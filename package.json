@@ -1,0 +1,27 @@
+{
+  "name": "smartduka",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "turbo run dev --parallel --filter=@smartduka/web --filter=@smartduka/api",
+    "dev:web": "pnpm --filter @smartduka/web dev",
+    "dev:api": "pnpm --filter @smartduka/api start:dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "format": "pnpm --filter @smartduka/api format"
+  },
+  "devDependencies": {
+    "turbo": "^2.1.4"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "packageManager": "pnpm@10.20.0",
+  "dependencies": {
+    "@radix-ui/react-checkbox": "^1.3.3",
+    "@radix-ui/react-dialog": "^1.1.15",
+    "@radix-ui/react-select": "^2.2.6"
+  }
+}

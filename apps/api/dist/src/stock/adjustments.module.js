@@ -1,0 +1,26 @@
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.AdjustmentsModule = void 0;
+const common_1 = require("@nestjs/common");
+const mongoose_1 = require("@nestjs/mongoose");
+const adjustment_schema_1 = require("./adjustment.schema");
+const adjustments_service_1 = require("./adjustments.service");
+const adjustments_controller_1 = require("./adjustments.controller");
+let AdjustmentsModule = class AdjustmentsModule {
+};
+exports.AdjustmentsModule = AdjustmentsModule;
+exports.AdjustmentsModule = AdjustmentsModule = __decorate([
+    (0, common_1.Module)({
+        imports: [mongoose_1.MongooseModule.forFeature([{ name: adjustment_schema_1.Adjustment.name, schema: adjustment_schema_1.AdjustmentSchema }])],
+        providers: [adjustments_service_1.AdjustmentsService],
+        controllers: [adjustments_controller_1.AdjustmentsController],
+        exports: [adjustments_service_1.AdjustmentsService],
+    })
+], AdjustmentsModule);
+//# sourceMappingURL=adjustments.module.js.map

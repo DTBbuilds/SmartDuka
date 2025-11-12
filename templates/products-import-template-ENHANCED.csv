@@ -1,0 +1,72 @@
+# ====================================================================
+# SMARTDUKA PRODUCT IMPORT TEMPLATE (ENHANCED)
+# Version: 2.0 | Date: November 2025
+# ====================================================================
+#
+# INSTRUCTIONS:
+# 1. Fill in the data starting from row 15 (after this header)
+# 2. Fields marked with * are REQUIRED
+# 3. Delete these instruction rows before uploading
+# 4. Save as CSV (UTF-8) format
+#
+# FIELD DESCRIPTIONS:
+# - Product Name*: Full product name (e.g., "Coca Cola 500ml Pet Bottle")
+# - SKU: Your internal product code (e.g., "COC-500-001")
+# - Barcode/UPC: EAN/UPC barcode number (e.g., "5000112637724")
+# - Selling Price (KES)*: Price customers pay (e.g., 80)
+# - Cost Price (KES): Your purchase/production cost (e.g., 55)
+# - Stock Quantity: Current inventory count (e.g., 150)
+# - Category: Category name (e.g., "Beverages")
+# - Brand: Manufacturer brand (e.g., "Coca Cola")
+# - Description: Detailed product description
+# - Short Description: Brief summary (max 160 characters)
+# - Tax Rate (%): Tax percentage (e.g., 16 for 16% VAT)
+# - Status: Product status - Options: active, inactive, draft
+# - Tags: Comma-separated tags (e.g., "drinks,soda,beverages")
+# - Weight (kg): Product weight in kilograms (e.g., 0.52)
+# - Supplier: Supplier/vendor name
+# - Reorder Point: Stock level to trigger reorder (e.g., 20)
+# - Low Stock Alert: Minimum stock before alert (e.g., 10)
+# - Allow Backorder: Allow sales when out of stock - Options: yes, no
+# - Product Type: Type of product - Options: simple, variable, bundle
+# - Expiry Date: Product expiry (format: YYYY-MM-DD)
+# - Batch Number: Manufacturing batch number
+# - Featured: Show on homepage - Options: yes, no
+# - Compare At Price (KES): Original price for discount display
+# - Track Inventory: Track stock levels - Options: yes, no
+#
+# VALIDATION RULES:
+# - Product Name: Required, 1-200 characters
+# - Selling Price: Required, must be positive number
+# - Cost Price: Optional, must be positive or zero
+# - Stock: Optional, must be whole number
+# - Tax Rate: Optional, 0-100
+# - Status: Must be: active, inactive, or draft
+# - Product Type: Must be: simple, variable, or bundle
+# - Dates: Must be YYYY-MM-DD format
+# - Yes/No fields: Must be: yes or no
+#
+# TIPS:
+# - Use category names exactly as they appear in your shop
+# - For multiple tags, separate with commas: "tag1,tag2,tag3"
+# - Leave optional fields blank if not applicable
+# - Use consistent units (weight in kg, dimensions in cm)
+# - For products with variants, import base product first
+#
+# SUPPORT:
+# - Documentation: https://docs.smartduka.com/products/import
+# - Support Email: support@smartduka.com
+# - Watch Tutorial: https://youtu.be/smartduka-product-import
+#
+# ====================================================================
+Product Name*,SKU,Barcode/UPC,Selling Price (KES)*,Cost Price (KES),Stock Quantity,Category,Brand,Description,Short Description,Tax Rate (%),Status,Tags,Weight (kg),Supplier,Reorder Point,Low Stock Alert,Allow Backorder,Product Type,Expiry Date,Batch Number,Featured,Compare At Price (KES),Track Inventory
+Afia Mixed Fruit Juice 500ml,AFI-JUI-001,6008459000972,80,55,150,Beverages,Afia,"Delicious mixed fruit juice blend with no added sugar. Contains vitamins A, C, and E. Perfect for a healthy lifestyle. Serve chilled for best taste.",Fresh mixed fruit juice - no added sugar,16,active,"drinks,juice,beverages,healthy",0.52,Afia Distributors Ltd,20,10,no,simple,2025-12-31,BATCH-AFI-2025-320,yes,100,yes
+Oraimo Lite Wireless Earbuds,ORA-EAR-001,4895180775291,350,220,50,Electronics,Oraimo,"True wireless earbuds with Bluetooth 5.0 connectivity. 10-hour battery life with charging case. Crystal clear sound with deep bass. Ergonomic design for comfortable all-day wear. IPX4 water resistance.",Premium wireless earbuds with 10h battery,16,active,"electronics,audio,earbuds,wireless,bluetooth",0.05,Oraimo Kenya,5,3,yes,simple,,,yes,450,yes
+Fresh Whole Milk 500ml,MLK-FRE-001,2000001234567,120,80,30,Dairy Products,KCC,"Fresh pasteurized whole milk from happy cows. Rich in calcium and vitamin D. Perfect for tea, coffee, cooking, and drinking. Keep refrigerated at 4°C. Best consumed within 3 days of opening.",Fresh pasteurized whole milk,0,active,"dairy,milk,beverages,fresh",0.52,Kenya Creameries Ltd,15,5,no,simple,2025-11-20,BATCH-KCC-2025-320,no,120,yes
+Colgate Total Toothpaste 175ml,COL-TPT-001,8850006327005,285,190,80,Personal Care,Colgate,"Advanced whitening toothpaste with fluoride protection. Fights cavities, plaque, and gingivitis. Provides 12-hour protection. Fresh mint flavor. Dentist recommended.",Advanced whitening toothpaste 175ml,16,active,"personal-care,dental,health,hygiene",0.18,Colgate-Palmolive,10,5,no,simple,2026-06-30,COL-2025-145,no,320,yes
+Nasco Cornflakes 500g,NAS-COR-001,6001087425810,295,200,60,Breakfast Foods,Nasco,"Crunchy corn flakes cereal fortified with vitamins and minerals. Low fat, high fiber. Perfect breakfast choice for the whole family. Serve with milk and fresh fruits.",Fortified corn flakes cereal 500g,16,active,"breakfast,cereal,food,healthy",0.5,Nasco Products,8,4,no,simple,2026-03-15,NAS-CER-2025-078,yes,350,yes
+Downy Fabric Softener 1L,DOW-FAB-001,4902430900867,450,310,40,Laundry,Downy,"Ultra-concentrated fabric softener with 3x longer-lasting freshness. Makes clothes soft, reduces wrinkles, and protects fibers. Mountain fresh scent. Suitable for all washing machines.",Ultra fabric softener with fresh scent,16,active,"laundry,cleaning,fabric-care,household",1.05,P&G East Africa,6,3,no,simple,,,no,500,yes
+Cadbury Dairy Milk 200g,CAD-CHO-001,6001495184774,550,380,100,Snacks & Confectionery,Cadbury,"Classic milk chocolate bar with smooth, creamy taste. Made with a glass and a half of fresh milk. Perfect for sharing or treating yourself. Contains cocoa butter.",Premium milk chocolate bar 200g,16,active,"chocolate,snacks,sweets,gifts",0.2,Mondelez Kenya,12,6,no,simple,2025-09-30,CAD-2025-265,yes,600,yes
+Blue Band Margarine 500g,BLU-MAR-001,6001087009126,220,155,70,Cooking Oils & Fats,Blue Band,"Multi-purpose margarine enriched with vitamins A and D. Perfect for cooking, baking, and spreading. Made from quality vegetable oils. Keep refrigerated.",Vitamin-enriched margarine 500g,16,active,"margarine,cooking,baking,spreads",0.5,Unilever Kenya,10,5,no,simple,2025-10-15,BLU-2025-288,no,250,yes
+Omo Washing Powder 2kg,OMO-WAS-001,6001087404358,780,550,45,Laundry,Omo,"Powerful washing powder that removes tough stains in one wash. Works in hot or cold water. Suitable for hand and machine washing. Fresh lemon scent. Biodegradable formula.",Powerful stain removal detergent 2kg,16,active,"laundry,detergent,cleaning,household",2.0,Unilever Kenya,8,4,no,simple,,,no,850,yes
+Tusker Lager Beer 500ml,TUS-BEE-001,6000291000010,180,125,200,Alcoholic Beverages,EABL,"Premium lager beer brewed with quality barley and hops. Smooth, refreshing taste. Serve chilled. Contains 4.2% alcohol by volume. Must be 18+ to purchase.",Premium lager beer 500ml bottle,18,active,"beer,alcoholic,beverages,lager",0.52,East African Breweries,25,15,no,simple,2025-08-30,TUS-2025-242,no,200,yes

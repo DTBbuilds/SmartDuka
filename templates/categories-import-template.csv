@@ -1,0 +1,58 @@
+# SMARTDUKA CATEGORY IMPORT TEMPLATE
+# Version: 2.0
+#
+# INSTRUCTIONS:
+# 1. Delete these header lines (lines 1-15)
+# 2. Fill in Category Name* (required)
+# 3. Parent Category: Leave blank for top-level, or enter parent name
+# 4. Save as CSV and upload
+#
+# FIELD DESCRIPTIONS:
+# - Category Name*: Full category name (required, unique)
+# - Slug: URL-friendly name (auto-generated if blank)
+# - Parent Category: Parent category name (for hierarchy)
+# - Description: Category description
+# - Display Order: Sort order (1, 2, 3, etc.)
+# - Status: active or inactive
+#
+Category Name*,Slug,Parent Category,Description,Display Order,Status
+Beverages,beverages,,Drinks and refreshments,1,active
+Soft Drinks,soft-drinks,Beverages,Carbonated and non-carbonated drinks,1,active
+Juices,juices,Beverages,Fresh and packaged fruit juices,2,active
+Water,water,Beverages,Bottled and sparkling water,3,active
+Electronics,electronics,,Electronic devices and accessories,2,active
+Mobile Phones,mobile-phones,Electronics,Smartphones and feature phones,1,active
+Audio Devices,audio-devices,Electronics,Headphones, earbuds, speakers,2,active
+Computers,computers,Electronics,Laptops, desktops, tablets,3,active
+Personal Care,personal-care,,Health and beauty products,3,active
+Dental Care,dental-care,Personal Care,Toothpaste, toothbrushes, mouthwash,1,active
+Hair Care,hair-care,Personal Care,Shampoo, conditioner, styling products,2,active
+Skin Care,skin-care,Personal Care,Lotions, creams, cleansers,3,active
+Dairy Products,dairy-products,,Milk, cheese, yogurt, and dairy items,4,active
+Milk,milk,Dairy Products,Fresh and long-life milk,1,active
+Cheese,cheese,Dairy Products,Various types of cheese,2,active
+Yogurt,yogurt,Dairy Products,Plain and flavored yogurt,3,active
+Snacks & Confectionery,snacks-confectionery,,Chips, chocolates, candies,5,active
+Chocolates,chocolates,Snacks & Confectionery,Chocolate bars and boxes,1,active
+Chips & Crisps,chips-crisps,Snacks & Confectionery,Potato chips and corn crisps,2,active
+Candies,candies,Snacks & Confectionery,Hard and soft candies,3,active
+Laundry,laundry,,Washing detergents and fabric care,6,active
+Detergents,detergents,Laundry,Washing powders and liquids,1,active
+Fabric Softeners,fabric-softeners,Laundry,Softeners and conditioners,2,active
+Stain Removers,stain-removers,Laundry,Stain treatment products,3,active
+Cooking Oils & Fats,cooking-oils-fats,,Oils, margarine, butter,7,active
+Vegetable Oils,vegetable-oils,Cooking Oils & Fats,Cooking and frying oils,1,active
+Margarine,margarine,Cooking Oils & Fats,Spreadable margarine,2,active
+Butter,butter,Cooking Oils & Fats,Dairy butter,3,active
+Breakfast Foods,breakfast-foods,,Cereals and breakfast items,8,active
+Cereals,cereals,Breakfast Foods,Corn flakes, oats, muesli,1,active
+Bread,bread,Breakfast Foods,Sliced and whole bread,2,active
+Jams & Spreads,jams-spreads,Breakfast Foods,Jams, honey, peanut butter,3,active
+Alcoholic Beverages,alcoholic-beverages,,Beer, wine, spirits (18+),9,active
+Beer,beer,Alcoholic Beverages,Lager, ale, and other beers,1,active
+Wine,wine,Alcoholic Beverages,Red, white, and rosé wine,2,active
+Spirits,spirits,Alcoholic Beverages,Whiskey, vodka, gin, rum,3,active
+Household Cleaning,household-cleaning,,Cleaning supplies and tools,10,active
+Floor Cleaners,floor-cleaners,Household Cleaning,Mops, liquids, disinfectants,1,active
+Dish Washing,dish-washing,Household Cleaning,Dish soap and scrubbers,2,active
+Bathroom Cleaners,bathroom-cleaners,Household Cleaning,Toilet and sink cleaners,3,active

@@ -1,0 +1,86 @@
+
+> @smartduka/web@0.1.0 build E:\BUILds\SmartDuka\apps\web
+> next build
+
+   ▲ Next.js 16.0.1 (Turbopack)
+   - Environments: .env.local
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully in 23.6s
+   Running TypeScript ...
+   Collecting page data ...
+   Generating static pages (0/59) ...
+   Generating static pages (14/59) 
+   Generating static pages (29/59) 
+   Generating static pages (44/59) 
+ ✓ Generating static pages (59/59) in 5.4s
+   Finalizing page optimization ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ○ /admin
+├ ○ /admin/audit-logs
+├ ○ /admin/branch-inventory
+├ ○ /admin/branch-reports
+├ ○ /admin/branches
+├ ƒ /admin/cashiers/[id]
+├ ○ /admin/customers
+├ ○ /admin/dashboard
+├ ○ /admin/discounts
+├ ○ /admin/inventory
+├ ○ /admin/locations
+├ ○ /admin/loyalty
+├ ○ /admin/monitoring
+├ ○ /admin/payments
+├ ○ /admin/permissions
+├ ○ /admin/purchase-orders
+├ ○ /admin/receipts
+├ ○ /admin/reconciliation
+├ ○ /admin/reports
+├ ○ /admin/returns
+├ ○ /admin/sales-analytics
+├ ○ /admin/settings/tax
+├ ○ /admin/staff-assignment
+├ ○ /admin/stock-transfer
+├ ○ /branch-manager/dashboard
+├ ○ /cashier/checkout
+├ ○ /cashier/dashboard
+├ ○ /cashier/pos
+├ ○ /cashier/receipt
+├ ○ /cashier/shift-end
+├ ○ /cashier/shift-start
+├ ○ /cashier/void-refund
+├ ○ /customers
+├ ƒ /customers/[id]
+├ ƒ /inventory/[id]/edit
+├ ○ /login
+├ ○ /login-pin
+├ ○ /onboarding
+├ ○ /payments
+├ ○ /pos
+├ ○ /purchases
+├ ƒ /purchases/[id]/receive
+├ ○ /purchases/new
+├ ○ /register-shop
+├ ○ /reports
+├ ○ /reports/monthly
+├ ○ /reports/trends
+├ ○ /reports/weekly
+├ ○ /settings
+├ ○ /signup
+├ ○ /stock/adjustments
+├ ○ /super-admin
+├ ○ /super-admin/shops
+├ ƒ /super-admin/shops/[id]
+├ ○ /super-admin/support
+├ ○ /suppliers
+├ ○ /users
+├ ○ /users/cashiers
+├ ○ /verification-pending
+└ ○ /verification-rejected
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

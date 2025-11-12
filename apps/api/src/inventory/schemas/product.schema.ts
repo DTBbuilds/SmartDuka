@@ -1,0 +1,87 @@
+import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { HydratedDocument, Types } from 'mongoose';
+
+export type ProductDocument = HydratedDocument<Product>;
+
+@Schema({ timestamps: true })
+export class Product {
+  @Prop({ required: true, type: Types.ObjectId, ref: 'Shop' })
+  shopId: Types.ObjectId;
+
+  @Prop({ required: true, trim: true })
+  name: string;
+
+  @Prop({ required: false, unique: true, sparse: true, trim: true })
+  sku?: string;
+
+  @Prop({ required: false, unique: true, sparse: true, trim: true })
+  barcode?: string;
+
+  @Prop({ type: Types.ObjectId, ref: 'Category', required: false })
+  categoryId?: Types.ObjectId;
+
+  @Prop({ required: true, min: 0 })
+  price: number;
+
+  @Prop({ required: false, min: 0, default: 0 })
+  cost?: number;
+
+  @Prop({ required: false, min: 0, default: 0 })
+  stock?: number;
+
+  @Prop({ required: false, min: 0, default: 0 })
+  tax?: number;
+
+  @Prop({ enum: ['active', 'inactive'], default: 'active' })
+  status: 'active' | 'inactive';
+
+  @Prop({ required: false })
+  expiryDate?: Date;
+
+  @Prop({ required: false })
+  batchNumber?: string;
+
+  @Prop({ required: false })
+  lotNumber?: string;
+
+  // PHASE 3: Reorder automation fields
+  @Prop({ required: false, min: 0, default: 0 })
+  reorderPoint?: number; // Minimum stock level to trigger reorder
+
+  @Prop({ required: false, min: 0, default: 0 })
+  reorderQuantity?: number; // Quantity to order when stock is low
+
+  @Prop({ required: false })
+  preferredSupplierId?: Types.ObjectId; // Default supplier for this product
+
+  @Prop({ required: false, min: 0, default: 0 })
+  leadTimeDays?: number; // Expected delivery time from supplier
+
+  @Prop({ required: false })
+  lastRestockDate?: Date; // When product was last restocked
+
+  // PHASE 4: Branch-specific inventory
+  @Prop({ required: false, type: Types.ObjectId, ref: 'Branch' })
+  branchId?: Types.ObjectId; // null = shared across all branches
+
+  @Prop({ type: Object, default: {} })
+  branchInventory?: {
+    [branchId: string]: {
+      stock: number;
+      reorderPoint?: number;
+      reorderQuantity?: number;
+      lastRestockDate?: Date;
+    };
+  };
+}
+
+export const ProductSchema = SchemaFactory.createForClass(Product);
+
+// Create indexes for multi-tenant queries
+ProductSchema.index({ shopId: 1, name: 1 });
+ProductSchema.index({ shopId: 1, barcode: 1 });
+ProductSchema.index({ shopId: 1, sku: 1 });
+ProductSchema.index({ shopId: 1, status: 1 });
+ProductSchema.index({ shopId: 1, expiryDate: 1 });
+ProductSchema.index({ shopId: 1, stock: 1 }); // For reorder automation
+ProductSchema.index({ shopId: 1, branchId: 1 }); // For branch-specific queries

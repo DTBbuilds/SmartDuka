@@ -1,0 +1,12 @@
+'use client';
+
+import { ReactNode } from 'react';
+import { AuthGuard } from '@/components/auth-guard';
+
+export default function AdminLayout({ children }: { children: ReactNode }) {
+  return (
+    <AuthGuard requiredRole="admin" fallbackRoute="/login">
+      {children}
+    </AuthGuard>
+  );
+}
