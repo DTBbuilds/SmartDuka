@@ -170,8 +170,32 @@ export class MpesaService {
 
     // STEP 4: Send STK Push
     try {
-      const callbackUrl = this.configService.get('MPESA_CALLBACK_URL');
+      let callbackUrl = this.configService.get('MPESA_CALLBACK_URL');
       const mpesaEnv = this.configService.get('MPESA_ENV', 'sandbox');
+      
+      // Auto-construct callback URL for Render deployments if not set
+      if (!callbackUrl) {
+        const renderExternalUrl = this.configService.get('RENDER_EXTERNAL_URL');
+        const apiBaseUrl = this.configService.get('API_BASE_URL');
+        
+        if (renderExternalUrl) {
+          // Render provides RENDER_EXTERNAL_URL automatically on paid plans
+          callbackUrl = `${renderExternalUrl}/payments/mpesa/callback`;
+          this.logger.log(`Auto-constructed callback URL from RENDER_EXTERNAL_URL: ${callbackUrl}`);
+        } else if (apiBaseUrl) {
+          // Use API_BASE_URL if provided
+          callbackUrl = `${apiBaseUrl}/payments/mpesa/callback`;
+          this.logger.log(`Auto-constructed callback URL from API_BASE_URL: ${callbackUrl}`);
+        } else if (process.env.RENDER === 'true') {
+          // On Render free tier, construct from known URL pattern
+          // This requires setting API_BASE_URL or MPESA_CALLBACK_URL in Render dashboard
+          this.logger.error(
+            '❌ MPESA_CALLBACK_URL not set! On Render, please set this environment variable:\n' +
+            '   MPESA_CALLBACK_URL=https://smartduka-91q6.onrender.com/payments/mpesa/callback\n' +
+            '   (Replace with your actual Render service URL)'
+          );
+        }
+      }
       
       // DEBUG: Log the actual callback URL being used
       this.logger.log(`🔍 DEBUG: MPESA_CALLBACK_URL = "${callbackUrl}"`);
@@ -182,6 +206,11 @@ export class MpesaService {
           'MPESA_CALLBACK_URL is not properly configured. ' +
           'For development, use ngrok: ngrok http 5000, then set MPESA_CALLBACK_URL=https://xxxx.ngrok-free.app/payments/mpesa/callback'
         );
+        
+        // For production, throw error if callback URL is not set
+        if (mpesaEnv === 'production') {
+          throw new Error('MPESA_CALLBACK_URL must be configured for production');
+        }
       }
 
       // Check for Cloudflare tunnel URLs which often get rejected by M-Pesa

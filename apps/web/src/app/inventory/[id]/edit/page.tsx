@@ -16,9 +16,9 @@ interface Product {
   categoryId?: string;
   price: number;
   cost: number;
-  quantityOnHand: number;
-  reorderLevel: number;
-  taxRate: number;
+  stock: number;
+  lowStockThreshold: number;
+  tax: number;
   status: string;
 }
 
@@ -46,9 +46,9 @@ export default function EditProductPage() {
     categoryId: "",
     price: 0,
     cost: 0,
-    quantityOnHand: 0,
-    reorderLevel: 10,
-    taxRate: 16,
+    stock: 0,
+    lowStockThreshold: 10,
+    tax: 16,
     status: "active",
   });
 
@@ -75,9 +75,9 @@ export default function EditProductPage() {
           categoryId: data.categoryId || "",
           price: data.price || 0,
           cost: data.cost || 0,
-          quantityOnHand: data.quantityOnHand || 0,
-          reorderLevel: data.reorderLevel || 10,
-          taxRate: data.taxRate || 16,
+          stock: data.stock || 0,
+          lowStockThreshold: data.lowStockThreshold || 10,
+          tax: data.tax || 16,
           status: data.status || "active",
         });
       }
@@ -110,23 +110,32 @@ export default function EditProductPage() {
 
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+      
+      // Clean up form data - remove empty categoryId
+      const payload = {
+        ...formData,
+        categoryId: formData.categoryId || undefined,
+      };
+      
       const res = await fetch(`${apiUrl}/inventory/products/${productId}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       });
 
       if (res.ok) {
         router.push("/admin");
       } else {
-        throw new Error("Failed to update product");
+        const errorData = await res.json().catch(() => ({}));
+        const errorMessage = errorData.message || errorData.error || "Failed to update product";
+        throw new Error(Array.isArray(errorMessage) ? errorMessage.join(", ") : errorMessage);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to update product:", error);
-      alert("Failed to update product. Please try again.");
+      alert(`Failed to update product: ${error.message || "Please try again."}`);
     } finally {
       setIsSaving(false);
     }
@@ -275,16 +284,16 @@ export default function EditProductPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="taxRate">Tax Rate (%)</Label>
+                <Label htmlFor="tax">Tax Rate (%)</Label>
                 <Input
-                  id="taxRate"
+                  id="tax"
                   type="number"
                   min="0"
                   max="100"
                   step="0.01"
-                  value={formData.taxRate}
+                  value={formData.tax}
                   onChange={(e) =>
-                    setFormData({ ...formData, taxRate: parseFloat(e.target.value) || 0 })
+                    setFormData({ ...formData, tax: parseFloat(e.target.value) || 0 })
                   }
                 />
               </div>
@@ -292,16 +301,16 @@ export default function EditProductPage() {
 
             <div className="grid gap-4 md:grid-cols-3">
               <div className="space-y-2">
-                <Label htmlFor="quantity">Quantity on Hand</Label>
+                <Label htmlFor="stock">Stock Quantity</Label>
                 <Input
-                  id="quantity"
+                  id="stock"
                   type="number"
                   min="0"
-                  value={formData.quantityOnHand}
+                  value={formData.stock}
                   onChange={(e) =>
                     setFormData({
                       ...formData,
-                      quantityOnHand: parseInt(e.target.value) || 0,
+                      stock: parseInt(e.target.value) || 0,
                     })
                   }
                   disabled
@@ -312,16 +321,16 @@ export default function EditProductPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="reorderLevel">Reorder Level</Label>
+                <Label htmlFor="lowStockThreshold">Low Stock Threshold</Label>
                 <Input
-                  id="reorderLevel"
+                  id="lowStockThreshold"
                   type="number"
                   min="0"
-                  value={formData.reorderLevel}
+                  value={formData.lowStockThreshold}
                   onChange={(e) =>
                     setFormData({
                       ...formData,
-                      reorderLevel: parseInt(e.target.value) || 0,
+                      lowStockThreshold: parseInt(e.target.value) || 0,
                     })
                   }
                 />
