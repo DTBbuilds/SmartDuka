@@ -1,7 +1,8 @@
 'use client';
 
+import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Button } from '@/components/ui/button';
 import { 
   HelpCircle, 
   BookOpen, 
@@ -13,9 +14,10 @@ import {
   Package,
   Users,
   CreditCard,
-  BarChart3
+  BarChart3,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 
 const faqs = [
   {
@@ -53,6 +55,31 @@ const quickLinks = [
   { title: 'Reports', description: 'Understanding your analytics', icon: BarChart3 },
 ];
 
+function FAQItem({ question, answer }: { question: string; answer: string }) {
+  const [isOpen, setIsOpen] = useState(false);
+  
+  return (
+    <div className="border-b last:border-b-0">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between py-4 text-left font-medium hover:text-primary transition-colors"
+      >
+        {question}
+        {isOpen ? (
+          <ChevronUp className="h-4 w-4 shrink-0" />
+        ) : (
+          <ChevronDown className="h-4 w-4 shrink-0" />
+        )}
+      </button>
+      {isOpen && (
+        <div className="pb-4 text-muted-foreground">
+          {answer}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function HelpPage() {
   return (
     <div className="container mx-auto py-8 px-4 max-w-5xl">
@@ -89,18 +116,9 @@ export default function HelpPage() {
         <h2 className="text-xl font-semibold mb-4">Frequently Asked Questions</h2>
         <Card>
           <CardContent className="pt-6">
-            <Accordion type="single" collapsible className="w-full">
-              {faqs.map((faq, index) => (
-                <AccordionItem key={index} value={`item-${index}`}>
-                  <AccordionTrigger className="text-left">
-                    {faq.question}
-                  </AccordionTrigger>
-                  <AccordionContent className="text-muted-foreground">
-                    {faq.answer}
-                  </AccordionContent>
-                </AccordionItem>
-              ))}
-            </Accordion>
+            {faqs.map((faq, index) => (
+              <FAQItem key={index} question={faq.question} answer={faq.answer} />
+            ))}
           </CardContent>
         </Card>
       </section>
