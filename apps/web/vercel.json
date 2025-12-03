@@ -4,6 +4,7 @@
   "buildCommand": "pnpm build",
   "installCommand": "pnpm install",
   "outputDirectory": ".next",
+  "devCommand": "pnpm dev",
   "regions": ["iad1"],
   "headers": [
     {
