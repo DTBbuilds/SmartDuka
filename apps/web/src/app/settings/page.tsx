@@ -1,13 +1,20 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { config } from "@/lib/config";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Tabs, TabsContent, TabsList, TabsTrigger, Input, Label, Button, Textarea } from "@smartduka/ui";
-import { Store, User, Lock, Settings as SettingsIcon } from "lucide-react";
+import { Store, User, Lock, Settings as SettingsIcon, ShieldAlert } from "lucide-react";
 import { TableSkeleton } from "@/components/shared/loading-skeleton";
 
 export default function SettingsPage() {
-  const { user, token } = useAuth();
+  const router = useRouter();
+  const { user, token, loading } = useAuth();
+  
+  // Role-based access control - only admin can access settings
+  const isAdmin = user?.role === 'admin';
+  const isCashier = user?.role === 'cashier';
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -37,6 +44,13 @@ export default function SettingsPage() {
     confirmPassword: "",
   });
 
+  // Redirect cashiers away from settings page
+  useEffect(() => {
+    if (!loading && user && isCashier) {
+      router.push('/pos');
+    }
+  }, [loading, user, isCashier, router]);
+
   useEffect(() => {
     fetchShopData();
     if (user) {
@@ -55,8 +69,8 @@ export default function SettingsPage() {
         return;
       }
 
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-      const res = await fetch(`${apiUrl}/shops/my-shop`, {
+      const base = config.apiUrl;
+      const res = await fetch(`${base}/shops/my-shop`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -99,8 +113,8 @@ export default function SettingsPage() {
     setMessage(null);
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-      const res = await fetch(`${apiUrl}/shops/my-shop`, {
+      const base = config.apiUrl;
+      const res = await fetch(`${base}/shops/my-shop`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -136,8 +150,8 @@ export default function SettingsPage() {
     setMessage(null);
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-      const res = await fetch(`${apiUrl}/users/change-password`, {
+      const base = config.apiUrl;
+      const res = await fetch(`${base}/users/change-password`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -163,10 +177,31 @@ export default function SettingsPage() {
     }
   };
 
-  if (isLoading) {
+  // Show loading state
+  if (loading || isLoading) {
     return (
       <div className="container py-8">
         <TableSkeleton rows={8} columns={1} />
+      </div>
+    );
+  }
+
+  // Block access for cashiers (fallback while redirect happens)
+  if (isCashier) {
+    return (
+      <div className="container py-8">
+        <Card className="max-w-md mx-auto">
+          <CardContent className="pt-6 text-center">
+            <ShieldAlert className="h-12 w-12 mx-auto text-destructive mb-4" />
+            <h2 className="text-xl font-semibold mb-2">Access Denied</h2>
+            <p className="text-muted-foreground mb-4">
+              Settings are only accessible to administrators.
+            </p>
+            <Button onClick={() => router.push('/pos')}>
+              Go to POS
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }

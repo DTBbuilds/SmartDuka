@@ -80,6 +80,12 @@ export function NavbarEnhancedV2() {
     return null;
   }
 
+  // Hide navbar for admin on desktop (they use sidebar instead)
+  // Admin still sees mobile nav via AdminMobileNav component
+  if (isAdmin) {
+    return null;
+  }
+
   return (
     <nav className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 items-center justify-between">
@@ -206,15 +212,17 @@ export function NavbarEnhancedV2() {
 
                   <div className="h-px bg-border my-1" />
 
-                  {/* Settings & Logout */}
-                  <Link
-                    href="/settings"
-                    className="flex items-center gap-2 rounded-sm px-3 py-2 text-sm hover:bg-accent transition-colors"
-                    onClick={() => setIsUserMenuOpen(false)}
-                  >
-                    <Settings className="h-4 w-4" />
-                    Settings
-                  </Link>
+                  {/* Settings & Logout - Settings only for admin */}
+                  {isAdmin && (
+                    <Link
+                      href="/settings"
+                      className="flex items-center gap-2 rounded-sm px-3 py-2 text-sm hover:bg-accent transition-colors"
+                      onClick={() => setIsUserMenuOpen(false)}
+                    >
+                      <Settings className="h-4 w-4" />
+                      Settings
+                    </Link>
+                  )}
                   <button
                     onClick={() => {
                       logout();
@@ -295,21 +303,23 @@ export function NavbarEnhancedV2() {
               );
             })}
 
-            {/* Settings & Language */}
+            {/* Settings & Language - Settings only for admin */}
             <div className="h-px bg-border my-2" />
-            <Link
-              href="/settings"
-              onClick={() => setIsMobileMenuOpen(false)}
-              className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                pathname === "/settings"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-              )}
-            >
-              <Settings className="h-5 w-5" />
-              Settings
-            </Link>
+            {isAdmin && (
+              <Link
+                href="/settings"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className={cn(
+                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                  pathname === "/settings"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                )}
+              >
+                <Settings className="h-5 w-5" />
+                Settings
+              </Link>
+            )}
 
             <div className="pt-2 px-3">
               <LanguageSwitcher />

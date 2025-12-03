@@ -159,14 +159,17 @@ export function Navbar() {
                       <div className="h-px bg-border my-1" />
                     </>
                   )}
-                  <Link
-                    href="/settings"
-                    className="flex items-center gap-2 rounded-sm px-3 py-2 text-sm hover:bg-accent"
-                    onClick={() => setIsUserMenuOpen(false)}
-                  >
-                    <Settings className="h-4 w-4" />
-                    Settings
-                  </Link>
+                  {/* Settings - Only for admin users */}
+                  {isAdmin && (
+                    <Link
+                      href="/settings"
+                      className="flex items-center gap-2 rounded-sm px-3 py-2 text-sm hover:bg-accent"
+                      onClick={() => setIsUserMenuOpen(false)}
+                    >
+                      <Settings className="h-4 w-4" />
+                      Settings
+                    </Link>
+                  )}
                   <button
                     onClick={() => {
                       logout();

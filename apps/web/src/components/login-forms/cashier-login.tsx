@@ -5,8 +5,17 @@ import { Button, Input, Label } from '@smartduka/ui';
 import { NumericKeypad } from '../numeric-keypad';
 import { ShopSelector } from '../shop-selector';
 
+interface Shop {
+  id: string;
+  shopId?: string;
+  name: string;
+  status?: 'pending' | 'verified' | 'active' | 'suspended';
+  demoMode?: boolean;
+  demoExpiresAt?: string;
+}
+
 interface CashierLoginFormProps {
-  shops: Array<{ id: string; name: string }>;
+  shops: Shop[];
   onSubmit: (name: string, pin: string, shopId: string) => Promise<void>;
   isLoading?: boolean;
 }
@@ -51,31 +60,46 @@ export function CashierLoginForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <ShopSelector
-        shops={shops}
-        selectedShopId={shopId}
-        onShopChange={setShopId}
-        disabled={isLoading}
-      />
-
-      <div>
-        <Label htmlFor="name">Your Name</Label>
-        <Input
-          id="name"
-          type="text"
-          placeholder="Enter your name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
+    <form onSubmit={handleSubmit} className="space-y-3">
+      {/* Shop & Name - side by side */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <ShopSelector
+          shops={shops}
+          selectedShopId={shopId}
+          onShopChange={setShopId}
           disabled={isLoading}
-          required
-          className="mt-1.5"
         />
+        <div>
+          <Label htmlFor="name" className="text-xs">Your Name</Label>
+          <Input
+            id="name"
+            type="text"
+            placeholder="Enter name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            disabled={isLoading}
+            required
+            className="mt-1 h-9"
+          />
+        </div>
       </div>
 
+      {/* PIN with inline dots */}
       <div>
-        <Label htmlFor="pin">PIN Code</Label>
-        <div className="relative mt-1.5">
+        <div className="flex items-center justify-between">
+          <Label htmlFor="pin" className="text-xs">PIN Code</Label>
+          <div className="flex gap-1">
+            {[...Array(6)].map((_, i) => (
+              <div
+                key={i}
+                className={`h-2 w-2 rounded-full transition-colors ${
+                  i < pin.length ? 'bg-primary' : 'bg-muted'
+                }`}
+              />
+            ))}
+          </div>
+        </div>
+        <div className="relative mt-1">
           <Input
             id="pin"
             type="password"
@@ -84,43 +108,21 @@ export function CashierLoginForm({
             onChange={handlePinChange}
             onKeyDown={handlePinKeyDown}
             maxLength={6}
-            autoFocus
             disabled={isLoading}
-            className="text-center text-2xl tracking-widest font-bold"
+            className="h-9 text-center text-lg tracking-widest font-bold"
           />
-        </div>
-        <div className="flex items-center justify-between mt-2">
-          <p className="text-xs text-slate-500">4-6 digits</p>
-          <p className="text-xs text-slate-500">{pin.length}/6</p>
-        </div>
-        
-        {/* Visual Progress Indicator */}
-        <div className="flex gap-1 mt-2">
-          {[...Array(6)].map((_, i) => (
-            <div
-              key={i}
-              className={`h-2 w-2 rounded-full transition-colors ${
-                i < pin.length
-                  ? 'bg-green-500'
-                  : 'bg-slate-300 dark:bg-slate-600'
-              }`}
-            />
-          ))}
         </div>
       </div>
 
+      {/* Compact Keypad */}
       <NumericKeypad
         onInput={handlePinInput}
         onClear={handleClear}
         disabled={isLoading}
       />
 
-      <Button
-        type="submit"
-        className="w-full"
-        disabled={isLoading || pin.length < 4}
-      >
-        {isLoading ? 'Logging in...' : 'Login as Cashier'}
+      <Button type="submit" className="w-full h-9" disabled={isLoading || pin.length < 4}>
+        {isLoading ? 'Signing in...' : 'Sign In'}
       </Button>
     </form>
   );

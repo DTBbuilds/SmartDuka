@@ -4,7 +4,42 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label } from "@smartduka/ui";
 import { useAuth } from "@/lib/auth-context";
-import { Clock, Store, AlertCircle, ShoppingCart } from "lucide-react";
+import { config } from "@/lib/config";
+import { Clock, Store, AlertCircle, ShoppingCart, CheckCircle, Info, Shield, Zap, BarChart3 } from "lucide-react";
+import { ThemeToggleOutline } from "@/components/theme-toggle";
+
+// Kenya counties for dropdown
+const KENYA_COUNTIES = [
+  "Baringo", "Bomet", "Bungoma", "Busia", "Elgeyo-Marakwet", "Embu", "Garissa",
+  "Homa Bay", "Isiolo", "Kajiado", "Kakamega", "Kericho", "Kiambu", "Kilifi",
+  "Kirinyaga", "Kisii", "Kisumu", "Kitui", "Kwale", "Laikipia", "Lamu", "Machakos",
+  "Makueni", "Mandera", "Marsabit", "Meru", "Migori", "Mombasa", "Murang'a",
+  "Nairobi", "Nakuru", "Nandi", "Narok", "Nyamira", "Nyandarua", "Nyeri", "Samburu",
+  "Siaya", "Taita-Taveta", "Tana River", "Tharaka-Nithi", "Trans-Nzoia", "Turkana",
+  "Uasin Gishu", "Vihiga", "Wajir", "West Pokot"
+];
+
+// Business types for dropdown
+const BUSINESS_TYPES = [
+  "General Store / Duka",
+  "Supermarket",
+  "Mini Supermarket",
+  "Wholesale Shop",
+  "Pharmacy / Chemist",
+  "Hardware Store",
+  "Electronics Shop",
+  "Clothing & Apparel",
+  "Grocery Store",
+  "Butchery",
+  "Bakery",
+  "Restaurant / Cafe",
+  "Stationery Shop",
+  "Mobile Phone Shop",
+  "Beauty & Cosmetics",
+  "Auto Parts Shop",
+  "Agro-Vet Shop",
+  "Other"
+];
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -12,13 +47,10 @@ export default function OnboardingPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Form state
+  // Form state - for additional info not collected during registration
   const [formData, setFormData] = useState({
-    address: "",
-    city: "",
-    businessType: "",
-    kraPin: "",
     tillNumber: "",
+    description: "",
   });
 
   useEffect(() => {
@@ -53,32 +85,32 @@ export default function OnboardingPage() {
     setIsLoading(true);
 
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+      const base = config.apiUrl;
 
-      // Normalize optional fields before sending
-      const payload: any = { ...formData };
-      if (typeof payload.kraPin === "string") {
-        const v = payload.kraPin.trim();
-        if (!v) {
-          delete payload.kraPin;
-        } else {
-          payload.kraPin = v.toUpperCase();
-        }
+      // Only send optional fields that have values
+      const payload: any = {};
+      if (formData.tillNumber.trim()) {
+        payload.tillNumber = formData.tillNumber.trim();
+      }
+      if (formData.description.trim()) {
+        payload.description = formData.description.trim();
       }
 
-      // Update shop details
-      const res = await fetch(`${base}/shops/${shop?.id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
+      // Only update if there are changes
+      if (Object.keys(payload).length > 0) {
+        const res = await fetch(`${base}/shops/${shop?.id}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
+        });
 
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({ message: "Failed to update shop" }));
-        throw new Error(errorData.message || "Failed to update shop");
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({ message: "Failed to update shop" }));
+          throw new Error(errorData.message || "Failed to update shop");
+        }
       }
 
       // Complete onboarding
@@ -103,114 +135,171 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center p-4">
-      <Card className="w-full max-w-2xl shadow-xl">
-        <CardHeader>
-          <div className="flex items-center gap-2 mb-4">
-            <div className="p-2 bg-primary/10 rounded-lg">
-              <ShoppingCart className="h-6 w-6 text-primary" />
+    <div className="h-screen bg-background flex overflow-hidden">
+      {/* Left Panel - Branding (Dark themed) */}
+      <div className="hidden lg:flex lg:w-2/5 bg-slate-900 p-8 flex-col justify-between relative overflow-hidden">
+        {/* Background Pattern */}
+        <div className="absolute inset-0 opacity-20">
+          <div className="absolute top-20 left-20 w-72 h-72 bg-primary rounded-full blur-3xl" />
+          <div className="absolute bottom-20 right-20 w-96 h-96 bg-orange-600 rounded-full blur-3xl" />
+        </div>
+        
+        <div className="relative z-10">
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-primary/20 rounded-xl">
+              <ShoppingCart className="h-8 w-8 text-primary" />
             </div>
-            <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-              SmartDuka
-            </span>
+            <span className="text-3xl font-bold text-white">SmartDuka</span>
+          </div>
+        </div>
+        
+        <div className="relative z-10 space-y-6">
+          <div>
+            <h1 className="text-3xl xl:text-4xl font-bold text-white leading-tight">
+              Almost There!<br />
+              <span className="text-primary">Final Step</span>
+            </h1>
+            <p className="mt-4 text-slate-300">
+              Review your details and submit for verification to start using SmartDuka.
+            </p>
           </div>
           
-          <CardTitle className="text-2xl">Complete Your Shop Setup</CardTitle>
-          <CardDescription className="text-base">
-            Welcome, {shop.name}! Let's finish setting up your shop.
-          </CardDescription>
-        </CardHeader>
+          {/* What's Next */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 bg-white/10 rounded-lg p-3">
+              <Clock className="h-5 w-5 text-primary" />
+              <span className="text-sm text-white">24-48 hour verification</span>
+            </div>
+            <div className="flex items-center gap-3 bg-white/10 rounded-lg p-3">
+              <Shield className="h-5 w-5 text-primary" />
+              <span className="text-sm text-white">Demo access while pending</span>
+            </div>
+            <div className="flex items-center gap-3 bg-white/10 rounded-lg p-3">
+              <Zap className="h-5 w-5 text-primary" />
+              <span className="text-sm text-white">Full features on approval</span>
+            </div>
+          </div>
+        </div>
+        
+        <div className="relative z-10 text-slate-500 text-sm">
+          © 2024 SmartDuka. Built for Kenyan businesses.
+        </div>
+      </div>
 
-        <CardContent>
-          {/* Shop Details Form */}
-          <form onSubmit={handleSubmit} className="space-y-5">
-              {error && (
-                <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
-                  <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
-                  <div className="text-red-600 text-sm flex-1">{error}</div>
-                </div>
-              )}
-
-              <div className="flex items-center gap-2 text-primary mb-4">
-                <Store className="h-5 w-5" />
-                <h3 className="font-semibold">Shop Details</h3>
+      {/* Right Panel - Form */}
+      <div className="w-full lg:w-3/5 flex flex-col overflow-hidden bg-background">
+        {/* Header */}
+        <div className="flex-shrink-0 p-6 pb-4 border-b border-border bg-muted/50">
+          {/* Mobile Logo + Theme Toggle */}
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-primary/10 rounded-lg">
+                <ShoppingCart className="h-6 w-6 text-primary" />
               </div>
+              <span className="text-xl font-bold text-foreground lg:hidden">SmartDuka</span>
+            </div>
+            <ThemeToggleOutline />
+          </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="sm:col-span-2">
-                  <Label htmlFor="business-type">Business Type</Label>
-                  <Input
-                    id="business-type"
-                    placeholder="e.g., General Store, Supermarket, Pharmacy"
-                    value={formData.businessType}
-                    onChange={(e) => setFormData({ ...formData, businessType: e.target.value })}
-                    className="mt-1.5"
-                  />
-                </div>
+          <h2 className="text-xl font-bold text-foreground">Review Your Shop Details</h2>
+          <p className="text-muted-foreground text-sm">Please review your information before submitting for verification</p>
+        </div>
 
+        {/* Scrollable Form Content */}
+        <div className="flex-1 overflow-y-auto p-6">
+          <form onSubmit={handleSubmit} className="space-y-5 max-w-2xl">
+            {error && (
+              <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                <div className="text-red-600 text-sm flex-1">{error}</div>
+              </div>
+            )}
+
+            {/* Shop Summary - Read Only */}
+            <div className="p-4 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg">
+              <div className="flex items-center gap-2 text-green-700 dark:text-green-300 mb-3">
+                <CheckCircle className="h-5 w-5" />
+                <h3 className="font-semibold">Shop Information (Collected)</h3>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
                 <div>
-                  <Label htmlFor="city">City *</Label>
-                  <Input
-                    id="city"
-                    placeholder="e.g., Nairobi"
-                    value={formData.city}
-                    onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                    className="mt-1.5"
-                    required
-                  />
+                  <p className="text-muted-foreground">Shop Name</p>
+                  <p className="font-medium">{shop.name}</p>
                 </div>
-
                 <div>
-                  <Label htmlFor="till-number">Till Number (Optional)</Label>
-                  <Input
-                    id="till-number"
-                    placeholder="e.g., 001"
-                    value={formData.tillNumber}
-                    onChange={(e) => setFormData({ ...formData, tillNumber: e.target.value })}
-                    className="mt-1.5"
-                  />
+                  <p className="text-muted-foreground">Business Type</p>
+                  <p className="font-medium">{(shop as any).businessType || 'Not set'}</p>
                 </div>
-
-                <div className="sm:col-span-2">
-                  <Label htmlFor="address">Physical Address</Label>
-                  <Input
-                    id="address"
-                    placeholder="Shop location/address"
-                    value={formData.address}
-                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                    className="mt-1.5"
-                  />
+                <div>
+                  <p className="text-muted-foreground">County</p>
+                  <p className="font-medium">{(shop as any).county || 'Not set'}</p>
                 </div>
-
-                <div className="sm:col-span-2">
-                  <Label htmlFor="kra-pin">KRA PIN (Optional)</Label>
-                  <Input
-                    id="kra-pin"
-                    placeholder="A000000000X"
-                    value={formData.kraPin}
-                    onChange={(e) => setFormData({ ...formData, kraPin: e.target.value })}
-                    className="mt-1.5"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">For tax compliance and reporting</p>
+                <div>
+                  <p className="text-muted-foreground">City/Town</p>
+                  <p className="font-medium">{(shop as any).city || 'Not set'}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Contact Email</p>
+                  <p className="font-medium">{shop.email}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">KRA PIN</p>
+                  <p className="font-medium">{(shop as any).kraPin || 'Not registered'}</p>
                 </div>
               </div>
+            </div>
 
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-6">
-                <div className="flex items-start gap-3">
-                  <Clock className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                  <div className="text-sm text-blue-900">
-                    <p className="font-medium mb-1">Verification Required</p>
-                    <p>After submitting, your shop will be reviewed by our team. This usually takes 24-48 hours.</p>
-                  </div>
-                </div>
+            {/* Additional Optional Info */}
+            <div className="flex items-center gap-2 text-primary">
+              <Info className="h-5 w-5" />
+              <h3 className="font-semibold">Additional Information (Optional)</h3>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="till-number">M-Pesa Till Number</Label>
+                <Input
+                  id="till-number"
+                  placeholder="e.g., 123456"
+                  value={formData.tillNumber}
+                  onChange={(e) => setFormData({ ...formData, tillNumber: e.target.value })}
+                  className="mt-1.5"
+                />
+                <p className="text-xs text-muted-foreground mt-1">For M-Pesa payments integration</p>
               </div>
 
-              <Button type="submit" className="w-full" size="lg" disabled={isLoading}>
-                {isLoading ? "Saving..." : "Submit for Verification"}
-              </Button>
-            </form>
-        </CardContent>
-      </Card>
+              <div>
+                <Label htmlFor="description">Shop Description</Label>
+                <textarea
+                  id="description"
+                  placeholder="Brief description of your shop..."
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  className="mt-1.5 w-full min-h-[80px] px-3 py-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                  maxLength={500}
+                />
+              </div>
+            </div>
+
+            <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <Clock className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                <div className="text-sm text-blue-900 dark:text-blue-100">
+                  <p className="font-medium mb-1">Verification Required</p>
+                  <p className="text-blue-700 dark:text-blue-300">
+                    After submitting, your shop will be reviewed by our team. This usually takes 24-48 hours.
+                    You'll receive an email once your shop is verified.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <Button type="submit" className="w-full" size="lg" disabled={isLoading}>
+              {isLoading ? "Submitting..." : "Submit for Verification"}
+            </Button>
+          </form>
+        </div>
+      </div>
     </div>
   );
 }

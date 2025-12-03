@@ -1,8 +1,10 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ConfigModule } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { InventoryModule } from './inventory/inventory.module';
@@ -29,11 +31,34 @@ import { ShopSettingsModule } from './shop-settings/shop-settings.module';
 import { ReorderModule } from './reorder/reorder.module';
 import { BranchesModule } from './branches/branches.module';
 import { AuditModule } from './audit/audit.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({ 
+      isGlobal: true,
+      envFilePath: ['.env.local', '.env'],
+    }),
     MongooseModule.forRoot(process.env.MONGODB_URI ?? 'mongodb://localhost:27017/smartduka'),
+    // Global rate limiting: 100 requests per minute per IP
+    ThrottlerModule.forRoot([
+      {
+        name: 'short',
+        ttl: 1000, // 1 second
+        limit: 10, // 10 requests per second
+      },
+      {
+        name: 'medium',
+        ttl: 60000, // 1 minute
+        limit: 100, // 100 requests per minute
+      },
+      {
+        name: 'long',
+        ttl: 3600000, // 1 hour
+        limit: 1000, // 1000 requests per hour
+      },
+    ]),
+    HealthModule,
     AuthModule,
     UsersModule,
     InventoryModule,
@@ -62,6 +87,13 @@ import { AuditModule } from './audit/audit.module';
     AuditModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    // Enable global rate limiting
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
 })
 export class AppModule {}

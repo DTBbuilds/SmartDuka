@@ -2,17 +2,24 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Clock, Phone, Mail, HelpCircle, LogOut, RefreshCw, AlertCircle, CheckCircle } from "lucide-react";
+import { Clock, Phone, Mail, HelpCircle, LogOut, RefreshCw, AlertCircle, CheckCircle, FlaskConical, Play, Sparkles, ShoppingCart, Zap, Shield } from "lucide-react";
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from "@smartduka/ui";
 import { useAuth } from "@/lib/auth-context";
+import { ThemeToggleOutline } from "@/components/theme-toggle";
 
 export default function VerificationPendingPage() {
   const router = useRouter();
-  const { user, shop, token, logout } = useAuth();
+  const { user, shop, token, logout, enterDemoMode, isDemoMode } = useAuth();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [shopStatus, setShopStatus] = useState(shop?.status);
   const [submittedTime, setSubmittedTime] = useState<Date | null>(null);
   const [expectedTime, setExpectedTime] = useState<Date | null>(null);
+
+  // Handle entering demo mode
+  const handleEnterDemoMode = () => {
+    enterDemoMode(shop || undefined);
+    router.push("/");
+  };
 
   useEffect(() => {
     // Redirect if not authenticated or not admin
@@ -93,100 +100,211 @@ export default function VerificationPendingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center p-4">
-      <Card className="w-full max-w-2xl shadow-xl">
-        <CardHeader className="text-center space-y-4">
-          <div className="flex items-center justify-center gap-2 mb-4">
-            <div className="p-2 bg-primary/10 rounded-lg">
-              <Clock className="h-6 w-6 text-primary" />
+    <div className="h-screen bg-background flex overflow-hidden">
+      {/* Left Panel - Status & Demo (Dark themed) */}
+      <div className="hidden lg:flex lg:w-2/5 bg-slate-900 p-8 flex-col justify-between relative overflow-hidden">
+        {/* Background Pattern */}
+        <div className="absolute inset-0 opacity-20">
+          <div className="absolute top-20 left-20 w-72 h-72 bg-primary rounded-full blur-3xl" />
+          <div className="absolute bottom-20 right-20 w-96 h-96 bg-orange-600 rounded-full blur-3xl" />
+        </div>
+        
+        <div className="relative z-10">
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-primary/20 rounded-xl">
+              <ShoppingCart className="h-8 w-8 text-primary" />
             </div>
-            <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-              SmartDuka
-            </span>
+            <span className="text-3xl font-bold text-white">SmartDuka</span>
           </div>
-
+        </div>
+        
+        <div className="relative z-10 space-y-6">
           <div>
-            <CardTitle className="text-3xl">Verification in Progress</CardTitle>
-            <CardDescription className="text-base mt-2">
-              Your shop is being reviewed by our team
-            </CardDescription>
+            <div className="flex items-center gap-2 mb-3">
+              <Clock className="h-8 w-8 text-primary animate-pulse" />
+              <h1 className="text-3xl font-bold text-white">Verification in Progress</h1>
+            </div>
+            <p className="text-slate-300 text-lg">
+              Your shop <strong className="text-primary">{shop?.name}</strong> is being reviewed
+            </p>
           </div>
-        </CardHeader>
+          
+          {/* Demo Mode CTA */}
+          <div className="bg-white/10 rounded-xl p-5">
+            <div className="flex items-center gap-3 mb-3">
+              <FlaskConical className="h-6 w-6 text-primary" />
+              <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-primary" />
+                Try Demo Mode!
+              </h3>
+            </div>
+            <p className="text-slate-300 text-sm mb-4">
+              Explore all SmartDuka features with sample data while you wait.
+            </p>
+            <Button
+              onClick={handleEnterDemoMode}
+              size="lg"
+              className="w-full font-bold shadow-lg"
+            >
+              <Play className="h-5 w-5 mr-2" />
+              Enter Demo Mode
+            </Button>
+          </div>
+          
+          {/* Status Info */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-white/10 rounded-lg p-3">
+              <p className="text-xs text-primary uppercase font-bold">Submitted</p>
+              <p className="text-lg font-bold text-white mt-1">
+                {submittedTime ? submittedTime.toLocaleDateString() : "Today"}
+              </p>
+            </div>
+            <div className="bg-white/10 rounded-lg p-3">
+              <p className="text-xs text-primary uppercase font-bold">Expected</p>
+              <p className="text-lg font-bold text-white mt-1">
+                {expectedTime ? expectedTime.toLocaleDateString() : "Within 48 hours"}
+              </p>
+            </div>
+          </div>
+        </div>
+        
+        <div className="relative z-10 text-slate-500 text-sm">
+          © 2024 SmartDuka. Built for Kenyan businesses.
+        </div>
+      </div>
 
-        <CardContent className="space-y-8">
-          {/* Status Card */}
-          <div className="bg-gradient-to-r from-yellow-50 to-orange-50 border-2 border-yellow-200 rounded-lg p-6 space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-yellow-100 rounded-full">
-                <Clock className="h-6 w-6 text-yellow-600" />
+      {/* Right Panel - Details */}
+      <div className="w-full lg:w-3/5 flex flex-col overflow-hidden bg-background">
+        {/* Header with Theme Toggle */}
+        <div className="flex-shrink-0 p-6 pb-4 border-b border-border bg-muted/50">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-primary/10 rounded-lg">
+                <ShoppingCart className="h-6 w-6 text-primary" />
+              </div>
+              <span className="text-xl font-bold text-foreground lg:hidden">SmartDuka</span>
+            </div>
+            <ThemeToggleOutline />
+          </div>
+          <h2 className="text-xl font-bold text-foreground">Verification in Progress</h2>
+          <p className="text-muted-foreground text-sm">Your shop <strong className="text-primary">{shop?.name}</strong> is being reviewed</p>
+        </div>
+
+        {/* Scrollable Content */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+          {/* Demo Mode CTA - High Visibility */}
+          <div className="bg-slate-900 rounded-xl p-6 text-white shadow-lg">
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-white/20 rounded-full">
+                <FlaskConical className="h-8 w-8" />
               </div>
               <div className="flex-1">
-                <p className="font-semibold text-slate-900">Status: Under Review</p>
-                <p className="text-sm text-slate-600">Your shop information is being verified</p>
+                <h3 className="text-xl font-bold flex items-center gap-2">
+                  <Sparkles className="h-5 w-5" />
+                  Try Demo Mode While You Wait!
+                </h3>
+                <p className="text-white/90 mt-2 text-sm">
+                  Explore all SmartDuka features with sample data. Perfect for learning the system before going live.
+                </p>
+                <ul className="mt-3 space-y-1 text-sm text-white/90">
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4" /> Full POS system access
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4" /> Inventory management
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4" /> Reports & analytics
+                  </li>
+                </ul>
+                <Button
+                  onClick={handleEnterDemoMode}
+                  size="lg"
+                  className="mt-4 bg-yellow-400 text-slate-900 hover:bg-yellow-300 font-bold shadow-lg"
+                >
+                  <Play className="h-5 w-5 mr-2" />
+                  Enter Demo Mode
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Status Card - High Contrast */}
+          <div className="bg-blue-50 border-2 border-blue-300 rounded-xl p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-blue-600 rounded-full">
+                <Clock className="h-6 w-6 text-white" />
+              </div>
+              <div className="flex-1">
+                <p className="font-bold text-lg text-slate-900">Status: Under Review</p>
+                <p className="text-slate-700">Your shop information is being verified by our team</p>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-yellow-200">
-              <div>
-                <p className="text-xs text-slate-600 uppercase font-medium">Submitted</p>
-                <p className="text-sm font-semibold text-slate-900 mt-1">
+            <div className="grid grid-cols-2 gap-4 pt-4 border-t-2 border-blue-200">
+              <div className="bg-white rounded-lg p-3">
+                <p className="text-xs text-blue-600 uppercase font-bold">Submitted</p>
+                <p className="text-lg font-bold text-slate-900 mt-1">
                   {submittedTime ? submittedTime.toLocaleDateString() : "Today"}
                 </p>
               </div>
-              <div>
-                <p className="text-xs text-slate-600 uppercase font-medium">Expected</p>
-                <p className="text-sm font-semibold text-slate-900 mt-1">
+              <div className="bg-white rounded-lg p-3">
+                <p className="text-xs text-blue-600 uppercase font-bold">Expected</p>
+                <p className="text-lg font-bold text-slate-900 mt-1">
                   {expectedTime ? expectedTime.toLocaleDateString() : "Within 48 hours"}
                 </p>
               </div>
             </div>
           </div>
 
-          {/* What Happens Next */}
-          <div className="space-y-4">
-            <h3 className="font-semibold text-slate-900 flex items-center gap-2">
-              <CheckCircle className="h-5 w-5 text-blue-600" />
-              What Happens Next?
-            </h3>
-            <ul className="space-y-3">
+          {/* What Happens Next - Collapsible */}
+          <details className="group border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+            <summary className="p-4 bg-slate-50 dark:bg-slate-800 cursor-pointer flex items-center justify-between font-semibold text-slate-900 dark:text-white">
+              <span className="flex items-center gap-2">
+                <CheckCircle className="h-5 w-5 text-blue-600" />
+                What Happens Next?
+              </span>
+              <span className="group-open:rotate-180 transition-transform text-slate-400">▼</span>
+            </summary>
+            <ul className="space-y-3 p-4 bg-white dark:bg-slate-900">
               <li className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center mt-0.5">
-                  <span className="text-xs font-semibold text-blue-600">1</span>
+                <div className="flex-shrink-0 w-7 h-7 rounded-full bg-blue-500 flex items-center justify-center mt-0.5">
+                  <span className="text-xs font-bold text-white">1</span>
                 </div>
                 <div>
-                  <p className="font-medium text-slate-900">Our team reviews your information</p>
-                  <p className="text-sm text-slate-600">We verify your business details and documents</p>
+                  <p className="font-medium text-slate-900 dark:text-white">Our team reviews your information</p>
+                  <p className="text-sm text-slate-600 dark:text-slate-400">We verify your business details and documents</p>
                 </div>
               </li>
               <li className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center mt-0.5">
-                  <span className="text-xs font-semibold text-blue-600">2</span>
+                <div className="flex-shrink-0 w-7 h-7 rounded-full bg-blue-500 flex items-center justify-center mt-0.5">
+                  <span className="text-xs font-bold text-white">2</span>
                 </div>
                 <div>
-                  <p className="font-medium text-slate-900">We validate your shop details</p>
-                  <p className="text-sm text-slate-600">This includes business registration and compliance checks</p>
+                  <p className="font-medium text-slate-900 dark:text-white">We validate your shop details</p>
+                  <p className="text-sm text-slate-600 dark:text-slate-400">This includes business registration and compliance checks</p>
                 </div>
               </li>
               <li className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center mt-0.5">
-                  <span className="text-xs font-semibold text-blue-600">3</span>
+                <div className="flex-shrink-0 w-7 h-7 rounded-full bg-blue-500 flex items-center justify-center mt-0.5">
+                  <span className="text-xs font-bold text-white">3</span>
                 </div>
                 <div>
-                  <p className="font-medium text-slate-900">You'll receive email notification</p>
-                  <p className="text-sm text-slate-600">We'll notify you at <strong>{shop.email}</strong> once verified</p>
+                  <p className="font-medium text-slate-900 dark:text-white">You'll receive email notification</p>
+                  <p className="text-sm text-slate-600 dark:text-slate-400">We'll notify you at <strong className="text-blue-600">{shop.email}</strong> once verified</p>
                 </div>
               </li>
               <li className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center mt-0.5">
-                  <span className="text-xs font-semibold text-blue-600">4</span>
+                <div className="flex-shrink-0 w-7 h-7 rounded-full bg-blue-500 flex items-center justify-center mt-0.5">
+                  <span className="text-xs font-bold text-white">4</span>
                 </div>
                 <div>
-                  <p className="font-medium text-slate-900">Full access to SmartDuka</p>
-                  <p className="text-sm text-slate-600">Start managing your POS and inventory</p>
+                  <p className="font-medium text-slate-900 dark:text-white">Full access to SmartDuka</p>
+                  <p className="text-sm text-slate-600 dark:text-slate-400">Start managing your POS and inventory</p>
                 </div>
               </li>
             </ul>
-          </div>
+          </details>
 
           {/* Support Section */}
           <div className="bg-slate-50 border border-slate-200 rounded-lg p-6 space-y-4">
@@ -289,8 +407,8 @@ export default function VerificationPendingPage() {
               You'll be automatically redirected to your dashboard once your shop is verified. You can also check back here anytime.
             </p>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

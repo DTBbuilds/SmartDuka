@@ -224,5 +224,46 @@
     "fieldInvalid": "{{field}} si sahihi",
     "fieldTooShort": "{{field}} ni fupi sana",
     "fieldTooLong": "{{field}} ni ndefu sana"
+  },
+  "demo": {
+    "title": "Hali ya Majaribio",
+    "banner": "Unachunguza SmartDuka katika hali ya majaribio. Data haitahifadhiwa kudumu.",
+    "indicator": "Hali ya Majaribio",
+    "verificationPending": "Uthibitisho unasubiri kwa {{shopName}}",
+    "tryDemoMode": "Jaribu Hali ya Majaribio Ukisubiri!",
+    "demoDescription": "Chunguza vipengele vyote vya SmartDuka na data ya sampuli. Bora kwa kujifunza mfumo kabla ya kuanza.",
+    "enterDemo": "Ingia Hali ya Majaribio",
+    "exitDemo": "Ondoka Hali ya Majaribio",
+    "features": {
+      "pos": "Ufikiaji kamili wa mfumo wa POS",
+      "inventory": "Usimamizi wa hesabu",
+      "reports": "Ripoti na uchambuzi"
+    },
+    "notice": "Hali ya majaribio inakuruhusu kuchunguza mfumo wakati uthibitisho wa duka lako unasubiri. Data yoyote unayounda itawekwa alama kama data ya majaribio.",
+    "dataWarning": "Data ya majaribio itafutwa duka lako litakapothibitishwa"
+  },
+  "verification": {
+    "title": "Uthibitisho Unaendelea",
+    "subtitle": "Duka lako linakaguliwa na timu yetu",
+    "statusUnderReview": "Hali: Inakaguliwa",
+    "statusDescription": "Taarifa za duka lako zinathibitishwa na timu yetu",
+    "submitted": "Imetumwa",
+    "expected": "Inatarajiwa",
+    "within48Hours": "Ndani ya saa 48",
+    "today": "Leo",
+    "whatHappensNext": "Nini Kinachofuata?",
+    "step1Title": "Timu yetu inakagua taarifa zako",
+    "step1Desc": "Tunathibitisha maelezo na nyaraka za biashara yako",
+    "step2Title": "Tunathibitisha maelezo ya duka lako",
+    "step2Desc": "Hii inajumuisha usajili wa biashara na ukaguzi wa uzingatiaji",
+    "step3Title": "Utapokea arifa ya barua pepe",
+    "step3Desc": "Tutakujulisha kwenye {{email}} utakapothibitishwa",
+    "step4Title": "Ufikiaji kamili wa SmartDuka",
+    "step4Desc": "Anza kusimamia POS na hesabu yako",
+    "needHelp": "Unahitaji Msaada?",
+    "callSupport": "Piga simu timu yetu ya msaada",
+    "emailUs": "Tutumie barua pepe",
+    "refreshStatus": "Sasisha Hali",
+    "checking": "Inakagua..."
   }
 }

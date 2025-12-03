@@ -113,81 +113,46 @@ function CashierDashboardContent() {
 
     try {
       setLoading(true);
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
-      // Get sales data for today
-      const res = await fetch(`${base}/sales?limit=100&status=completed`, {
+      // Use the dedicated cashier stats endpoint
+      const res = await fetch(`${base}/sales/cashier-stats`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
       if (!res.ok) {
-        // Handle errors gracefully
         if (res.status === 401) {
-          console.warn('Unauthorized - token may have expired');
           toast({ type: 'error', title: 'Session expired', message: 'Please login again' });
           return;
         }
-        if (res.status === 403) {
-          console.warn('Access denied to sales endpoint');
-          setStats({
-            totalSales: 0,
-            transactionCount: 0,
-            averageTransaction: 0,
-            recentTransactions: [],
-          });
-          return;
-        }
-        if (res.status === 404) {
-          // No transactions yet - this is normal
-          setStats({
-            totalSales: 0,
-            transactionCount: 0,
-            averageTransaction: 0,
-            recentTransactions: [],
-          });
-          return;
-        }
-        throw new Error(`Failed to load stats: ${res.status}`);
+        // Set empty stats on error
+        setStats({
+          totalSales: 0,
+          transactionCount: 0,
+          averageTransaction: 0,
+          recentTransactions: [],
+        });
+        return;
       }
 
       const data = await res.json();
-      const sales = Array.isArray(data) ? data : data.data || [];
 
-      // Filter for today's transactions and current cashier
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      const todayTransactions = sales.filter((sale: any) => {
-        const saleDate = new Date(sale.createdAt);
-        saleDate.setHours(0, 0, 0, 0);
-        return saleDate.getTime() === today.getTime() && 
-               (sale.cashierId === user.sub || sale.cashierName === user.name);
-      });
-
-      // Calculate stats
-      let totalSales = 0;
-      todayTransactions.forEach((sale: any) => {
-        totalSales += sale.total || 0;
-      });
-
-      const averageTransaction = todayTransactions.length > 0 ? totalSales / todayTransactions.length : 0;
-
-      // Format transactions for display
-      const formattedTransactions: Transaction[] = todayTransactions.slice(0, 10).map((sale: any) => ({
-        _id: sale._id,
+      // Format recent orders for display
+      const formattedTransactions: Transaction[] = (data.recentOrders || []).map((order: any) => ({
+        _id: order.id,
         action: 'sale',
         details: {
-          amount: sale.total,
-          items: sale.items?.length || 0,
-          paymentMethod: sale.payments?.[0]?.method || 'Unknown',
+          amount: order.total,
+          items: order.items || 0,
+          paymentMethod: order.paymentStatus || 'paid',
         },
-        timestamp: sale.createdAt,
+        timestamp: order.createdAt,
       }));
 
       setStats({
-        totalSales,
-        transactionCount: todayTransactions.length,
-        averageTransaction,
+        totalSales: data.todaySales || 0,
+        transactionCount: data.todayTransactions || 0,
+        averageTransaction: data.averageTransaction || 0,
         recentTransactions: formattedTransactions,
       });
     } catch (err: any) {

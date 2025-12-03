@@ -75,7 +75,7 @@ export function BranchStockSharing() {
 
       const [branchesRes, productsRes, transfersRes] = await Promise.all([
         fetch(`${base}/branches`, { headers }),
-        fetch(`${base}/inventory/products?limit=500`, { headers }),
+        fetch(`${base}/inventory/products?limit=200`, { headers }),
         fetch(`${base}/inventory/stock-transfers`, { headers }),
       ]);
 

@@ -55,8 +55,8 @@ export function POSProductsListView({
   }
 
   return (
-    <div className={`${maxHeight} overflow-y-auto border rounded-lg bg-slate-50 dark:bg-slate-950/50`}>
-      <div className="space-y-0">
+    <div className={`${maxHeight} overflow-y-auto border rounded-lg bg-slate-50 dark:bg-slate-950/50 flex flex-col`}>
+      <div className="space-y-0 flex-1">
         {products.map((product, index) => {
           const isOutOfStock = product.stock === 0 || product.stock === undefined;
           const isLowStock = product.stock && product.stock > 0 && product.stock <= 5;

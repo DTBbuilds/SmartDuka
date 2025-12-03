@@ -3,6 +3,8 @@
  * Manages online/offline status and sends heartbeat to backend
  */
 
+import { config } from './config';
+
 export type UserStatus = 'online' | 'idle' | 'offline';
 
 class StatusManager {
@@ -20,7 +22,7 @@ class StatusManager {
   private initialized: boolean = false;
 
   constructor() {
-    this.baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+    this.baseUrl = config.apiUrl;
     this.setupActivityListeners();
   }
 

@@ -17,6 +17,7 @@ declare module "next-themes" {
     theme?: Theme;
     setTheme: (theme: Theme) => void;
     systemTheme?: Theme;
+    resolvedTheme?: Theme;
   }
 
   export const ThemeProvider: React.ComponentType<ThemeProviderProps>;

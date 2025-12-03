@@ -15,10 +15,10 @@ export class StockAdjustment {
   quantityChange: number;
 
   @Prop({
-    enum: ['damage', 'loss', 'correction', 'return', 'other'],
+    enum: ['damage', 'loss', 'correction', 'return', 'sale', 'purchase', 'transfer', 'other'],
     required: true,
   })
-  reason: 'damage' | 'loss' | 'correction' | 'return' | 'other';
+  reason: 'damage' | 'loss' | 'correction' | 'return' | 'sale' | 'purchase' | 'transfer' | 'other';
 
   @Prop()
   notes?: string;

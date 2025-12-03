@@ -2,49 +2,94 @@
 
 import { useRef, useState } from "react";
 import { Button, Dialog, DialogContent, DialogHeader, DialogTitle } from "@smartduka/ui";
-import { Upload, X, AlertCircle, CheckCircle } from "lucide-react";
-import { parseProductsCSV, getCSVTemplate, downloadCSV } from "@/lib/csv-parser";
+import { Upload, X, AlertCircle, CheckCircle, FolderPlus, Sparkles, AlertTriangle, FileSpreadsheet } from "lucide-react";
+import { parseProductsCSV, getCSVTemplate, downloadCSV, CSVParseResult } from "@/lib/csv-parser";
+
+interface ImportOptions {
+  autoCreateCategories: boolean;
+  autoSuggestCategories: boolean;
+  updateExisting: boolean;
+  skipDuplicates: boolean;
+}
+
+interface ImportResult {
+  imported: number;
+  updated: number;
+  skipped: number;
+  categoriesCreated: string[];
+  categorySuggestions: { [key: string]: string };
+  errors?: string[];
+}
 
 interface CSVImportModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onImport: (products: any[]) => Promise<void>;
+  onImport: (products: any[], options?: ImportOptions) => Promise<ImportResult | void>;
 }
 
 export function CSVImportModal({ isOpen, onClose, onImport }: CSVImportModalProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
+  const [parseResult, setParseResult] = useState<CSVParseResult | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
+  const [warnings, setWarnings] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [importedCount, setImportedCount] = useState(0);
+  const [loadingStatus, setLoadingStatus] = useState<string>("");
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  
+  // Import options
+  const [options, setOptions] = useState<ImportOptions>({
+    autoCreateCategories: true,
+    autoSuggestCategories: true,
+    updateExisting: false,
+    skipDuplicates: true,
+  });
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
       setFile(selectedFile);
       setErrors([]);
-      setImportedCount(0);
+      setWarnings([]);
+      setImportResult(null);
+      setParseResult(null);
+      
+      // Pre-parse to show preview
+      setLoadingStatus("Parsing CSV...");
+      const result = await parseProductsCSV(selectedFile);
+      setParseResult(result);
+      setErrors(result.errors);
+      setWarnings(result.warnings || []);
+      setLoadingStatus("");
     }
   };
 
   const handleImport = async () => {
-    if (!file) return;
+    if (!file || !parseResult?.data) return;
 
     try {
       setIsLoading(true);
-      setErrors([]);
+      setLoadingStatus("Uploading products...");
 
-      const result = await parseProductsCSV(file);
-
-      if (!result.success || !result.data) {
-        setErrors(result.errors);
-        return;
+      // Call the import handler with options
+      const importRes = await onImport(parseResult.data, options);
+      if (importRes) {
+        setImportResult(importRes);
+        // Add any server-side errors
+        if (importRes.errors?.length) {
+          setErrors(prev => [...prev, ...importRes.errors!]);
+        }
+      } else {
+        setImportResult({ 
+          imported: parseResult.data.length, 
+          updated: 0, 
+          skipped: 0, 
+          categoriesCreated: [], 
+          categorySuggestions: {} 
+        });
       }
-
-      // Call the import handler
-      await onImport(result.data);
-      setImportedCount(result.data.length);
       setFile(null);
+      setParseResult(null);
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
@@ -52,11 +97,15 @@ export function CSVImportModal({ isOpen, onClose, onImport }: CSVImportModalProp
       // Close after a short delay to show success
       setTimeout(() => {
         onClose();
-      }, 1500);
+        setImportResult(null);
+        setErrors([]);
+        setWarnings([]);
+      }, 3000);
     } catch (err: any) {
       setErrors([err?.message || "Failed to import products"]);
     } finally {
       setIsLoading(false);
+      setLoadingStatus("");
     }
   };
 
@@ -109,16 +158,48 @@ export function CSVImportModal({ isOpen, onClose, onImport }: CSVImportModalProp
             </Button>
           </div>
 
+          {/* Parse Preview */}
+          {parseResult && !importResult && (
+            <div className="rounded-md border border-blue-500/40 bg-blue-500/10 p-3">
+              <div className="flex gap-2 items-center">
+                <FileSpreadsheet className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                <p className="text-xs font-medium text-blue-600 dark:text-blue-400">
+                  {parseResult.validRows} of {parseResult.totalRows} products ready to import
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Warnings */}
+          {warnings.length > 0 && !importResult && (
+            <div className="rounded-md border border-yellow-500/40 bg-yellow-500/10 p-3">
+              <div className="flex gap-2 mb-2">
+                <AlertTriangle className="h-4 w-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+                <p className="text-xs font-medium text-yellow-600 dark:text-yellow-400">
+                  {warnings.length} warning{warnings.length !== 1 ? "s" : ""}
+                </p>
+              </div>
+              <ul className="text-xs text-yellow-600 dark:text-yellow-400 space-y-1 ml-6 max-h-20 overflow-y-auto">
+                {warnings.slice(0, 5).map((warning, idx) => (
+                  <li key={idx}>• {warning}</li>
+                ))}
+                {warnings.length > 5 && (
+                  <li>• ... and {warnings.length - 5} more</li>
+                )}
+              </ul>
+            </div>
+          )}
+
           {/* Errors */}
           {errors.length > 0 && (
             <div className="rounded-md border border-red-500/40 bg-red-500/10 p-3">
               <div className="flex gap-2 mb-2">
                 <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
                 <p className="text-xs font-medium text-red-600 dark:text-red-400">
-                  {errors.length} error{errors.length !== 1 ? "s" : ""} found
+                  {errors.length} error{errors.length !== 1 ? "s" : ""} found (will be skipped)
                 </p>
               </div>
-              <ul className="text-xs text-red-600 dark:text-red-400 space-y-1 ml-6">
+              <ul className="text-xs text-red-600 dark:text-red-400 space-y-1 ml-6 max-h-20 overflow-y-auto">
                 {errors.slice(0, 5).map((error, idx) => (
                   <li key={idx}>• {error}</li>
                 ))}
@@ -129,13 +210,61 @@ export function CSVImportModal({ isOpen, onClose, onImport }: CSVImportModalProp
             </div>
           )}
 
+          {/* Import Options */}
+          {parseResult?.data && !importResult && (
+            <div className="rounded-md border border-slate-200 dark:border-slate-700 p-3 space-y-3">
+              <p className="text-xs font-medium text-slate-700 dark:text-slate-300">Import Options</p>
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 text-xs cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={options.autoCreateCategories}
+                    onChange={(e) => setOptions({ ...options, autoCreateCategories: e.target.checked })}
+                    className="rounded border-slate-300"
+                  />
+                  <FolderPlus className="h-3 w-3 text-blue-500" />
+                  <span>Auto-create categories from CSV</span>
+                </label>
+                <label className="flex items-center gap-2 text-xs cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={options.autoSuggestCategories}
+                    onChange={(e) => setOptions({ ...options, autoSuggestCategories: e.target.checked })}
+                    className="rounded border-slate-300"
+                  />
+                  <Sparkles className="h-3 w-3 text-purple-500" />
+                  <span>Auto-suggest categories by product name</span>
+                </label>
+                <label className="flex items-center gap-2 text-xs cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={options.updateExisting}
+                    onChange={(e) => setOptions({ ...options, updateExisting: e.target.checked })}
+                    className="rounded border-slate-300"
+                  />
+                  <span>Update existing products (by SKU/barcode)</span>
+                </label>
+              </div>
+            </div>
+          )}
+
           {/* Success */}
-          {importedCount > 0 && (
-            <div className="rounded-md border border-green-500/40 bg-green-500/10 p-3 flex gap-2">
-              <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
-              <p className="text-xs text-green-600 dark:text-green-400">
-                Successfully imported {importedCount} product{importedCount !== 1 ? "s" : ""}!
-              </p>
+          {importResult && (
+            <div className="rounded-md border border-green-500/40 bg-green-500/10 p-3 space-y-2">
+              <div className="flex gap-2">
+                <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+                <div className="text-xs text-green-600 dark:text-green-400">
+                  <p className="font-medium">Import Complete!</p>
+                  <ul className="mt-1 space-y-0.5">
+                    <li>• {importResult.imported} products imported</li>
+                    {importResult.updated > 0 && <li>• {importResult.updated} products updated</li>}
+                    {importResult.skipped > 0 && <li>• {importResult.skipped} duplicates skipped</li>}
+                    {importResult.categoriesCreated.length > 0 && (
+                      <li>• {importResult.categoriesCreated.length} categories created: {importResult.categoriesCreated.slice(0, 3).join(", ")}{importResult.categoriesCreated.length > 3 ? "..." : ""}</li>
+                    )}
+                  </ul>
+                </div>
+              </div>
             </div>
           )}
 
@@ -146,6 +275,7 @@ export function CSVImportModal({ isOpen, onClose, onImport }: CSVImportModalProp
               variant="outline"
               onClick={onClose}
               className="flex-1"
+              disabled={isLoading}
             >
               <X className="h-4 w-4 mr-2" />
               Cancel
@@ -153,15 +283,15 @@ export function CSVImportModal({ isOpen, onClose, onImport }: CSVImportModalProp
             <Button
               size="sm"
               onClick={handleImport}
-              disabled={!file || isLoading || errors.length > 0}
+              disabled={!parseResult?.data || isLoading || !!importResult}
               className="flex-1"
             >
-              {isLoading ? "Importing..." : "Import"}
+              {isLoading ? (loadingStatus || "Importing...") : `Import ${parseResult?.validRows || 0} Products`}
             </Button>
           </div>
 
           <p className="text-xs text-muted-foreground text-center">
-            CSV should have columns: name, sku, barcode, price, cost, stock, categoryId, tax, status
+            CSV columns: name, sku, barcode, price, cost, stock, category, brand, tax, status, description
           </p>
         </div>
       </DialogContent>

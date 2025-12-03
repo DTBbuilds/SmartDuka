@@ -7,25 +7,27 @@ import { Pause, X, Percent, Plus, ShoppingCart, Receipt } from 'lucide-react';
 interface POSCheckoutBarProps {
   cartItemsCount: number;
   isCheckingOut: boolean;
+  receiptsCount?: number;
   onHoldSale: () => void;
   onClearCart: () => void;
   onApplyDiscount: () => void;
   onAddManualItem: () => void;
   onOpenScanner: () => void;
   onCheckout: () => void;
-  onOpenReceipt: () => void;
+  onOpenReceiptsHistory: () => void;
 }
 
 export function POSCheckoutBar({
   cartItemsCount,
   isCheckingOut,
+  receiptsCount = 0,
   onHoldSale,
   onClearCart,
   onApplyDiscount,
   onAddManualItem,
   onOpenScanner,
   onCheckout,
-  onOpenReceipt,
+  onOpenReceiptsHistory,
 }: POSCheckoutBarProps) {
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-background border-t border-border shadow-lg z-40">
@@ -96,12 +98,17 @@ export function POSCheckoutBar({
           <Button
             variant="outline"
             size="sm"
-            onClick={onOpenReceipt}
-            className="gap-2"
-            title="View receipt"
+            onClick={onOpenReceiptsHistory}
+            className="gap-2 relative"
+            title="View receipts history"
           >
             <Receipt className="h-4 w-4" />
-            <span className="hidden sm:inline">Receipt</span>
+            <span className="hidden sm:inline">Receipts</span>
+            {receiptsCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 h-5 w-5 flex items-center justify-center text-[10px] font-bold bg-primary text-primary-foreground rounded-full">
+                {receiptsCount > 99 ? '99+' : receiptsCount}
+              </span>
+            )}
           </Button>
 
           <Button

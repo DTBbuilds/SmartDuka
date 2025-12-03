@@ -5,15 +5,35 @@ import { useRouter } from "next/navigation";
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label } from "@smartduka/ui";
 import { useAuth } from "@/lib/auth-context";
 import { AuthGuard } from "@/components/auth-guard";
-import { Plus, Trash2, AlertCircle, CheckCircle, Users } from "lucide-react";
+import { 
+  Plus, 
+  Trash2, 
+  AlertCircle, 
+  CheckCircle, 
+  Users, 
+  RefreshCw, 
+  Copy, 
+  Eye, 
+  EyeOff,
+  UserPlus,
+  Shield,
+  Clock,
+  Phone,
+  Mail,
+  MoreVertical,
+  Power,
+  Key
+} from "lucide-react";
 
 interface Cashier {
   _id: string;
   name: string;
   email: string;
   phone?: string;
+  cashierId?: string;
   status: "active" | "disabled";
   createdAt: string;
+  totalSales?: number;
 }
 
 function CashiersContent() {
@@ -174,88 +194,91 @@ function CashiersContent() {
     }
   };
 
+  const [pinCopied, setPinCopied] = useState(false);
+
+  const copyPin = () => {
+    navigator.clipboard.writeText(generatedPin);
+    setPinCopied(true);
+    setTimeout(() => setPinCopied(false), 2000);
+  };
+
   if (!user || !shop) {
     return null;
   }
 
+  const activeCashiers = cashiers.filter(c => c.status === 'active').length;
+  const maxCashiers = 5; // Increased limit
+
   return (
-    <div className="min-h-screen bg-slate-50 p-4 sm:p-6">
-      <div className="max-w-6xl mx-auto space-y-6">
+    <div className="min-h-screen bg-background p-4 sm:p-6">
+      <div className="max-w-5xl mx-auto space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-slate-900 flex items-center gap-2">
-              <Users className="h-8 w-8 text-primary" />
+            <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+              <Users className="h-6 w-6 text-primary" />
               Cashier Management
             </h1>
-            <p className="text-slate-600 mt-1">Manage cashiers for {shop.name}</p>
+            <p className="text-muted-foreground text-sm mt-1">
+              {activeCashiers} active · {cashiers.length}/{maxCashiers} total
+            </p>
           </div>
 
-          <Button onClick={() => setShowAddForm(!showAddForm)} disabled={cashiers.length >= 2}>
-            <Plus className="h-4 w-4 mr-2" />
+          <Button 
+            onClick={() => setShowAddForm(!showAddForm)} 
+            disabled={cashiers.length >= maxCashiers}
+            className="gap-2"
+          >
+            <UserPlus className="h-4 w-4" />
             Add Cashier
           </Button>
         </div>
 
         {/* Error Alert */}
         {error && (
-          <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
-            <div className="text-red-600 text-sm flex-1">{error}</div>
-          </div>
-        )}
-
-        {/* Cashier Limit Alert */}
-        {cashiers.length >= 2 && (
-          <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-yellow-600 flex-shrink-0 mt-0.5" />
-            <div className="text-yellow-800 text-sm">
-              <p className="font-medium">Maximum cashiers reached</p>
-              <p>You can have up to 2 cashiers per shop. Delete a cashier to add another.</p>
-            </div>
+          <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg flex items-center gap-3">
+            <AlertCircle className="h-4 w-4 text-destructive flex-shrink-0" />
+            <p className="text-destructive text-sm flex-1">{error}</p>
+            <button onClick={() => setError('')} className="text-destructive hover:text-destructive/80">×</button>
           </div>
         )}
 
         {/* Add Cashier Form */}
         {showAddForm && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Add New Cashier</CardTitle>
-              <CardDescription>Create a new cashier account with auto-generated PIN</CardDescription>
+          <Card className="border-primary/20 bg-primary/5">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <UserPlus className="h-5 w-5 text-primary" />
+                Add New Cashier
+              </CardTitle>
+              <CardDescription>A secure PIN will be auto-generated</CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleAddCashier} className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="name">Full Name *</Label>
+                    <Label htmlFor="name" className="text-sm">Full Name *</Label>
                     <Input
                       id="name"
-                      placeholder="Cashier name"
+                      placeholder="e.g. John Kamau"
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      className="mt-1.5"
+                      className="mt-1"
                     />
                   </div>
-
                   <div>
-                    <Label htmlFor="phone">Phone (Optional)</Label>
+                    <Label htmlFor="phone" className="text-sm">Phone (Optional)</Label>
                     <Input
                       id="phone"
-                      placeholder="+254712345678"
+                      placeholder="0712345678"
                       value={formData.phone}
                       onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                      className="mt-1.5"
+                      className="mt-1"
                     />
                   </div>
                 </div>
 
-                <div className="bg-blue-50 border border-blue-200 p-3 rounded-lg">
-                  <p className="text-xs text-blue-700">
-                    ℹ️ A PIN will be automatically generated for this cashier. You can share it with them after creation.
-                  </p>
-                </div>
-
-                <div className="flex gap-3 pt-4">
+                <div className="flex gap-3">
                   <Button
                     type="button"
                     variant="outline"
@@ -264,8 +287,18 @@ function CashiersContent() {
                   >
                     Cancel
                   </Button>
-                  <Button type="submit" className="flex-1" disabled={isSubmitting}>
-                    {isSubmitting ? "Creating..." : "Create Cashier"}
+                  <Button type="submit" className="flex-1 gap-2" disabled={isSubmitting}>
+                    {isSubmitting ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                        Creating...
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="h-4 w-4" />
+                        Create Cashier
+                      </>
+                    )}
                   </Button>
                 </div>
               </form>
@@ -275,41 +308,38 @@ function CashiersContent() {
 
         {/* PIN Display Modal */}
         {generatedPin && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-            <Card className="w-full max-w-sm">
-              <CardHeader>
-                <CardTitle>PIN Created Successfully</CardTitle>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <Card className="w-full max-w-sm shadow-2xl">
+              <CardHeader className="text-center pb-2">
+                <div className="mx-auto w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mb-2">
+                  <CheckCircle className="h-6 w-6 text-green-600" />
+                </div>
+                <CardTitle>Cashier Created!</CardTitle>
+                <CardDescription>{generatedCashierName}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div>
-                  <p className="text-sm font-medium text-slate-900 mb-3">Cashier: {generatedCashierName}</p>
-                  <div className="bg-gradient-to-br from-blue-600 to-blue-700 p-6 rounded-lg text-center shadow-lg">
-                    <p className="text-xs text-blue-100 mb-3 font-medium">PIN Code</p>
-                    <p className="text-5xl font-bold tracking-widest font-mono text-white drop-shadow-lg">{generatedPin}</p>
-                  </div>
+                <div className="bg-slate-900 p-6 rounded-xl text-center">
+                  <p className="text-xs text-slate-400 mb-2 font-medium uppercase tracking-wider">Login PIN</p>
+                  <p className="text-4xl font-bold tracking-[0.3em] font-mono text-white">{generatedPin}</p>
                 </div>
 
-                <div className="bg-blue-50 border border-blue-200 p-3 rounded-lg">
-                  <p className="text-xs text-blue-700">
-                    ⚠️ Save this PIN securely. It will only be shown once. Share it with the cashier via a secure channel.
+                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3 rounded-lg">
+                  <p className="text-xs text-amber-800 dark:text-amber-200 flex items-start gap-2">
+                    <Shield className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                    <span>Save this PIN securely. It won't be shown again. Share it privately with the cashier.</span>
                   </p>
                 </div>
 
-                <div className="flex gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   <Button
-                    onClick={() => {
-                      navigator.clipboard.writeText(generatedPin);
-                      alert('PIN copied to clipboard');
-                    }}
+                    onClick={copyPin}
                     variant="outline"
-                    className="flex-1"
+                    className="gap-2"
                   >
-                    Copy PIN
+                    {pinCopied ? <CheckCircle className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                    {pinCopied ? 'Copied!' : 'Copy PIN'}
                   </Button>
-                  <Button
-                    onClick={() => setGeneratedPin('')}
-                    className="flex-1"
-                  >
+                  <Button onClick={() => { setGeneratedPin(''); setPinCopied(false); }}>
                     Done
                   </Button>
                 </div>
@@ -320,69 +350,93 @@ function CashiersContent() {
 
         {/* Cashiers List */}
         {isLoading ? (
-          <Card>
-            <CardContent className="pt-6">
-              <p className="text-center text-slate-500">Loading cashiers...</p>
-            </CardContent>
-          </Card>
+          <div className="flex items-center justify-center py-12">
+            <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
         ) : cashiers.length === 0 ? (
-          <Card>
-            <CardContent className="pt-6">
-              <p className="text-center text-slate-500">No cashiers yet. Click "Add Cashier" to create one.</p>
+          <Card className="border-dashed">
+            <CardContent className="py-12 text-center">
+              <div className="mx-auto w-12 h-12 bg-muted rounded-full flex items-center justify-center mb-4">
+                <Users className="h-6 w-6 text-muted-foreground" />
+              </div>
+              <h3 className="font-medium text-foreground mb-1">No cashiers yet</h3>
+              <p className="text-sm text-muted-foreground mb-4">Add your first cashier to get started</p>
+              <Button onClick={() => setShowAddForm(true)} variant="outline" className="gap-2">
+                <UserPlus className="h-4 w-4" />
+                Add First Cashier
+              </Button>
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-4">
+          <div className="space-y-3">
             {cashiers.map((cashier) => (
-              <Card key={cashier._id}>
-                <CardContent className="pt-6">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <h3 className="font-semibold text-slate-900">{cashier.name}</h3>
-                        <span
-                          className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            cashier.status === "active"
-                              ? "bg-green-100 text-green-800"
-                              : "bg-red-100 text-red-800"
-                          }`}
-                        >
+              <Card key={cashier._id} className={cashier.status === 'disabled' ? 'opacity-60' : ''}>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-4">
+                    {/* Avatar */}
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm ${
+                      cashier.status === 'active' ? 'bg-primary' : 'bg-muted-foreground'
+                    }`}>
+                      {cashier.name.charAt(0).toUpperCase()}
+                    </div>
+
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-medium text-foreground truncate">{cashier.name}</h3>
+                        {cashier.cashierId && (
+                          <span className="px-1.5 py-0.5 bg-muted text-muted-foreground text-xs font-mono rounded">
+                            {cashier.cashierId}
+                          </span>
+                        )}
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                          cashier.status === "active"
+                            ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                            : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                        }`}>
                           {cashier.status === "active" ? "Active" : "Disabled"}
                         </span>
                       </div>
-                      <p className="text-sm text-slate-600">{cashier.email}</p>
-                      {cashier.phone && (
-                        <p className="text-sm text-slate-600">{cashier.phone}</p>
-                      )}
-                      <p className="text-xs text-slate-500 mt-2">
-                        Created {new Date(cashier.createdAt).toLocaleDateString()}
-                      </p>
+                      <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
+                        {cashier.phone && (
+                          <span className="flex items-center gap-1">
+                            <Phone className="h-3 w-3" />
+                            {cashier.phone}
+                          </span>
+                        )}
+                        <span className="flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {new Date(cashier.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
                     </div>
 
-                    <div className="flex gap-2">
+                    {/* Actions */}
+                    <div className="flex items-center gap-1">
                       <Button
-                        variant="outline"
+                        variant="ghost"
                         size="sm"
                         onClick={() => handleResetPin(cashier._id, cashier.name)}
+                        title="Reset PIN"
+                        className="h-8 w-8 p-0"
                       >
-                        Reset PIN
+                        <Key className="h-4 w-4" />
                       </Button>
                       <Button
-                        variant="outline"
+                        variant="ghost"
                         size="sm"
-                        onClick={() =>
-                          handleToggleStatus(
-                            cashier._id,
-                            cashier.status === "active" ? "disabled" : "active"
-                          )
-                        }
+                        onClick={() => handleToggleStatus(cashier._id, cashier.status === "active" ? "disabled" : "active")}
+                        title={cashier.status === "active" ? "Disable" : "Enable"}
+                        className="h-8 w-8 p-0"
                       >
-                        {cashier.status === "active" ? "Disable" : "Enable"}
+                        <Power className={`h-4 w-4 ${cashier.status === 'active' ? 'text-green-600' : 'text-muted-foreground'}`} />
                       </Button>
                       <Button
-                        variant="destructive"
+                        variant="ghost"
                         size="sm"
                         onClick={() => handleDeleteCashier(cashier._id)}
+                        title="Delete"
+                        className="h-8 w-8 p-0 text-destructive hover:text-destructive"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -393,6 +447,22 @@ function CashiersContent() {
             ))}
           </div>
         )}
+
+        {/* Info Card */}
+        <Card className="bg-muted/50">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <Shield className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+              <div className="text-sm">
+                <p className="font-medium text-foreground mb-1">Cashier Security</p>
+                <p className="text-muted-foreground text-xs">
+                  Each cashier gets a unique 4-digit PIN for quick POS login. PINs are encrypted and can be reset anytime. 
+                  Disabled cashiers cannot log in but their sales history is preserved.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

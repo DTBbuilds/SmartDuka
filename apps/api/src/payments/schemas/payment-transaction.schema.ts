@@ -95,3 +95,6 @@ PaymentTransactionSchema.index({ shopId: 1, status: 1 });
 PaymentTransactionSchema.index({ shopId: 1, branchId: 1 });
 PaymentTransactionSchema.index({ orderId: 1 });
 PaymentTransactionSchema.index({ createdAt: -1 });
+// Compound index for branch-level analytics (multi-tenant)
+PaymentTransactionSchema.index({ shopId: 1, branchId: 1, createdAt: -1 });
+PaymentTransactionSchema.index({ shopId: 1, branchId: 1, status: 1, createdAt: -1 });

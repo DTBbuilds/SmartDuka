@@ -104,6 +104,16 @@ export class User {
   // Last branch accessed
   @Prop({ required: false, type: Types.ObjectId, ref: 'Branch' })
   lastBranchId?: Types.ObjectId;
+
+  // Google OAuth fields
+  @Prop({ required: false, unique: true, sparse: true })
+  googleId?: string;
+
+  @Prop({ required: false })
+  avatarUrl?: string;
+
+  @Prop({ enum: ['local', 'google'], default: 'local' })
+  authProvider: 'local' | 'google';
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
@@ -116,3 +126,4 @@ UserSchema.index({ shopId: 1, cashierId: 1 });
 UserSchema.index({ branches: 1 });
 UserSchema.index({ createdAt: -1 });
 UserSchema.index({ lastLoginAt: -1 });
+// Note: googleId already has index from @Prop({ unique: true, sparse: true })

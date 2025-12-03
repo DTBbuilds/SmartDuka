@@ -29,6 +29,7 @@ import {
   Check,
   CreditCard,
   HandCoins,
+  LogOut,
   Pause,
   QrCode,
   RefreshCw,
@@ -42,8 +43,9 @@ import {
 } from "lucide-react";
 
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
-import { db } from "@/lib/db";
+import { db, getPendingOrdersByShop, getPendingOrderCountByShop, addPendingOrder, deletePendingOrder, clearAllLocalData } from "@/lib/db";
 import { useAuth } from "@/lib/auth-context";
+import { config } from "@/lib/config";
 import { useToast } from "@/lib/use-toast";
 import { ToastContainer } from "@/components/toast-container";
 import { BarcodeScannerZXing } from "@/components/barcode-scanner-zxing";
@@ -71,6 +73,9 @@ import { TransactionHistory, type Transaction } from "@/components/transaction-h
 import { POSCartCompact } from "@/components/pos-cart-compact";
 import { POSCheckoutBar } from "@/components/pos-checkout-bar";
 import { POSProductsListView } from "@/components/pos-products-list-view";
+import { ReceiptsHistoryModal, type StoredReceipt } from "@/components/receipts-history-modal";
+import { PaymentMethodModal } from "@/components/payment-method-modal";
+import { MpesaPaymentFlow } from "@/components/mpesa-payment-flow";
 
 type Product = {
   _id: string;
@@ -154,9 +159,15 @@ function POSContent() {
   const [isCheckoutMode, setIsCheckoutMode] = useState(false);
   const [showReceiptPreview, setShowReceiptPreview] = useState(false);
   const [shopSettings, setShopSettings] = useState<any>(null);
+  const [receiptsHistory, setReceiptsHistory] = useState<StoredReceipt[]>([]);
+  const [isReceiptsHistoryOpen, setIsReceiptsHistoryOpen] = useState(false);
+  const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false);
+  const [showMpesaFlow, setShowMpesaFlow] = useState(false);
+  const [mpesaPhoneNumber, setMpesaPhoneNumber] = useState('');
+  const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const { user, shop, token } = useAuth();
+  const { user, shop, token, logout } = useAuth();
   const { toasts, toast, dismiss } = useToast();
   const { favorites, toggleFavorite, removeFavorite: removeFromFavorites, clearAll: clearFavorites } = useFavoriteProducts();
   const quantityPad = useQuantityPad();
@@ -232,13 +243,19 @@ function POSContent() {
     [categories],
   );
 
+  // Get shopId from user context for multi-tenant isolation
+  const shopId = user?.shopId || (shop as any)?._id || shop?.id || '';
+
   const refreshPendingCount = useCallback(async () => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || !shopId) return;
     try {
-      const count = await db.pendingOrders.count();
+      // Use shop-isolated query for multi-tenancy
+      const count = await getPendingOrderCountByShop(shopId);
       setPendingCount(count);
       if (count > 0) {
-        const orders = await db.pendingOrders.orderBy("createdAt").toArray();
+        const orders = await getPendingOrdersByShop(shopId);
+        // Sort by createdAt descending
+        orders.sort((a, b) => b.createdAt - a.createdAt);
         setPendingOrders(
           orders.map((order) => {
             const total = order.payload.items.reduce(
@@ -265,7 +282,7 @@ function POSContent() {
         console.warn("Failed to read pending orders count", err);
       }
     }
-  }, [requestBackgroundSync]);
+  }, [requestBackgroundSync, shopId]);
 
   useEffect(() => {
     if (tab !== "all" && !categories.find((category) => category._id === tab)) {
@@ -393,17 +410,18 @@ function POSContent() {
           barcode: product.barcode,
         }));
         setProducts(normalized);
-        if (typeof window !== "undefined") {
+        // Cache products with shopId for multi-tenant isolation
+        if (typeof window !== "undefined" && shopId) {
           db.products
             .bulkPut(
               normalized.map((product) => ({
                 _id: product._id,
+                shopId, // Multi-tenancy: isolate products by shop
                 name: product.name,
                 price: product.price,
                 stock: product.stock,
                 categoryId: product.categoryId,
                 updatedAt: product.updatedAt,
-                barcode: product.barcode,
               })),
             )
             .catch((err) => {
@@ -427,7 +445,7 @@ function POSContent() {
     const fetchShopSettings = async () => {
       try {
         if (!shop?.id || !token) return;
-        const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+        const base = config.apiUrl;
         const res = await fetch(`${base}/shop-settings/${shop.id}`, {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -484,76 +502,226 @@ function POSContent() {
     });
   };
 
-  const handleBarcodeScanned = (barcode: string) => {
-    // Phase 4: Show processing message
-    toast({ type: 'info', title: 'Processing...', message: barcode });
+  const handleBarcodeScanned = async (barcode: string) => {
+    const trimmedBarcode = barcode.trim();
+    if (!trimmedBarcode) return;
+
+    // First, try to find in already loaded products (fastest)
+    const localProduct = products.find((p) => 
+      p.barcode === trimmedBarcode || 
+      p.barcode === trimmedBarcode.replace(/^0+/, '') || // Try without leading zeros
+      (trimmedBarcode.length === 12 && p.barcode === '0' + trimmedBarcode) // EAN-13 conversion
+    );
     
-    // Phase 4: Set timeout for product lookup
-    const timeoutId = setTimeout(() => {
+    if (localProduct) {
+      handleAddToCart(localProduct);
+      toast({ type: 'success', title: 'Added to cart', message: localProduct.name });
+      return;
+    }
+
+    // If not found locally, query the API for exact barcode match
+    try {
+      toast({ type: 'info', title: 'Searching...', message: `Barcode: ${trimmedBarcode}` });
+      
+      const res = await fetch(`${config.apiUrl}/inventory/products/barcode/${encodeURIComponent(trimmedBarcode)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        if (data.found && data.product) {
+          handleAddToCart(data.product);
+          toast({ type: 'success', title: 'Added to cart', message: data.product.name });
+          return;
+        }
+      }
+      
+      // Product not found
       toast({ 
         type: 'error', 
         title: 'Product not found', 
-        message: `Barcode: ${barcode} - Try again or enter manually` 
+        message: `Barcode: ${trimmedBarcode} - Check if product exists in inventory` 
       });
-    }, 5000);
-    
-    try {
-      // Find product by barcode (primary), then by ID, then by name
-      const product = products.find((p) => 
-        p.barcode === barcode || 
-        p._id === barcode || 
-        p.name.toLowerCase().includes(barcode.toLowerCase())
-      );
-      
-      // Clear timeout if found
-      clearTimeout(timeoutId);
-      
-      if (product) {
-        handleAddToCart(product);
-        toast({ type: 'success', title: 'Added to cart', message: product.name });
-      } else {
-        toast({ type: 'error', title: 'Product not found', message: `Barcode: ${barcode}` });
-      }
     } catch (error) {
-      clearTimeout(timeoutId);
+      console.error('Barcode lookup error:', error);
       toast({ 
         type: 'error', 
-        title: 'Error', 
-        message: 'Failed to process barcode' 
+        title: 'Search failed', 
+        message: 'Could not search for product. Please try again.' 
       });
     }
   };
 
-  const handlePaymentMethodSelect = (methodId: string) => {
-    setSelectedPaymentMethod(methodId);
-    setAmountTendered(0);
-    toast({ type: 'info', title: 'Payment method selected', message: `${paymentOptions.find(o => o.id === methodId)?.label || methodId} selected` });
-  };
-
+  // New checkout flow: clicking checkout opens payment method selection
   const handleCheckout = async () => {
     if (cartItems.length === 0) {
       toast({ type: 'info', title: 'Cart is empty', message: 'Add items before checkout' });
       return;
     }
 
-    // Validate payment method selection
-    if (!selectedPaymentMethod) {
-      toast({ type: 'error', title: 'Payment method required', message: 'Please select a payment method to proceed' });
-      setCheckoutError('Please select a payment method to proceed');
-      return;
-    }
+    // Show payment method modal - user selects payment method after clicking checkout
+    setShowPaymentMethodModal(true);
+  };
 
-    // Validate cash payment - amount tendered must be >= total
-    if (selectedPaymentMethod === 'cash' && amountTendered > 0 && amountTendered < total) {
-      toast({ type: 'error', title: 'Insufficient amount', message: `Amount tendered (${formatCurrency(amountTendered)}) is less than total (${formatCurrency(total)})` });
-      setCheckoutError(`Amount tendered must be at least ${formatCurrency(total)}`);
-      return;
+  // Called when user selects a payment method from the modal
+  const handlePaymentMethodConfirm = async (paymentMethod: string, cashAmountTendered?: number, phoneNumber?: string) => {
+    setSelectedPaymentMethod(paymentMethod);
+    setShowPaymentMethodModal(false);
+    
+    if (paymentMethod === 'mpesa' && phoneNumber) {
+      // For M-Pesa, create a pending order first, then show M-Pesa flow
+      try {
+        setIsCheckingOut(true);
+        setFeedbackType('loading');
+        setFeedbackMessage('Creating order...');
+        
+        const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+        const payload = {
+          items: cartItems.map((item) => ({
+            productId: item.productId,
+            name: item.name,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+          })),
+          taxRate: shopSettings?.tax?.enabled ? shopSettings.tax.rate : 0.16,
+          payments: [
+            {
+              method: 'mpesa',
+              amount: total,
+              status: 'pending',
+              customerPhone: phoneNumber,
+            },
+          ],
+          status: "pending" as const,
+          isOffline: false,
+          notes: orderNotes || undefined,
+          customerName: customerName || undefined,
+          customerPhone: phoneNumber,
+          cashierId,
+          cashierName,
+        };
+        
+        const res = await fetch(`${base}/sales/checkout`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
+        });
+        
+        if (!res.ok) {
+          const detail = await res.json().catch(() => undefined);
+          throw new Error(detail?.message ?? `Failed to create order (${res.status})`);
+        }
+        
+        const order = await res.json();
+        setPendingOrderId(order._id || order.id);
+        setMpesaPhoneNumber(phoneNumber);
+        setShowMpesaFlow(true);
+        setIsCheckingOut(false);
+        setFeedbackType(null);
+      } catch (err: any) {
+        setIsCheckingOut(false);
+        setFeedbackType('error');
+        setFeedbackMessage(err?.message || 'Failed to create order');
+        toast({ type: 'error', title: 'Order failed', message: err?.message });
+      }
+    } else {
+      // For cash and other methods, proceed with normal flow
+      if (cashAmountTendered !== undefined) {
+        setAmountTendered(cashAmountTendered);
+      }
+      
+      // Proceed to payment confirmation
+      setIsCheckoutMode(true);
+      setCheckoutStep(1);
+      setShowPaymentConfirmation(true);
     }
+  };
 
-    // Hide scanner and show checkout
-    setIsCheckoutMode(true);
-    setCheckoutStep(1);
-    setShowPaymentConfirmation(true);
+  // Handle M-Pesa payment success
+  const handleMpesaSuccess = async (receiptNumber: string) => {
+    setShowMpesaFlow(false);
+    setFeedbackType('success');
+    setFeedbackMessage('M-Pesa payment received!');
+    setShowSuccessAnimation(true);
+    
+    // Track transaction
+    const newTransaction: Transaction = {
+      id: pendingOrderId || `txn-${Date.now()}`,
+      timestamp: new Date(),
+      amount: total,
+      itemCount: cartItems.reduce((sum, item) => sum + item.quantity, 0),
+      paymentMethod: 'M-Pesa',
+      customerName: customerName || undefined,
+      status: 'completed',
+    };
+    
+    setTransactionHistory((prev) => [newTransaction, ...prev]);
+    setTotalSalesAmount((prev) => prev + total);
+    
+    // Initialize shift start time on first transaction
+    if (!shiftStartTime) {
+      setShiftStartTime(new Date());
+    }
+    
+    // Create receipt data with shop details
+    const receiptSettings = shopSettings?.receipt || {};
+    const receipt: ReceiptData = {
+      orderNumber: pendingOrderId || "N/A",
+      date: new Date(),
+      items: cartItems,
+      subtotal,
+      tax,
+      taxRate: shopSettings?.tax?.enabled ? shopSettings.tax.rate : 0,
+      total,
+      customerName: customerName || undefined,
+      cashierName,
+      paymentMethod: 'mpesa',
+      notes: orderNotes || undefined,
+      mpesaReceiptNumber: receiptNumber,
+      // Shop details from settings or defaults
+      shopName: receiptSettings.shopName || shop?.name,
+      shopAddress: receiptSettings.shopAddress,
+      shopPhone: receiptSettings.shopPhone,
+      shopEmail: receiptSettings.shopEmail,
+      shopTaxPin: receiptSettings.shopTaxPin,
+      footerMessage: receiptSettings.footerMessage || 'Thank you for your purchase!',
+    };
+    setLastReceipt(receipt);
+    
+    // Add to receipts history
+    const storedReceipt: StoredReceipt = {
+      ...receipt,
+      id: `receipt-${pendingOrderId || Date.now()}`,
+    };
+    setReceiptsHistory((prev) => [storedReceipt, ...prev]);
+    
+    // Show receipt preview
+    setShowReceiptPreview(true);
+    
+    toast({ type: 'success', title: 'Payment successful', message: `M-Pesa receipt: ${receiptNumber}` });
+    
+    // Reset after animation
+    setTimeout(() => {
+      setShowSuccessAnimation(false);
+      setCartItems([]);
+      setOrderNotes("");
+      setCustomerName("");
+      setSelectedPaymentMethod(null);
+      setPendingOrderId(null);
+      setMpesaPhoneNumber('');
+      setFeedbackType(null);
+    }, 2500);
+  };
+
+  // Handle M-Pesa payment cancel
+  const handleMpesaCancel = () => {
+    setShowMpesaFlow(false);
+    setPendingOrderId(null);
+    setMpesaPhoneNumber('');
+    toast({ type: 'info', title: 'Payment cancelled', message: 'M-Pesa payment was cancelled' });
   };
 
   const handleConfirmPayment = async () => {
@@ -568,6 +736,23 @@ function POSContent() {
       setFeedbackType('loading');
       setFeedbackMessage('Processing payment...');
       const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+      // Build payment with full details for analytics
+      const paymentDetails: any = {
+        method: selectedPaymentMethod || 'cash',
+        amount: total,
+      };
+      
+      // Add cash-specific details
+      if (selectedPaymentMethod === 'cash') {
+        paymentDetails.amountTendered = amountTendered;
+        paymentDetails.change = Math.max(0, amountTendered - total);
+      }
+      
+      // Add customer phone if available
+      if (customerName) {
+        paymentDetails.customerPhone = customerName; // Could be phone in some cases
+      }
+
       const payload = {
         items: cartItems.map((item) => ({
           productId: item.productId,
@@ -575,17 +760,13 @@ function POSContent() {
           quantity: item.quantity,
           unitPrice: item.unitPrice,
         })),
-        taxRate: 0.02,
-        payments: [
-          {
-            method: selectedPaymentMethod || 'cash',
-            amount: total,
-          },
-        ],
+        taxRate: shopSettings?.tax?.enabled ? shopSettings.tax.rate : 0.16,
+        payments: [paymentDetails],
         status: "completed" as const,
         isOffline: false,
         notes: orderNotes || undefined,
         customerName: customerName || undefined,
+        customerPhone: customerName || undefined, // Add to order level too
         cashierId,
         cashierName,
       };
@@ -600,8 +781,9 @@ function POSContent() {
 
       if (!res.ok) {
         const detail = await res.json().catch(() => undefined);
-        if (res.status >= 500 && typeof window !== "undefined") {
-          await db.pendingOrders.add({
+        if (res.status >= 500 && typeof window !== "undefined" && shopId) {
+          // Save offline with shopId for multi-tenant isolation
+          await addPendingOrder(shopId, {
             createdAt: Date.now(),
             payload: { ...payload, status: "pending", isOffline: true },
           });
@@ -642,7 +824,8 @@ function POSContent() {
         setShiftStartTime(new Date());
       }
       
-      // Create receipt data
+      // Create receipt data with shop details
+      const receiptSettings = shopSettings?.receipt || {};
       const receipt: ReceiptData = {
         orderNumber: order.orderNumber || "N/A",
         date: new Date(),
@@ -657,8 +840,22 @@ function POSContent() {
         notes: orderNotes || undefined,
         amountTendered: selectedPaymentMethod === 'cash' ? amountTendered : undefined,
         change: selectedPaymentMethod === 'cash' ? Math.max(0, amountTendered - total) : undefined,
+        // Shop details from settings or defaults
+        shopName: receiptSettings.shopName || shop?.name,
+        shopAddress: receiptSettings.shopAddress,
+        shopPhone: receiptSettings.shopPhone,
+        shopEmail: receiptSettings.shopEmail,
+        shopTaxPin: receiptSettings.shopTaxPin,
+        footerMessage: receiptSettings.footerMessage || 'Thank you for your purchase!',
       };
       setLastReceipt(receipt);
+      
+      // Add to receipts history
+      const storedReceipt: StoredReceipt = {
+        ...receipt,
+        id: `receipt-${order.orderNumber || Date.now()}`,
+      };
+      setReceiptsHistory((prev) => [storedReceipt, ...prev]);
       
       // Show receipt preview instead of auto-printing
       setShowReceiptPreview(true);
@@ -676,8 +873,9 @@ function POSContent() {
         refreshPendingCount();
       }, 2500);
     } catch (err: any) {
-      if (typeof window !== "undefined") {
-        await db.pendingOrders.add({
+      if (typeof window !== "undefined" && shopId) {
+        // Save offline with shopId for multi-tenant isolation
+        await addPendingOrder(shopId, {
           createdAt: Date.now(),
           payload: {
             items: cartItems.map((item) => ({
@@ -817,10 +1015,15 @@ function POSContent() {
       if (!token) {
         throw new Error('Authentication token not available. Please log in again.');
       }
+      if (!shopId) {
+        throw new Error('Shop ID not available. Please log in again.');
+      }
       setIsSyncingOffline(true);
       setCheckoutError(null);
       setCheckoutMessage(null);
-      const orders = await db.pendingOrders.orderBy("createdAt").toArray();
+      
+      // Use shop-isolated query for multi-tenancy
+      const orders = await getPendingOrdersByShop(shopId);
       if (orders.length === 0) {
         setCheckoutMessage("No pending orders to sync.");
         setIsSyncingOffline(false);
@@ -848,7 +1051,8 @@ function POSContent() {
             continue;
           }
           if (order.id != null) {
-            await db.pendingOrders.delete(order.id);
+            // Use shop-isolated delete for multi-tenancy
+            await deletePendingOrder(shopId, order.id);
           }
           success += 1;
         } catch (err) {
@@ -874,7 +1078,7 @@ function POSContent() {
     } finally {
       setIsSyncingOffline(false);
     }
-  }, [refreshPendingCount]);
+  }, [refreshPendingCount, shopId, token, toast]);
 
   // Setup POS keyboard shortcuts
   usePOSKeyboardShortcuts({
@@ -969,9 +1173,9 @@ function POSContent() {
         onComplete={() => setShowSuccessAnimation(false)}
       />
       
-      {/* Header - Compact, single row */}
-      <header className="sticky top-16 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 py-2">
-        <div className="container px-4 md:px-6">
+      {/* Header - Compact, single row, full width */}
+      <header className="sticky top-16 lg:top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 py-2">
+        <div className="w-full px-3 lg:px-4">
           <div className="flex items-center justify-between gap-2 text-xs">
             {/* Left: Shop name and POS title */}
             <div className="flex-1 min-w-0 flex items-center gap-2">
@@ -1019,6 +1223,18 @@ function POSContent() {
               <div className="lg:hidden flex items-center gap-0.5 text-muted-foreground truncate">
                 <span className="truncate">{cashierName}</span>
               </div>
+
+              {/* Logout Button */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={logout}
+                className="text-destructive hover:text-destructive hover:bg-destructive/10 h-8 px-2"
+                title="Logout"
+              >
+                <LogOut className="h-4 w-4" />
+                <span className="hidden sm:inline ml-1">Logout</span>
+              </Button>
             </div>
           </div>
         </div>
@@ -1028,10 +1244,10 @@ function POSContent() {
 
       {/* Main content - Responsive grid (hidden during checkout) */}
       {!isCheckoutMode && (
-      <div className="flex-1 w-full px-4 md:px-6 py-4 md:py-6 pb-24 overflow-hidden">
-        <div className="grid gap-4 md:gap-6 grid-cols-1 lg:grid-cols-[60%_40%] h-[calc(100vh-200px)]">
-          <section className="space-y-4">
-            <Card className="border-dashed">
+      <div className="flex-1 w-full px-3 lg:px-4 py-3 lg:py-4 pb-20 lg:pb-4 overflow-hidden">
+        <div className="grid gap-3 lg:gap-4 grid-cols-1 lg:grid-cols-[1fr_380px] xl:grid-cols-[1fr_420px] h-[calc(100vh-180px)] lg:h-[calc(100vh-100px)]">
+          <section className="space-y-3 overflow-hidden flex flex-col">
+            <Card className="border-dashed flex-1 flex flex-col overflow-hidden">
               <CardHeader className="gap-4 pb-0">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                   <div className="flex grow items-center gap-2 rounded-full border px-3 py-2">
@@ -1055,8 +1271,8 @@ function POSContent() {
                   </div>
                 </div>
               </CardHeader>
-              <CardContent className="pt-4">
-                <Tabs value={tab} onValueChange={setTab} className="space-y-4">
+              <CardContent className="pt-4 flex-1 overflow-hidden flex flex-col">
+                <Tabs value={tab} onValueChange={setTab} className="flex-1 flex flex-col overflow-hidden">
                   <TabsList className="w-full justify-start overflow-x-auto">
                     {categoryTabs.map((category) => (
                       <TabsTrigger key={category.id} value={category.id} className="px-5">
@@ -1065,14 +1281,14 @@ function POSContent() {
                     ))}
                   </TabsList>
                   {categoryTabs.map((category) => (
-                    <TabsContent key={category.id} value={category.id} className="space-y-4">
+                    <TabsContent key={category.id} value={category.id} className="flex-1 overflow-hidden mt-4">
                       <POSProductsListView
                         products={products}
                         onAddToCart={handleAddToCart}
                         isLoading={loading}
                         error={error || undefined}
                         formatCurrency={formatCurrency}
-                        maxHeight="max-h-[calc(100vh-280px)]"
+                        maxHeight="h-full"
                       />
                     </TabsContent>
                   ))}
@@ -1106,16 +1322,11 @@ function POSContent() {
               totalDiscount={totalDiscount}
               tax={tax}
               total={total}
-              selectedPaymentMethod={selectedPaymentMethod}
-              amountTendered={amountTendered}
               customerName={customerName}
               isCheckingOut={isCheckingOut}
               checkoutMessage={checkoutMessage}
               checkoutError={checkoutError}
-              paymentOptions={paymentOptions}
               shopSettings={shopSettings}
-              onPaymentMethodSelect={handlePaymentMethodSelect}
-              onAmountTenderedChange={setAmountTendered}
               onCustomerNameChange={setCustomerName}
               onRemoveItem={handleRemoveItem}
               onCheckout={handleCheckout}
@@ -1297,10 +1508,43 @@ function POSContent() {
         receipt={lastReceipt}
       />
 
+      {/* Receipts History Modal */}
+      <ReceiptsHistoryModal
+        isOpen={isReceiptsHistoryOpen}
+        onClose={() => setIsReceiptsHistoryOpen(false)}
+        receipts={receiptsHistory}
+      />
+
+      {/* Payment Method Selection Modal - Shows after clicking Checkout */}
+      <PaymentMethodModal
+        isOpen={showPaymentMethodModal}
+        total={total}
+        itemCount={cartItems.reduce((sum, item) => sum + item.quantity, 0)}
+        customerName={customerName || undefined}
+        onConfirm={handlePaymentMethodConfirm}
+        onCancel={() => setShowPaymentMethodModal(false)}
+      />
+
+      {/* M-Pesa Payment Flow Modal */}
+      <MpesaPaymentFlow
+        isOpen={showMpesaFlow}
+        orderId={pendingOrderId || ''}
+        amount={total}
+        customerName={customerName || undefined}
+        phoneNumber={mpesaPhoneNumber || undefined}
+        onSuccess={handleMpesaSuccess}
+        onCancel={handleMpesaCancel}
+        onBack={() => {
+          setShowMpesaFlow(false);
+          setShowPaymentMethodModal(true);
+        }}
+      />
+
       {/* Fixed Bottom Checkout Bar */}
       <POSCheckoutBar
         cartItemsCount={cartItems.length}
         isCheckingOut={isCheckingOut}
+        receiptsCount={receiptsHistory.length}
         onHoldSale={handleHoldSale}
         onClearCart={handleClearCart}
         onApplyDiscount={() => {
@@ -1315,7 +1559,7 @@ function POSContent() {
         }}
         onOpenScanner={() => setIsScannerOpen(true)}
         onCheckout={handleCheckout}
-        onOpenReceipt={() => setShowReceiptPreview(true)}
+        onOpenReceiptsHistory={() => setIsReceiptsHistoryOpen(true)}
       />
     </main>
   );

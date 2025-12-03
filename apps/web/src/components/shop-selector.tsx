@@ -1,11 +1,20 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, Search, Clock } from 'lucide-react';
+import { ChevronDown, Search, Clock, FlaskConical, CheckCircle } from 'lucide-react';
 import { Input } from '@smartduka/ui';
 
+interface Shop {
+  id: string;
+  shopId?: string;
+  name: string;
+  status?: 'pending' | 'verified' | 'active' | 'suspended';
+  demoMode?: boolean;
+  demoExpiresAt?: string;
+}
+
 interface ShopSelectorProps {
-  shops: Array<{ id: string; name: string }>;
+  shops: Array<Shop>;
   selectedShopId: string;
   onShopChange: (shopId: string) => void;
   disabled?: boolean;
@@ -86,29 +95,31 @@ export function ShopSelector({
 
   return (
     <div className="relative" ref={dropdownRef}>
-      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+      <label className="block text-xs font-medium text-muted-foreground mb-1">
         Shop
       </label>
 
-      {/* Selected Shop Display */}
+      {/* Selected Shop Display - Compact */}
       <button
         type="button"
         onClick={() => !disabled && setIsOpen(!isOpen)}
         disabled={disabled}
-        className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 flex items-center justify-between hover:border-slate-400 dark:hover:border-slate-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        className="w-full h-9 px-3 border border-input rounded-lg bg-background text-foreground flex items-center justify-between hover:border-primary/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
       >
-        <div className="text-left flex-1">
-          <div className="font-medium text-sm">
-            {selectedShop?.name || 'Select a shop'}
+        <div className="text-left flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <span className="font-medium text-sm truncate">
+              {selectedShop?.name || 'Select shop'}
+            </span>
+            {selectedShop?.status === 'pending' && (
+              <span className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                Demo
+              </span>
+            )}
           </div>
-          {selectedShop && (
-            <div className="text-xs text-slate-500 dark:text-slate-400">
-              {selectedShop.id}
-            </div>
-          )}
         </div>
         <ChevronDown
-          className={`h-4 w-4 text-slate-400 transition-transform ${
+          className={`h-4 w-4 text-muted-foreground transition-transform flex-shrink-0 ${
             isOpen ? 'rotate-180' : ''
           }`}
         />
@@ -116,64 +127,60 @@ export function ShopSelector({
 
       {/* Dropdown List */}
       {isOpen && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg shadow-lg z-50 overflow-hidden">
+        <div className="absolute top-full left-0 right-0 mt-1 bg-popover border border-border rounded-lg shadow-lg z-50 overflow-hidden">
           {/* Search Input */}
-          <div className="p-2 border-b border-slate-200 dark:border-slate-700 sticky top-0 bg-white dark:bg-slate-900">
+          <div className="p-2 border-b border-border sticky top-0 bg-popover">
             <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
               <input
                 ref={searchInputRef}
                 type="text"
-                placeholder="Search shops..."
+                placeholder="Search..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full pl-8 pr-3 py-1.5 h-8 border border-input rounded-md bg-background text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
               />
             </div>
           </div>
 
           {/* Shop List */}
-          <div className="max-h-64 overflow-y-auto">
+          <div className="max-h-48 overflow-y-auto">
             {sortedShops.length > 0 ? (
               sortedShops.map((shop) => {
                 const isSelected = shop.id === selectedShopId;
-                const isRecent = shop.id === lastUsedShopId;
 
                 return (
                   <button
                     key={shop.id}
                     type="button"
                     onClick={() => handleShopChange(shop.id)}
-                    className={`w-full text-left px-3 py-2.5 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-start justify-between gap-2 ${
-                      isSelected
-                        ? 'bg-blue-50 dark:bg-blue-950 border-l-4 border-blue-500'
-                        : ''
+                    className={`w-full text-left px-3 py-2 hover:bg-accent transition-colors flex items-center justify-between gap-2 ${
+                      isSelected ? 'bg-primary/10' : ''
                     }`}
                   >
                     <div className="flex-1 min-w-0">
-                      <div className="font-medium text-sm text-slate-900 dark:text-slate-100 truncate">
-                        {shop.name}
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-medium text-sm text-foreground truncate">
+                          {shop.name}
+                        </span>
+                        {shop.status === 'pending' && (
+                          <span className="px-1 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                            Demo
+                          </span>
+                        )}
+                        {(shop.status === 'active' || shop.status === 'verified') && (
+                          <CheckCircle className="h-3 w-3 text-green-600" />
+                        )}
                       </div>
-                      <div className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                        {shop.id}
-                      </div>
-                      {isRecent && (
-                        <div className="flex items-center gap-1 mt-1 text-xs text-green-600 dark:text-green-400">
-                          <Clock className="h-3 w-3" />
-                          Recently used
-                        </div>
-                      )}
                     </div>
                     {isSelected && (
-                      <div className="text-blue-600 dark:text-blue-400 text-lg leading-none">
-                        ✓
-                      </div>
+                      <span className="text-primary text-sm">✓</span>
                     )}
                   </button>
                 );
               })
             ) : (
-              <div className="px-3 py-4 text-center text-slate-500 dark:text-slate-400 text-sm">
+              <div className="px-3 py-3 text-center text-muted-foreground text-sm">
                 No shops found
               </div>
             )}

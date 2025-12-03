@@ -35,6 +35,21 @@ export class Product {
   @Prop({ enum: ['active', 'inactive'], default: 'active' })
   status: 'active' | 'inactive';
 
+  @Prop({ required: false, min: 0, default: 10 })
+  lowStockThreshold?: number;
+
+  @Prop({ required: false })
+  description?: string;
+
+  @Prop({ required: false, trim: true })
+  brand?: string;
+
+  @Prop({ required: false })
+  image?: string;
+
+  @Prop({ required: false })
+  updatedAt?: Date;
+
   @Prop({ required: false })
   expiryDate?: Date;
 
@@ -85,3 +100,9 @@ ProductSchema.index({ shopId: 1, status: 1 });
 ProductSchema.index({ shopId: 1, expiryDate: 1 });
 ProductSchema.index({ shopId: 1, stock: 1 }); // For reorder automation
 ProductSchema.index({ shopId: 1, branchId: 1 }); // For branch-specific queries
+
+// Compound indexes for search optimization
+ProductSchema.index({ shopId: 1, barcode: 1, status: 1 }); // Fast barcode lookup
+ProductSchema.index({ shopId: 1, sku: 1, status: 1 }); // Fast SKU lookup
+ProductSchema.index({ shopId: 1, brand: 1 }); // Brand filtering
+ProductSchema.index({ shopId: 1, name: 'text', description: 'text', brand: 'text' }); // Full-text search

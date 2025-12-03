@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { useBranch } from "@/lib/branch-context";
 import { Button } from "@smartduka/ui";
 import { Plus, Package, Eye, List, Grid3x3 } from "lucide-react";
 import { DataTable, Column } from "@/components/shared/data-table";
@@ -31,6 +32,7 @@ interface Purchase {
 
 export default function PurchasesPage() {
   const { token } = useAuth();
+  const { currentBranch } = useBranch();
   const router = useRouter();
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -39,7 +41,7 @@ export default function PurchasesPage() {
 
   useEffect(() => {
     fetchPurchases();
-  }, [statusFilter]);
+  }, [statusFilter, currentBranch]);
 
   const fetchPurchases = async () => {
     try {
@@ -48,6 +50,12 @@ export default function PurchasesPage() {
       
       if (statusFilter !== "all") {
         url += `/${statusFilter}`;
+      }
+      
+      // Add branch filter
+      const branchParam = currentBranch ? `branchId=${currentBranch._id}` : '';
+      if (branchParam) {
+        url += url.includes('?') ? `&${branchParam}` : `?${branchParam}`;
       }
 
       const res = await fetch(url, {

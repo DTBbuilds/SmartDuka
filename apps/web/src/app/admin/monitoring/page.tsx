@@ -70,51 +70,43 @@ function AdminMonitoringContent() {
         headers,
       });
 
+      // Get all cashier sales stats from the new endpoint
+      const salesStatsRes = await fetch(`${base}/sales/all-cashier-stats`, {
+        headers,
+      });
+
+      const salesStats = salesStatsRes.ok ? await salesStatsRes.json() : [];
+
       if (cashiersRes.ok) {
         const cashiersData = await cashiersRes.json();
         setCashiers(cashiersData);
 
-        // Get metrics for each cashier
-        const metricsData: CashierMetrics[] = [];
-        for (const cashier of cashiersData) {
-          try {
-            const transRes = await fetch(
-              `${base}/activity/cashier/${cashier._id}/transactions?limit=100`,
-              { headers }
-            );
+        // Merge cashier data with sales stats
+        const metricsData: CashierMetrics[] = cashiersData.map((cashier: any) => {
+          // Find matching sales stats by cashier ID
+          const stats = salesStats.find((s: any) => s.userId === cashier._id) || {
+            todaySales: 0,
+            todayTransactions: 0,
+            totalSales: 0,
+            totalTransactions: 0,
+          };
 
-            if (transRes.ok) {
-              const transactions = await transRes.json();
-              let totalSales = 0;
-              transactions.forEach((t: any) => {
-                if (t.details?.amount) totalSales += t.details.amount;
-              });
-
-              const lastActivity = transactions.length > 0 ? transactions[0].timestamp : null;
-              const now = new Date();
-              const lastActivityDate = lastActivity ? new Date(lastActivity) : null;
-              const diffMinutes = lastActivityDate
-                ? Math.floor((now.getTime() - lastActivityDate.getTime()) / 60000)
-                : 999;
-
-              let status: 'online' | 'idle' | 'offline' = 'offline';
-              if (diffMinutes < 5) status = 'online';
-              else if (diffMinutes < 15) status = 'idle';
-
-              metricsData.push({
-                cashierId: cashier._id,
-                cashierName: cashier.name,
-                status,
-                lastActivity: lastActivity || new Date().toISOString(),
-                todaySales: totalSales,
-                transactionCount: transactions.length,
-                averageTransaction: transactions.length > 0 ? totalSales / transactions.length : 0,
-              });
-            }
-          } catch (err) {
-            console.error(`Failed to load metrics for cashier ${cashier._id}:`, err);
-          }
-        }
+          // Determine online status based on recent activity
+          // For now, mark as offline - could be enhanced with real-time status tracking
+          let status: 'online' | 'idle' | 'offline' = 'offline';
+          
+          return {
+            cashierId: cashier._id,
+            cashierName: cashier.name,
+            status,
+            lastActivity: new Date().toISOString(),
+            todaySales: stats.todaySales || 0,
+            transactionCount: stats.todayTransactions || 0,
+            averageTransaction: stats.todayTransactions > 0 
+              ? Math.round(stats.todaySales / stats.todayTransactions) 
+              : 0,
+          };
+        });
         setMetrics(metricsData);
       }
 

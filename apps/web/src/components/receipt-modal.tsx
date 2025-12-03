@@ -61,16 +61,18 @@ export function ReceiptModal({ isOpen, onClose, receipt }: ReceiptModalProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="max-w-md max-h-[90vh] flex flex-col overflow-hidden">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle>Receipt #{receipt.orderNumber}</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4">
-          <pre className="bg-slate-50 dark:bg-slate-900 p-4 rounded-md text-xs overflow-x-auto border">
+        <div className="space-y-4 flex-1 flex flex-col min-h-0">
+          {/* Scrollable receipt content */}
+          <pre className="bg-slate-50 dark:bg-slate-900 p-4 rounded-md text-xs overflow-auto border flex-1 min-h-0 max-h-[50vh]">
             {receiptText}
           </pre>
 
-          <div className="grid gap-2 sm:grid-cols-2">
+          {/* Fixed action buttons */}
+          <div className="grid gap-2 sm:grid-cols-2 flex-shrink-0">
             <Button
               size="sm"
               variant="outline"

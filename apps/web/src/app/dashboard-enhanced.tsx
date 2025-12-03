@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button } from "@smartduka/ui";
 import { cn } from "@smartduka/ui";
+import { useAuth } from "@/lib/auth-context";
 
 interface QuickAccessCard {
   title: string;
@@ -89,6 +90,9 @@ const quickAccessCards: QuickAccessCard[] = [
 ];
 
 export function DashboardEnhanced() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+
   return (
     <main className="bg-background min-h-screen">
       <div className="container py-8 md:py-12">
@@ -103,12 +107,15 @@ export function DashboardEnhanced() {
                 Your complete POS and inventory management system
               </p>
             </div>
-            <Link href="/settings">
-              <Button variant="outline" className="w-full md:w-auto">
-                <Settings className="h-4 w-4 mr-2" />
-                Settings
-              </Button>
-            </Link>
+            {/* Settings button - Only for admin users */}
+            {isAdmin && (
+              <Link href="/settings">
+                <Button variant="outline" className="w-full md:w-auto">
+                  <Settings className="h-4 w-4 mr-2" />
+                  Settings
+                </Button>
+              </Link>
+            )}
           </div>
         </div>
 

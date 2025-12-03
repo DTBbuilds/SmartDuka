@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Badge, Tabs, TabsContent, TabsList, TabsTrigger, Button, Input } from '@smartduka/ui';
-import { Search, Eye, CheckCircle, XCircle, AlertCircle, Clock, RefreshCw } from 'lucide-react';
+import { Search, Eye, CheckCircle, XCircle, AlertCircle, Clock, RefreshCw, ArrowLeft, Store } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/lib/use-toast';
 import { ToastContainer } from '@/components/toast-container';
@@ -23,12 +24,35 @@ type Shop = {
 };
 
 export default function ShopsManagement() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { token } = useAuth();
   const { toasts, toast, dismiss } = useToast();
-  const [activeTab, setActiveTab] = useState('pending');
+  
+  // Get initial tab from URL or default to 'all'
+  const statusFromUrl = searchParams.get('status');
+  const [activeTab, setActiveTab] = useState(statusFromUrl || 'all');
   const [shops, setShops] = useState<Shop[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Update tab when URL changes
+  useEffect(() => {
+    const status = searchParams.get('status');
+    if (status && status !== activeTab) {
+      setActiveTab(status);
+    }
+  }, [searchParams]);
+
+  // Update URL when tab changes
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    if (tab === 'all') {
+      router.push('/super-admin/shops');
+    } else {
+      router.push(`/super-admin/shops?status=${tab}`);
+    }
+  };
 
   useEffect(() => {
     loadShops();
@@ -39,7 +63,8 @@ export default function ShopsManagement() {
     try {
       setLoading(true);
       const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-      const endpoint = `/super-admin/shops/${activeTab}`;
+      // Use 'all' endpoint for all shops, otherwise use status-specific endpoint
+      const endpoint = activeTab === 'all' ? '/super-admin/shops' : `/super-admin/shops/${activeTab}`;
       const res = await fetch(`${base}${endpoint}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -180,9 +205,21 @@ export default function ShopsManagement() {
       <div className="p-8">
         {/* Header */}
         <div className="mb-8 flex justify-between items-center">
-          <div>
-            <h1 className="text-4xl font-bold">Shops Management</h1>
-            <p className="text-muted-foreground mt-2">Manage and verify shops</p>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => router.push('/super-admin')}
+              className="flex items-center gap-2 px-3 py-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back
+            </button>
+            <div>
+              <h1 className="text-4xl font-bold flex items-center gap-3">
+                <Store className="h-8 w-8 text-primary" />
+                Shops Management
+              </h1>
+              <p className="text-muted-foreground mt-2">Manage and verify shops</p>
+            </div>
           </div>
           <button
             onClick={loadShops}
@@ -208,13 +245,52 @@ export default function ShopsManagement() {
         </div>
 
         {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="pending">Pending</TabsTrigger>
-            <TabsTrigger value="active">Active</TabsTrigger>
-            <TabsTrigger value="suspended">Suspended</TabsTrigger>
-            <TabsTrigger value="flagged">Flagged</TabsTrigger>
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
+          <TabsList className="grid w-full grid-cols-5">
+            <TabsTrigger value="all" className="flex items-center gap-2">
+              <Store className="h-4 w-4" />
+              All
+            </TabsTrigger>
+            <TabsTrigger value="pending" className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-yellow-500" />
+              Pending
+            </TabsTrigger>
+            <TabsTrigger value="active" className="flex items-center gap-2">
+              <CheckCircle className="h-4 w-4 text-green-500" />
+              Active
+            </TabsTrigger>
+            <TabsTrigger value="suspended" className="flex items-center gap-2">
+              <XCircle className="h-4 w-4 text-red-500" />
+              Suspended
+            </TabsTrigger>
+            <TabsTrigger value="flagged" className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 text-orange-500" />
+              Flagged
+            </TabsTrigger>
           </TabsList>
+
+          {/* All Shops */}
+          <TabsContent value="all" className="space-y-4">
+            {filteredShops.length === 0 ? (
+              <Card>
+                <CardContent className="pt-6 text-center text-muted-foreground">
+                  No shops found
+                </CardContent>
+              </Card>
+            ) : (
+              filteredShops.map((shop) => (
+                <ShopCard
+                  key={shop._id}
+                  shop={shop}
+                  onVerify={shop.status === 'pending' ? () => handleVerify(shop._id) : undefined}
+                  onReject={shop.status === 'pending' ? () => handleReject(shop._id) : undefined}
+                  onSuspend={shop.status === 'active' ? () => handleSuspend(shop._id) : undefined}
+                  onReactivate={shop.status === 'suspended' || shop.status === 'flagged' ? () => handleReactivate(shop._id) : undefined}
+                  getStatusIcon={getStatusIcon}
+                />
+              ))
+            )}
+          </TabsContent>
 
           {/* Pending Shops */}
           <TabsContent value="pending" className="space-y-4">

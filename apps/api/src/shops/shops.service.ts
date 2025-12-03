@@ -58,9 +58,21 @@ export class ShopsService {
       const sequenceNumber = shopCount + 1;
       const shopId = generateShopId(sequenceNumber);
 
-      // Convert empty kraPin to null to avoid duplicate key errors
-      const shopData = {
-        ...dto,
+      // Normalize kraPin: convert empty/whitespace to undefined for sparse unique index
+      // The sparse index only ignores null/undefined, NOT empty strings
+      let normalizedKraPin: string | undefined = undefined;
+      if (dto.kraPin && typeof dto.kraPin === 'string') {
+        const trimmed = dto.kraPin.trim().toUpperCase();
+        if (trimmed.length > 0) {
+          normalizedKraPin = trimmed;
+        }
+      }
+
+      // Remove kraPin from dto to avoid it being spread with wrong value
+      const { kraPin: _ignoredKraPin, ...restDto } = dto;
+
+      const shopData: any = {
+        ...restDto,
         shopId,  // Add human-readable shop ID
         ownerId: ownerId ? new Types.ObjectId(ownerId) : undefined,
         language: dto.language || 'en',
@@ -69,8 +81,12 @@ export class ShopsService {
         totalSales: 0,
         totalOrders: 0,
         onboardingComplete: false,
-        kraPin: dto.kraPin && dto.kraPin.trim() ? dto.kraPin : null,
       };
+
+      // Only add kraPin if it has a valid value
+      if (normalizedKraPin) {
+        shopData.kraPin = normalizedKraPin;
+      }
       
       const shop = new this.shopModel(shopData);
       return await shop.save();
@@ -102,12 +118,29 @@ export class ShopsService {
 
   async update(shopId: string, dto: UpdateShopDto): Promise<ShopDocument | null> {
     try {
-      // Convert empty kraPin to null to avoid duplicate key errors
-      const updateData = {
-        ...dto,
+      // Remove kraPin from dto to handle separately
+      const { kraPin: dtoKraPin, ...restDto } = dto;
+
+      const updateData: any = {
+        ...restDto,
         updatedAt: new Date(),
-        kraPin: dto.kraPin !== undefined ? (dto.kraPin && dto.kraPin.trim() ? dto.kraPin : null) : undefined,
       };
+      
+      // Handle kraPin separately - only update if explicitly provided
+      if (dtoKraPin !== undefined) {
+        if (dtoKraPin && typeof dtoKraPin === 'string') {
+          const trimmed = dtoKraPin.trim().toUpperCase();
+          if (trimmed.length > 0) {
+            updateData.kraPin = trimmed;
+          } else {
+            // Explicitly unset kraPin if empty string provided
+            updateData.$unset = { kraPin: 1 };
+          }
+        } else {
+          // Explicitly unset kraPin if null provided
+          updateData.$unset = { kraPin: 1 };
+        }
+      }
       
       return await this.shopModel
         .findByIdAndUpdate(
@@ -125,7 +158,7 @@ export class ShopsService {
         } else if (field === 'phone') {
           throw new BadRequestException('Shop phone number already registered');
         } else if (field === 'kraPin') {
-          throw new BadRequestException('KRA PIN already registered');
+          throw new BadRequestException('KRA PIN already registered to another shop');
         } else {
           throw new BadRequestException(`${field} already registered`);
         }
@@ -235,11 +268,41 @@ export class ShopsService {
   }
 
   async findAll(): Promise<any[]> {
-    // Return only active shops for login page
-    const shops = await this.shopModel.find({ status: 'active' }).select('_id name').exec();
-    return shops.map((shop) => ({
-      id: shop._id,
-      name: shop.name,
-    }));
+    // Return active shops and pending shops (for demo mode)
+    // Pending shops get 24 days (3 weeks + 3 days) free demo period
+    const DEMO_PERIOD_DAYS = 24;
+    const demoExpiryDate = new Date();
+    demoExpiryDate.setDate(demoExpiryDate.getDate() - DEMO_PERIOD_DAYS);
+
+    const shops = await this.shopModel
+      .find({
+        $or: [
+          { status: 'active' },
+          { status: 'verified' },
+          // Include pending shops created within demo period
+          { status: 'pending', createdAt: { $gte: demoExpiryDate } },
+        ],
+      })
+      .select('_id shopId name status createdAt')
+      .exec();
+
+    return shops.map((shop) => {
+      const result: any = {
+        id: shop._id,
+        shopId: shop.shopId,
+        name: shop.name,
+        status: shop.status,
+      };
+
+      // For pending shops, include demo expiry info
+      if (shop.status === 'pending' && shop.createdAt) {
+        const expiryDate = new Date(shop.createdAt);
+        expiryDate.setDate(expiryDate.getDate() + DEMO_PERIOD_DAYS);
+        result.demoExpiresAt = expiryDate;
+        result.demoMode = true;
+      }
+
+      return result;
+    });
   }
 }

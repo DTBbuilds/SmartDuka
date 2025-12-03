@@ -99,46 +99,138 @@ export function useReceiptPrinter() {
 }
 
 function formatReceiptHTML(receiptData: any): string {
+  const shopName = receiptData.shopName || 'SmartDuka';
+  const formatCurrency = (val: number) => `Ksh ${val?.toLocaleString('en-KE', { minimumFractionDigits: 0 }) || '0'}`;
+  
   return `
     <!DOCTYPE html>
     <html>
     <head>
+      <meta charset="UTF-8">
       <style>
-        body { font-family: monospace; width: 80mm; margin: 0; padding: 10px; }
+        @page { size: 80mm auto; margin: 0; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+          font-family: 'Courier New', monospace; 
+          width: 80mm; 
+          margin: 0 auto; 
+          padding: 8mm 5mm;
+          font-size: 11px;
+          line-height: 1.4;
+        }
         .receipt { text-align: center; }
-        .header { font-weight: bold; margin-bottom: 10px; }
-        .items { margin: 10px 0; text-align: left; }
-        .item { display: flex; justify-content: space-between; }
-        .total { border-top: 1px solid #000; margin-top: 10px; font-weight: bold; }
-        .footer { margin-top: 10px; font-size: 0.8em; }
+        .divider { border-top: 1px dashed #333; margin: 8px 0; }
+        .divider-bold { border-top: 2px solid #333; margin: 8px 0; }
+        
+        /* Header */
+        .shop-name { font-size: 16px; font-weight: bold; margin-bottom: 4px; }
+        .shop-info { font-size: 10px; color: #555; }
+        
+        /* Order Info */
+        .order-info { text-align: left; margin: 8px 0; font-size: 10px; }
+        .order-info div { margin: 2px 0; }
+        
+        /* Items */
+        .items { text-align: left; margin: 8px 0; }
+        .item { margin: 4px 0; }
+        .item-name { font-weight: 500; }
+        .item-details { display: flex; justify-content: space-between; font-size: 10px; color: #555; }
+        
+        /* Totals */
+        .totals { text-align: left; margin: 8px 0; }
+        .total-row { display: flex; justify-content: space-between; margin: 2px 0; }
+        .total-row.grand { font-size: 14px; font-weight: bold; margin-top: 8px; }
+        
+        /* Payment */
+        .payment { text-align: left; margin: 8px 0; padding: 6px; background: #f5f5f5; border-radius: 4px; }
+        .payment-method { font-weight: bold; }
+        
+        /* Footer */
+        .footer { margin-top: 12px; font-size: 10px; color: #666; }
+        .footer p { margin: 4px 0; }
       </style>
     </head>
     <body>
       <div class="receipt">
-        <div class="header">
-          <div>${receiptData.shopName || 'SmartDuka'}</div>
-          <div>${new Date().toLocaleString()}</div>
+        <!-- Shop Header -->
+        <div class="shop-name">${shopName}</div>
+        ${receiptData.shopAddress ? `<div class="shop-info">${receiptData.shopAddress}</div>` : ''}
+        ${receiptData.shopPhone ? `<div class="shop-info">Tel: ${receiptData.shopPhone}</div>` : ''}
+        ${receiptData.shopTaxPin ? `<div class="shop-info">PIN: ${receiptData.shopTaxPin}</div>` : ''}
+        
+        <div class="divider-bold"></div>
+        
+        <!-- Order Info -->
+        <div class="order-info">
+          <div><strong>Order:</strong> ${receiptData.orderNumber || 'N/A'}</div>
+          <div><strong>Date:</strong> ${new Date(receiptData.date || Date.now()).toLocaleString('en-KE')}</div>
+          ${receiptData.cashierName ? `<div><strong>Cashier:</strong> ${receiptData.cashierName}</div>` : ''}
+          ${receiptData.customerName ? `<div><strong>Customer:</strong> ${receiptData.customerName}</div>` : ''}
         </div>
         
+        <div class="divider"></div>
+        
+        <!-- Items -->
         <div class="items">
           ${receiptData.items?.map((item: any) => `
             <div class="item">
-              <span>${item.name}</span>
-              <span>Ksh ${(item.unitPrice * item.quantity).toLocaleString()}</span>
+              <div class="item-name">${item.name}</div>
+              <div class="item-details">
+                <span>${item.quantity} × ${formatCurrency(item.unitPrice)}</span>
+                <span>${formatCurrency(item.unitPrice * item.quantity)}</span>
+              </div>
             </div>
-          `).join('')}
+          `).join('') || ''}
         </div>
         
-        <div class="total">
-          <div style="display: flex; justify-content: space-between;">
-            <span>Total:</span>
-            <span>Ksh ${receiptData.total?.toLocaleString()}</span>
+        <div class="divider"></div>
+        
+        <!-- Totals -->
+        <div class="totals">
+          <div class="total-row">
+            <span>Subtotal</span>
+            <span>${formatCurrency(receiptData.subtotal)}</span>
+          </div>
+          ${receiptData.discount ? `
+            <div class="total-row" style="color: green;">
+              <span>Discount</span>
+              <span>-${formatCurrency(receiptData.discount)}</span>
+            </div>
+          ` : ''}
+          <div class="total-row">
+            <span>Tax ${receiptData.taxRate ? `(${(receiptData.taxRate * 100).toFixed(0)}%)` : ''}</span>
+            <span>${formatCurrency(receiptData.tax)}</span>
+          </div>
+          <div class="divider-bold"></div>
+          <div class="total-row grand">
+            <span>TOTAL</span>
+            <span>${formatCurrency(receiptData.total)}</span>
           </div>
         </div>
         
+        <!-- Payment -->
+        <div class="payment">
+          <div class="payment-method">
+            ${receiptData.paymentMethod === 'mpesa' ? '📱 M-Pesa' : 
+              receiptData.paymentMethod === 'cash' ? '💵 Cash' : 
+              receiptData.paymentMethod === 'card' ? '💳 Card' : 
+              receiptData.paymentMethod || 'Cash'}
+          </div>
+          ${receiptData.mpesaReceiptNumber ? `<div style="font-size: 10px;">Ref: ${receiptData.mpesaReceiptNumber}</div>` : ''}
+          ${receiptData.amountTendered ? `
+            <div style="font-size: 10px; margin-top: 4px;">
+              Tendered: ${formatCurrency(receiptData.amountTendered)} | 
+              Change: ${formatCurrency(receiptData.change || 0)}
+            </div>
+          ` : ''}
+        </div>
+        
+        <div class="divider"></div>
+        
+        <!-- Footer -->
         <div class="footer">
-          <div>Thank you for your purchase!</div>
-          <div>Receipt #${receiptData.receiptNumber}</div>
+          <p><em>${receiptData.footerMessage || 'Thank you for your purchase!'}</em></p>
+          ${receiptData.shopPhone ? `<p>Questions? Call ${receiptData.shopPhone}</p>` : ''}
         </div>
       </div>
     </body>

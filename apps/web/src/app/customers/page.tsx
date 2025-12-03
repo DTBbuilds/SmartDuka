@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { useBranch } from "@/lib/branch-context";
+import { config } from "@/lib/config";
 import { Button, Input, Label, Textarea } from "@smartduka/ui";
 import { Plus, Pencil, Trash2, Users, Eye } from "lucide-react";
 import { DataTable, Column } from "@/components/shared/data-table";
@@ -26,6 +28,7 @@ interface Customer {
 
 export default function CustomersPage() {
   const { token } = useAuth();
+  const { currentBranch } = useBranch();
   const router = useRouter();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -45,12 +48,13 @@ export default function CustomersPage() {
 
   useEffect(() => {
     fetchCustomers();
-  }, []);
+  }, [currentBranch]);
 
   const fetchCustomers = async () => {
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-      const res = await fetch(`${apiUrl}/customers`, {
+      const base = config.apiUrl;
+      const branchParam = currentBranch ? `?branchId=${currentBranch._id}` : '';
+      const res = await fetch(`${base}/customers${branchParam}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -103,10 +107,10 @@ export default function CustomersPage() {
     setIsSaving(true);
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+      const base = config.apiUrl;
       const url = editingCustomer
-        ? `${apiUrl}/customers/${editingCustomer._id}`
-        : `${apiUrl}/customers`;
+        ? `${base}/customers/${editingCustomer._id}`
+        : `${base}/customers`;
       const method = editingCustomer ? "PUT" : "POST";
 
       const res = await fetch(url, {
@@ -136,8 +140,8 @@ export default function CustomersPage() {
     if (!deletingCustomer) return;
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-      const res = await fetch(`${apiUrl}/customers/${deletingCustomer._id}`, {
+      const base = config.apiUrl;
+      const res = await fetch(`${base}/customers/${deletingCustomer._id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -322,66 +326,72 @@ export default function CustomersPage() {
         onSubmit={handleSubmit}
         loading={isSaving}
         submitLabel={editingCustomer ? "Update" : "Add"}
+        size="lg"
       >
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="name">
-              Name <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              id="name"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              placeholder="Customer name"
-              required
-            />
+        <div className="grid grid-cols-2 gap-4">
+          {/* Left column */}
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">
+                Name <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="Customer name"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="phone">
+                Phone <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="phone"
+                type="tel"
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                placeholder="+254 712 345 678"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                placeholder="customer@example.com"
+              />
+            </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="phone">
-              Phone <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              id="phone"
-              type="tel"
-              value={formData.phone}
-              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-              placeholder="+254 712 345 678"
-              required
-            />
-          </div>
+          {/* Right column */}
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="address">Address</Label>
+              <Input
+                id="address"
+                value={formData.address}
+                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                placeholder="Customer address"
+              />
+            </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              placeholder="customer@example.com"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="address">Address</Label>
-            <Textarea
-              id="address"
-              value={formData.address}
-              onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-              placeholder="Customer address"
-              rows={3}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="notes">Notes</Label>
-            <Textarea
-              id="notes"
-              value={formData.notes}
-              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              placeholder="Additional notes"
-              rows={3}
-            />
+            <div className="space-y-2">
+              <Label htmlFor="notes">Notes</Label>
+              <Textarea
+                id="notes"
+                value={formData.notes}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                placeholder="Additional notes"
+                rows={4}
+              />
+            </div>
           </div>
         </div>
       </FormModal>

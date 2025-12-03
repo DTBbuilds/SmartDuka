@@ -77,6 +77,20 @@ export class SuperAdminController {
   }
 
   /**
+   * Get all shops (must be before :id route)
+   */
+  @Get('shops')
+  async getAllShops(
+    @Query('limit') limit: string = '50',
+    @Query('skip') skip: string = '0',
+    @Query('status') status?: string,
+  ) {
+    const shops = await this.superAdminService.getAllShops(parseInt(limit), parseInt(skip), status);
+    const count = await this.superAdminService.getAllShopsCount(status);
+    return { shops, count };
+  }
+
+  /**
    * Get shop details
    */
   @Get('shops/:id')

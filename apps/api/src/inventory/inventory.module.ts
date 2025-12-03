@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { InventoryService } from './inventory.service';
 import { InventoryController } from './inventory.controller';
+import { CategorySuggestionService } from './services/category-suggestion.service';
 import { Product, ProductSchema } from './schemas/product.schema';
 import { Category, CategorySchema } from './schemas/category.schema';
 import { StockAdjustment, StockAdjustmentSchema } from './schemas/stock-adjustment.schema';
@@ -16,8 +17,8 @@ import { StockReconciliation, StockReconciliationSchema } from './schemas/stock-
       { name: StockReconciliation.name, schema: StockReconciliationSchema },
     ]),
   ],
-  providers: [InventoryService],
+  providers: [InventoryService, CategorySuggestionService],
   controllers: [InventoryController],
-  exports: [InventoryService],
+  exports: [InventoryService, CategorySuggestionService],
 })
 export class InventoryModule {}

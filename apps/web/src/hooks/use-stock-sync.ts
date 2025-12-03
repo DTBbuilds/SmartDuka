@@ -16,7 +16,7 @@ export function useStockSync(apiUrl: string, token: string | null) {
     if (!token) return;
     try {
       const base = apiUrl || 'http://localhost:3000';
-      const res = await fetch(`${base}/inventory/products?limit=500`, {
+      const res = await fetch(`${base}/inventory/products?limit=200`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error(`Failed (${res.status})`);

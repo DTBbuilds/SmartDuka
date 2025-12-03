@@ -16,10 +16,12 @@ import {
   TabsTrigger,
   Textarea,
 } from '@smartduka/ui';
-import { Plus, Trash2, Edit2, Download, Upload, Users, Activity, ChevronDown, ChevronUp, Package, Zap, BarChart3, Copy, Archive, Eye, Search, Filter, MapPin } from 'lucide-react';
+import { Plus, Trash2, Edit2, Download, Upload, Users, Activity, ChevronDown, ChevronUp, Package, Zap, BarChart3, Copy, Archive, Eye, Search, Filter, MapPin, TrendingUp, ShoppingCart, CreditCard, AlertTriangle, ArrowUpRight, Boxes } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
+import { useBranch } from '@/lib/branch-context';
 import { useToast } from '@/lib/use-toast';
+import { config } from '@/lib/config';
 import { ToastContainer } from '@/components/toast-container';
 import { CSVImportModal } from '@/components/csv-import-modal';
 import { CategoryManagement } from '@/components/category-management';
@@ -48,6 +50,7 @@ type Category = {
 function AdminContent() {
   const router = useRouter();
   const { user, shop, token } = useAuth();
+  const { currentBranch } = useBranch();
   const { toasts, toast, dismiss } = useToast();
 
   const [products, setProducts] = useState<Product[]>([]);
@@ -57,6 +60,12 @@ function AdminContent() {
   const [newProduct, setNewProduct] = useState({ name: '', sku: '', price: 0, stock: 0 });
   const [newCategory, setNewCategory] = useState({ name: '', slug: '' });
   const [lowStockProducts, setLowStockProducts] = useState<Product[]>([]);
+  const [salesStats, setSalesStats] = useState<{
+    todayRevenue: number;
+    todayOrders: number;
+    totalRevenue: number;
+    totalOrders: number;
+  } | null>(null);
   const [isCSVImportOpen, setIsCSVImportOpen] = useState(false);
   const [isCategoryImportExportOpen, setIsCategoryImportExportOpen] = useState(false);
   const [isQuickAddExpanded, setIsQuickAddExpanded] = useState(false);
@@ -66,19 +75,24 @@ function AdminContent() {
 
   useEffect(() => {
     loadData();
-  }, [token]);
+  }, [token, currentBranch]);
 
   const loadData = async () => {
     if (!token) return;
     try {
       setLoading(true);
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+      const base = config.apiUrl;
       const headers = { Authorization: `Bearer ${token}` };
+      
+      // Build branch query parameter for branch-level data isolation
+      const branchParam = currentBranch ? `branchId=${currentBranch._id}` : '';
+      const branchQuery = branchParam ? `&${branchParam}` : '';
 
-      const [productsRes, categoriesRes, lowStockRes] = await Promise.all([
-        fetch(`${base}/inventory/products?limit=200`, { headers }),
+      const [productsRes, categoriesRes, lowStockRes, salesStatsRes] = await Promise.all([
+        fetch(`${base}/inventory/products?limit=200${branchQuery}`, { headers }),
         fetch(`${base}/inventory/categories`, { headers }),
-        fetch(`${base}/inventory/stock/low-stock`, { headers }),
+        fetch(`${base}/inventory/stock/low-stock${branchParam ? `?${branchParam}` : ''}`, { headers }),
+        fetch(`${base}/sales/stats${branchParam ? `?${branchParam}` : ''}`, { headers }),
       ]);
 
       // Handle products
@@ -116,6 +130,15 @@ function AdminContent() {
         console.error('Failed to load low stock:', lowStockRes.status);
         setLowStockProducts([]);
       }
+
+      // Handle sales stats
+      if (salesStatsRes.ok) {
+        const data = await salesStatsRes.json();
+        setSalesStats(data);
+      } else {
+        console.error('Failed to load sales stats:', salesStatsRes.status);
+        setSalesStats(null);
+      }
     } catch (err: any) {
       console.error('Error loading data:', err);
       toast({ type: 'error', title: 'Load failed', message: err?.message });
@@ -127,7 +150,7 @@ function AdminContent() {
   const handleAddProduct = async () => {
     if (!newProduct.name || newProduct.price <= 0 || !token) return;
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+      const base = config.apiUrl;
       const res = await fetch(`${base}/inventory/products`, {
         method: 'POST',
         headers: {
@@ -148,7 +171,7 @@ function AdminContent() {
   const handleDeleteProduct = async (id: string) => {
     if (!token) return;
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+      const base = config.apiUrl;
       const res = await fetch(`${base}/inventory/products/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
@@ -161,34 +184,53 @@ function AdminContent() {
     }
   };
 
-  const handleCSVImport = async (importedProducts: any[]) => {
+  const handleCSVImport = async (importedProducts: any[], options?: {
+    autoCreateCategories?: boolean;
+    autoSuggestCategories?: boolean;
+    updateExisting?: boolean;
+    skipDuplicates?: boolean;
+  }) => {
     if (!token) return;
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+      const base = config.apiUrl;
       const res = await fetch(`${base}/inventory/products/import`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ products: importedProducts }),
+        body: JSON.stringify({ products: importedProducts, options }),
       });
       if (!res.ok) throw new Error(`Failed (${res.status})`);
       const result = await res.json();
+      
+      // Build detailed message
+      let message = `Imported ${result.imported} products`;
+      if (result.updated > 0) message += `, updated ${result.updated}`;
+      if (result.skipped > 0) message += `, skipped ${result.skipped} duplicates`;
+      if (result.categoriesCreated?.length > 0) {
+        message += `. Created ${result.categoriesCreated.length} categories`;
+      }
+      if (result.errors?.length > 0) message += `. ${result.errors.length} errors`;
+      
       toast({
         type: 'success',
         title: 'Import complete',
-        message: `Imported ${result.imported} products${result.errors.length > 0 ? `, ${result.errors.length} errors` : ''}`,
+        message,
       });
       loadData();
+      
+      // Return result for the modal to display
+      return result;
     } catch (err: any) {
       toast({ type: 'error', title: 'Import failed', message: err?.message });
+      throw err;
     }
   };
 
   const handleCSVExport = async () => {
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+      const base = config.apiUrl;
       const res = await fetch(`${base}/inventory/products/export`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -236,7 +278,7 @@ function AdminContent() {
     if (!confirm(`Delete ${selectedProducts.size} product(s)? This cannot be undone.`)) return;
     
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+      const base = config.apiUrl;
       for (const productId of selectedProducts) {
         await fetch(`${base}/inventory/products/${productId}`, {
           method: 'DELETE',
@@ -287,6 +329,127 @@ function AdminContent() {
             </CardContent>
           </Card>
         )}
+
+        {/* Analytics Dashboard Cards - All Clickable */}
+        <div className="mb-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+          {/* Today's Sales - Links to Sales Analytics */}
+          <Card 
+            className="bg-gradient-to-br from-green-500/10 to-green-600/5 border-green-500/20 cursor-pointer hover:shadow-lg hover:border-green-500/40 transition-all group"
+            onClick={() => router.push('/admin/analytics/sales')}
+          >
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-green-500/20">
+                    <TrendingUp className="h-5 w-5 text-green-600" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-lg text-green-700 dark:text-green-400">
+                      Ksh {(salesStats?.todayRevenue || 0).toLocaleString()}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Today's Sales</p>
+                  </div>
+                </div>
+                <ArrowUpRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Today's Orders - Links to Orders Analytics */}
+          <Card 
+            className="cursor-pointer hover:shadow-lg hover:border-blue-500/40 transition-all group"
+            onClick={() => router.push('/admin/analytics/orders')}
+          >
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-blue-500/10">
+                    <ShoppingCart className="h-5 w-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-lg">{salesStats?.todayOrders || 0}</p>
+                    <p className="text-xs text-muted-foreground">Today's Orders</p>
+                  </div>
+                </div>
+                <ArrowUpRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Inventory Value - Links to Inventory Analytics */}
+          <Card 
+            className="cursor-pointer hover:shadow-lg hover:border-purple-500/40 transition-all group"
+            onClick={() => router.push('/admin/analytics/inventory')}
+          >
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-purple-500/10">
+                    <Boxes className="h-5 w-5 text-purple-600" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-lg">{products.length}</p>
+                    <p className="text-xs text-muted-foreground">Products</p>
+                    {lowStockProducts.length > 0 && (
+                      <p className="text-xs text-yellow-600 flex items-center gap-1">
+                        <AlertTriangle className="h-3 w-3" />
+                        {lowStockProducts.length} low stock
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <ArrowUpRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Payments - Links to Payments Analytics */}
+          <Card 
+            className="cursor-pointer hover:shadow-lg hover:border-orange-500/40 transition-all group"
+            onClick={() => router.push('/admin/analytics/payments')}
+          >
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-orange-500/10">
+                    <CreditCard className="h-5 w-5 text-orange-600" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-lg">
+                      Ksh {(salesStats?.totalRevenue || 0).toLocaleString()}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Total Revenue</p>
+                  </div>
+                </div>
+                <ArrowUpRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Quick Analytics Links */}
+        <div className="mb-6 flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" onClick={() => router.push('/admin/analytics/sales')} className="gap-2">
+            <BarChart3 className="h-4 w-4" />
+            Sales Report
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => router.push('/admin/analytics/orders')} className="gap-2">
+            <ShoppingCart className="h-4 w-4" />
+            Order History
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => router.push('/admin/analytics/inventory')} className="gap-2">
+            <Package className="h-4 w-4" />
+            Stock Report
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => router.push('/admin/analytics/payments')} className="gap-2">
+            <CreditCard className="h-4 w-4" />
+            Payment Report
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => router.push('/reports')} className="gap-2">
+            <TrendingUp className="h-4 w-4" />
+            All Reports
+          </Button>
+        </div>
 
         {/* Quick Actions Section */}
         <div className="mb-8">
@@ -382,7 +545,7 @@ function AdminContent() {
                 onSubmit={async (product) => {
                   if (!token) return;
                   try {
-                    const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+                    const base = config.apiUrl;
                     const res = await fetch(`${base}/inventory/products`, {
                       method: 'POST',
                       headers: {
@@ -602,6 +765,7 @@ function AdminContent() {
                             size="sm"
                             variant="ghost"
                             title="View details"
+                            onClick={() => router.push(`/inventory/${product._id}`)}
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
@@ -609,6 +773,7 @@ function AdminContent() {
                             size="sm"
                             variant="ghost"
                             title="Edit product"
+                            onClick={() => router.push(`/inventory/${product._id}/edit`)}
                           >
                             <Edit2 className="h-4 w-4" />
                           </Button>

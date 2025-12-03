@@ -75,6 +75,20 @@ export function BarcodeScannerZXing({
       setError(null);
       setMessage("🔄 Initializing camera...");
 
+      // Check for secure context (HTTPS or localhost required for camera access)
+      if (typeof window !== "undefined" && !window.isSecureContext) {
+        throw new Error(
+          "INSECURE_CONTEXT: Camera access requires HTTPS. Please access this page via https:// or localhost."
+        );
+      }
+
+      // Check if mediaDevices API is available
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error(
+          "MEDIA_DEVICES_UNAVAILABLE: Your browser does not support camera access. Please use a modern browser like Chrome, Firefox, Safari, or Edge."
+        );
+      }
+
       // Dynamically import ZXing-JS
       const { BrowserMultiFormatReader } = await import("@zxing/browser");
       
@@ -126,14 +140,32 @@ export function BarcodeScannerZXing({
       setScanStatus("error");
 
       // User-friendly error messages
-      if (err.name === "NotAllowedError") {
-        setError("Camera permission denied. Please enable camera access in your browser settings.");
+      if (err.message?.includes("INSECURE_CONTEXT")) {
+        setError(
+          "Camera requires HTTPS. Please access this page via https:// or use localhost for development."
+        );
+      } else if (err.message?.includes("MEDIA_DEVICES_UNAVAILABLE")) {
+        setError(
+          "Camera API not available. Please use a modern browser (Chrome, Firefox, Safari, Edge)."
+        );
+      } else if (err.name === "NotAllowedError") {
+        // NotAllowedError can occur due to:
+        // 1. User denied permission
+        // 2. Permission policy blocks camera
+        // 3. No user gesture (autoplay policy)
+        setError(
+          "Camera permission denied. Please click 'Allow' when prompted, or enable camera access in your browser settings (Site Settings > Camera)."
+        );
       } else if (err.name === "NotFoundError" || err.message?.includes("No camera found")) {
         setError("No camera found on this device. Use hardware scanner or manual entry.");
       } else if (err.name === "NotReadableError") {
         setError("Camera is already in use by another application. Please close other apps and try again.");
       } else if (err.name === "AbortError") {
         setError("Camera initialization was canceled. Please try again.");
+      } else if (err.name === "OverconstrainedError") {
+        setError("Camera constraints could not be satisfied. Try a different camera.");
+      } else if (err.name === "SecurityError") {
+        setError("Camera access blocked by security policy. Check browser permissions.");
       } else {
         setError(`Camera error: ${err.message || "Unknown error"}. Falling back to manual entry.`);
       }

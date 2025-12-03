@@ -74,6 +74,41 @@ export class SuperAdminService {
   }
 
   /**
+   * Get all shops with optional status filter
+   */
+  async getAllShops(limit: number = 50, skip: number = 0, status?: string): Promise<ShopDocument[]> {
+    const query: any = {};
+    if (status && status !== 'all') {
+      if (status === 'flagged') {
+        query.isFlagged = true;
+      } else {
+        query.status = status;
+      }
+    }
+    return this.shopModel
+      .find(query)
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .skip(skip)
+      .exec();
+  }
+
+  /**
+   * Get count of all shops with optional status filter
+   */
+  async getAllShopsCount(status?: string): Promise<number> {
+    const query: any = {};
+    if (status && status !== 'all') {
+      if (status === 'flagged') {
+        query.isFlagged = true;
+      } else {
+        query.status = status;
+      }
+    }
+    return this.shopModel.countDocuments(query).exec();
+  }
+
+  /**
    * Get shop details
    */
   async getShopDetails(shopId: string): Promise<ShopDocument> {

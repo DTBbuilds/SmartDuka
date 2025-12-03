@@ -1,9 +1,35 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { Button, Input, Label, Textarea } from "@smartduka/ui";
-import { Plus, TrendingUp, TrendingDown } from "lucide-react";
+import {
+  Button,
+  Card,
+  CardContent,
+  Input,
+  Label,
+  Textarea,
+  Badge,
+} from "@smartduka/ui";
+import {
+  Plus,
+  TrendingUp,
+  TrendingDown,
+  Package,
+  RefreshCw,
+  Search,
+  Filter,
+  Download,
+  AlertTriangle,
+  CheckCircle,
+  XCircle,
+  RotateCcw,
+  FileText,
+  Calendar,
+  User,
+  ArrowUpDown,
+  Eye,
+} from "lucide-react";
 import { DataTable, Column } from "@/components/shared/data-table";
 import { FormModal } from "@/components/shared/form-modal";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -11,97 +37,128 @@ import { TableSkeleton } from "@/components/shared/loading-skeleton";
 
 interface Adjustment {
   _id: string;
-  productId: {
-    _id: string;
-    name: string;
-  };
-  quantity: number;
+  productId: string;
+  productName: string;
+  delta: number;
   reason: string;
-  notes?: string;
-  createdBy: string;
+  description?: string;
+  reference?: string;
+  adjustedBy?: string;
+  adjustedByName?: string;
   createdAt: string;
 }
 
 interface Product {
   _id: string;
   name: string;
-  sku: string;
-  quantityOnHand: number;
+  sku?: string;
+  stock: number;
+  price: number;
+  lowStockThreshold?: number;
 }
+
+interface AdjustmentSummary {
+  totalAdjustments: number;
+  byReason: Record<string, number>;
+  netAdjustment: number;
+}
+
+const REASONS = [
+  { value: "recount", label: "Physical Recount" },
+  { value: "correction", label: "Correction/Error Fix" },
+  { value: "damage", label: "Damaged Goods" },
+  { value: "loss", label: "Lost/Missing" },
+  { value: "theft", label: "Theft/Shrinkage" },
+  { value: "expired", label: "Expired Products" },
+  { value: "return", label: "Customer Return" },
+  { value: "received", label: "Stock Received" },
+  { value: "transfer_in", label: "Transfer In" },
+  { value: "transfer_out", label: "Transfer Out" },
+  { value: "other", label: "Other" },
+];
 
 export default function StockAdjustmentsPage() {
   const { token, user } = useAuth();
   const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [summary, setSummary] = useState<AdjustmentSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [reasonFilter, setReasonFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [viewingAdjustment, setViewingAdjustment] = useState<Adjustment | null>(null);
 
   const [formData, setFormData] = useState({
     productId: "",
     adjustmentType: "increase" as "increase" | "decrease",
-    quantity: 0,
+    quantity: 1,
     reason: "",
-    notes: "",
+    description: "",
+    reference: "",
   });
 
-  const reasons = [
-    "damage",
-    "theft",
-    "correction",
-    "found",
-    "expired",
-    "returned",
-    "other",
-  ];
+  // Admin check
+  if (user?.role !== "admin") {
+    return (
+      <div className="p-6 text-center py-12">
+        <Package className="mx-auto h-12 w-12 text-muted-foreground" />
+        <h2 className="mt-4 text-xl font-semibold">Access Denied</h2>
+        <p className="mt-2 text-muted-foreground">Admin privileges required.</p>
+      </div>
+    );
+  }
+
+  const fetchAdjustments = useCallback(async () => {
+    if (!token) return;
+    try {
+      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+      const res = await fetch(`${base}/stock/adjustments`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) setAdjustments(await res.json());
+    } catch (e) {
+      console.error("Failed to fetch adjustments:", e);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [token]);
+
+  const fetchProducts = useCallback(async () => {
+    if (!token) return;
+    try {
+      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+      const res = await fetch(`${base}/inventory/products?limit=200`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) setProducts(await res.json());
+    } catch (e) {
+      console.error("Failed to fetch products:", e);
+    }
+  }, [token]);
+
+  const fetchSummary = useCallback(async () => {
+    if (!token) return;
+    try {
+      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+      const res = await fetch(`${base}/stock/adjustments/summary`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) setSummary(await res.json());
+    } catch (e) {
+      console.error("Failed to fetch summary:", e);
+    }
+  }, [token]);
 
   useEffect(() => {
     fetchAdjustments();
     fetchProducts();
-  }, []);
-
-  const fetchAdjustments = async () => {
-    try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-      const res = await fetch(`${apiUrl}/stock/adjustments`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setAdjustments(data);
-      }
-    } catch (error) {
-      console.error("Failed to fetch adjustments:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const fetchProducts = async () => {
-    try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-      const res = await fetch(`${apiUrl}/inventory/products`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setProducts(data);
-      }
-    } catch (error) {
-      console.error("Failed to fetch products:", error);
-    }
-  };
+    fetchSummary();
+  }, [fetchAdjustments, fetchProducts, fetchSummary]);
 
   const handleAdd = () => {
-    setFormData({
-      productId: "",
-      adjustmentType: "increase",
-      quantity: 0,
-      reason: "",
-      notes: "",
-    });
+    setFormData({ productId: "", adjustmentType: "increase", quantity: 1, reason: "", description: "", reference: "" });
     setIsModalOpen(true);
   };
 
@@ -110,233 +167,284 @@ export default function StockAdjustmentsPage() {
       alert("Please fill in all required fields");
       return;
     }
-
     setIsSaving(true);
-
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-      const adjustmentQuantity =
-        formData.adjustmentType === "decrease" ? -formData.quantity : formData.quantity;
+      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+      const product = products.find(p => p._id === formData.productId);
+      const delta = formData.adjustmentType === "decrease" ? -formData.quantity : formData.quantity;
 
-      const res = await fetch(`${apiUrl}/stock/adjustments`, {
+      const res = await fetch(`${base}/stock/adjustments`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           productId: formData.productId,
-          quantity: adjustmentQuantity,
+          productName: product?.name || "Unknown",
+          delta,
           reason: formData.reason,
-          notes: formData.notes || undefined,
+          description: formData.description || undefined,
+          reference: formData.reference || undefined,
         }),
       });
 
       if (res.ok) {
-        await fetchAdjustments();
-        await fetchProducts(); // Refresh to show updated stock
+        await Promise.all([fetchAdjustments(), fetchProducts(), fetchSummary()]);
         setIsModalOpen(false);
       } else {
-        throw new Error("Failed to create adjustment");
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || "Failed to create adjustment");
       }
-    } catch (error) {
-      console.error("Failed to create adjustment:", error);
-      alert("Failed to create adjustment. Please try again.");
+    } catch (e: any) {
+      alert(e.message || "Failed to create adjustment");
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleExport = () => {
+    const csv = [
+      ["Date", "Product", "Adjustment", "Reason", "Description", "Reference"].join(","),
+      ...filteredAdjustments.map(a => [
+        new Date(a.createdAt).toLocaleDateString(),
+        `"${a.productName}"`,
+        a.delta > 0 ? `+${a.delta}` : a.delta,
+        a.reason,
+        `"${a.description || ""}"`,
+        a.reference || "",
+      ].join(","))
+    ].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `stock-adjustments-${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+  };
+
+  const filteredAdjustments = adjustments.filter((adj) => {
+    if (searchQuery && !adj.productName?.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    if (reasonFilter !== "all" && adj.reason !== reasonFilter) return false;
+    if (typeFilter === "increase" && adj.delta <= 0) return false;
+    if (typeFilter === "decrease" && adj.delta >= 0) return false;
+    return true;
+  });
+
+  const getReasonBadge = (reason: string) => {
+    const colors: Record<string, string> = {
+      damage: "bg-red-100 text-red-700",
+      loss: "bg-red-100 text-red-700",
+      theft: "bg-red-100 text-red-700",
+      expired: "bg-orange-100 text-orange-700",
+      recount: "bg-blue-100 text-blue-700",
+      correction: "bg-blue-100 text-blue-700",
+      return: "bg-green-100 text-green-700",
+      received: "bg-green-100 text-green-700",
+    };
+    const label = REASONS.find(r => r.value === reason)?.label || reason;
+    return <Badge className={`${colors[reason] || "bg-gray-100 text-gray-700"} font-normal`}>{label}</Badge>;
   };
 
   const columns: Column<Adjustment>[] = [
     {
       key: "createdAt",
       header: "Date",
-      render: (adj) => new Date(adj.createdAt).toLocaleDateString(),
+      render: (adj) => (
+        <div className="text-sm">
+          <div>{new Date(adj.createdAt).toLocaleDateString()}</div>
+          <div className="text-xs text-muted-foreground">{new Date(adj.createdAt).toLocaleTimeString()}</div>
+        </div>
+      ),
       sortable: true,
     },
     {
-      key: "productId",
+      key: "productName",
       header: "Product",
-      render: (adj) => adj.productId?.name || "Unknown",
+      render: (adj) => (
+        <div className="flex items-center gap-2">
+          <Package className="h-4 w-4 text-muted-foreground" />
+          <span className="font-medium">{adj.productName}</span>
+        </div>
+      ),
       sortable: true,
     },
     {
-      key: "quantity",
+      key: "delta",
       header: "Adjustment",
       render: (adj) => (
-        <span
-          className={`flex items-center gap-1 ${
-            adj.quantity > 0 ? "text-green-600" : "text-red-600"
-          }`}
-        >
-          {adj.quantity > 0 ? (
-            <TrendingUp className="h-4 w-4" />
-          ) : (
-            <TrendingDown className="h-4 w-4" />
-          )}
-          {adj.quantity > 0 ? "+" : ""}
-          {adj.quantity}
-        </span>
+        <div className={`flex items-center gap-1 font-semibold ${adj.delta > 0 ? "text-green-600" : "text-red-600"}`}>
+          {adj.delta > 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+          <span>{adj.delta > 0 ? "+" : ""}{adj.delta}</span>
+        </div>
       ),
       sortable: true,
     },
-    {
-      key: "reason",
-      header: "Reason",
-      render: (adj) => (
-        <span className="capitalize">{adj.reason.replace("_", " ")}</span>
-      ),
-    },
-    {
-      key: "notes",
-      header: "Notes",
-      render: (adj) => adj.notes || "—",
-    },
-    {
-      key: "createdBy",
-      header: "Created By",
-      render: (adj) => adj.createdBy || user?.email || "—",
-    },
+    { key: "reason", header: "Reason", render: (adj) => getReasonBadge(adj.reason) },
+    { key: "description", header: "Notes", render: (adj) => <span className="text-sm text-muted-foreground truncate max-w-[150px] block">{adj.description || "—"}</span> },
+    { key: "reference", header: "Ref #", render: (adj) => <span className="text-sm font-mono">{adj.reference || "—"}</span> },
   ];
 
-  if (isLoading) {
-    return (
-      <div className="container py-8">
-        <TableSkeleton />
-      </div>
-    );
-  }
+  if (isLoading) return <div className="p-6"><TableSkeleton /></div>;
 
   return (
-    <div className="container py-8">
-      <div className="mb-8 flex items-center justify-between">
+    <div className="p-6 space-y-6">
+      {/* Header */}
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Stock Adjustments</h1>
-          <p className="text-muted-foreground">
-            Track and manage inventory adjustments
-          </p>
+          <h1 className="text-2xl font-bold">Stock Adjustments</h1>
+          <p className="text-muted-foreground">Track and manage inventory adjustments</p>
         </div>
-        <Button onClick={handleAdd}>
-          <Plus className="mr-2 h-4 w-4" />
-          New Adjustment
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => { fetchAdjustments(); fetchSummary(); }}>
+            <RefreshCw className="h-4 w-4 mr-2" />Refresh
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleExport}>
+            <Download className="h-4 w-4 mr-2" />Export
+          </Button>
+          <Button size="sm" onClick={handleAdd}>
+            <Plus className="h-4 w-4 mr-2" />New Adjustment
+          </Button>
+        </div>
       </div>
 
-      {adjustments.length === 0 ? (
-        <EmptyState
-          icon={TrendingUp}
-          title="No adjustments yet"
-          description="Create your first stock adjustment to track inventory changes"
-          actionLabel="New Adjustment"
-          onAction={handleAdd}
-        />
-      ) : (
-        <DataTable
-          data={adjustments}
-          columns={columns}
-          searchable
-          searchPlaceholder="Search adjustments..."
-          emptyMessage="No adjustments found"
-        />
-      )}
+      {/* Stats */}
+      <div className="grid gap-4 md:grid-cols-4">
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-blue-100 rounded-lg"><FileText className="h-5 w-5 text-blue-600" /></div>
+              <div>
+                <p className="text-sm text-muted-foreground">Total Adjustments</p>
+                <p className="text-2xl font-bold">{summary?.totalAdjustments || adjustments.length}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-green-100 rounded-lg"><TrendingUp className="h-5 w-5 text-green-600" /></div>
+              <div>
+                <p className="text-sm text-muted-foreground">Stock Added</p>
+                <p className="text-2xl font-bold text-green-600">+{adjustments.filter(a => a.delta > 0).reduce((s, a) => s + a.delta, 0)}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-red-100 rounded-lg"><TrendingDown className="h-5 w-5 text-red-600" /></div>
+              <div>
+                <p className="text-sm text-muted-foreground">Stock Removed</p>
+                <p className="text-2xl font-bold text-red-600">{adjustments.filter(a => a.delta < 0).reduce((s, a) => s + a.delta, 0)}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-purple-100 rounded-lg"><ArrowUpDown className="h-5 w-5 text-purple-600" /></div>
+              <div>
+                <p className="text-sm text-muted-foreground">Net Change</p>
+                <p className={`text-2xl font-bold ${(summary?.netAdjustment || 0) >= 0 ? "text-green-600" : "text-red-600"}`}>
+                  {(summary?.netAdjustment || 0) >= 0 ? "+" : ""}{summary?.netAdjustment || 0}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
-      <FormModal
-        open={isModalOpen}
-        onOpenChange={setIsModalOpen}
-        title="New Stock Adjustment"
-        description="Adjust inventory levels for a product"
-        onSubmit={handleSubmit}
-        loading={isSaving}
-        submitLabel="Create Adjustment"
-      >
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="product">
-              Product <span className="text-destructive">*</span>
-            </Label>
-            <select
-              id="product"
-              value={formData.productId}
-              onChange={(e) => setFormData({ ...formData, productId: e.target.value })}
-              required
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            >
-              <option value="">Select product</option>
-              {products.map((product) => (
-                <option key={product._id} value={product._id}>
-                  {product.name} ({product.sku}) - Current: {product.quantityOnHand}
-                </option>
-              ))}
+      {/* Filters */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-wrap gap-4">
+            <div className="flex-1 min-w-[200px]">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input placeholder="Search products..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9" />
+              </div>
+            </div>
+            <select value={reasonFilter} onChange={(e) => setReasonFilter(e.target.value)} className="h-9 rounded-md border px-3 text-sm">
+              <option value="all">All Reasons</option>
+              {REASONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+            </select>
+            <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="h-9 rounded-md border px-3 text-sm">
+              <option value="all">All Types</option>
+              <option value="increase">Increases Only</option>
+              <option value="decrease">Decreases Only</option>
             </select>
           </div>
+        </CardContent>
+      </Card>
 
+      {/* Low Stock Alert */}
+      {products.filter(p => p.stock <= (p.lowStockThreshold || 5)).length > 0 && (
+        <Card className="border-orange-200 bg-orange-50 dark:bg-orange-900/10">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <AlertTriangle className="h-5 w-5 text-orange-600" />
+              <span className="font-semibold text-orange-800 dark:text-orange-400">Low Stock Products</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {products.filter(p => p.stock <= (p.lowStockThreshold || 5)).slice(0, 5).map(p => (
+                <Badge key={p._id} variant="outline" className="cursor-pointer hover:bg-orange-100" onClick={() => { setFormData({ ...formData, productId: p._id, adjustmentType: "increase", reason: "received" }); setIsModalOpen(true); }}>
+                  {p.name}: {p.stock} left
+                </Badge>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Table */}
+      {filteredAdjustments.length === 0 ? (
+        <EmptyState icon={Package} title="No adjustments found" description={searchQuery ? "Try different filters" : "Create your first stock adjustment"} actionLabel={!searchQuery ? "New Adjustment" : undefined} onAction={!searchQuery ? handleAdd : undefined} />
+      ) : (
+        <Card>
+          <CardContent className="p-0">
+            <DataTable data={filteredAdjustments} columns={columns} searchable={false} emptyMessage="No adjustments found" />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Modal */}
+      <FormModal open={isModalOpen} onOpenChange={setIsModalOpen} title="New Stock Adjustment" description="Adjust inventory levels for a product" onSubmit={handleSubmit} loading={isSaving} submitLabel="Create Adjustment">
+        <div className="space-y-4">
+          <div>
+            <Label>Product <span className="text-destructive">*</span></Label>
+            <select value={formData.productId} onChange={(e) => setFormData({ ...formData, productId: e.target.value })} className="mt-1 w-full h-10 rounded-md border px-3 text-sm">
+              <option value="">Select product</option>
+              {products.map(p => <option key={p._id} value={p._id}>{p.name} {p.sku ? `(${p.sku})` : ""} - Stock: {p.stock}</option>)}
+            </select>
+          </div>
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="adjustmentType">
-                Type <span className="text-destructive">*</span>
-              </Label>
-              <select
-                id="adjustmentType"
-                value={formData.adjustmentType}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    adjustmentType: e.target.value as "increase" | "decrease",
-                  })
-                }
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              >
+            <div>
+              <Label>Type <span className="text-destructive">*</span></Label>
+              <select value={formData.adjustmentType} onChange={(e) => setFormData({ ...formData, adjustmentType: e.target.value as any })} className="mt-1 w-full h-10 rounded-md border px-3 text-sm">
                 <option value="increase">Increase (+)</option>
                 <option value="decrease">Decrease (-)</option>
               </select>
             </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="quantity">
-                Quantity <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="quantity"
-                type="number"
-                min="1"
-                value={formData.quantity}
-                onChange={(e) =>
-                  setFormData({ ...formData, quantity: parseInt(e.target.value) || 0 })
-                }
-                required
-              />
+            <div>
+              <Label>Quantity <span className="text-destructive">*</span></Label>
+              <Input type="number" min="1" value={formData.quantity} onChange={(e) => setFormData({ ...formData, quantity: parseInt(e.target.value) || 0 })} className="mt-1" />
             </div>
           </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="reason">
-              Reason <span className="text-destructive">*</span>
-            </Label>
-            <select
-              id="reason"
-              value={formData.reason}
-              onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
-              required
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            >
+          <div>
+            <Label>Reason <span className="text-destructive">*</span></Label>
+            <select value={formData.reason} onChange={(e) => setFormData({ ...formData, reason: e.target.value })} className="mt-1 w-full h-10 rounded-md border px-3 text-sm">
               <option value="">Select reason</option>
-              {reasons.map((reason) => (
-                <option key={reason} value={reason}>
-                  {reason.charAt(0).toUpperCase() + reason.slice(1)}
-                </option>
-              ))}
+              {REASONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
             </select>
           </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="notes">Notes</Label>
-            <Textarea
-              id="notes"
-              value={formData.notes}
-              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              placeholder="Additional details about this adjustment"
-              rows={3}
-            />
+          <div>
+            <Label>Reference # (optional)</Label>
+            <Input value={formData.reference} onChange={(e) => setFormData({ ...formData, reference: e.target.value })} placeholder="PO#, Invoice#, etc." className="mt-1" />
+          </div>
+          <div>
+            <Label>Notes</Label>
+            <Textarea value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} placeholder="Additional details..." rows={2} className="mt-1" />
           </div>
         </div>
       </FormModal>

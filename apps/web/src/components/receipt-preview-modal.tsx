@@ -4,14 +4,10 @@ import {
   Button,
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogHeader,
   DialogTitle,
-  DialogFooter,
-  Separator,
 } from '@smartduka/ui';
-import { Printer, Mail } from 'lucide-react';
-import { ReceiptData } from '@/lib/receipt-generator';
+import { Printer, MessageCircle, Download, Mail, Check, Phone, MapPin, Building2, Receipt } from 'lucide-react';
+import { ReceiptData, shareViaWhatsApp, printReceipt, downloadReceipt } from '@/lib/receipt-generator';
 
 interface ReceiptPreviewModalProps {
   isOpen: boolean;
@@ -24,14 +20,33 @@ interface ReceiptPreviewModalProps {
 const formatCurrency = (value: number) =>
   `Ksh ${value.toLocaleString('en-KE', { minimumFractionDigits: 0 })}`;
 
-const formatDate = (date: Date) =>
-  date.toLocaleDateString('en-KE', {
+const formatDate = (date: Date) => {
+  const d = new Date(date);
+  return d.toLocaleDateString('en-KE', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
     year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
+  });
+};
+
+const formatTime = (date: Date) => {
+  const d = new Date(date);
+  return d.toLocaleTimeString('en-KE', {
     hour: '2-digit',
     minute: '2-digit',
   });
+};
+
+const getPaymentLabel = (method?: string) => {
+  switch (method) {
+    case 'mpesa': return '📱 M-Pesa';
+    case 'cash': return '💵 Cash';
+    case 'card': return '💳 Card';
+    case 'qr': return '📲 QR Pay';
+    default: return method || 'Unknown';
+  }
+};
 
 export function ReceiptPreviewModal({
   isOpen,
@@ -42,229 +57,241 @@ export function ReceiptPreviewModal({
 }: ReceiptPreviewModalProps) {
   if (!receipt) return null;
 
+  const handleWhatsApp = () => {
+    shareViaWhatsApp(receipt);
+  };
+
+  const handleDownload = () => {
+    downloadReceipt(receipt);
+  };
+
+  const handlePrint = () => {
+    printReceipt(receipt);
+    onPrint();
+  };
+
+  const shopName = receipt.shopName || 'SmartDuka';
+
   return (
     <Dialog open={isOpen} onOpenChange={() => {}}>
-      <DialogContent className="sm:max-w-md lg:max-w-6xl lg:max-h-[90vh] overflow-hidden flex flex-col">
-        {/* Progress Indicator */}
-        <div className="mb-2 flex gap-2 flex-shrink-0">
-          <div className="flex-1 h-1 bg-green-500 rounded" />
-          <div className="flex-1 h-1 bg-green-500 rounded" />
-          <div className="flex-1 h-1 bg-gray-300 rounded" />
+      <DialogContent className="max-w-md p-0 overflow-hidden max-h-[90vh] flex flex-col">
+        {/* Visually hidden title for accessibility */}
+        <DialogTitle className="sr-only">Receipt for Order #{receipt.orderNumber}</DialogTitle>
+        
+        {/* Progress Bar */}
+        <div className="flex gap-1 px-4 pt-3">
+          <div className="flex-1 h-1 bg-primary rounded-full" />
+          <div className="flex-1 h-1 bg-primary rounded-full" />
+          <div className="flex-1 h-1 bg-muted rounded-full" />
         </div>
 
-        <DialogHeader className="mb-2 flex-shrink-0">
-          <DialogTitle className="flex items-center gap-2 text-lg lg:text-xl">
-            🧾 Receipt Preview
-          </DialogTitle>
-          <DialogDescription className="text-xs lg:text-sm">
-            Step 2 of 3: Review receipt before printing
-          </DialogDescription>
-        </DialogHeader>
+        {/* Scrollable Receipt Content */}
+        <div className="px-4 py-3 space-y-3 flex-1 overflow-y-auto min-h-0">
+          
+          {/* Shop Header - Attractive branding */}
+          <div className="text-center py-3 border-b-2 border-dashed border-muted">
+            <div className="flex items-center justify-center gap-2 mb-1">
+              <Building2 className="h-5 w-5 text-primary" />
+              <h2 className="text-lg font-bold text-foreground">{shopName}</h2>
+            </div>
+            {receipt.shopAddress && (
+              <p className="text-xs text-muted-foreground flex items-center justify-center gap-1">
+                <MapPin className="h-3 w-3" />
+                {receipt.shopAddress}
+              </p>
+            )}
+            {receipt.shopPhone && (
+              <p className="text-xs text-muted-foreground flex items-center justify-center gap-1 mt-0.5">
+                <Phone className="h-3 w-3" />
+                {receipt.shopPhone}
+              </p>
+            )}
+            {receipt.shopTaxPin && (
+              <p className="text-xs text-muted-foreground mt-0.5">
+                <span className="font-medium">PIN:</span> {receipt.shopTaxPin}
+              </p>
+            )}
+          </div>
 
-        {/* Landscape Layout for Desktop */}
-        <div className="flex-1 overflow-hidden min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
-          {/* Left Column - Receipt Preview (Main) */}
-          <div className="lg:col-span-2 bg-white dark:bg-slate-950 p-3 lg:p-4 rounded-lg border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col">
-            <div className="space-y-2 lg:space-y-3 text-xs lg:text-sm overflow-y-auto flex-1">
-              {/* Header */}
-              <div className="text-center space-y-1">
-                <p className="text-sm lg:text-base font-semibold text-muted-foreground">SmartDuka POS</p>
-                <p className="text-xs lg:text-sm text-muted-foreground">Receipt</p>
+          {/* Receipt Title & Order Info */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center">
+                <Check className="h-4 w-4 text-green-600" />
               </div>
+              <div>
+                <p className="text-sm font-semibold">Sale Complete</p>
+                <p className="text-xs text-muted-foreground">Order #{receipt.orderNumber}</p>
+              </div>
+            </div>
+            <div className="text-right text-xs">
+              <p className="font-medium">{formatDate(receipt.date)}</p>
+              <p className="text-muted-foreground">{formatTime(receipt.date)}</p>
+            </div>
+          </div>
 
-              <Separator />
+          {/* Cashier & Customer Info */}
+          <div className="flex gap-2 text-xs">
+            {receipt.cashierName && (
+              <div className="flex-1 p-2 rounded bg-muted/30">
+                <p className="text-muted-foreground">Served by</p>
+                <p className="font-medium">{receipt.cashierName}</p>
+              </div>
+            )}
+            {receipt.customerName && (
+              <div className="flex-1 p-2 rounded bg-muted/30">
+                <p className="text-muted-foreground">Customer</p>
+                <p className="font-medium truncate">{receipt.customerName}</p>
+              </div>
+            )}
+          </div>
 
-              {/* Order Number & Date */}
-              <div className="space-y-1 text-xs lg:text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Order #</span>
-                  <span className="font-semibold">{receipt.orderNumber}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Date</span>
-                  <span className="font-semibold">{formatDate(receipt.date)}</span>
-                </div>
-                {receipt.cashierName && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Cashier</span>
-                    <span className="font-semibold">{receipt.cashierName}</span>
+          {/* Items List */}
+          <div className="border rounded-lg overflow-hidden">
+            <div className="bg-primary/10 px-3 py-2 text-xs font-semibold flex justify-between">
+              <span className="flex items-center gap-1">
+                <Receipt className="h-3 w-3" />
+                Items ({receipt.items.length})
+              </span>
+              <span>Amount</span>
+            </div>
+            <div className="divide-y divide-border max-h-[180px] overflow-y-auto">
+              {receipt.items.map((item, idx) => (
+                <div key={idx} className="flex justify-between items-center px-3 py-2 text-xs hover:bg-muted/20">
+                  <div className="flex-1 min-w-0">
+                    <span className="font-medium block truncate">{item.name}</span>
+                    <span className="text-muted-foreground">
+                      {item.quantity} × {formatCurrency(item.unitPrice)}
+                    </span>
                   </div>
-                )}
-              </div>
-
-              <Separator />
-
-              {/* Items */}
-              <div className="space-y-1">
-                <p className="text-xs lg:text-sm font-semibold text-muted-foreground uppercase">Items</p>
-                <div className="space-y-0.5">
-                  {receipt.items.map((item, idx) => (
-                    <div key={idx} className="flex justify-between text-xs gap-2">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium truncate">{item.name}</p>
-                        <p className="text-muted-foreground text-xs">
-                          {item.quantity} × {formatCurrency(item.unitPrice)}
-                        </p>
-                      </div>
-                      <p className="font-semibold text-right flex-shrink-0">
-                        {formatCurrency(item.unitPrice * item.quantity)}
-                      </p>
-                    </div>
-                  ))}
+                  <span className="font-semibold ml-2 text-sm">{formatCurrency(item.unitPrice * item.quantity)}</span>
                 </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Totals Section */}
+          <div className="bg-muted/20 rounded-lg p-3 space-y-1">
+            <div className="flex justify-between text-xs">
+              <span className="text-muted-foreground">Subtotal</span>
+              <span className="font-medium">{formatCurrency(receipt.subtotal)}</span>
+            </div>
+            {receipt.discount && receipt.discount > 0 && (
+              <div className="flex justify-between text-xs text-green-600">
+                <span>Discount</span>
+                <span>-{formatCurrency(receipt.discount)}</span>
               </div>
+            )}
+            <div className="flex justify-between text-xs">
+              <span className="text-muted-foreground">
+                Tax {receipt.taxRate ? `(${(receipt.taxRate * 100).toFixed(0)}%)` : ''}
+              </span>
+              <span className="font-medium">{formatCurrency(receipt.tax)}</span>
+            </div>
+            <div className="flex justify-between text-base font-bold pt-2 border-t border-dashed">
+              <span>TOTAL</span>
+              <span className="text-green-600">{formatCurrency(receipt.total)}</span>
+            </div>
+          </div>
 
-              <Separator className="my-1" />
-
-              {/* Totals */}
-              <div className="space-y-1 text-xs lg:text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Subtotal</span>
-                  <span className="font-semibold">{formatCurrency(receipt.subtotal)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Tax ({receipt.taxRate ? (receipt.taxRate * 100).toFixed(1) : '2'}%)</span>
-                  <span className="font-semibold">{formatCurrency(receipt.tax)}</span>
-                </div>
-                <Separator className="my-1" />
-                <div className="flex justify-between text-base lg:text-lg font-bold">
-                  <span>Total</span>
-                  <span className="text-green-600 dark:text-green-400">
-                    {formatCurrency(receipt.total)}
-                  </span>
-                </div>
+          {/* Payment Info */}
+          <div className="bg-blue-50 dark:bg-blue-950/30 rounded-lg p-3 border border-blue-100 dark:border-blue-900">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">Payment Method</p>
+                <p className="font-semibold text-sm">{getPaymentLabel(receipt.paymentMethod)}</p>
               </div>
-
-              <Separator className="my-1" />
-
-              {/* Payment Info */}
-              <div className="space-y-0.5 text-xs lg:text-sm">
-                <p className="text-muted-foreground">Payment</p>
-                <p className="font-semibold">
-                  {receipt.paymentMethod === 'cash'
-                    ? '💵 Cash'
-                    : receipt.paymentMethod === 'card'
-                    ? '💳 Card'
-                    : receipt.paymentMethod === 'mpesa'
-                    ? '📱 M-Pesa'
-                    : receipt.paymentMethod}
-                </p>
-                {receipt.paymentMethod === 'cash' && receipt.amountTendered && (
-                  <div className="space-y-0.5 pt-1 text-xs">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Tendered</span>
-                      <span className="font-semibold">{formatCurrency(receipt.amountTendered)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Change</span>
-                      <span className="font-bold text-green-600 dark:text-green-400">
-                        {formatCurrency(receipt.change || 0)}
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Customer Info */}
-              {receipt.customerName && (
-                <>
-                  <Separator className="my-1" />
-                  <div className="space-y-0.5 text-xs lg:text-sm">
-                    <p className="text-muted-foreground">Customer</p>
-                    <p className="font-semibold truncate">{receipt.customerName}</p>
-                  </div>
-                </>
+              {receipt.mpesaReceiptNumber && (
+                <div className="text-right">
+                  <p className="text-xs text-muted-foreground">M-Pesa Ref</p>
+                  <p className="font-mono text-xs font-medium">{receipt.mpesaReceiptNumber}</p>
+                </div>
               )}
-
-              {/* Footer */}
-              <Separator className="my-1" />
-              <div className="text-center text-xs text-muted-foreground space-y-0.5">
-                <p>Thank you!</p>
-                <p>SmartDuka POS</p>
-              </div>
             </div>
+            {receipt.paymentMethod === 'cash' && receipt.amountTendered && (
+              <div className="flex gap-4 mt-2 pt-2 border-t border-blue-100 dark:border-blue-800 text-xs">
+                <div>
+                  <span className="text-muted-foreground">Tendered: </span>
+                  <span className="font-medium">{formatCurrency(receipt.amountTendered)}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Change: </span>
+                  <span className="font-bold text-green-600">{formatCurrency(receipt.change || 0)}</span>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Right Column - Action Summary (Desktop Only) */}
-          <div className="hidden lg:flex flex-col gap-3">
-            {/* Summary Card */}
-            <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950 dark:to-emerald-950 p-3 rounded-lg border border-green-200 dark:border-green-800">
-              <p className="text-xs font-semibold text-green-900 dark:text-green-100 mb-2">Order Summary</p>
-              <div className="space-y-1 text-xs">
-                <div className="flex justify-between">
-                  <span className="text-green-700 dark:text-green-300">Items</span>
-                  <span className="font-bold">{receipt.items.length}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-green-700 dark:text-green-300">Subtotal</span>
-                  <span className="font-bold">{formatCurrency(receipt.subtotal)}</span>
-                </div>
-                <Separator className="my-1 bg-green-200 dark:bg-green-800" />
-                <div className="flex justify-between text-sm font-bold">
-                  <span className="text-green-900 dark:text-green-100">Total</span>
-                  <span className="text-green-600 dark:text-green-400">{formatCurrency(receipt.total)}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Payment Info Card */}
-            <div className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-950 dark:to-cyan-950 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
-              <p className="text-xs font-semibold text-blue-900 dark:text-blue-100 mb-1">Payment</p>
-              <p className="text-xl font-bold text-blue-600 dark:text-blue-400">
-                {receipt.paymentMethod === 'cash'
-                  ? '💵'
-                  : receipt.paymentMethod === 'card'
-                  ? '💳'
-                  : receipt.paymentMethod === 'mpesa'
-                  ? '📱'
-                  : '💰'}
+          {/* Footer Message */}
+          <div className="text-center py-2 border-t border-dashed">
+            <p className="text-xs text-muted-foreground italic">
+              {receipt.footerMessage || 'Thank you for your purchase!'}
+            </p>
+            {receipt.shopPhone && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Questions? Call us at {receipt.shopPhone}
               </p>
-              <p className="text-xs font-semibold text-blue-900 dark:text-blue-100 mt-1">
-                {receipt.paymentMethod === 'cash'
-                  ? 'Cash'
-                  : receipt.paymentMethod === 'card'
-                  ? 'Card'
-                  : receipt.paymentMethod === 'mpesa'
-                  ? 'M-Pesa'
-                  : 'Other'}
-              </p>
-            </div>
-
-            {/* Status Card */}
-            <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950 dark:to-pink-950 p-3 rounded-lg border border-purple-200 dark:border-purple-800">
-              <p className="text-xs font-semibold text-purple-900 dark:text-purple-100 mb-1">Status</p>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                <p className="text-xs font-semibold text-purple-900 dark:text-purple-100">Ready</p>
-              </div>
-            </div>
+            )}
           </div>
         </div>
 
-        {/* Action Buttons - Mobile First */}
-        <div className="flex-shrink-0 flex flex-col lg:flex-row gap-2 lg:gap-3 mt-4 lg:mt-6">
-          <Button
-            onClick={onPrint}
-            disabled={isProcessing}
-            className="flex-1 h-12 lg:h-14 text-base lg:text-lg font-bold order-1"
-          >
-            <Printer className="mr-2 h-5 w-5" />
-            <span className="hidden sm:inline">🖨️ PRINT</span>
-            <span className="sm:hidden">Print</span>
-          </Button>
-
-          {onEmail && (
+        {/* Receipt Actions - Fixed at bottom */}
+        <div className="px-4 pb-4 space-y-2 flex-shrink-0 border-t pt-3">
+          <p className="text-xs font-medium text-muted-foreground">Receipt Actions</p>
+          <div className="grid grid-cols-4 gap-2">
             <Button
-              onClick={onEmail}
+              onClick={handlePrint}
+              disabled={isProcessing}
+              size="sm"
+              className="h-14 flex flex-col items-center justify-center gap-1"
+            >
+              <Printer className="h-4 w-4" />
+              <span className="text-xs">Print</span>
+            </Button>
+            <Button
+              onClick={handleWhatsApp}
               disabled={isProcessing}
               variant="outline"
-              className="flex-1 h-12 lg:h-14 text-base lg:text-lg order-2"
+              size="sm"
+              className="h-14 flex flex-col items-center justify-center gap-1 border-green-200 hover:bg-green-50 dark:border-green-800 dark:hover:bg-green-950"
             >
-              <Mail className="mr-2 h-5 w-5" />
-              <span className="hidden sm:inline">📧 EMAIL</span>
-              <span className="sm:hidden">Email</span>
+              <MessageCircle className="h-4 w-4 text-green-600" />
+              <span className="text-xs">WhatsApp</span>
             </Button>
-          )}
+            <Button
+              onClick={handleDownload}
+              disabled={isProcessing}
+              variant="outline"
+              size="sm"
+              className="h-14 flex flex-col items-center justify-center gap-1"
+            >
+              <Download className="h-4 w-4" />
+              <span className="text-xs">Download</span>
+            </Button>
+            {onEmail && (
+              <Button
+                onClick={onEmail}
+                disabled={isProcessing}
+                variant="outline"
+                size="sm"
+                className="h-14 flex flex-col items-center justify-center gap-1"
+              >
+                <Mail className="h-4 w-4" />
+                <span className="text-xs">Email</span>
+              </Button>
+            )}
+            {!onEmail && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled
+                className="h-14 flex flex-col items-center justify-center gap-1 opacity-50"
+              >
+                <Mail className="h-4 w-4" />
+                <span className="text-xs">Email</span>
+              </Button>
+            )}
+          </div>
         </div>
       </DialogContent>
     </Dialog>

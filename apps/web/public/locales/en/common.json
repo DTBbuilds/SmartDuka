@@ -224,5 +224,46 @@
     "fieldInvalid": "{{field}} is invalid",
     "fieldTooShort": "{{field}} is too short",
     "fieldTooLong": "{{field}} is too long"
+  },
+  "demo": {
+    "title": "Demo Mode",
+    "banner": "You're exploring SmartDuka in demo mode. Data won't be saved permanently.",
+    "indicator": "Demo Mode",
+    "verificationPending": "Verification pending for {{shopName}}",
+    "tryDemoMode": "Try Demo Mode While You Wait!",
+    "demoDescription": "Explore all SmartDuka features with sample data. Perfect for learning the system before going live.",
+    "enterDemo": "Enter Demo Mode",
+    "exitDemo": "Exit Demo Mode",
+    "features": {
+      "pos": "Full POS system access",
+      "inventory": "Inventory management",
+      "reports": "Reports & analytics"
+    },
+    "notice": "Demo mode allows you to explore the system while your shop verification is pending. Any data you create will be marked as demo data.",
+    "dataWarning": "Demo data will be cleared when your shop is verified"
+  },
+  "verification": {
+    "title": "Verification in Progress",
+    "subtitle": "Your shop is being reviewed by our team",
+    "statusUnderReview": "Status: Under Review",
+    "statusDescription": "Your shop information is being verified by our team",
+    "submitted": "Submitted",
+    "expected": "Expected",
+    "within48Hours": "Within 48 hours",
+    "today": "Today",
+    "whatHappensNext": "What Happens Next?",
+    "step1Title": "Our team reviews your information",
+    "step1Desc": "We verify your business details and documents",
+    "step2Title": "We validate your shop details",
+    "step2Desc": "This includes business registration and compliance checks",
+    "step3Title": "You'll receive email notification",
+    "step3Desc": "We'll notify you at {{email}} once verified",
+    "step4Title": "Full access to SmartDuka",
+    "step4Desc": "Start managing your POS and inventory",
+    "needHelp": "Need Help?",
+    "callSupport": "Call our support team",
+    "emailUs": "Email us",
+    "refreshStatus": "Refresh Status",
+    "checking": "Checking..."
   }
 }

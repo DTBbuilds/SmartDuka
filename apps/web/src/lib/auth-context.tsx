@@ -1,8 +1,10 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { activityTracker } from './activity-tracker';
 import { statusManager } from './status-manager';
+import { config } from './config';
+import { clearAllLocalData } from './db';
 
 export type AuthUser = {
   sub: string;
@@ -20,20 +22,36 @@ export type Shop = {
   rejectionReason?: string;
 };
 
+// Demo mode key for localStorage
+const DEMO_MODE_KEY = 'smartduka:demo_mode';
+
 type AuthContextType = {
   user: AuthUser | null;
   shop: Shop | null;
   token: string | null;
   loading: boolean;
   isAuthenticated: boolean;
+  isDemoMode: boolean;
+  isShopPending: boolean;
   login: (email: string, password: string, role?: 'admin' | 'cashier' | 'super_admin', shopId?: string) => Promise<void>;
   loginWithPin: (pin: string, shopId: string) => Promise<void>;
+  loginWithGoogle: () => void;
+  registerShopWithGoogle: (googleProfile: GoogleProfile, shopData: any) => Promise<void>;
   logout: () => void;
   registerShop: (shopData: any, adminData: any) => Promise<void>;
+  enterDemoMode: (forceShop?: Shop) => void;
+  exitDemoMode: () => void;
   hasRole: (role: 'admin' | 'cashier' | 'super_admin') => boolean;
   isAdmin: () => boolean;
   isCashier: () => boolean;
   isSuperAdmin: () => boolean;
+};
+
+export type GoogleProfile = {
+  googleId: string;
+  email: string;
+  name: string;
+  avatarUrl?: string;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -43,34 +61,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [shop, setShop] = useState<Shop | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isDemoMode, setIsDemoMode] = useState(false);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const storedToken = window.localStorage.getItem('smartduka:token');
     const storedShop = window.localStorage.getItem('smartduka:shop');
+    const storedDemoMode = window.localStorage.getItem(DEMO_MODE_KEY);
+    
     if (storedToken) {
       try {
         const decoded = JSON.parse(atob(storedToken.split('.')[1]));
         setUser(decoded);
         setToken(storedToken);
         
+        // Sync cookie for middleware authentication (in case cookie expired but localStorage still has token)
+        document.cookie = `smartduka_token=${storedToken}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
+        
         // Initialize activity tracking and status manager
         activityTracker.setToken(storedToken, decoded.role);
         statusManager.initialize(storedToken, decoded.sub, decoded.shopId);
         if (storedShop) {
-          setShop(JSON.parse(storedShop));
+          const parsedShop = JSON.parse(storedShop);
+          setShop(parsedShop);
+          // Restore demo mode only if shop is still pending
+          if (storedDemoMode === 'true' && parsedShop.status === 'pending') {
+            setIsDemoMode(true);
+          }
         }
       } catch (err) {
         window.localStorage.removeItem('smartduka:token');
         window.localStorage.removeItem('smartduka:shop');
+        window.localStorage.removeItem(DEMO_MODE_KEY);
       }
     }
     setLoading(false);
   }, []);
 
   const login = async (email: string, password: string, role?: 'admin' | 'cashier' | 'super_admin', shopId?: string) => {
-    const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-    const res = await fetch(`${base}/auth/login`, {
+    const res = await fetch(`${config.apiUrl}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
@@ -97,6 +126,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.localStorage.setItem('smartduka:token', authToken);
     window.localStorage.setItem('smartduka:shop', JSON.stringify(shopData));
     
+    // Set cookie for middleware authentication
+    document.cookie = `smartduka_token=${authToken}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
+    
     // Initialize activity tracking and status manager
     activityTracker.setToken(authToken, decoded.role);
     statusManager.initialize(authToken, decoded.sub, decoded.shopId);
@@ -106,7 +138,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const registerShop = async (shopData: any, adminData: any) => {
-    const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
     // Normalize optional fields before sending
     const normalizedShop = { ...shopData } as any;
     if (typeof normalizedShop.kraPin === 'string') {
@@ -117,10 +148,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         normalizedShop.kraPin = v.toUpperCase();
       }
     }
-    const res = await fetch(`${base}/auth/register-shop`, {
+    
+    // Remove confirmPassword - it's only for frontend validation
+    const { confirmPassword, ...adminPayload } = adminData;
+    
+    const res = await fetch(`${config.apiUrl}/auth/register-shop`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ shop: normalizedShop, admin: adminData }),
+      body: JSON.stringify({ shop: normalizedShop, admin: adminPayload }),
     });
     
     if (!res.ok) {
@@ -141,24 +176,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.localStorage.setItem('smartduka:token', authToken);
     window.localStorage.setItem('smartduka:shop', JSON.stringify(shopInfo));
     
+    // Set cookie for middleware authentication
+    document.cookie = `smartduka_token=${authToken}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
+    
     // Initialize activity tracking and status manager
     activityTracker.setToken(authToken, decoded.role);
     statusManager.initialize(authToken, decoded.sub, decoded.shopId);
   };
 
-  const logout = () => {
+  const logout = async () => {
     // Track logout activity
     activityTracker.track('logout', {});
     
     // Cleanup status manager
     statusManager.cleanup();
     
+    // Clear all local IndexedDB data to prevent data leakage between shops
+    // This is critical for multi-tenancy security
+    try {
+      await clearAllLocalData();
+    } catch (err) {
+      console.warn('Failed to clear local data on logout:', err);
+    }
+    
     setUser(null);
     setShop(null);
     setToken(null);
+    setIsDemoMode(false);
     window.localStorage.removeItem('smartduka:token');
     window.localStorage.removeItem('smartduka:shop');
+    window.localStorage.removeItem(DEMO_MODE_KEY);
+    
+    // Clear auth cookie
+    document.cookie = 'smartduka_token=; path=/; max-age=0';
   };
+
+  // Demo mode functions
+  const enterDemoMode = (forceShop?: Shop) => {
+    const targetShop = forceShop || shop;
+    if (targetShop?.status === 'pending') {
+      setIsDemoMode(true);
+      window.localStorage.setItem(DEMO_MODE_KEY, 'true');
+    }
+  };
+
+  const exitDemoMode = () => {
+    setIsDemoMode(false);
+    window.localStorage.removeItem(DEMO_MODE_KEY);
+  };
+
+  // Check if shop is pending verification
+  const isShopPending = shop?.status === 'pending';
 
   const hasRole = (role: 'admin' | 'cashier' | 'super_admin'): boolean => {
     return user?.role === role;
@@ -177,8 +245,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const loginWithPin = async (pin: string, shopId: string) => {
-    const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-    const res = await fetch(`${base}/auth/login-pin`, {
+    const res = await fetch(`${config.apiUrl}/auth/login-pin`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ pin, shopId }),
@@ -201,6 +268,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     window.localStorage.setItem('smartduka:token', authToken);
     window.localStorage.setItem('smartduka:shop', JSON.stringify(shopInfo));
+    
+    // Set cookie for middleware authentication
+    document.cookie = `smartduka_token=${authToken}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
 
     // Initialize activity tracking and status manager
     activityTracker.setToken(authToken, decoded.role);
@@ -208,6 +278,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Track login activity
     await activityTracker.track('login_pin', { method: 'PIN' });
+  };
+
+  // Google OAuth login - redirects to backend which handles Google OAuth flow
+  const loginWithGoogle = () => {
+    window.location.href = `${config.apiUrl}/auth/google`;
+  };
+
+  // Register shop with Google profile (for new users coming from Google OAuth)
+  const registerShopWithGoogle = async (googleProfile: GoogleProfile, shopData: any) => {
+    const res = await fetch(`${config.apiUrl}/auth/register-shop-google`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ googleProfile, shop: shopData }),
+    });
+
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ message: 'Registration failed' }));
+      throw new Error(error.message || 'Registration failed');
+    }
+
+    const data = await res.json();
+    const { token: authToken, user: userData, shop: shopInfo } = data;
+
+    if (!authToken) throw new Error('No token received');
+
+    const decoded = JSON.parse(atob(authToken.split('.')[1]));
+    setUser(decoded);
+    setToken(authToken);
+    setShop(shopInfo);
+
+    window.localStorage.setItem('smartduka:token', authToken);
+    window.localStorage.setItem('smartduka:shop', JSON.stringify(shopInfo));
+    
+    // Set cookie for middleware authentication
+    document.cookie = `smartduka_token=${authToken}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
+
+    // Initialize activity tracking and status manager
+    activityTracker.setToken(authToken, decoded.role);
+    statusManager.initialize(authToken, decoded.sub, decoded.shopId);
   };
 
   const isAuthenticated = !!user && !!token;
@@ -219,10 +328,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       token, 
       loading, 
       isAuthenticated,
+      isDemoMode,
+      isShopPending: isShopPending || false,
       login, 
       loginWithPin,
+      loginWithGoogle,
+      registerShopWithGoogle,
       logout, 
       registerShop,
+      enterDemoMode,
+      exitDemoMode,
       hasRole,
       isAdmin,
       isCashier,

@@ -20,14 +20,47 @@ export class Shop {
   @Prop({ required: false, trim: true })
   address?: string;
 
-  @Prop({ required: false, trim: true })
-  city?: string;
+  @Prop({ required: true, trim: true })
+  county: string;
 
-  @Prop({ required: false, trim: true })
-  businessType?: string;
+  @Prop({ required: true, trim: true })
+  city: string;
+
+  @Prop({ required: true, trim: true })
+  businessType: string;
 
   @Prop({ required: false, trim: true })
   kraPin?: string;
+
+  @Prop({ required: false, trim: true, maxlength: 500 })
+  description?: string;
+
+  @Prop({ required: false, trim: true })
+  tillNumber?: string;
+
+  // M-Pesa Configuration - Each shop can have their own M-Pesa credentials
+  @Prop({ type: Object, default: {} })
+  mpesaConfig?: {
+    // Type: 'paybill' or 'till' (Buy Goods)
+    type?: 'paybill' | 'till';
+    // Paybill/Till number
+    shortCode?: string;
+    // For Paybill: Account number prefix (optional)
+    accountPrefix?: string;
+    // Daraja API credentials (encrypted in production)
+    consumerKey?: string;
+    consumerSecret?: string;
+    // Passkey for STK Push (Lipa Na M-Pesa Online)
+    passkey?: string;
+    // Callback URL for this shop (optional - defaults to platform callback)
+    callbackUrl?: string;
+    // Whether M-Pesa is enabled for this shop
+    enabled?: boolean;
+    // Last verification date
+    verifiedAt?: Date;
+    // Verification status
+    verificationStatus?: 'pending' | 'verified' | 'failed';
+  };
 
   @Prop({ enum: ['pending', 'verified', 'active', 'suspended', 'rejected', 'flagged'], default: 'pending' })
   status: 'pending' | 'verified' | 'active' | 'suspended' | 'rejected' | 'flagged';

@@ -3,6 +3,8 @@
  * Tracks user activities and sends them to the backend for logging
  */
 
+import { config } from './config';
+
 export interface ActivityEvent {
   action: string;
   details?: Record<string, any>;
@@ -17,7 +19,7 @@ class ActivityTracker {
   private initialized: boolean = false;
 
   constructor() {
-    this.baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+    this.baseUrl = config.apiUrl;
     this.initialize();
   }
 

@@ -148,18 +148,41 @@ export class UsersService {
       bcrypt.hash(pin, 10),
     );
 
-    const cashierCount = await this.userModel.countDocuments({
-      shopId: new Types.ObjectId(shopId),
-      role: 'cashier',
-    });
-    const cashierId = `C${String(cashierCount + 1).padStart(3, '0')}`;
+    // Get the highest cashier number for this shop to avoid gaps
+    const lastCashier = await this.userModel
+      .findOne({
+        shopId: new Types.ObjectId(shopId),
+        role: 'cashier',
+        cashierId: { $exists: true },
+      })
+      .sort({ cashierId: -1 })
+      .select('cashierId');
+
+    let nextNum = 1;
+    if (lastCashier?.cashierId) {
+      const match = lastCashier.cashierId.match(/C(\d+)/);
+      if (match) {
+        nextNum = parseInt(match[1], 10) + 1;
+      }
+    }
+    const cashierId = `C${String(nextNum).padStart(3, '0')}`;
+
+    // Generate unique email using shopId to avoid collisions across shops
+    const shortShopId = shopId.slice(-6);
+    const uniqueEmail =
+      createCashierDto.email || `cashier-${cashierId}-${shortShopId}@shop.local`;
+
+    // Check if email already exists
+    const existingUser = await this.userModel.findOne({ email: uniqueEmail });
+    if (existingUser) {
+      throw new Error(`A user with this email already exists. Please use a different email.`);
+    }
 
     const user = new this.userModel({
       shopId: new Types.ObjectId(shopId),
       name: createCashierDto.name,
       phone: createCashierDto.phone,
-      email:
-        createCashierDto.email || `cashier-${cashierId}@shop.local`,
+      email: uniqueEmail,
       role: 'cashier',
       status: 'active',
       pinHash: hashedPin,
@@ -169,7 +192,15 @@ export class UsersService {
       ),
     });
 
-    await user.save();
+    try {
+      await user.save();
+    } catch (err: any) {
+      // Handle MongoDB duplicate key error
+      if (err.code === 11000) {
+        throw new Error('A cashier with this ID already exists. Please try again.');
+      }
+      throw err;
+    }
 
     return {
       user: user.toObject({ versionKey: false }),
@@ -233,5 +264,55 @@ export class UsersService {
       { pinHash: hashedPin },
       { new: true },
     );
+  }
+
+  // Google OAuth methods
+  async findByGoogleId(googleId: string): Promise<User | null> {
+    return this.userModel.findOne({ googleId }).exec();
+  }
+
+  async linkGoogleAccount(
+    userId: string,
+    googleId: string,
+    avatarUrl?: string,
+  ): Promise<User | null> {
+    return this.userModel.findByIdAndUpdate(
+      userId,
+      { 
+        googleId, 
+        avatarUrl,
+        authProvider: 'google',
+      },
+      { new: true },
+    ).exec();
+  }
+
+  async createGoogleUser(data: {
+    shopId: string;
+    email: string;
+    name: string;
+    googleId: string;
+    avatarUrl?: string;
+    phone?: string;
+    role?: 'admin' | 'cashier';
+  }): Promise<User> {
+    // Generate a random password hash (user won't use it, they'll use Google)
+    const randomPassword = Math.random().toString(36).slice(-12);
+    const passwordHash = await bcrypt.hash(randomPassword, 10);
+
+    const user = new this.userModel({
+      shopId: new Types.ObjectId(data.shopId),
+      email: data.email,
+      name: data.name,
+      googleId: data.googleId,
+      avatarUrl: data.avatarUrl,
+      phone: data.phone,
+      authProvider: 'google',
+      role: data.role || 'admin',
+      status: 'active',
+      passwordHash,
+    });
+
+    return user.save();
   }
 }

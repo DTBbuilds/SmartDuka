@@ -92,6 +92,9 @@ export class Order {
   customerName?: string;
 
   @Prop()
+  customerPhone?: string;
+
+  @Prop()
   cashierId?: string;
 
   @Prop()

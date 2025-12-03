@@ -139,9 +139,14 @@ export class PaymentTransactionService {
     }
   }
 
-  async getStats(shopId: string, filters?: { from?: string; to?: string }): Promise<PaymentStatsDto> {
+  async getStats(shopId: string, filters?: { from?: string; to?: string; branchId?: string }): Promise<PaymentStatsDto> {
     try {
       const query: any = { shopId: new Types.ObjectId(shopId) };
+
+      // Branch filter for multi-tenant isolation
+      if (filters?.branchId) {
+        query.branchId = new Types.ObjectId(filters.branchId);
+      }
 
       if (filters?.from || filters?.to) {
         query.createdAt = {};
@@ -198,7 +203,7 @@ export class PaymentTransactionService {
 
   async exportTransactions(
     shopId: string,
-    filters?: { from?: string; to?: string },
+    filters?: { from?: string; to?: string; branchId?: string },
   ): Promise<string> {
     try {
       const transactions = await this.getTransactions(shopId, {
@@ -306,5 +311,240 @@ export class PaymentTransactionService {
         `Failed to fetch cashier stats: ${error?.message || 'Unknown error'}`,
       );
     }
+  }
+
+  async getPaymentsAnalytics(
+    shopId: string,
+    branchId?: string,
+  ): Promise<any> {
+    if (!shopId) {
+      throw new BadRequestException('Shop ID is required for payment analytics');
+    }
+
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    // Build query with shop isolation (multi-tenant)
+    const baseQuery: any = {
+      shopId: new Types.ObjectId(shopId),
+      createdAt: { $gte: monthAgo },
+    };
+
+    // Add branch filter if specified (branch-level analytics)
+    if (branchId) {
+      baseQuery.branchId = new Types.ObjectId(branchId);
+    }
+
+    // Get all transactions for the month with shop/branch isolation
+    const monthTransactions = await this.paymentTransactionModel
+      .find(baseQuery)
+      .sort({ createdAt: -1 })
+      .exec();
+
+    const todayTransactions = monthTransactions.filter(t => {
+      if (!t.createdAt) return false;
+      return new Date(t.createdAt).getTime() >= today.getTime();
+    });
+    const weekTransactions = monthTransactions.filter(t => {
+      if (!t.createdAt) return false;
+      return new Date(t.createdAt).getTime() >= weekAgo.getTime();
+    });
+
+    // Calculate totals
+    const todayTotal = todayTransactions
+      .filter(t => t.status === 'completed')
+      .reduce((sum, t) => sum + (t.amount || 0), 0);
+    const weekTotal = weekTransactions
+      .filter(t => t.status === 'completed')
+      .reduce((sum, t) => sum + (t.amount || 0), 0);
+    const monthTotal = monthTransactions
+      .filter(t => t.status === 'completed')
+      .reduce((sum, t) => sum + (t.amount || 0), 0);
+
+    // Success rate
+    const completedCount = monthTransactions.filter(t => t.status === 'completed').length;
+    const failedCount = monthTransactions.filter(t => t.status === 'failed').length;
+    const successRate = monthTransactions.length > 0 
+      ? Math.round((completedCount / monthTransactions.length) * 1000) / 10 
+      : 100;
+
+    // Average transaction value
+    const averageTransactionValue = completedCount > 0 
+      ? Math.round(monthTotal / completedCount) 
+      : 0;
+
+    // Method breakdown
+    const methodMap = new Map<string, { count: number; total: number }>();
+    monthTransactions.filter(t => t.status === 'completed').forEach(t => {
+      const method = t.paymentMethod || 'cash';
+      const existing = methodMap.get(method) || { count: 0, total: 0 };
+      existing.count += 1;
+      existing.total += t.amount || 0;
+      methodMap.set(method, existing);
+    });
+
+    const totalCompleted = completedCount;
+    const methodBreakdown = Array.from(methodMap.entries()).map(([method, data]) => ({
+      method: method === 'mpesa' ? 'M-Pesa' : method.charAt(0).toUpperCase() + method.slice(1),
+      count: data.count,
+      total: data.total,
+      percentage: totalCompleted > 0 ? Math.round((data.count / totalCompleted) * 1000) / 10 : 0,
+    }));
+
+    // Daily trend for last 14 days
+    const dailyTrend = Array.from({ length: 14 }, (_, i) => {
+      const date = new Date(today.getTime() - (13 - i) * 24 * 60 * 60 * 1000);
+      const nextDate = new Date(date.getTime() + 24 * 60 * 60 * 1000);
+      const dayTransactions = monthTransactions.filter(t => {
+        if (!t.createdAt) return false;
+        const txTime = new Date(t.createdAt).getTime();
+        return txTime >= date.getTime() && txTime < nextDate.getTime() && t.status === 'completed';
+      });
+      return {
+        date: date.toISOString().split('T')[0],
+        total: dayTransactions.reduce((sum, t) => sum + (t.amount || 0), 0),
+        count: dayTransactions.length,
+      };
+    });
+
+    // Recent transactions
+    const recentTransactions = monthTransactions.slice(0, 10).map(t => ({
+      id: t._id.toString(),
+      amount: t.amount || 0,
+      method: t.paymentMethod || 'cash',
+      status: t.status,
+      reference: t.mpesaReceiptNumber || t.referenceNumber || `TXN-${t._id.toString().slice(-8).toUpperCase()}`,
+      timestamp: t.createdAt,
+      orderNumber: t.orderNumber,
+    }));
+
+    // Failed transactions
+    const failedTransactions = monthTransactions
+      .filter(t => t.status === 'failed')
+      .slice(0, 5)
+      .map(t => ({
+        id: t._id.toString(),
+        amount: t.amount || 0,
+        method: t.paymentMethod || 'cash',
+        reason: t.notes || 'Transaction failed',
+        timestamp: t.createdAt,
+      }));
+
+    // Branch breakdown (for shop-level analytics showing per-branch stats)
+    const branchMap = new Map<string, { count: number; total: number; branchId: string }>();
+    monthTransactions.filter(t => t.status === 'completed').forEach(t => {
+      const bId = t.branchId?.toString() || 'main';
+      const existing = branchMap.get(bId) || { count: 0, total: 0, branchId: bId };
+      existing.count += 1;
+      existing.total += t.amount || 0;
+      branchMap.set(bId, existing);
+    });
+
+    const branchBreakdown = Array.from(branchMap.entries()).map(([bId, data]) => ({
+      branchId: bId,
+      count: data.count,
+      total: data.total,
+      percentage: totalCompleted > 0 ? Math.round((data.count / totalCompleted) * 1000) / 10 : 0,
+    }));
+
+    return {
+      // Identifiers for multi-tenant clarity
+      shopId,
+      branchId: branchId || null,
+      // Time-based totals
+      todayTotal,
+      todayTransactions: todayTransactions.length,
+      weekTotal,
+      weekTransactions: weekTransactions.length,
+      monthTotal,
+      monthTransactions: monthTransactions.length,
+      // Performance metrics
+      successRate,
+      averageTransactionValue,
+      failedCount,
+      // Breakdowns
+      methodBreakdown,
+      branchBreakdown,
+      // Trend data
+      dailyTrend,
+      // Transaction lists
+      recentTransactions,
+      failedTransactions,
+    };
+  }
+
+  /**
+   * Get payment analytics for a specific branch
+   */
+  async getBranchPaymentsAnalytics(shopId: string, branchId: string): Promise<any> {
+    if (!shopId || !branchId) {
+      throw new BadRequestException('Shop ID and Branch ID are required');
+    }
+    return this.getPaymentsAnalytics(shopId, branchId);
+  }
+
+  /**
+   * Get aggregated payment stats across all branches for a shop
+   */
+  async getShopPaymentsSummary(shopId: string): Promise<any> {
+    if (!shopId) {
+      throw new BadRequestException('Shop ID is required');
+    }
+
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    // Aggregation pipeline for efficient multi-branch summary
+    const pipeline = [
+      {
+        $match: {
+          shopId: new Types.ObjectId(shopId),
+          createdAt: { $gte: monthAgo },
+          status: 'completed',
+        },
+      },
+      {
+        $group: {
+          _id: '$branchId',
+          totalAmount: { $sum: '$amount' },
+          transactionCount: { $sum: 1 },
+          avgTransaction: { $avg: '$amount' },
+          methods: {
+            $push: '$paymentMethod',
+          },
+        },
+      },
+      {
+        $project: {
+          branchId: '$_id',
+          totalAmount: 1,
+          transactionCount: 1,
+          avgTransaction: { $round: ['$avgTransaction', 0] },
+        },
+      },
+    ];
+
+    const branchStats = await this.paymentTransactionModel.aggregate(pipeline).exec();
+
+    // Calculate shop-wide totals
+    const shopTotal = branchStats.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+    const shopTransactions = branchStats.reduce((sum, b) => sum + (b.transactionCount || 0), 0);
+
+    return {
+      shopId,
+      shopTotal,
+      shopTransactions,
+      shopAvgTransaction: shopTransactions > 0 ? Math.round(shopTotal / shopTransactions) : 0,
+      branchStats: branchStats.map(b => ({
+        branchId: b.branchId?.toString() || 'main',
+        totalAmount: b.totalAmount,
+        transactionCount: b.transactionCount,
+        avgTransaction: b.avgTransaction,
+        percentageOfTotal: shopTotal > 0 ? Math.round((b.totalAmount / shopTotal) * 1000) / 10 : 0,
+      })),
+    };
   }
 }

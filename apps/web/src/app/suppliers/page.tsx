@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { useBranch } from "@/lib/branch-context";
+import { config } from "@/lib/config";
 import { Button, Input, Label, Textarea } from "@smartduka/ui";
 import { Plus, Pencil, Trash2, Users } from "lucide-react";
 import { DataTable, Column } from "@/components/shared/data-table";
@@ -22,6 +24,7 @@ interface Supplier {
 
 export default function SuppliersPage() {
   const { token } = useAuth();
+  const { currentBranch } = useBranch();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -41,12 +44,13 @@ export default function SuppliersPage() {
 
   useEffect(() => {
     fetchSuppliers();
-  }, []);
+  }, [currentBranch]);
 
   const fetchSuppliers = async () => {
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-      const res = await fetch(`${apiUrl}/suppliers`, {
+      const base = config.apiUrl;
+      const branchParam = currentBranch ? `?branchId=${currentBranch._id}` : '';
+      const res = await fetch(`${base}/suppliers${branchParam}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -96,10 +100,10 @@ export default function SuppliersPage() {
     setIsSaving(true);
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+      const base = config.apiUrl;
       const url = editingSupplier
-        ? `${apiUrl}/suppliers/${editingSupplier._id}`
-        : `${apiUrl}/suppliers`;
+        ? `${base}/suppliers/${editingSupplier._id}`
+        : `${base}/suppliers`;
       const method = editingSupplier ? "PUT" : "POST";
 
       const res = await fetch(url, {
@@ -129,8 +133,8 @@ export default function SuppliersPage() {
     if (!deletingSupplier) return;
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-      const res = await fetch(`${apiUrl}/suppliers/${deletingSupplier._id}`, {
+      const base = config.apiUrl;
+      const res = await fetch(`${base}/suppliers/${deletingSupplier._id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });

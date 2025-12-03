@@ -74,4 +74,36 @@ export class ShopSettingsController {
     }
     return this.service.removeCategoryTaxRate(shopId, categoryId);
   }
+
+  // Receipt Settings Endpoints
+  @Get(':shopId/receipt')
+  async getReceiptSettings(@Param('shopId') shopId: string) {
+    if (!shopId) {
+      throw new BadRequestException('Shop ID is required');
+    }
+    return this.service.getReceiptSettings(shopId);
+  }
+
+  @Put(':shopId/receipt')
+  async updateReceiptSettings(
+    @Param('shopId') shopId: string,
+    @Body() receiptSettings: any,
+  ) {
+    if (!shopId) {
+      throw new BadRequestException('Shop ID is required');
+    }
+    return this.service.updateReceiptSettings(shopId, receiptSettings);
+  }
+
+  @Post(':shopId/receipt/sync')
+  async syncReceiptFromShop(@Param('shopId') shopId: string) {
+    if (!shopId) {
+      throw new BadRequestException('Shop ID is required');
+    }
+    const result = await this.service.syncReceiptSettingsFromShop(shopId);
+    if (!result) {
+      throw new BadRequestException('Shop not found');
+    }
+    return result;
+  }
 }

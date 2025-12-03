@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button, Input, Badge, Separator } from '@smartduka/ui';
-import { ShoppingCart, Trash2, Check, User } from 'lucide-react';
+import { Button, Input, Badge, Separator } from '@smartduka/ui';
+import { ShoppingCart, Trash2, User } from 'lucide-react';
 
 const formatCurrency = (value: number) =>
   `Ksh ${value.toLocaleString('en-KE', { minimumFractionDigits: 0 })}`;
@@ -16,25 +16,16 @@ interface CartItem {
   categoryId?: string;
 }
 
-interface PaymentOption {
-  id: string;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-}
-
 interface POSCartCompactProps {
   cartItems: CartItem[];
   subtotal: number;
   totalDiscount: number;
   tax: number;
   total: number;
-  selectedPaymentMethod: string | null;
-  amountTendered: number;
   customerName: string;
   isCheckingOut: boolean;
   checkoutMessage: string | null;
   checkoutError: string | null;
-  paymentOptions: PaymentOption[];
   shopSettings?: {
     tax?: {
       enabled: boolean;
@@ -42,8 +33,6 @@ interface POSCartCompactProps {
       name: string;
     };
   };
-  onPaymentMethodSelect: (methodId: string) => void;
-  onAmountTenderedChange: (amount: number) => void;
   onCustomerNameChange: (name: string) => void;
   onRemoveItem: (productId: string) => void;
   onCheckout: () => void;
@@ -55,16 +44,11 @@ export function POSCartCompact({
   totalDiscount,
   tax,
   total,
-  selectedPaymentMethod,
-  amountTendered,
   customerName,
   isCheckingOut,
   checkoutMessage,
   checkoutError,
-  paymentOptions,
   shopSettings,
-  onPaymentMethodSelect,
-  onAmountTenderedChange,
   onCustomerNameChange,
   onRemoveItem,
   onCheckout,
@@ -207,91 +191,16 @@ export function POSCartCompact({
         </div>
       )}
 
-      {/* Payment Methods - 2x2 Grid */}
-      {cartItems.length > 0 && (
-        <div className="flex-shrink-0 border-b px-2 py-1">
-          {!selectedPaymentMethod && (
-            <div className="rounded-md border border-amber-200 bg-amber-50 p-1 text-xs text-amber-700 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200 mb-1">
-              Select payment method
-            </div>
-          )}
-
-          <div className="grid gap-1 grid-cols-2">
-            {paymentOptions.map((option) => (
-              <Button
-                key={option.id}
-                onClick={() => onPaymentMethodSelect(option.id)}
-                variant={selectedPaymentMethod === option.id ? 'default' : 'outline'}
-                size="sm"
-                className={`
-                  h-11 flex flex-col items-center justify-center gap-0
-                  transition-all duration-200 relative text-xs
-                  ${
-                    selectedPaymentMethod === option.id
-                      ? 'ring-2 ring-primary ring-offset-1'
-                      : 'hover:border-primary'
-                  }
-                `}
-                aria-pressed={selectedPaymentMethod === option.id}
-                aria-label={`Pay with ${option.label}`}
-              >
-                <option.icon className="h-4 w-4" />
-                <span className="text-xs font-semibold leading-tight">{option.label}</span>
-                {selectedPaymentMethod === option.id && (
-                  <Check className="h-3 w-3 absolute top-0.5 right-0.5" />
-                )}
-              </Button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Cash Payment Input - Conditional */}
-      {cartItems.length > 0 && selectedPaymentMethod === 'cash' && (
-        <div className="flex-shrink-0 border-b px-2 py-1 space-y-0.5 bg-blue-50 dark:bg-blue-950">
-          <label className="text-xs font-medium text-blue-900 dark:text-blue-100">
-            Amount Tendered
-          </label>
-          <Input
-            type="number"
-            placeholder="Amount"
-            value={amountTendered || ''}
-            onChange={(e) => onAmountTenderedChange(Number(e.target.value) || 0)}
-            className="text-sm font-semibold h-7"
-            min="0"
-            step="100"
-          />
-          {amountTendered > 0 && (
-            <div className="space-y-0.5 text-xs">
-              <div className="flex justify-between">
-                <span className="text-blue-700 dark:text-blue-300">Total:</span>
-                <span className="font-semibold">{formatCurrency(total)}</span>
-              </div>
-              <div
-                className={`flex justify-between font-semibold p-0.5 rounded text-xs ${
-                  amountTendered >= total
-                    ? 'bg-green-100 dark:bg-green-900 text-green-900 dark:text-green-100'
-                    : 'bg-red-100 dark:bg-red-900 text-red-900 dark:text-red-100'
-                }`}
-              >
-                <span>Change:</span>
-                <span>{formatCurrency(Math.max(0, amountTendered - total))}</span>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
       {/* Checkout Button - Always at bottom */}
       {cartItems.length > 0 && (
-        <div className="flex-shrink-0 px-2 py-1">
+        <div className="flex-shrink-0 px-2 py-2">
           <Button
-            className="w-full h-8 text-xs font-semibold"
-            disabled={isCheckingOut || !selectedPaymentMethod}
+            className="w-full h-10 text-sm font-semibold"
+            disabled={isCheckingOut}
             onClick={onCheckout}
             aria-label="Complete checkout"
           >
-            {isCheckingOut ? 'Processing…' : 'Checkout'}
+            {isCheckingOut ? 'Processing…' : `Checkout • ${formatCurrency(total)}`}
           </Button>
         </div>
       )}

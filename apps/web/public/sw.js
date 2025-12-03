@@ -1,9 +1,7 @@
 /* eslint-disable no-restricted-globals */
 importScripts('https://storage.googleapis.com/workbox-cdn/releases/7.0.0/workbox-sw.js');
-importScripts('https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js');
 
-const SW_VERSION = '1.0.0';
-let isSyncing = false;
+const SW_VERSION = '2.0.0'; // Updated for multi-tenancy
 
 const sendMessageToClients = async (type, payload) => {
   const clients = await self.clients.matchAll({ includeUncontrolled: true, type: 'window' });
@@ -12,78 +10,41 @@ const sendMessageToClients = async (type, payload) => {
   }
 };
 
-const buildRequest = (payload) => {
-  const url = new URL('/sales/checkout', self.location.origin).toString();
-  return new Request(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-    credentials: 'include',
-  });
-};
-
-const flushPendingOrders = async () => {
-  if (typeof Dexie === 'undefined') {
-    sendMessageToClients('sync-error', { message: 'Dexie not available in service worker.' });
-    return;
-  }
-
-  if (isSyncing) return;
-  isSyncing = true;
-
-  const db = new Dexie('SmartDukaPOS');
-  db.version(1).stores({
-    products: '&_id, name, categoryId, updatedAt',
-    pendingOrders: '++id, createdAt',
-    metadata: '&key, updatedAt',
-  });
-
-  try {
-    const orders = await db.pendingOrders.orderBy('createdAt').toArray();
-    if (orders.length === 0) {
-      await sendMessageToClients('sync-result', { success: 0, failed: 0 });
-      return;
-    }
-
-    let success = 0;
-    let failed = 0;
-
-    for (const order of orders) {
-      try {
-        const payload = { ...order.payload, status: 'completed', isOffline: false };
-        const response = await fetch(buildRequest(payload));
-        if (!response.ok) {
-          failed += 1;
-          continue;
-        }
-        if (order.id != null) {
-          await db.pendingOrders.delete(order.id);
-        }
-        success += 1;
-      } catch (error) {
-        failed += 1;
-      }
-    }
-
-    await sendMessageToClients('sync-result', { success, failed });
-  } catch (error) {
-    await sendMessageToClients('sync-error', { message: error?.message ?? 'Failed to sync pending orders' });
-  } finally {
-    isSyncing = false;
-  }
-};
+/**
+ * MULTI-TENANCY SECURITY NOTE:
+ * 
+ * Background sync of pending orders is DISABLED in the service worker.
+ * This is intentional for multi-tenancy security reasons:
+ * 
+ * 1. The service worker doesn't have access to the current user's shopId
+ * 2. Syncing orders without shopId verification could leak data between shops
+ * 3. Manual sync from the POS page has proper shopId context and auth token
+ * 
+ * Users should use the "Sync" button in the POS interface to sync pending orders.
+ * This ensures proper multi-tenant isolation.
+ */
 
 self.addEventListener('message', (event) => {
   const data = event?.data;
   if (!data || typeof data !== 'object') return;
+  
   if (data.type === 'TRIGGER_SYNC') {
-    flushPendingOrders();
+    // Notify client to handle sync with proper shopId context
+    // The actual sync is handled by the POS page with proper auth
+    sendMessageToClients('sync-requested', { 
+      message: 'Please use the Sync button in POS to sync pending orders.' 
+    });
   }
 });
 
 self.addEventListener('sync', (event) => {
   if (event.tag === 'sync-pending-orders') {
-    event.waitUntil(flushPendingOrders());
+    // Don't auto-sync - notify client instead for multi-tenancy safety
+    event.waitUntil(
+      sendMessageToClients('sync-requested', { 
+        message: 'Background sync requested. Please use the Sync button in POS.' 
+      })
+    );
   }
 });
 

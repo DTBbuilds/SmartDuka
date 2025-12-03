@@ -5,12 +5,10 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
-  Separator,
 } from '@smartduka/ui';
-import { AlertCircle, Check, X } from 'lucide-react';
+import { Check, X, Smartphone, Banknote, CreditCard, QrCode } from 'lucide-react';
 
 export interface PaymentConfirmationData {
   paymentMethod: string;
@@ -35,6 +33,16 @@ interface PaymentConfirmationModalProps {
 const formatCurrency = (value: number) =>
   `Ksh ${value.toLocaleString('en-KE', { minimumFractionDigits: 0 })}`;
 
+const getPaymentIcon = (method: string) => {
+  switch (method) {
+    case 'mpesa': return Smartphone;
+    case 'cash': return Banknote;
+    case 'card': return CreditCard;
+    case 'qr': return QrCode;
+    default: return Banknote;
+  }
+};
+
 export function PaymentConfirmationModal({
   isOpen,
   data,
@@ -46,129 +54,113 @@ export function PaymentConfirmationModal({
 
   const isCash = data.paymentMethod === 'cash';
   const changeAmount = data.change ?? 0;
+  const PaymentIcon = getPaymentIcon(data.paymentMethod);
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onCancel()}>
-      <DialogContent className="sm:max-w-md lg:max-w-4xl lg:max-h-[90vh]">
-        {/* Progress Indicator */}
-        <div className="mb-4 flex gap-2">
-          <div className="flex-1 h-1.5 bg-green-500 rounded" />
-          <div className="flex-1 h-1.5 bg-gray-300 rounded" />
-          <div className="flex-1 h-1.5 bg-gray-300 rounded" />
+      <DialogContent className="max-w-sm p-0 overflow-hidden">
+        {/* Progress Bar */}
+        <div className="flex gap-1 px-4 pt-3">
+          <div className="flex-1 h-1 bg-primary rounded-full" />
+          <div className="flex-1 h-1 bg-muted rounded-full" />
+          <div className="flex-1 h-1 bg-muted rounded-full" />
         </div>
 
-        <DialogHeader className="mb-4">
-          <DialogTitle className="flex items-center gap-2 text-xl lg:text-2xl">
-            <AlertCircle className="h-6 w-6 text-blue-600" />
-            Confirm Payment
-          </DialogTitle>
-          <DialogDescription className="text-sm">
-            Step 1 of 3: Review payment details
-          </DialogDescription>
+        {/* Header */}
+        <DialogHeader className="px-4 pt-2 pb-0">
+          <DialogTitle className="text-base font-semibold">Confirm Payment</DialogTitle>
+          <DialogDescription className="text-xs">Step 1 of 3</DialogDescription>
         </DialogHeader>
 
-        {/* Landscape Layout for Desktop */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6 overflow-y-auto max-h-[calc(90vh-200px)] lg:max-h-[400px]">
-          {/* Left Column - Order Info */}
-          <div className="lg:col-span-1 space-y-4">
-            {/* Customer Info */}
-            {data.customerName && (
-              <div className="rounded-lg bg-slate-50 p-4 dark:bg-slate-900">
-                <p className="text-xs text-muted-foreground uppercase tracking-wide">Customer</p>
-                <p className="text-lg font-semibold mt-1">{data.customerName}</p>
-              </div>
-            )}
-
-            {/* Order Summary */}
-            <div className="space-y-3 rounded-lg bg-slate-50 p-4 dark:bg-slate-900">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Order Summary</p>
-              <div className="flex justify-between text-base">
-                <span className="text-muted-foreground">{data.itemCount} items</span>
-                <span className="font-semibold">{formatCurrency(data.subtotal)}</span>
-              </div>
-              <div className="flex justify-between text-base">
-                <span className="text-muted-foreground">Tax (2%)</span>
-                <span className="font-semibold">{formatCurrency(data.tax)}</span>
-              </div>
-              <Separator className="my-3" />
-              <div className="flex justify-between text-xl font-bold">
-                <span>Total</span>
-                <span className="text-green-600 dark:text-green-400">{formatCurrency(data.total)}</span>
-              </div>
+        {/* Compact Content */}
+        <div className="px-4 py-3 space-y-3">
+          {/* Payment Method - Highlighted */}
+          <div className="flex items-center gap-3 p-3 rounded-lg bg-primary/10 border border-primary/20">
+            <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center">
+              <PaymentIcon className="h-5 w-5 text-primary" />
+            </div>
+            <div className="flex-1">
+              <p className="text-xs text-muted-foreground">Payment Method</p>
+              <p className="text-lg font-bold">{data.paymentMethodLabel}</p>
             </div>
           </div>
 
-          {/* Middle Column - Payment Method */}
-          <div className="lg:col-span-1 flex flex-col justify-center">
-            <div className="space-y-2 rounded-lg bg-blue-50 p-6 dark:bg-blue-950 border-2 border-blue-200 dark:border-blue-800 h-full flex flex-col justify-center">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Payment Method</p>
-              <p className="text-3xl lg:text-4xl font-bold text-blue-900 dark:text-blue-100 text-center">
-                {data.paymentMethodLabel}
-              </p>
+          {/* Order Summary - Inline */}
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="p-2 rounded bg-muted/50">
+              <p className="text-muted-foreground">Items</p>
+              <p className="font-semibold">{data.itemCount}</p>
+            </div>
+            <div className="p-2 rounded bg-muted/50">
+              <p className="text-muted-foreground">Subtotal</p>
+              <p className="font-semibold">{formatCurrency(data.subtotal)}</p>
+            </div>
+            <div className="p-2 rounded bg-muted/50">
+              <p className="text-muted-foreground">Tax</p>
+              <p className="font-semibold">{formatCurrency(data.tax)}</p>
+            </div>
+            <div className="p-2 rounded bg-green-100 dark:bg-green-900/50">
+              <p className="text-green-700 dark:text-green-300 text-xs">Total</p>
+              <p className="font-bold text-green-700 dark:text-green-300">{formatCurrency(data.total)}</p>
             </div>
           </div>
 
-          {/* Right Column - Cash Details or Warning */}
-          <div className="lg:col-span-1">
-            {isCash && data.amountTendered !== undefined ? (
-              <div className="space-y-3 rounded-lg bg-green-50 p-4 dark:bg-green-950 border-2 border-green-200 dark:border-green-800 h-full flex flex-col justify-center">
-                <div className="flex justify-between text-base">
-                  <span className="text-green-700 dark:text-green-300">Amount Tendered</span>
-                  <span className="font-bold text-green-900 dark:text-green-100 text-lg">
-                    {formatCurrency(data.amountTendered)}
-                  </span>
-                </div>
-                <div className="flex justify-between text-base">
-                  <span className="text-green-700 dark:text-green-300">Total Due</span>
-                  <span className="font-bold text-green-900 dark:text-green-100 text-lg">
-                    {formatCurrency(data.total)}
-                  </span>
-                </div>
-                <Separator className="my-3 bg-green-200 dark:bg-green-800" />
-                <div className="flex justify-between text-2xl font-bold">
-                  <span className="text-green-700 dark:text-green-300">Change</span>
-                  <span className="text-green-900 dark:text-green-100">
-                    {formatCurrency(changeAmount)}
-                  </span>
-                </div>
+          {/* Customer (if any) */}
+          {data.customerName && (
+            <div className="flex items-center gap-2 p-2 rounded bg-muted/50 text-xs">
+              <span className="text-muted-foreground">Customer:</span>
+              <span className="font-semibold truncate">{data.customerName}</span>
+            </div>
+          )}
+
+          {/* Cash Change Display */}
+          {isCash && data.amountTendered !== undefined && (
+            <div className="p-3 rounded-lg bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
+              <div className="flex justify-between text-xs mb-1">
+                <span className="text-green-700 dark:text-green-300">Tendered</span>
+                <span className="font-bold">{formatCurrency(data.amountTendered)}</span>
               </div>
-            ) : !isCash ? (
-              <div className="rounded-lg border-2 border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950 h-full flex items-center justify-center">
-                <p className="text-base text-amber-900 dark:text-amber-100 text-center">
-                  ℹ️ Ensure customer has {data.paymentMethodLabel} available before proceeding
-                </p>
+              <div className="flex justify-between text-sm font-bold">
+                <span className="text-green-700 dark:text-green-300">Change</span>
+                <span className="text-green-600 dark:text-green-400 text-lg">{formatCurrency(changeAmount)}</span>
               </div>
-            ) : null}
-          </div>
+            </div>
+          )}
+
+          {/* Non-cash reminder */}
+          {!isCash && (
+            <div className="p-2 rounded bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 text-xs text-amber-700 dark:text-amber-300 text-center">
+              Ensure customer has {data.paymentMethodLabel} ready
+            </div>
+          )}
         </div>
 
         {/* Action Buttons */}
-        <div className="flex gap-3 mt-6 lg:mt-8">
+        <div className="flex gap-2 p-4 pt-0">
           <Button
             onClick={onConfirm}
             disabled={isProcessing}
-            className="flex-1 h-14 lg:h-16 text-base lg:text-lg font-bold"
+            className="flex-1 h-11 font-semibold"
           >
             {isProcessing ? (
-              <>
-                <span className="mr-2 inline-block h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+              <span className="flex items-center gap-2">
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
                 Processing...
-              </>
+              </span>
             ) : (
-              <>
-                <Check className="mr-2 h-6 w-6" />
-                ✓ CONFIRM
-              </>
+              <span className="flex items-center gap-2">
+                <Check className="h-4 w-4" />
+                Confirm
+              </span>
             )}
           </Button>
           <Button
             variant="outline"
             onClick={onCancel}
             disabled={isProcessing}
-            className="flex-1 h-14 lg:h-16 text-base lg:text-lg"
+            className="h-11"
           >
-            <X className="mr-2 h-5 w-5" />
-            Cancel
+            <X className="h-4 w-4" />
           </Button>
         </div>
       </DialogContent>

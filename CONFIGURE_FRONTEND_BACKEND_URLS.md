@@ -138,13 +138,23 @@ Already updated in Part 1 (includes localhost URLs)
 
 **Add/Update**:
 ```env
+# Backend API URL (development)
 NEXT_PUBLIC_API_URL=http://localhost:5000
+
+# Frontend URL (development)
+NEXT_PUBLIC_FRONTEND_URL=http://localhost:3000
 ```
 
 **Or for production testing**:
 ```env
-NEXT_PUBLIC_API_URL=https://smartduka.onrender.com
+# Backend API URL (production)
+NEXT_PUBLIC_API_URL=https://smarduka.onrender.com
+
+# Frontend URL (production)
+NEXT_PUBLIC_FRONTEND_URL=https://smartduka.vercel.app
 ```
+
+**Note**: The app automatically detects environment (development/production) based on `NODE_ENV` and uses the appropriate URLs. All URLs are centrally managed in `apps/web/src/lib/config.ts`.
 
 ### Step 3.3: Restart Dev Server
 

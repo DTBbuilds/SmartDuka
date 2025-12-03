@@ -8,28 +8,42 @@ export interface ProductCSVRow {
   cost?: number;
   stock?: number;
   categoryId?: string;
+  category?: string; // Category name - will be auto-matched or created
   tax?: number;
   status?: string;
+  brand?: string;
+  description?: string;
 }
 
 export interface CSVParseResult {
   success: boolean;
   data?: ProductCSVRow[];
   errors: string[];
+  warnings?: string[];
+  totalRows?: number;
+  validRows?: number;
 }
 
 export function parseProductsCSV(file: File): Promise<CSVParseResult> {
   return new Promise((resolve) => {
     const errors: string[] = [];
+    const warnings: string[] = [];
+    const data: ProductCSVRow[] = [];
+    let totalRows = 0;
 
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
+      fastMode: false, // Ensure proper parsing of quoted fields
       complete: (results: any) => {
-        const data: ProductCSVRow[] = [];
+        totalRows = results.data.length;
 
         results.data.forEach((row: any, index: number) => {
           const rowNum = index + 2; // +2 because of header and 1-indexing
+
+          // Skip completely empty rows
+          const hasAnyValue = Object.values(row).some((v: any) => v && String(v).trim());
+          if (!hasAnyValue) return;
 
           // Validate required fields
           if (!row.name || row.name.trim() === "") {
@@ -42,47 +56,70 @@ export function parseProductsCSV(file: File): Promise<CSVParseResult> {
             return;
           }
 
+          const price = parseFloat(row.price);
+          if (price <= 0) {
+            errors.push(`Row ${rowNum}: Price must be greater than zero`);
+            return;
+          }
+
           const product: ProductCSVRow = {
             name: row.name.trim(),
             sku: row.sku?.trim() || undefined,
             barcode: row.barcode?.trim() || undefined,
-            price: parseFloat(row.price),
+            price,
             cost: row.cost ? parseFloat(row.cost) : undefined,
             stock: row.stock ? parseInt(row.stock, 10) : undefined,
             categoryId: row.categoryId?.trim() || undefined,
+            category: row.category?.trim() || undefined,
             tax: row.tax ? parseFloat(row.tax) : undefined,
             status: row.status?.trim() || "active",
+            brand: row.brand?.trim() || undefined,
+            description: row.description?.trim() || undefined,
           };
 
-          // Validate numeric fields
+          // Validate numeric fields but don't reject - use defaults
           if (product.cost !== undefined && isNaN(product.cost)) {
-            errors.push(`Row ${rowNum}: Cost must be a valid number`);
-            return;
+            warnings.push(`Row ${rowNum}: Invalid cost, using 0`);
+            product.cost = 0;
           }
 
           if (product.stock !== undefined && isNaN(product.stock)) {
-            errors.push(`Row ${rowNum}: Stock must be a valid number`);
-            return;
+            warnings.push(`Row ${rowNum}: Invalid stock, using 0`);
+            product.stock = 0;
           }
 
           if (product.tax !== undefined && isNaN(product.tax)) {
-            errors.push(`Row ${rowNum}: Tax must be a valid number`);
-            return;
+            warnings.push(`Row ${rowNum}: Invalid tax, using 0`);
+            product.tax = 0;
+          }
+
+          // Warn if cost > price
+          if (product.cost && product.cost > price) {
+            warnings.push(`Row ${rowNum}: Cost (${product.cost}) > Price (${price})`);
           }
 
           data.push(product);
         });
 
+        // Allow partial success - import valid rows even if some have errors
+        const hasValidData = data.length > 0;
+        
         resolve({
-          success: errors.length === 0,
-          data: errors.length === 0 ? data : undefined,
+          success: hasValidData,
+          data: hasValidData ? data : undefined,
           errors,
+          warnings,
+          totalRows,
+          validRows: data.length,
         });
       },
       error: (error: any) => {
         resolve({
           success: false,
           errors: [error.message || "Failed to parse CSV file"],
+          warnings: [],
+          totalRows: 0,
+          validRows: 0,
         });
       },
     });
@@ -90,7 +127,7 @@ export function parseProductsCSV(file: File): Promise<CSVParseResult> {
 }
 
 export function generateProductsCSV(products: any[]): string {
-  const headers = ["name", "sku", "barcode", "price", "cost", "stock", "categoryId", "tax", "status"];
+  const headers = ["name", "sku", "barcode", "price", "cost", "stock", "category", "brand", "tax", "status", "description"];
   
   const rows = products.map((product) => [
     product.name || "",
@@ -99,9 +136,11 @@ export function generateProductsCSV(products: any[]): string {
     product.price || "",
     product.cost || "",
     product.stock || "",
-    product.categoryId || "",
+    product.category || "",
+    product.brand || "",
     product.tax || "",
     product.status || "active",
+    product.description || "",
   ]);
 
   const csvContent = [
@@ -145,18 +184,48 @@ export function downloadCSV(csvContent: string, filename: string): void {
 }
 
 export function getCSVTemplate(): string {
-  const headers = ["name", "sku", "barcode", "price", "cost", "stock", "categoryId", "tax", "status"];
-  const exampleRow = [
-    "Sample Product",
-    "SKU001",
-    "1234567890123",
-    "1000",
-    "500",
-    "50",
-    "",
-    "0.02",
-    "active",
+  const headers = ["name", "sku", "barcode", "price", "cost", "stock", "category", "brand", "tax", "status", "description"];
+  const exampleRows = [
+    [
+      "Coca Cola 500ml",
+      "COK500",
+      "5449000000996",
+      "80",
+      "60",
+      "100",
+      "Beverages",
+      "Coca-Cola",
+      "16",
+      "active",
+      "Refreshing soft drink",
+    ],
+    [
+      "Omo Washing Powder 1kg",
+      "OMO1KG",
+      "6001087000123",
+      "350",
+      "280",
+      "50",
+      "Cleaning Supplies",
+      "Omo",
+      "16",
+      "active",
+      "Multi-action detergent",
+    ],
+    [
+      "Bread White Sliced",
+      "BRD001",
+      "",
+      "65",
+      "50",
+      "30",
+      "", // No category - will be auto-suggested as "Bread & Bakery"
+      "",
+      "0",
+      "active",
+      "Fresh white bread",
+    ],
   ];
 
-  return [headers.join(","), exampleRow.join(",")].join("\n");
+  return [headers.join(","), ...exampleRows.map(row => row.join(","))].join("\n");
 }

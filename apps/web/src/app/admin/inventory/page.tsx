@@ -21,6 +21,7 @@ import {
   DialogTitle,
 } from "@smartduka/ui";
 import { useAuth } from "@/lib/auth-context";
+import { useBranch } from "@/lib/branch-context";
 import { useToast } from "@/lib/use-toast";
 import { ToastContainer } from "@/components/toast-container";
 import { AlertCircle, TrendingDown, Package, Calendar } from "lucide-react";
@@ -43,6 +44,7 @@ interface ExpiringProduct {
 
 export default function InventoryPage() {
   const { token, user } = useAuth();
+  const { currentBranch } = useBranch();
   const { toasts, toast, dismiss } = useToast();
   const [stats, setStats] = useState<InventoryStats | null>(null);
   const [expiringProducts, setExpiringProducts] = useState<ExpiringProduct[]>([]);
@@ -54,7 +56,7 @@ export default function InventoryPage() {
       return;
     }
     loadInventoryData();
-  }, [token, user]);
+  }, [token, user, currentBranch]);
 
   const loadInventoryData = async () => {
     if (!token) return;
@@ -62,9 +64,10 @@ export default function InventoryPage() {
     setLoading(true);
     try {
       const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+      const branchParam = currentBranch ? `branchId=${currentBranch._id}` : '';
 
       // Load stats
-      const statsRes = await fetch(`${base}/inventory/stats`, {
+      const statsRes = await fetch(`${base}/inventory/stats${branchParam ? `?${branchParam}` : ''}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (statsRes.ok) {
@@ -73,7 +76,7 @@ export default function InventoryPage() {
       }
 
       // Load expiring products
-      const expiringRes = await fetch(`${base}/inventory/expiring-products?days=30`, {
+      const expiringRes = await fetch(`${base}/inventory/expiring-products?days=30${branchParam ? `&${branchParam}` : ''}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (expiringRes.ok) {

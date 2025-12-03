@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Post, Put, Query, UseGuards, Response, P
 import { InventoryService } from './inventory.service';
 import { QueryProductsDto } from './dto/query-products.dto';
 import { CreateProductDto } from './dto/create-product.dto';
+import { UpdateProductDto } from './dto/update-product.dto';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -24,6 +25,52 @@ export class InventoryController {
   @Post('products')
   createProduct(@Body() dto: CreateProductDto, @CurrentUser() user: any) {
     return this.inventoryService.createProduct(user.shopId, dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('products/barcode/:barcode')
+  async findByBarcode(@Param('barcode') barcode: string, @CurrentUser() user: any) {
+    const product = await this.inventoryService.findByBarcode(user.shopId, barcode);
+    if (!product) {
+      return { found: false, product: null };
+    }
+    return { found: true, product };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('products/sku/:sku')
+  async findBySku(@Param('sku') sku: string, @CurrentUser() user: any) {
+    const product = await this.inventoryService.findBySku(user.shopId, sku);
+    if (!product) {
+      return { found: false, product: null };
+    }
+    return { found: true, product };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('products/search/quick')
+  quickSearch(@Query('q') q: string, @Query('limit') limit: string, @CurrentUser() user: any) {
+    return this.inventoryService.quickSearch(user.shopId, q || '', limit ? parseInt(limit, 10) : 10);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('products/:id')
+  getProduct(@Param('id') productId: string, @CurrentUser() user: any) {
+    return this.inventoryService.getProductById(user.shopId, productId);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Put('products/:id')
+  updateProduct(@Param('id') productId: string, @Body() dto: UpdateProductDto, @CurrentUser() user: any) {
+    return this.inventoryService.updateProduct(user.shopId, productId, dto);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Delete('products/:id')
+  deleteProduct(@Param('id') productId: string, @CurrentUser() user: any) {
+    return this.inventoryService.deleteProduct(user.shopId, productId);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -82,8 +129,30 @@ export class InventoryController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
   @Post('products/import')
-  importProducts(@Body() dto: { products: CreateProductDto[] }, @CurrentUser() user: any) {
-    return this.inventoryService.importProducts(user.shopId, dto.products);
+  importProducts(
+    @Body() dto: { 
+      products: CreateProductDto[];
+      options?: {
+        autoCreateCategories?: boolean;
+        autoSuggestCategories?: boolean;
+        updateExisting?: boolean;
+        skipDuplicates?: boolean;
+      };
+    }, 
+    @CurrentUser() user: any
+  ) {
+    return this.inventoryService.importProducts(user.shopId, dto.products, dto.options);
+  }
+
+  /**
+   * Analyze products before import
+   * Returns information about categories that will be created/suggested
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Post('products/import/analyze')
+  analyzeImport(@Body() dto: { products: CreateProductDto[] }, @CurrentUser() user: any) {
+    return this.inventoryService.analyzeImport(user.shopId, dto.products);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -265,5 +334,16 @@ export class InventoryController {
       dto.quantity,
       user.sub,
     );
+  }
+
+  /**
+   * Get inventory analytics
+   * GET /inventory/analytics
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Get('analytics')
+  async getInventoryAnalytics(@CurrentUser() user: any) {
+    return this.inventoryService.getInventoryAnalytics(user.shopId);
   }
 }

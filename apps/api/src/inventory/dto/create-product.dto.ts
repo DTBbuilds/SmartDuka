@@ -1,4 +1,4 @@
-import { IsEnum, IsMongoId, IsNumber, IsOptional, IsString, Min, MinLength } from 'class-validator';
+import { IsEnum, IsMongoId, IsNumber, IsOptional, IsString, IsBoolean, Min, MinLength, IsArray } from 'class-validator';
 
 export class CreateProductDto {
   @IsString()
@@ -16,6 +16,11 @@ export class CreateProductDto {
   @IsOptional()
   @IsMongoId()
   categoryId?: string;
+
+  // Category name - will be matched or auto-created
+  @IsOptional()
+  @IsString()
+  category?: string;
 
   @IsNumber()
   @Min(0)
@@ -39,4 +44,53 @@ export class CreateProductDto {
   @IsOptional()
   @IsEnum(['active', 'inactive'])
   status?: 'active' | 'inactive';
+
+  // Enhanced fields for bulk import
+  @IsOptional()
+  @IsString()
+  brand?: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  tags?: string[];
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  lowStockThreshold?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  reorderPoint?: number;
+}
+
+export class BulkImportOptionsDto {
+  @IsOptional()
+  @IsBoolean()
+  autoCreateCategories?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  autoSuggestCategories?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  updateExisting?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  skipDuplicates?: boolean;
+}
+
+export class BulkImportDto {
+  products: CreateProductDto[];
+
+  @IsOptional()
+  options?: BulkImportOptionsDto;
 }

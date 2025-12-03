@@ -38,6 +38,45 @@ export class CheckoutPaymentDto {
   @IsOptional()
   @IsString()
   reference?: string;
+
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  // M-Pesa specific fields
+  @IsOptional()
+  @IsString()
+  mpesaReceiptNumber?: string;
+
+  @IsOptional()
+  @IsString()
+  mpesaTransactionId?: string;
+
+  @IsOptional()
+  @IsString()
+  customerPhone?: string;
+
+  // Cash specific fields
+  @IsOptional()
+  @IsNumber()
+  amountTendered?: number;
+
+  @IsOptional()
+  @IsNumber()
+  change?: number;
+
+  // Card specific fields
+  @IsOptional()
+  @IsString()
+  cardLastFour?: string;
+
+  @IsOptional()
+  @IsString()
+  cardBrand?: string;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
 }
 
 export class CheckoutDto {
@@ -54,6 +93,10 @@ export class CheckoutDto {
   @IsOptional()
   @IsString()
   customerName?: string;
+
+  @IsOptional()
+  @IsString()
+  customerPhone?: string;
 
   @IsOptional()
   @IsString()
