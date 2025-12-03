@@ -66,7 +66,7 @@ export class Invoice {
   @Prop({ type: Types.ObjectId, ref: 'Order' })
   orderId?: Types.ObjectId;
 
-  @Prop({ required: true, unique: true, index: true })
+  @Prop({ required: true, unique: true })
   invoiceNumber: string;
 
   @Prop()
@@ -230,5 +230,5 @@ InvoiceSchema.index({ shopId: 1, paymentStatus: 1 });
 InvoiceSchema.index({ shopId: 1, customerPhone: 1 });
 InvoiceSchema.index({ shopId: 1, customerEmail: 1 });
 InvoiceSchema.index({ shopId: 1, dueDate: 1 });
-InvoiceSchema.index({ invoiceNumber: 1 }, { unique: true });
+// invoiceNumber index already defined in @Prop decorator
 InvoiceSchema.index({ orderId: 1 });

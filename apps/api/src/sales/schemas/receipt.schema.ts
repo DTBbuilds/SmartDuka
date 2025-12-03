@@ -63,7 +63,7 @@ export class Receipt {
   @Prop({ required: true, type: Types.ObjectId, ref: 'Order' })
   orderId: Types.ObjectId;
 
-  @Prop({ required: true, unique: true, index: true })
+  @Prop({ required: true, unique: true })
   receiptNumber: string;
 
   @Prop({ required: true })
@@ -175,5 +175,5 @@ ReceiptSchema.index({ shopId: 1, branchId: 1, createdAt: -1 });
 ReceiptSchema.index({ shopId: 1, orderId: 1 });
 ReceiptSchema.index({ shopId: 1, customerPhone: 1 });
 ReceiptSchema.index({ shopId: 1, primaryPaymentMethod: 1 });
-ReceiptSchema.index({ receiptNumber: 1 }, { unique: true });
+// receiptNumber index already defined in @Prop decorator
 ReceiptSchema.index({ orderNumber: 1 });
