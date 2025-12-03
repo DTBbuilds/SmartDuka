@@ -934,7 +934,7 @@ export class InventoryService implements OnModuleInit {
   ): Promise<StockReconciliationDocument> {
     const product = await this.productModel.findById(productId).exec();
     if (!product) {
-      throw new Error('Product not found');
+      throw new NotFoundException('Product not found');
     }
 
     const systemQuantity = product.stock || 0;

@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { Injectable, BadRequestException, ConflictException, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import * as bcrypt from 'bcryptjs';
@@ -175,7 +175,7 @@ export class UsersService {
     // Check if email already exists
     const existingUser = await this.userModel.findOne({ email: uniqueEmail });
     if (existingUser) {
-      throw new Error(`A user with this email already exists. Please use a different email.`);
+      throw new ConflictException(`A user with this email already exists. Please use a different email.`);
     }
 
     const user = new this.userModel({
@@ -197,7 +197,7 @@ export class UsersService {
     } catch (err: any) {
       // Handle MongoDB duplicate key error
       if (err.code === 11000) {
-        throw new Error('A cashier with this ID already exists. Please try again.');
+        throw new ConflictException('A cashier with this ID already exists. Please try again.');
       }
       throw err;
     }

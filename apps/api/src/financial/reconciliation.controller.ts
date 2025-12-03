@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Put, Param, UseGuards, Query } from '@nestjs/common';
+import { Body, Controller, Get, Post, Put, Param, UseGuards, Query, BadRequestException } from '@nestjs/common';
 import { ReconciliationService } from './reconciliation.service';
 import { CreateDailyReconciliationDto, GetReconciliationHistoryDto, InvestigateVarianceDto, ApproveReconciliationDto } from './dto/reconciliation.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -45,7 +45,7 @@ export class ReconciliationController {
     @CurrentUser() user: Record<string, any>,
   ) {
     if (!startDate || !endDate) {
-      throw new Error('startDate and endDate are required');
+      throw new BadRequestException('startDate and endDate are required');
     }
     return this.reconciliationService.getVarianceReport(
       user.shopId,

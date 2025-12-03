@@ -93,7 +93,7 @@ export class SalesController {
   dailySales(@Param('date') dateStr: string, @CurrentUser() user: any) {
     const date = new Date(dateStr);
     if (isNaN(date.getTime())) {
-      throw new Error('Invalid date format');
+      throw new BadRequestException('Invalid date format. Please use YYYY-MM-DD format');
     }
     return this.salesService.getDailySales(user.shopId, date);
   }
@@ -118,7 +118,7 @@ export class SalesController {
   ) {
     const date = new Date(dateStr);
     if (isNaN(date.getTime())) {
-      throw new Error('Invalid date format');
+      throw new BadRequestException('Invalid date format. Please use YYYY-MM-DD format');
     }
     return this.salesService.getDailySalesByBranch(user.shopId, branchId, date);
   }

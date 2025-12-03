@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Put, UseGuards, Param } from '@nestjs/common';
+import { Body, Controller, Get, Post, Put, UseGuards, Param, ForbiddenException } from '@nestjs/common';
 import type { CreateShopDto, UpdateShopDto } from './shops.service';
 import { ShopsService } from './shops.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -60,7 +60,7 @@ export class ShopsController {
   async getStats(@Param('id') id: string, @CurrentUser() user: Record<string, any>) {
     // Verify user belongs to this shop
     if (user.shopId !== id) {
-      throw new Error('Unauthorized');
+      throw new ForbiddenException('You are not allowed to access stats for this shop');
     }
     return this.shopsService.getStats(id);
   }

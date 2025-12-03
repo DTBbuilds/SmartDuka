@@ -7,6 +7,7 @@ import {
   Put,
   Query,
   UseGuards,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ShiftsService } from './shifts.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -30,7 +31,7 @@ export class ShiftsController {
     @CurrentUser() user: any,
   ) {
     if (user.shopId !== body.shopId) {
-      throw new Error('Unauthorized');
+      throw new ForbiddenException('You are not allowed to clock in for this shop');
     }
 
     const shift = await this.shiftsService.clockIn(

@@ -23,8 +23,8 @@ export class PaymentTransaction {
   @Prop({ required: false, type: Types.ObjectId, ref: 'Branch' })
   branchId?: Types.ObjectId;
 
-  @Prop({ required: true, enum: ['cash', 'card', 'mpesa', 'other'], default: 'cash' })
-  paymentMethod: 'cash' | 'card' | 'mpesa' | 'other';
+  @Prop({ required: true, enum: ['cash', 'card', 'mpesa', 'qr', 'other'], default: 'cash' })
+  paymentMethod: 'cash' | 'card' | 'mpesa' | 'qr' | 'other';
 
   @Prop({ required: true })
   amount: number;

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, UseGuards, BadRequestException } from '@nestjs/common';
 import { PaymentReconciliationService } from './payment-reconciliation.service';
 import { CreatePaymentReconciliationDto, GetReconciliationHistoryDto } from './dto/payment-reconciliation.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -37,15 +37,16 @@ export class PaymentReconciliationController {
     return this.reconciliationService.getReconciliationHistory(user.shopId, startDate, endDate);
   }
 
-  @Get('variance-report')
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
+  @Get('variance-report')
   async getVarianceReport(
     @Query('startDate') startDate: string,
     @Query('endDate') endDate: string,
     @CurrentUser() user: Record<string, any>,
   ) {
     if (!startDate || !endDate) {
-      throw new Error('startDate and endDate are required');
+      throw new BadRequestException('startDate and endDate are required');
     }
     return this.reconciliationService.getVarianceReport(
       user.shopId,

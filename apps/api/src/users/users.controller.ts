@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query, Req, UseGuards, BadRequestException } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, Query, Req, UseGuards, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { CreateCashierDto } from './dto/create-cashier.dto';
@@ -19,7 +19,7 @@ export class UsersController {
   async create(@Body() dto: CreateUserDto, @CurrentUser() user: any) {
     // Ensure user is creating cashier for their own shop
     if (dto.shopId !== user.shopId) {
-      throw new Error('Unauthorized');
+      throw new ForbiddenException('You are not allowed to create users for this shop');
     }
     const createdUser = await this.usersService.create(dto);
     const { passwordHash, ...safe } = (createdUser as any).toObject();
@@ -55,7 +55,7 @@ export class UsersController {
   async getCashiersByShop(@Param('shopId') shopId: string, @CurrentUser() user: any) {
     // Verify user belongs to this shop
     if (user.shopId !== shopId) {
-      throw new Error('Unauthorized');
+      throw new ForbiddenException('You are not allowed to access this shop');
     }
     const cashiers = await this.usersService.findCashiersByShop(shopId);
     return cashiers.map((c: any) => {
@@ -75,7 +75,7 @@ export class UsersController {
     // Verify user belongs to same shop
     const targetUser = await this.usersService.findById(id);
     if (!targetUser || (targetUser as any).shopId.toString() !== user.shopId) {
-      throw new Error('Unauthorized');
+      throw new ForbiddenException('You are not allowed to update users from this shop');
     }
     const updated = await this.usersService.updateStatus(id, dto.status);
     if (!updated) return null;
@@ -90,11 +90,11 @@ export class UsersController {
     // Verify user belongs to same shop
     const targetUser = await this.usersService.findById(id);
     if (!targetUser || (targetUser as any).shopId.toString() !== user.shopId) {
-      throw new Error('Unauthorized');
+      throw new ForbiddenException('You are not allowed to delete users from this shop');
     }
     // Prevent deleting admin users
     if ((targetUser as any).role === 'admin') {
-      throw new Error('Cannot delete admin users');
+      throw new BadRequestException('Cannot delete admin users');
     }
     return this.usersService.deleteUser(id);
   }
