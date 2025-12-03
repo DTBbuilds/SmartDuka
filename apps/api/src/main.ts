@@ -93,6 +93,7 @@ Include the token in the Authorization header: \`Bearer <token>\`
       'http://localhost:3000',
       'http://localhost:3001',
       'https://smartduka.vercel.app',
+      'https://smartduka-eta.vercel.app',
       process.env.CORS_ORIGIN,
     ].filter(Boolean),
     credentials: true,
