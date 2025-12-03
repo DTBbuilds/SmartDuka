@@ -11,10 +11,10 @@ export class Product {
   @Prop({ required: true, trim: true })
   name: string;
 
-  @Prop({ required: false, unique: true, sparse: true, trim: true })
+  @Prop({ required: false, trim: true })
   sku?: string;
 
-  @Prop({ required: false, unique: true, sparse: true, trim: true })
+  @Prop({ required: false, trim: true })
   barcode?: string;
 
   @Prop({ type: Types.ObjectId, ref: 'Category', required: false })
@@ -94,8 +94,8 @@ export const ProductSchema = SchemaFactory.createForClass(Product);
 
 // Create indexes for multi-tenant queries
 ProductSchema.index({ shopId: 1, name: 1 });
-ProductSchema.index({ shopId: 1, barcode: 1 });
-ProductSchema.index({ shopId: 1, sku: 1 });
+ProductSchema.index({ shopId: 1, barcode: 1 }, { unique: true, sparse: true }); // Unique barcode per shop
+ProductSchema.index({ shopId: 1, sku: 1 }, { unique: true, sparse: true }); // Unique SKU per shop
 ProductSchema.index({ shopId: 1, status: 1 });
 ProductSchema.index({ shopId: 1, expiryDate: 1 });
 ProductSchema.index({ shopId: 1, stock: 1 }); // For reorder automation

@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, FilterQuery, Types } from 'mongoose';
 import { Product, ProductDocument } from './schemas/product.schema';
@@ -13,7 +13,7 @@ import { UpdateCategoryDto } from './dto/update-category.dto';
 import { CategorySuggestionService } from './services/category-suggestion.service';
 
 @Injectable()
-export class InventoryService {
+export class InventoryService implements OnModuleInit {
   private readonly logger = new Logger(InventoryService.name);
 
   constructor(
@@ -23,6 +23,29 @@ export class InventoryService {
     @InjectModel(StockReconciliation.name) private readonly reconciliationModel: Model<StockReconciliationDocument>,
     private readonly categorySuggestionService: CategorySuggestionService,
   ) {}
+
+  /**
+   * Drop legacy global unique indexes on startup (one-time migration)
+   */
+  async onModuleInit() {
+    try {
+      const collection = this.productModel.collection;
+      const indexes = await collection.indexes();
+      
+      // Check for old global unique indexes and drop them
+      for (const index of indexes) {
+        if (index.name === 'sku_1' || index.name === 'barcode_1') {
+          this.logger.log(`Dropping legacy index: ${index.name}`);
+          await collection.dropIndex(index.name);
+        }
+      }
+    } catch (err: any) {
+      // Ignore errors if indexes don't exist
+      if (!err.message?.includes('index not found')) {
+        this.logger.warn(`Index migration warning: ${err.message}`);
+      }
+    }
+  }
 
   async createProduct(shopId: string, dto: CreateProductDto): Promise<ProductDocument> {
     const created = new this.productModel({
@@ -653,7 +676,21 @@ export class InventoryService {
         if (err.writeErrors) {
           err.writeErrors.forEach((writeErr: any) => {
             const idx = writeErr.index;
-            errors.push(`Row ${idx + 1}: ${writeErr.errmsg || 'Failed to insert'}`);
+            const productName = productsToInsert[idx]?.name || 'Unknown';
+            let errorMsg = writeErr.errmsg || 'Failed to insert';
+            
+            // Make duplicate key errors more user-friendly
+            if (errorMsg.includes('duplicate key') || errorMsg.includes('E11000')) {
+              if (errorMsg.includes('sku')) {
+                errorMsg = `Duplicate SKU "${productsToInsert[idx]?.sku}"`;
+              } else if (errorMsg.includes('barcode')) {
+                errorMsg = `Duplicate barcode "${productsToInsert[idx]?.barcode}"`;
+              } else {
+                errorMsg = 'Duplicate product';
+              }
+            }
+            
+            errors.push(`Row ${idx + 1} (${productName}): ${errorMsg}`);
           });
         }
       }
