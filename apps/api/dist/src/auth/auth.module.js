@@ -17,7 +17,9 @@ const auth_controller_1 = require("./auth.controller");
 const users_module_1 = require("../users/users.module");
 const shops_module_1 = require("../shops/shops.module");
 const activity_module_1 = require("../activity/activity.module");
+const shop_settings_module_1 = require("../shop-settings/shop-settings.module");
 const jwt_strategy_1 = require("./strategies/jwt.strategy");
+const google_strategy_1 = require("./strategies/google.strategy");
 const super_admin_schema_1 = require("./schemas/super-admin.schema");
 let AuthModule = class AuthModule {
 };
@@ -28,6 +30,7 @@ exports.AuthModule = AuthModule = __decorate([
             users_module_1.UsersModule,
             shops_module_1.ShopsModule,
             activity_module_1.ActivityModule,
+            shop_settings_module_1.ShopSettingsModule,
             passport_1.PassportModule,
             mongoose_1.MongooseModule.forFeature([
                 {
@@ -44,7 +47,7 @@ exports.AuthModule = AuthModule = __decorate([
                 }),
             }),
         ],
-        providers: [auth_service_1.AuthService, jwt_strategy_1.JwtStrategy],
+        providers: [auth_service_1.AuthService, jwt_strategy_1.JwtStrategy, google_strategy_1.GoogleStrategy],
         controllers: [auth_controller_1.AuthController],
         exports: [auth_service_1.AuthService],
     })

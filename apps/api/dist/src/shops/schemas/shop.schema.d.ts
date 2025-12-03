@@ -6,9 +6,24 @@ export declare class Shop {
     phone: string;
     shopId: string;
     address?: string;
-    city?: string;
-    businessType?: string;
+    county: string;
+    city: string;
+    businessType: string;
     kraPin?: string;
+    description?: string;
+    tillNumber?: string;
+    mpesaConfig?: {
+        type?: 'paybill' | 'till';
+        shortCode?: string;
+        accountPrefix?: string;
+        consumerKey?: string;
+        consumerSecret?: string;
+        passkey?: string;
+        callbackUrl?: string;
+        enabled?: boolean;
+        verifiedAt?: Date;
+        verificationStatus?: 'pending' | 'verified' | 'failed';
+    };
     status: 'pending' | 'verified' | 'active' | 'suspended' | 'rejected' | 'flagged';
     verificationBy?: Types.ObjectId;
     verificationDate?: Date;

@@ -11,6 +11,7 @@ const common_1 = require("@nestjs/common");
 const mongoose_1 = require("@nestjs/mongoose");
 const inventory_service_1 = require("./inventory.service");
 const inventory_controller_1 = require("./inventory.controller");
+const category_suggestion_service_1 = require("./services/category-suggestion.service");
 const product_schema_1 = require("./schemas/product.schema");
 const category_schema_1 = require("./schemas/category.schema");
 const stock_adjustment_schema_1 = require("./schemas/stock-adjustment.schema");
@@ -28,9 +29,9 @@ exports.InventoryModule = InventoryModule = __decorate([
                 { name: stock_reconciliation_schema_1.StockReconciliation.name, schema: stock_reconciliation_schema_1.StockReconciliationSchema },
             ]),
         ],
-        providers: [inventory_service_1.InventoryService],
+        providers: [inventory_service_1.InventoryService, category_suggestion_service_1.CategorySuggestionService],
         controllers: [inventory_controller_1.InventoryController],
-        exports: [inventory_service_1.InventoryService],
+        exports: [inventory_service_1.InventoryService, category_suggestion_service_1.CategorySuggestionService],
     })
 ], InventoryModule);
 //# sourceMappingURL=inventory.module.js.map

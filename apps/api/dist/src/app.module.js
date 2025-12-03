@@ -8,10 +8,12 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AppModule = void 0;
 const common_1 = require("@nestjs/common");
+const core_1 = require("@nestjs/core");
 const app_controller_1 = require("./app.controller");
 const app_service_1 = require("./app.service");
 const config_1 = require("@nestjs/config");
 const mongoose_1 = require("@nestjs/mongoose");
+const throttler_1 = require("@nestjs/throttler");
 const auth_module_1 = require("./auth/auth.module");
 const users_module_1 = require("./users/users.module");
 const inventory_module_1 = require("./inventory/inventory.module");
@@ -38,14 +40,36 @@ const shop_settings_module_1 = require("./shop-settings/shop-settings.module");
 const reorder_module_1 = require("./reorder/reorder.module");
 const branches_module_1 = require("./branches/branches.module");
 const audit_module_1 = require("./audit/audit.module");
+const health_module_1 = require("./health/health.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
 exports.AppModule = AppModule = __decorate([
     (0, common_1.Module)({
         imports: [
-            config_1.ConfigModule.forRoot({ isGlobal: true }),
+            config_1.ConfigModule.forRoot({
+                isGlobal: true,
+                envFilePath: ['.env.local', '.env'],
+            }),
             mongoose_1.MongooseModule.forRoot(process.env.MONGODB_URI ?? 'mongodb://localhost:27017/smartduka'),
+            throttler_1.ThrottlerModule.forRoot([
+                {
+                    name: 'short',
+                    ttl: 1000,
+                    limit: 10,
+                },
+                {
+                    name: 'medium',
+                    ttl: 60000,
+                    limit: 100,
+                },
+                {
+                    name: 'long',
+                    ttl: 3600000,
+                    limit: 1000,
+                },
+            ]),
+            health_module_1.HealthModule,
             auth_module_1.AuthModule,
             users_module_1.UsersModule,
             inventory_module_1.InventoryModule,
@@ -74,7 +98,13 @@ exports.AppModule = AppModule = __decorate([
             audit_module_1.AuditModule,
         ],
         controllers: [app_controller_1.AppController],
-        providers: [app_service_1.AppService],
+        providers: [
+            app_service_1.AppService,
+            {
+                provide: core_1.APP_GUARD,
+                useClass: throttler_1.ThrottlerGuard,
+            },
+        ],
     })
 ], AppModule);
 //# sourceMappingURL=app.module.js.map

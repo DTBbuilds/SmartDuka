@@ -17,7 +17,24 @@ let AllExceptionsFilter = AllExceptionsFilter_1 = class AllExceptionsFilter {
         const request = ctx.getRequest();
         let status = common_1.HttpStatus.INTERNAL_SERVER_ERROR;
         let message = 'Internal server error';
-        if (exception instanceof Error) {
+        let errors;
+        if (exception instanceof common_1.HttpException) {
+            status = exception.getStatus();
+            const exceptionResponse = exception.getResponse();
+            if (typeof exceptionResponse === 'string') {
+                message = exceptionResponse;
+            }
+            else if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
+                const resp = exceptionResponse;
+                message = resp.message || exception.message;
+                if (Array.isArray(resp.message)) {
+                    errors = resp.message;
+                    message = resp.message.join(', ');
+                }
+            }
+            this.logger.error(`${request.method} ${request.url}`, exception);
+        }
+        else if (exception instanceof Error) {
             message = exception.message;
             this.logger.error(`${request.method} ${request.url}`, exception.stack);
         }
@@ -30,8 +47,10 @@ let AllExceptionsFilter = AllExceptionsFilter_1 = class AllExceptionsFilter {
             path: request.url,
             method: request.method,
             message,
-            error: 'Internal Server Error',
         };
+        if (errors) {
+            errorResponse.errors = errors;
+        }
         response.status(status).json(errorResponse);
     }
 };

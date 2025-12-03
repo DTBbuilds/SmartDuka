@@ -35,7 +35,7 @@ __decorate([
 ], StockAdjustment.prototype, "quantityChange", void 0);
 __decorate([
     (0, mongoose_1.Prop)({
-        enum: ['damage', 'loss', 'correction', 'return', 'other'],
+        enum: ['damage', 'loss', 'correction', 'return', 'sale', 'purchase', 'transfer', 'other'],
         required: true,
     }),
     __metadata("design:type", String)

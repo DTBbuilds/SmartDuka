@@ -52,35 +52,45 @@ const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const users_service_1 = require("../users/users.service");
 const shops_service_1 = require("../shops/shops.service");
+const shop_settings_service_1 = require("../shop-settings/shop-settings.service");
 const bcryptjs = __importStar(require("bcryptjs"));
 let AuthService = class AuthService {
     usersService;
     shopsService;
     jwtService;
+    shopSettingsService;
     activityService;
     superAdminModel;
-    constructor(usersService, shopsService, jwtService, activityService, superAdminModel) {
+    constructor(usersService, shopsService, jwtService, shopSettingsService, activityService, superAdminModel) {
         this.usersService = usersService;
         this.shopsService = shopsService;
         this.jwtService = jwtService;
+        this.shopSettingsService = shopSettingsService;
         this.activityService = activityService;
         this.superAdminModel = superAdminModel;
     }
     async registerShop(dto) {
         const shopData = {
-            name: dto.admin.name,
+            name: dto.shop.shopName,
             email: dto.admin.email,
             phone: dto.admin.phone,
+            businessType: dto.shop.businessType,
+            county: dto.shop.county,
+            city: dto.shop.city,
         };
         if (dto.shop.address)
             shopData.address = dto.shop.address;
-        if (dto.shop.city)
-            shopData.city = dto.shop.city;
-        if (dto.shop.businessType)
-            shopData.businessType = dto.shop.businessType;
         if (dto.shop.kraPin)
             shopData.kraPin = dto.shop.kraPin;
+        if (dto.shop.description)
+            shopData.description = dto.shop.description;
         const shop = await this.shopsService.create('', shopData);
+        try {
+            await this.shopSettingsService.syncReceiptSettingsFromShop(shop.shopId);
+        }
+        catch (err) {
+            console.error('Failed to initialize shop settings:', err);
+        }
         const user = await this.usersService.create({
             shopId: shop._id.toString(),
             email: dto.admin.email,
@@ -119,10 +129,12 @@ let AuthService = class AuthService {
         }
         const user = await this.usersService.findByEmail(dto.email);
         if (!user) {
+            console.log(`[Auth] Login failed: No user found with email ${dto.email}`);
             throw new common_1.UnauthorizedException('Invalid credentials');
         }
         const isValid = await this.usersService.validatePassword(user, dto.password);
         if (!isValid) {
+            console.log(`[Auth] Login failed: Invalid password for user ${dto.email}`);
             throw new common_1.UnauthorizedException('Invalid credentials');
         }
         if (user.status !== 'active') {
@@ -184,9 +196,7 @@ let AuthService = class AuthService {
         }
         let isValid = false;
         try {
-            console.log('[SuperAdmin Login] Comparing passwords...');
             isValid = await bcryptjs.compare(dto.password, superAdmin.passwordHash);
-            console.log('[SuperAdmin Login] Password valid:', isValid);
         }
         catch (error) {
             console.error('[SuperAdmin Login] Password comparison error:', error);
@@ -272,15 +282,136 @@ let AuthService = class AuthService {
         }
         return user;
     }
+    async googleLogin(googleUser, ipAddress, userAgent) {
+        let user = await this.usersService.findByGoogleId(googleUser.googleId);
+        if (!user) {
+            user = await this.usersService.findByEmail(googleUser.email);
+        }
+        if (!user) {
+            return {
+                isNewUser: true,
+                googleProfile: {
+                    googleId: googleUser.googleId,
+                    email: googleUser.email,
+                    name: googleUser.name,
+                    avatarUrl: googleUser.avatarUrl,
+                },
+                token: null,
+                user: null,
+                shop: null,
+            };
+        }
+        if (user.status !== 'active') {
+            throw new common_1.UnauthorizedException('Account is disabled');
+        }
+        if (!user.googleId) {
+            await this.usersService.linkGoogleAccount(user._id.toString(), googleUser.googleId, googleUser.avatarUrl);
+        }
+        const shop = await this.shopsService.findById(user.shopId.toString());
+        if (!shop) {
+            throw new common_1.UnauthorizedException('Shop not found');
+        }
+        if (shop.status === 'suspended') {
+            throw new common_1.UnauthorizedException('Shop is suspended');
+        }
+        const token = this.jwtService.sign({
+            sub: user._id,
+            email: user.email,
+            name: user.name || user.email,
+            role: user.role,
+            shopId: user.shopId,
+        });
+        if (this.activityService) {
+            await this.activityService.logActivity(user.shopId.toString(), user._id.toString(), user.name || user.email, user.role, 'login_google', { email: user.email, method: 'Google OAuth' }, ipAddress, userAgent);
+        }
+        return {
+            isNewUser: false,
+            googleProfile: null,
+            user: {
+                id: user._id,
+                email: user.email,
+                name: user.name,
+                role: user.role,
+                shopId: user.shopId,
+                avatarUrl: user.avatarUrl,
+            },
+            shop: {
+                id: shop._id,
+                name: shop.name,
+                status: shop.status,
+            },
+            token,
+        };
+    }
+    async registerShopWithGoogle(googleProfile, shopData, ipAddress, userAgent) {
+        if (!shopData.phone) {
+            throw new common_1.BadRequestException('Phone number is required');
+        }
+        const shopPayload = {
+            name: shopData.shopName,
+            email: googleProfile.email,
+            phone: shopData.phone,
+            businessType: shopData.businessType,
+            county: shopData.county,
+            city: shopData.city,
+        };
+        if (shopData.address)
+            shopPayload.address = shopData.address;
+        if (shopData.kraPin)
+            shopPayload.kraPin = shopData.kraPin;
+        if (shopData.description)
+            shopPayload.description = shopData.description;
+        const shop = await this.shopsService.create('', shopPayload);
+        try {
+            await this.shopSettingsService.syncReceiptSettingsFromShop(shop.shopId);
+        }
+        catch (err) {
+            console.error('Failed to initialize shop settings:', err);
+        }
+        const user = await this.usersService.createGoogleUser({
+            shopId: shop._id.toString(),
+            email: googleProfile.email,
+            name: googleProfile.name,
+            googleId: googleProfile.googleId,
+            avatarUrl: googleProfile.avatarUrl,
+            phone: shopData.phone,
+            role: 'admin',
+        });
+        const token = this.jwtService.sign({
+            sub: user._id,
+            email: user.email,
+            name: user.name || user.email,
+            role: user.role,
+            shopId: shop._id,
+        });
+        return {
+            shop: {
+                id: shop._id,
+                shopId: shop.shopId,
+                name: shop.name,
+                status: shop.status,
+                email: shop.email,
+            },
+            user: {
+                id: user._id,
+                email: user.email,
+                name: user.name,
+                role: user.role,
+                avatarUrl: user.avatarUrl,
+            },
+            token,
+        };
+    }
 };
 exports.AuthService = AuthService;
 exports.AuthService = AuthService = __decorate([
     (0, common_1.Injectable)(),
-    __param(3, (0, common_1.Optional)()),
-    __param(3, (0, common_1.Inject)('ActivityService')),
-    __param(4, (0, mongoose_1.InjectModel)('SuperAdmin')),
+    __param(4, (0, common_1.Optional)()),
+    __param(4, (0, common_1.Inject)('ActivityService')),
+    __param(5, (0, mongoose_1.InjectModel)('SuperAdmin')),
     __metadata("design:paramtypes", [users_service_1.UsersService,
         shops_service_1.ShopsService,
-        jwt_1.JwtService, Object, mongoose_2.Model])
+        jwt_1.JwtService,
+        shop_settings_service_1.ShopSettingsService, Object, mongoose_2.Model])
 ], AuthService);
 //# sourceMappingURL=auth.service.js.map

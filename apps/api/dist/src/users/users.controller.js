@@ -60,7 +60,7 @@ let UsersController = class UsersController {
         }
         const cashiers = await this.usersService.findCashiersByShop(shopId);
         return cashiers.map((c) => {
-            const { passwordHash, ...safe } = c.toObject();
+            const { passwordHash, pinHash, ...safe } = c.toObject();
             return safe;
         });
     }

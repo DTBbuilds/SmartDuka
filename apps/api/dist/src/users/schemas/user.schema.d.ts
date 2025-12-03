@@ -46,6 +46,9 @@ export declare class User {
         minAmount?: number;
     };
     lastBranchId?: Types.ObjectId;
+    googleId?: string;
+    avatarUrl?: string;
+    authProvider: 'local' | 'google';
 }
 export declare const UserSchema: import("mongoose").Schema<User, import("mongoose").Model<User, any, any, any, import("mongoose").Document<unknown, any, User, any, {}> & User & {
     _id: Types.ObjectId;

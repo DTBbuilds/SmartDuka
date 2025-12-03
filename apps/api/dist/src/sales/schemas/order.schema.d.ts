@@ -48,6 +48,7 @@ export declare class Order {
     payments: PaymentRecord[];
     notes?: string;
     customerName?: string;
+    customerPhone?: string;
     cashierId?: string;
     cashierName?: string;
     isOffline?: boolean;

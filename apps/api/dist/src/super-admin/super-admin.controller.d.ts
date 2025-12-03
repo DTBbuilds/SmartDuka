@@ -42,6 +42,14 @@ export declare class SuperAdminController {
         })[];
         count: number;
     }>;
+    getAllShops(limit?: string, skip?: string, status?: string): Promise<{
+        shops: (import("mongoose").Document<unknown, {}, import("../shops/schemas/shop.schema").Shop, {}, {}> & import("../shops/schemas/shop.schema").Shop & {
+            _id: import("mongoose").Types.ObjectId;
+        } & {
+            __v: number;
+        })[];
+        count: number;
+    }>;
     getShopDetails(shopId: string): Promise<import("mongoose").Document<unknown, {}, import("../shops/schemas/shop.schema").Shop, {}, {}> & import("../shops/schemas/shop.schema").Shop & {
         _id: import("mongoose").Types.ObjectId;
     } & {

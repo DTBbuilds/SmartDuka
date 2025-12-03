@@ -3,19 +3,31 @@ import { ProductDocument } from './schemas/product.schema';
 import { CategoryDocument } from './schemas/category.schema';
 import { StockAdjustmentDocument } from './schemas/stock-adjustment.schema';
 import { StockReconciliationDocument } from './schemas/stock-reconciliation.schema';
-import { CreateProductDto } from './dto/create-product.dto';
+import { CreateProductDto, BulkImportOptionsDto } from './dto/create-product.dto';
+import { UpdateProductDto } from './dto/update-product.dto';
 import { QueryProductsDto } from './dto/query-products.dto';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
+import { CategorySuggestionService } from './services/category-suggestion.service';
 export declare class InventoryService {
     private readonly productModel;
     private readonly categoryModel;
     private readonly adjustmentModel;
     private readonly reconciliationModel;
-    constructor(productModel: Model<ProductDocument>, categoryModel: Model<CategoryDocument>, adjustmentModel: Model<StockAdjustmentDocument>, reconciliationModel: Model<StockReconciliationDocument>);
+    private readonly categorySuggestionService;
+    private readonly logger;
+    constructor(productModel: Model<ProductDocument>, categoryModel: Model<CategoryDocument>, adjustmentModel: Model<StockAdjustmentDocument>, reconciliationModel: Model<StockReconciliationDocument>, categorySuggestionService: CategorySuggestionService);
     createProduct(shopId: string, dto: CreateProductDto): Promise<ProductDocument>;
     getProductById(shopId: string, productId: string): Promise<ProductDocument | null>;
+    updateProduct(shopId: string, productId: string, dto: UpdateProductDto): Promise<ProductDocument | null>;
+    deleteProduct(shopId: string, productId: string): Promise<{
+        deleted: boolean;
+        message: string;
+    }>;
     listProducts(shopId: string, q: QueryProductsDto): Promise<ProductDocument[]>;
+    findByBarcode(shopId: string, barcode: string): Promise<ProductDocument | null>;
+    findBySku(shopId: string, sku: string): Promise<ProductDocument | null>;
+    quickSearch(shopId: string, term: string, limit?: number): Promise<ProductDocument[]>;
     listCategories(shopId: string): Promise<CategoryDocument[]>;
     createCategory(shopId: string, dto: CreateCategoryDto): Promise<CategoryDocument>;
     updateCategory(shopId: string, categoryId: string, dto: UpdateCategoryDto): Promise<CategoryDocument | null>;
@@ -24,10 +36,29 @@ export declare class InventoryService {
     getCategoryHierarchy(shopId: string): Promise<any[]>;
     updateStock(shopId: string, productId: string, quantityChange: number): Promise<ProductDocument | null>;
     getLowStockProducts(shopId: string, threshold?: number): Promise<ProductDocument[]>;
-    importProducts(shopId: string, products: CreateProductDto[]): Promise<{
+    importProducts(shopId: string, products: CreateProductDto[], options?: BulkImportOptionsDto): Promise<{
         imported: number;
+        updated: number;
+        skipped: number;
         errors: string[];
+        categoriesCreated: string[];
+        categorySuggestions: {
+            [productName: string]: string;
+        };
     }>;
+    analyzeImport(shopId: string, products: CreateProductDto[]): Promise<{
+        total: number;
+        withCategory: number;
+        withSuggestion: number;
+        uncategorized: number;
+        existingCategories: string[];
+        newCategories: string[];
+        suggestedCategories: {
+            [category: string]: number;
+        };
+        duplicates: number;
+    }>;
+    private generateSlug;
     exportProducts(shopId: string, res: any, categoryId?: string): Promise<void>;
     createStockAdjustment(shopId: string, productId: string, quantityChange: number, reason: string, adjustedBy: string, notes?: string): Promise<StockAdjustmentDocument>;
     getStockAdjustmentHistory(shopId: string, filters?: {
@@ -60,4 +91,43 @@ export declare class InventoryService {
         totalStockValue: number;
     }>;
     transferBranchStock(shopId: string, productId: string, fromBranchId: string, toBranchId: string, quantity: number, transferredBy: string): Promise<ProductDocument | null>;
+    getInventoryAnalytics(shopId: string): Promise<{
+        totalProducts: number;
+        activeProducts: number;
+        lowStockProducts: number;
+        outOfStockProducts: number;
+        totalStockValue: number;
+        totalStockUnits: number;
+        categoriesCount: number;
+        averageStockLevel: number;
+        turnoverRate: number;
+        lowStockItems: {
+            name: string;
+            stock: number;
+            threshold: number;
+            sku: string;
+        }[];
+        topMovingProducts: {
+            name: string;
+            soldQty: number;
+            currentStock: number;
+        }[];
+        slowMovingProducts: {
+            name: string;
+            soldQty: number;
+            currentStock: number;
+            daysSinceLastSale: number;
+        }[];
+        stockByCategory: {
+            category: string;
+            count: number;
+            value: number;
+        }[];
+        recentStockChanges: {
+            product: any;
+            change: number;
+            type: string;
+            date: any;
+        }[];
+    }>;
 }

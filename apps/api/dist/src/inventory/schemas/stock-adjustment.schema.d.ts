@@ -4,7 +4,7 @@ export declare class StockAdjustment {
     shopId: Types.ObjectId;
     productId: Types.ObjectId;
     quantityChange: number;
-    reason: 'damage' | 'loss' | 'correction' | 'return' | 'other';
+    reason: 'damage' | 'loss' | 'correction' | 'return' | 'sale' | 'purchase' | 'transfer' | 'other';
     notes?: string;
     adjustedBy: Types.ObjectId;
 }

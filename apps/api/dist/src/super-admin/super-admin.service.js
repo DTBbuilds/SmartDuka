@@ -67,6 +67,35 @@ let SuperAdminService = SuperAdminService_1 = class SuperAdminService {
             .skip(skip)
             .exec();
     }
+    async getAllShops(limit = 50, skip = 0, status) {
+        const query = {};
+        if (status && status !== 'all') {
+            if (status === 'flagged') {
+                query.isFlagged = true;
+            }
+            else {
+                query.status = status;
+            }
+        }
+        return this.shopModel
+            .find(query)
+            .sort({ createdAt: -1 })
+            .limit(limit)
+            .skip(skip)
+            .exec();
+    }
+    async getAllShopsCount(status) {
+        const query = {};
+        if (status && status !== 'all') {
+            if (status === 'flagged') {
+                query.isFlagged = true;
+            }
+            else {
+                query.status = status;
+            }
+        }
+        return this.shopModel.countDocuments(query).exec();
+    }
     async getShopDetails(shopId) {
         const shop = await this.shopModel.findById(new mongoose_2.Types.ObjectId(shopId)).exec();
         if (!shop) {

@@ -64,12 +64,17 @@ export declare class PaymentTransactionService {
     getStats(shopId: string, filters?: {
         from?: string;
         to?: string;
+        branchId?: string;
     }): Promise<PaymentStatsDto>;
     exportTransactions(shopId: string, filters?: {
         from?: string;
         to?: string;
+        branchId?: string;
     }): Promise<string>;
     updateTransactionStatus(transactionId: string, status: 'completed' | 'pending' | 'failed'): Promise<PaymentTransactionDocument>;
     getTransactionsByOrderId(orderId: string): Promise<PaymentTransactionDocument[]>;
     getCashierStats(shopId: string, cashierId: string): Promise<any>;
+    getPaymentsAnalytics(shopId: string, branchId?: string): Promise<any>;
+    getBranchPaymentsAnalytics(shopId: string, branchId: string): Promise<any>;
+    getShopPaymentsSummary(shopId: string): Promise<any>;
 }

@@ -12,4 +12,7 @@ export declare class ShopSettingsController {
         exempt: boolean;
     }): Promise<import("./shop-settings.schema").ShopSettings | null>;
     removeCategoryTaxRate(shopId: string, categoryId: string): Promise<import("./shop-settings.schema").ShopSettings | null>;
+    getReceiptSettings(shopId: string): Promise<any>;
+    updateReceiptSettings(shopId: string, receiptSettings: any): Promise<import("./shop-settings.schema").ShopSettings | null>;
+    syncReceiptFromShop(shopId: string): Promise<import("./shop-settings.schema").ShopSettings>;
 }

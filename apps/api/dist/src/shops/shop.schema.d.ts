@@ -4,6 +4,7 @@ export declare class Shop {
     name: string;
     email: string;
     phone: string;
+    shopId: string;
     tillNumber?: string;
     ownerId?: Types.ObjectId;
     address?: string;

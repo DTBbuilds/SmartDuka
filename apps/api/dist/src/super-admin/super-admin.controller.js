@@ -49,6 +49,11 @@ let SuperAdminController = class SuperAdminController {
         const count = await this.superAdminService.getFlaggedShopsCount();
         return { shops, count };
     }
+    async getAllShops(limit = '50', skip = '0', status) {
+        const shops = await this.superAdminService.getAllShops(parseInt(limit), parseInt(skip), status);
+        const count = await this.superAdminService.getAllShopsCount(status);
+        return { shops, count };
+    }
     async getShopDetails(shopId) {
         return this.superAdminService.getShopDetails(shopId);
     }
@@ -145,6 +150,15 @@ __decorate([
     __metadata("design:paramtypes", [String, String]),
     __metadata("design:returntype", Promise)
 ], SuperAdminController.prototype, "getFlaggedShops", null);
+__decorate([
+    (0, common_1.Get)('shops'),
+    __param(0, (0, common_1.Query)('limit')),
+    __param(1, (0, common_1.Query)('skip')),
+    __param(2, (0, common_1.Query)('status')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, String]),
+    __metadata("design:returntype", Promise)
+], SuperAdminController.prototype, "getAllShops", null);
 __decorate([
     (0, common_1.Get)('shops/:id'),
     __param(0, (0, common_1.Param)('id')),

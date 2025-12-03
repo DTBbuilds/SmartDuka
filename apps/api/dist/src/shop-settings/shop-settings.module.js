@@ -12,6 +12,7 @@ const mongoose_1 = require("@nestjs/mongoose");
 const shop_settings_schema_1 = require("./shop-settings.schema");
 const shop_settings_service_1 = require("./shop-settings.service");
 const shop_settings_controller_1 = require("./shop-settings.controller");
+const shop_schema_1 = require("../shops/schemas/shop.schema");
 let ShopSettingsModule = class ShopSettingsModule {
 };
 exports.ShopSettingsModule = ShopSettingsModule;
@@ -20,6 +21,7 @@ exports.ShopSettingsModule = ShopSettingsModule = __decorate([
         imports: [
             mongoose_1.MongooseModule.forFeature([
                 { name: shop_settings_schema_1.ShopSettings.name, schema: shop_settings_schema_1.ShopSettingsSchema },
+                { name: shop_schema_1.Shop.name, schema: shop_schema_1.ShopSchema },
             ]),
         ],
         controllers: [shop_settings_controller_1.ShopSettingsController],

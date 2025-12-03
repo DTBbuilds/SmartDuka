@@ -18,9 +18,13 @@ let Shop = class Shop {
     phone;
     shopId;
     address;
+    county;
     city;
     businessType;
     kraPin;
+    description;
+    tillNumber;
+    mpesaConfig;
     status;
     verificationBy;
     verificationDate;
@@ -65,17 +69,33 @@ __decorate([
     __metadata("design:type", String)
 ], Shop.prototype, "address", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ required: false, trim: true }),
+    (0, mongoose_1.Prop)({ required: true, trim: true }),
+    __metadata("design:type", String)
+], Shop.prototype, "county", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: true, trim: true }),
     __metadata("design:type", String)
 ], Shop.prototype, "city", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ required: false, trim: true }),
+    (0, mongoose_1.Prop)({ required: true, trim: true }),
     __metadata("design:type", String)
 ], Shop.prototype, "businessType", void 0);
 __decorate([
     (0, mongoose_1.Prop)({ required: false, trim: true }),
     __metadata("design:type", String)
 ], Shop.prototype, "kraPin", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, trim: true, maxlength: 500 }),
+    __metadata("design:type", String)
+], Shop.prototype, "description", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, trim: true }),
+    __metadata("design:type", String)
+], Shop.prototype, "tillNumber", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: Object, default: {} }),
+    __metadata("design:type", Object)
+], Shop.prototype, "mpesaConfig", void 0);
 __decorate([
     (0, mongoose_1.Prop)({ enum: ['pending', 'verified', 'active', 'suspended', 'rejected', 'flagged'], default: 'pending' }),
     __metadata("design:type", String)

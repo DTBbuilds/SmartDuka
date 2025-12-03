@@ -93,7 +93,11 @@ let DarajaService = DarajaService_1 = class DarajaService {
             return this.accessToken;
         }
         catch (error) {
-            this.logger.error('Failed to get access token', error?.message);
+            this.logger.error('Failed to get access token');
+            this.logger.error('Error message:', error?.message);
+            this.logger.error('Response data:', JSON.stringify(error?.response?.data));
+            this.logger.error('Response status:', error?.response?.status);
+            this.logger.error('Consumer Key (first 10 chars):', this.config.consumerKey?.substring(0, 10));
             throw new Error('Failed to authenticate with M-Pesa');
         }
     }
@@ -102,19 +106,43 @@ let DarajaService = DarajaService_1 = class DarajaService {
             const accessToken = await this.getAccessToken();
             const timestamp = this.getTimestamp();
             const password = this.generatePassword(timestamp);
+            const formattedPhone = this.formatPhoneNumber(request.phoneNumber);
+            if (!/^254[71]\d{8}$/.test(formattedPhone)) {
+                throw new Error(`Invalid phone number format: ${formattedPhone}. Must be 2547XXXXXXXX or 2541XXXXXXXX (Safaricom number)`);
+            }
+            if (request.amount < 1 || request.amount > 150000) {
+                throw new Error(`Invalid amount: ${request.amount}. Must be between 1 and 150,000 KES`);
+            }
+            if (!request.callbackUrl || !request.callbackUrl.startsWith('https://')) {
+                this.logger.warn(`Callback URL should be HTTPS: ${request.callbackUrl}`);
+            }
+            const isSandbox = this.config.environment === 'sandbox';
+            const problematicDomains = ['trycloudflare.com', 'cloudflare', 'workers.dev'];
+            const hasProblematicDomain = problematicDomains.some(d => request.callbackUrl.includes(d));
+            if (isSandbox && hasProblematicDomain) {
+                this.logger.warn(`Cloudflare tunnel URLs often get rejected by M-Pesa sandbox with "Threat Detected" error. ` +
+                    `Consider using ngrok instead: ngrok http 5000`);
+            }
+            const sanitizedAccountRef = request.accountReference
+                .replace(/[^a-zA-Z0-9]/g, '')
+                .slice(0, 12) || 'Payment';
+            const sanitizedDesc = request.transactionDesc
+                .replace(/[^a-zA-Z0-9 ]/g, '')
+                .slice(0, 13) || 'Payment';
             const payload = {
                 BusinessShortCode: this.config.shortCode,
                 Password: password,
                 Timestamp: timestamp,
                 TransactionType: 'CustomerPayBillOnline',
                 Amount: Math.round(request.amount),
-                PartyA: this.formatPhoneNumber(request.phoneNumber),
+                PartyA: formattedPhone,
                 PartyB: this.config.shortCode,
-                PhoneNumber: this.formatPhoneNumber(request.phoneNumber),
+                PhoneNumber: formattedPhone,
                 CallBackURL: request.callbackUrl,
-                AccountReference: request.accountReference,
-                TransactionDesc: request.transactionDesc,
+                AccountReference: sanitizedAccountRef,
+                TransactionDesc: sanitizedDesc,
             };
+            this.logger.log(`STK Push payload: ShortCode=${this.config.shortCode}, Phone=${formattedPhone}, Amount=${payload.Amount}, AccountRef=${sanitizedAccountRef}`);
             const response = await this.client.post('/mpesa/stkpush/v1/processrequest', payload, {
                 headers: {
                     Authorization: `Bearer ${accessToken}`,
@@ -130,10 +158,24 @@ let DarajaService = DarajaService_1 = class DarajaService {
             };
         }
         catch (error) {
-            this.logger.error('STK Push failed', error?.response?.data || error?.message);
-            throw new Error(error?.response?.data?.errorMessage ||
-                error?.message ||
-                'Failed to initiate STK push');
+            this.logger.error('STK Push failed');
+            this.logger.error(error?.response?.data || error?.message);
+            const errorData = error?.response?.data;
+            let errorMessage = 'Failed to initiate STK push';
+            if (errorData?.errorCode === '400.002.02') {
+                errorMessage = 'M-Pesa rejected the request. Common causes:\n' +
+                    '1. Invalid callback URL (must be HTTPS and publicly accessible)\n' +
+                    '2. Invalid phone number format\n' +
+                    '3. Special characters in AccountReference or TransactionDesc\n' +
+                    'For development, use ngrok to expose your local server.';
+            }
+            else if (errorData?.errorMessage) {
+                errorMessage = errorData.errorMessage;
+            }
+            else if (error?.message) {
+                errorMessage = error.message;
+            }
+            throw new Error(errorMessage);
         }
     }
     async queryStkStatus(checkoutRequestId, merchantRequestId) {

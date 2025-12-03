@@ -32,6 +32,9 @@ let User = class User {
     branchPermissions;
     requiresApprovalFor;
     lastBranchId;
+    googleId;
+    avatarUrl;
+    authProvider;
 };
 exports.User = User;
 __decorate([
@@ -114,6 +117,18 @@ __decorate([
     (0, mongoose_1.Prop)({ required: false, type: mongoose_2.Types.ObjectId, ref: 'Branch' }),
     __metadata("design:type", mongoose_2.Types.ObjectId)
 ], User.prototype, "lastBranchId", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, unique: true, sparse: true }),
+    __metadata("design:type", String)
+], User.prototype, "googleId", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false }),
+    __metadata("design:type", String)
+], User.prototype, "avatarUrl", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ enum: ['local', 'google'], default: 'local' }),
+    __metadata("design:type", String)
+], User.prototype, "authProvider", void 0);
 exports.User = User = __decorate([
     (0, mongoose_1.Schema)({ timestamps: true })
 ], User);

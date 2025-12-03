@@ -11,6 +11,11 @@ export declare class Product {
     stock?: number;
     tax?: number;
     status: 'active' | 'inactive';
+    lowStockThreshold?: number;
+    description?: string;
+    brand?: string;
+    image?: string;
+    updatedAt?: Date;
     expiryDate?: Date;
     batchNumber?: string;
     lotNumber?: string;

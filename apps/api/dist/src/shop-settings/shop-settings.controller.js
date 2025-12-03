@@ -61,6 +61,28 @@ let ShopSettingsController = class ShopSettingsController {
         }
         return this.service.removeCategoryTaxRate(shopId, categoryId);
     }
+    async getReceiptSettings(shopId) {
+        if (!shopId) {
+            throw new common_1.BadRequestException('Shop ID is required');
+        }
+        return this.service.getReceiptSettings(shopId);
+    }
+    async updateReceiptSettings(shopId, receiptSettings) {
+        if (!shopId) {
+            throw new common_1.BadRequestException('Shop ID is required');
+        }
+        return this.service.updateReceiptSettings(shopId, receiptSettings);
+    }
+    async syncReceiptFromShop(shopId) {
+        if (!shopId) {
+            throw new common_1.BadRequestException('Shop ID is required');
+        }
+        const result = await this.service.syncReceiptSettingsFromShop(shopId);
+        if (!result) {
+            throw new common_1.BadRequestException('Shop not found');
+        }
+        return result;
+    }
 };
 exports.ShopSettingsController = ShopSettingsController;
 __decorate([
@@ -111,6 +133,28 @@ __decorate([
     __metadata("design:paramtypes", [String, String]),
     __metadata("design:returntype", Promise)
 ], ShopSettingsController.prototype, "removeCategoryTaxRate", null);
+__decorate([
+    (0, common_1.Get)(':shopId/receipt'),
+    __param(0, (0, common_1.Param)('shopId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], ShopSettingsController.prototype, "getReceiptSettings", null);
+__decorate([
+    (0, common_1.Put)(':shopId/receipt'),
+    __param(0, (0, common_1.Param)('shopId')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], ShopSettingsController.prototype, "updateReceiptSettings", null);
+__decorate([
+    (0, common_1.Post)(':shopId/receipt/sync'),
+    __param(0, (0, common_1.Param)('shopId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], ShopSettingsController.prototype, "syncReceiptFromShop", null);
 exports.ShopSettingsController = ShopSettingsController = __decorate([
     (0, common_1.Controller)('shop-settings'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),

@@ -23,6 +23,11 @@ let Product = class Product {
     stock;
     tax;
     status;
+    lowStockThreshold;
+    description;
+    brand;
+    image;
+    updatedAt;
     expiryDate;
     batchNumber;
     lotNumber;
@@ -76,6 +81,26 @@ __decorate([
     __metadata("design:type", String)
 ], Product.prototype, "status", void 0);
 __decorate([
+    (0, mongoose_1.Prop)({ required: false, min: 0, default: 10 }),
+    __metadata("design:type", Number)
+], Product.prototype, "lowStockThreshold", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false }),
+    __metadata("design:type", String)
+], Product.prototype, "description", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, trim: true }),
+    __metadata("design:type", String)
+], Product.prototype, "brand", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false }),
+    __metadata("design:type", String)
+], Product.prototype, "image", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false }),
+    __metadata("design:type", Date)
+], Product.prototype, "updatedAt", void 0);
+__decorate([
     (0, mongoose_1.Prop)({ required: false }),
     __metadata("design:type", Date)
 ], Product.prototype, "expiryDate", void 0);
@@ -126,4 +151,8 @@ exports.ProductSchema.index({ shopId: 1, status: 1 });
 exports.ProductSchema.index({ shopId: 1, expiryDate: 1 });
 exports.ProductSchema.index({ shopId: 1, stock: 1 });
 exports.ProductSchema.index({ shopId: 1, branchId: 1 });
+exports.ProductSchema.index({ shopId: 1, barcode: 1, status: 1 });
+exports.ProductSchema.index({ shopId: 1, sku: 1, status: 1 });
+exports.ProductSchema.index({ shopId: 1, brand: 1 });
+exports.ProductSchema.index({ shopId: 1, name: 'text', description: 'text', brand: 'text' });
 //# sourceMappingURL=product.schema.js.map

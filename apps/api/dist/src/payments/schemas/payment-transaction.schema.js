@@ -143,4 +143,6 @@ exports.PaymentTransactionSchema.index({ shopId: 1, status: 1 });
 exports.PaymentTransactionSchema.index({ shopId: 1, branchId: 1 });
 exports.PaymentTransactionSchema.index({ orderId: 1 });
 exports.PaymentTransactionSchema.index({ createdAt: -1 });
+exports.PaymentTransactionSchema.index({ shopId: 1, branchId: 1, createdAt: -1 });
+exports.PaymentTransactionSchema.index({ shopId: 1, branchId: 1, status: 1, createdAt: -1 });
 //# sourceMappingURL=payment-transaction.schema.js.map

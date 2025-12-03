@@ -13,6 +13,29 @@ export declare class ShopSettings extends Document {
         rate: number;
         exempt: boolean;
     }>;
+    receipt: {
+        shopName?: string;
+        shopAddress?: string;
+        shopPhone?: string;
+        shopEmail?: string;
+        shopLogo?: string;
+        shopTaxPin?: string;
+        shopWebsite?: string;
+        printerWidth: number;
+        showLogo: boolean;
+        showTaxPin: boolean;
+        showCashierName: boolean;
+        showCustomerName: boolean;
+        showItemSku: boolean;
+        headerMessage?: string;
+        footerMessage: string;
+        socialMedia?: {
+            facebook?: string;
+            instagram?: string;
+            twitter?: string;
+            whatsapp?: string;
+        };
+    };
     createdAt: Date;
     updatedAt: Date;
 }

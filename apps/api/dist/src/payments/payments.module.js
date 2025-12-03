@@ -14,7 +14,12 @@ const payments_service_1 = require("./payments.service");
 const payments_controller_1 = require("./payments.controller");
 const daraja_service_1 = require("./daraja.service");
 const payment_transaction_service_1 = require("./services/payment-transaction.service");
+const mpesa_service_1 = require("./services/mpesa.service");
+const mpesa_multi_tenant_service_1 = require("./services/mpesa-multi-tenant.service");
+const mpesa_controller_1 = require("./mpesa.controller");
 const payment_transaction_schema_1 = require("./schemas/payment-transaction.schema");
+const mpesa_transaction_schema_1 = require("./schemas/mpesa-transaction.schema");
+const shop_schema_1 = require("../shops/schemas/shop.schema");
 let PaymentsModule = class PaymentsModule {
 };
 exports.PaymentsModule = PaymentsModule;
@@ -24,11 +29,25 @@ exports.PaymentsModule = PaymentsModule = __decorate([
             config_1.ConfigModule,
             mongoose_1.MongooseModule.forFeature([
                 { name: payment_transaction_schema_1.PaymentTransaction.name, schema: payment_transaction_schema_1.PaymentTransactionSchema },
+                { name: mpesa_transaction_schema_1.MpesaTransaction.name, schema: mpesa_transaction_schema_1.MpesaTransactionSchema },
+                { name: shop_schema_1.Shop.name, schema: shop_schema_1.ShopSchema },
             ]),
         ],
-        providers: [payments_service_1.PaymentsService, daraja_service_1.DarajaService, payment_transaction_service_1.PaymentTransactionService],
-        controllers: [payments_controller_1.PaymentsController],
-        exports: [payments_service_1.PaymentsService, daraja_service_1.DarajaService, payment_transaction_service_1.PaymentTransactionService],
+        providers: [
+            payments_service_1.PaymentsService,
+            daraja_service_1.DarajaService,
+            payment_transaction_service_1.PaymentTransactionService,
+            mpesa_service_1.MpesaService,
+            mpesa_multi_tenant_service_1.MpesaMultiTenantService,
+        ],
+        controllers: [payments_controller_1.PaymentsController, mpesa_controller_1.MpesaController],
+        exports: [
+            payments_service_1.PaymentsService,
+            daraja_service_1.DarajaService,
+            payment_transaction_service_1.PaymentTransactionService,
+            mpesa_service_1.MpesaService,
+            mpesa_multi_tenant_service_1.MpesaMultiTenantService,
+        ],
     })
 ], PaymentsModule);
 //# sourceMappingURL=payments.module.js.map

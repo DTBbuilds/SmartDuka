@@ -38,8 +38,16 @@ let ShopsService = ShopsService_1 = class ShopsService {
             const shopCount = await this.shopModel.countDocuments();
             const sequenceNumber = shopCount + 1;
             const shopId = (0, shop_id_generator_1.generateShopId)(sequenceNumber);
+            let normalizedKraPin = undefined;
+            if (dto.kraPin && typeof dto.kraPin === 'string') {
+                const trimmed = dto.kraPin.trim().toUpperCase();
+                if (trimmed.length > 0) {
+                    normalizedKraPin = trimmed;
+                }
+            }
+            const { kraPin: _ignoredKraPin, ...restDto } = dto;
             const shopData = {
-                ...dto,
+                ...restDto,
                 shopId,
                 ownerId: ownerId ? new mongoose_2.Types.ObjectId(ownerId) : undefined,
                 language: dto.language || 'en',
@@ -48,8 +56,10 @@ let ShopsService = ShopsService_1 = class ShopsService {
                 totalSales: 0,
                 totalOrders: 0,
                 onboardingComplete: false,
-                kraPin: dto.kraPin && dto.kraPin.trim() ? dto.kraPin : null,
             };
+            if (normalizedKraPin) {
+                shopData.kraPin = normalizedKraPin;
+            }
             const shop = new this.shopModel(shopData);
             return await shop.save();
         }
@@ -80,11 +90,25 @@ let ShopsService = ShopsService_1 = class ShopsService {
     }
     async update(shopId, dto) {
         try {
+            const { kraPin: dtoKraPin, ...restDto } = dto;
             const updateData = {
-                ...dto,
+                ...restDto,
                 updatedAt: new Date(),
-                kraPin: dto.kraPin !== undefined ? (dto.kraPin && dto.kraPin.trim() ? dto.kraPin : null) : undefined,
             };
+            if (dtoKraPin !== undefined) {
+                if (dtoKraPin && typeof dtoKraPin === 'string') {
+                    const trimmed = dtoKraPin.trim().toUpperCase();
+                    if (trimmed.length > 0) {
+                        updateData.kraPin = trimmed;
+                    }
+                    else {
+                        updateData.$unset = { kraPin: 1 };
+                    }
+                }
+                else {
+                    updateData.$unset = { kraPin: 1 };
+                }
+            }
             return await this.shopModel
                 .findByIdAndUpdate(new mongoose_2.Types.ObjectId(shopId), updateData, { new: true })
                 .exec();
@@ -99,7 +123,7 @@ let ShopsService = ShopsService_1 = class ShopsService {
                     throw new common_1.BadRequestException('Shop phone number already registered');
                 }
                 else if (field === 'kraPin') {
-                    throw new common_1.BadRequestException('KRA PIN already registered');
+                    throw new common_1.BadRequestException('KRA PIN already registered to another shop');
                 }
                 else {
                     throw new common_1.BadRequestException(`${field} already registered`);
@@ -178,11 +202,34 @@ let ShopsService = ShopsService_1 = class ShopsService {
         return this.shopModel.find({ status: 'active' }).exec();
     }
     async findAll() {
-        const shops = await this.shopModel.find({ status: 'active' }).select('_id name').exec();
-        return shops.map((shop) => ({
-            id: shop._id,
-            name: shop.name,
-        }));
+        const DEMO_PERIOD_DAYS = 24;
+        const demoExpiryDate = new Date();
+        demoExpiryDate.setDate(demoExpiryDate.getDate() - DEMO_PERIOD_DAYS);
+        const shops = await this.shopModel
+            .find({
+            $or: [
+                { status: 'active' },
+                { status: 'verified' },
+                { status: 'pending', createdAt: { $gte: demoExpiryDate } },
+            ],
+        })
+            .select('_id shopId name status createdAt')
+            .exec();
+        return shops.map((shop) => {
+            const result = {
+                id: shop._id,
+                shopId: shop.shopId,
+                name: shop.name,
+                status: shop.status,
+            };
+            if (shop.status === 'pending' && shop.createdAt) {
+                const expiryDate = new Date(shop.createdAt);
+                expiryDate.setDate(expiryDate.getDate() + DEMO_PERIOD_DAYS);
+                result.demoExpiresAt = expiryDate;
+                result.demoMode = true;
+            }
+            return result;
+        });
     }
 };
 exports.ShopsService = ShopsService;

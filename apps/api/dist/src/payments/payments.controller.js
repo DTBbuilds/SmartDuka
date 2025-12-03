@@ -18,6 +18,8 @@ const payments_service_1 = require("./payments.service");
 const payment_transaction_service_1 = require("./services/payment-transaction.service");
 const initiate_stk_dto_1 = require("./dto/initiate-stk.dto");
 const jwt_auth_guard_1 = require("../auth/guards/jwt-auth.guard");
+const roles_guard_1 = require("../auth/guards/roles.guard");
+const roles_decorator_1 = require("../auth/decorators/roles.decorator");
 const current_user_decorator_1 = require("../auth/decorators/current-user.decorator");
 let PaymentsController = class PaymentsController {
     paymentsService;
@@ -47,14 +49,15 @@ let PaymentsController = class PaymentsController {
             skip: skip ? parseInt(skip) : 0,
         });
     }
-    async getStats(user, from, to) {
-        return this.paymentTransactionService.getStats(user.shopId, { from, to });
+    async getStats(user, from, to, branchId) {
+        return this.paymentTransactionService.getStats(user.shopId, { from, to, branchId });
     }
-    async exportTransactions(res, user, from, to) {
+    async exportTransactions(res, user, from, to, branchId) {
         try {
             const csvContent = await this.paymentTransactionService.exportTransactions(user.shopId, {
                 from,
                 to,
+                branchId,
             });
             res.setHeader('Content-Type', 'text/csv; charset=utf-8');
             res.setHeader('Content-Disposition', 'attachment; filename=payments.csv');
@@ -69,6 +72,15 @@ let PaymentsController = class PaymentsController {
     }
     async getOrderTransactions(orderId) {
         return this.paymentTransactionService.getTransactionsByOrderId(orderId);
+    }
+    async getPaymentsAnalytics(user, branchId) {
+        return this.paymentTransactionService.getPaymentsAnalytics(user.shopId, branchId);
+    }
+    async getBranchPaymentsAnalytics(user, branchId) {
+        return this.paymentTransactionService.getBranchPaymentsAnalytics(user.shopId, branchId);
+    }
+    async getShopPaymentsSummary(user) {
+        return this.paymentTransactionService.getShopPaymentsSummary(user.shopId);
     }
 };
 exports.PaymentsController = PaymentsController;
@@ -118,8 +130,9 @@ __decorate([
     __param(0, (0, current_user_decorator_1.CurrentUser)()),
     __param(1, (0, common_1.Query)('from')),
     __param(2, (0, common_1.Query)('to')),
+    __param(3, (0, common_1.Query)('branchId')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, String, String]),
+    __metadata("design:paramtypes", [Object, String, String, String]),
     __metadata("design:returntype", Promise)
 ], PaymentsController.prototype, "getStats", null);
 __decorate([
@@ -129,8 +142,9 @@ __decorate([
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __param(2, (0, common_1.Query)('from')),
     __param(3, (0, common_1.Query)('to')),
+    __param(4, (0, common_1.Query)('branchId')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, Object, String, String]),
+    __metadata("design:paramtypes", [Object, Object, String, String, String]),
     __metadata("design:returntype", Promise)
 ], PaymentsController.prototype, "exportTransactions", null);
 __decorate([
@@ -150,6 +164,35 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], PaymentsController.prototype, "getOrderTransactions", null);
+__decorate([
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('admin'),
+    (0, common_1.Get)('analytics'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Query)('branchId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String]),
+    __metadata("design:returntype", Promise)
+], PaymentsController.prototype, "getPaymentsAnalytics", null);
+__decorate([
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('admin'),
+    (0, common_1.Get)('analytics/branch/:branchId'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Param)('branchId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String]),
+    __metadata("design:returntype", Promise)
+], PaymentsController.prototype, "getBranchPaymentsAnalytics", null);
+__decorate([
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('admin'),
+    (0, common_1.Get)('analytics/summary'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], PaymentsController.prototype, "getShopPaymentsSummary", null);
 exports.PaymentsController = PaymentsController = __decorate([
     (0, common_1.Controller)('payments'),
     __metadata("design:paramtypes", [payments_service_1.PaymentsService,

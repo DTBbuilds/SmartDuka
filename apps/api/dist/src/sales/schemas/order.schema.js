@@ -100,6 +100,7 @@ let Order = class Order {
     payments;
     notes;
     customerName;
+    customerPhone;
     cashierId;
     cashierName;
     isOffline;
@@ -169,6 +170,10 @@ __decorate([
     (0, mongoose_1.Prop)(),
     __metadata("design:type", String)
 ], Order.prototype, "customerName", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], Order.prototype, "customerPhone", void 0);
 __decorate([
     (0, mongoose_1.Prop)(),
     __metadata("design:type", String)

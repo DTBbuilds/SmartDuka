@@ -11,6 +11,8 @@ export declare class SuperAdminService {
     getActiveShops(limit?: number, skip?: number): Promise<ShopDocument[]>;
     getSuspendedShops(limit?: number, skip?: number): Promise<ShopDocument[]>;
     getFlaggedShops(limit?: number, skip?: number): Promise<ShopDocument[]>;
+    getAllShops(limit?: number, skip?: number, status?: string): Promise<ShopDocument[]>;
+    getAllShopsCount(status?: string): Promise<number>;
     getShopDetails(shopId: string): Promise<ShopDocument>;
     verifyShop(shopId: string, superAdminId: string, notes?: string): Promise<ShopDocument>;
     rejectShop(shopId: string, superAdminId: string, reason: string, notes?: string): Promise<ShopDocument>;

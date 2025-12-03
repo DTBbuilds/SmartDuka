@@ -41,6 +41,15 @@ class CheckoutPaymentDto {
     method;
     amount;
     reference;
+    status;
+    mpesaReceiptNumber;
+    mpesaTransactionId;
+    customerPhone;
+    amountTendered;
+    change;
+    cardLastFour;
+    cardBrand;
+    notes;
 }
 exports.CheckoutPaymentDto = CheckoutPaymentDto;
 __decorate([
@@ -57,10 +66,56 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CheckoutPaymentDto.prototype, "reference", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CheckoutPaymentDto.prototype, "status", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CheckoutPaymentDto.prototype, "mpesaReceiptNumber", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CheckoutPaymentDto.prototype, "mpesaTransactionId", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CheckoutPaymentDto.prototype, "customerPhone", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)(),
+    __metadata("design:type", Number)
+], CheckoutPaymentDto.prototype, "amountTendered", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)(),
+    __metadata("design:type", Number)
+], CheckoutPaymentDto.prototype, "change", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CheckoutPaymentDto.prototype, "cardLastFour", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CheckoutPaymentDto.prototype, "cardBrand", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CheckoutPaymentDto.prototype, "notes", void 0);
 class CheckoutDto {
     items;
     notes;
     customerName;
+    customerPhone;
     cashierId;
     cashierName;
     payments;
@@ -86,6 +141,11 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CheckoutDto.prototype, "customerName", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CheckoutDto.prototype, "customerPhone", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),

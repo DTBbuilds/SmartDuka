@@ -22,12 +22,15 @@ export declare class PaymentsController {
     } & {
         __v: number;
     })[]>;
-    getStats(user: JwtPayload, from?: string, to?: string): Promise<import("./services/payment-transaction.service").PaymentStatsDto>;
-    exportTransactions(res: Response, user: JwtPayload, from?: string, to?: string): Promise<void>;
+    getStats(user: JwtPayload, from?: string, to?: string, branchId?: string): Promise<import("./services/payment-transaction.service").PaymentStatsDto>;
+    exportTransactions(res: Response, user: JwtPayload, from?: string, to?: string, branchId?: string): Promise<void>;
     getCashierStats(user: JwtPayload, cashierId: string): Promise<any>;
     getOrderTransactions(orderId: string): Promise<(import("mongoose").Document<unknown, {}, import("./schemas/payment-transaction.schema").PaymentTransaction, {}, {}> & import("./schemas/payment-transaction.schema").PaymentTransaction & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
     })[]>;
+    getPaymentsAnalytics(user: JwtPayload, branchId?: string): Promise<any>;
+    getBranchPaymentsAnalytics(user: JwtPayload, branchId: string): Promise<any>;
+    getShopPaymentsSummary(user: JwtPayload): Promise<any>;
 }

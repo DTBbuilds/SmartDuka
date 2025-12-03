@@ -17,6 +17,7 @@ let ShopSettings = class ShopSettings extends mongoose_2.Document {
     tax;
     taxExemptProducts;
     categoryTaxRates;
+    receipt;
     createdAt;
     updatedAt;
 };
@@ -53,6 +54,45 @@ __decorate([
     __metadata("design:type", Object)
 ], ShopSettings.prototype, "categoryTaxRates", void 0);
 __decorate([
+    (0, mongoose_1.Prop)({
+        type: {
+            shopName: { type: String },
+            shopAddress: { type: String },
+            shopPhone: { type: String },
+            shopEmail: { type: String },
+            shopLogo: { type: String },
+            shopTaxPin: { type: String },
+            shopWebsite: { type: String },
+            printerWidth: { type: Number, default: 32 },
+            showLogo: { type: Boolean, default: false },
+            showTaxPin: { type: Boolean, default: true },
+            showCashierName: { type: Boolean, default: true },
+            showCustomerName: { type: Boolean, default: true },
+            showItemSku: { type: Boolean, default: false },
+            headerMessage: { type: String },
+            footerMessage: { type: String, default: 'Thank you for your purchase!' },
+            socialMedia: {
+                type: {
+                    facebook: { type: String },
+                    instagram: { type: String },
+                    twitter: { type: String },
+                    whatsapp: { type: String },
+                },
+            },
+        },
+        default: {
+            printerWidth: 32,
+            showLogo: false,
+            showTaxPin: true,
+            showCashierName: true,
+            showCustomerName: true,
+            showItemSku: false,
+            footerMessage: 'Thank you for your purchase!',
+        },
+    }),
+    __metadata("design:type", Object)
+], ShopSettings.prototype, "receipt", void 0);
+__decorate([
     (0, mongoose_1.Prop)({ default: Date.now }),
     __metadata("design:type", Date)
 ], ShopSettings.prototype, "createdAt", void 0);
@@ -64,5 +104,4 @@ exports.ShopSettings = ShopSettings = __decorate([
     (0, mongoose_1.Schema)({ timestamps: true })
 ], ShopSettings);
 exports.ShopSettingsSchema = mongoose_1.SchemaFactory.createForClass(ShopSettings);
-exports.ShopSettingsSchema.index({ shopId: 1 });
 //# sourceMappingURL=shop-settings.schema.js.map

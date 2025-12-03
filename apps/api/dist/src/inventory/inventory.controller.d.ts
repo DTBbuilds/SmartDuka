@@ -1,6 +1,7 @@
 import { InventoryService } from './inventory.service';
 import { QueryProductsDto } from './dto/query-products.dto';
 import { CreateProductDto } from './dto/create-product.dto';
+import { UpdateProductDto } from './dto/update-product.dto';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 export declare class InventoryController {
@@ -15,6 +16,47 @@ export declare class InventoryController {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
+    }>;
+    findByBarcode(barcode: string, user: any): Promise<{
+        found: boolean;
+        product: null;
+    } | {
+        found: boolean;
+        product: import("mongoose").Document<unknown, {}, import("./schemas/product.schema").Product, {}, {}> & import("./schemas/product.schema").Product & {
+            _id: import("mongoose").Types.ObjectId;
+        } & {
+            __v: number;
+        };
+    }>;
+    findBySku(sku: string, user: any): Promise<{
+        found: boolean;
+        product: null;
+    } | {
+        found: boolean;
+        product: import("mongoose").Document<unknown, {}, import("./schemas/product.schema").Product, {}, {}> & import("./schemas/product.schema").Product & {
+            _id: import("mongoose").Types.ObjectId;
+        } & {
+            __v: number;
+        };
+    }>;
+    quickSearch(q: string, limit: string, user: any): Promise<(import("mongoose").Document<unknown, {}, import("./schemas/product.schema").Product, {}, {}> & import("./schemas/product.schema").Product & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    })[]>;
+    getProduct(productId: string, user: any): Promise<(import("mongoose").Document<unknown, {}, import("./schemas/product.schema").Product, {}, {}> & import("./schemas/product.schema").Product & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }) | null>;
+    updateProduct(productId: string, dto: UpdateProductDto, user: any): Promise<(import("mongoose").Document<unknown, {}, import("./schemas/product.schema").Product, {}, {}> & import("./schemas/product.schema").Product & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }) | null>;
+    deleteProduct(productId: string, user: any): Promise<{
+        deleted: boolean;
+        message: string;
     }>;
     listCategories(user: any): Promise<(import("mongoose").Document<unknown, {}, import("./schemas/category.schema").Category, {}, {}> & import("./schemas/category.schema").Category & {
         _id: import("mongoose").Types.ObjectId;
@@ -49,9 +91,35 @@ export declare class InventoryController {
     })[]>;
     importProducts(dto: {
         products: CreateProductDto[];
+        options?: {
+            autoCreateCategories?: boolean;
+            autoSuggestCategories?: boolean;
+            updateExisting?: boolean;
+            skipDuplicates?: boolean;
+        };
     }, user: any): Promise<{
         imported: number;
+        updated: number;
+        skipped: number;
         errors: string[];
+        categoriesCreated: string[];
+        categorySuggestions: {
+            [productName: string]: string;
+        };
+    }>;
+    analyzeImport(dto: {
+        products: CreateProductDto[];
+    }, user: any): Promise<{
+        total: number;
+        withCategory: number;
+        withSuggestion: number;
+        uncategorized: number;
+        existingCategories: string[];
+        newCategories: string[];
+        suggestedCategories: {
+            [category: string]: number;
+        };
+        duplicates: number;
     }>;
     exportProducts(res: any, categoryId: string, user: any): Promise<void>;
     createStockAdjustment(dto: {
@@ -129,4 +197,43 @@ export declare class InventoryController {
     } & {
         __v: number;
     }) | null>;
+    getInventoryAnalytics(user: any): Promise<{
+        totalProducts: number;
+        activeProducts: number;
+        lowStockProducts: number;
+        outOfStockProducts: number;
+        totalStockValue: number;
+        totalStockUnits: number;
+        categoriesCount: number;
+        averageStockLevel: number;
+        turnoverRate: number;
+        lowStockItems: {
+            name: string;
+            stock: number;
+            threshold: number;
+            sku: string;
+        }[];
+        topMovingProducts: {
+            name: string;
+            soldQty: number;
+            currentStock: number;
+        }[];
+        slowMovingProducts: {
+            name: string;
+            soldQty: number;
+            currentStock: number;
+            daysSinceLastSale: number;
+        }[];
+        stockByCategory: {
+            category: string;
+            count: number;
+            value: number;
+        }[];
+        recentStockChanges: {
+            product: any;
+            change: number;
+            type: string;
+            date: any;
+        }[];
+    }>;
 }

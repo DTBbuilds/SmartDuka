@@ -26,4 +26,15 @@ export declare class UsersService {
     }>;
     resetPin(userId: string, shopId: string): Promise<string>;
     changePin(userId: string, currentPin: string, newPin: string): Promise<void>;
+    findByGoogleId(googleId: string): Promise<User | null>;
+    linkGoogleAccount(userId: string, googleId: string, avatarUrl?: string): Promise<User | null>;
+    createGoogleUser(data: {
+        shopId: string;
+        email: string;
+        name: string;
+        googleId: string;
+        avatarUrl?: string;
+        phone?: string;
+        role?: 'admin' | 'cashier';
+    }): Promise<User>;
 }

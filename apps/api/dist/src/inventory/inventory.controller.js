@@ -17,6 +17,7 @@ const common_1 = require("@nestjs/common");
 const inventory_service_1 = require("./inventory.service");
 const query_products_dto_1 = require("./dto/query-products.dto");
 const create_product_dto_1 = require("./dto/create-product.dto");
+const update_product_dto_1 = require("./dto/update-product.dto");
 const create_category_dto_1 = require("./dto/create-category.dto");
 const update_category_dto_1 = require("./dto/update-category.dto");
 const jwt_auth_guard_1 = require("../auth/guards/jwt-auth.guard");
@@ -33,6 +34,32 @@ let InventoryController = class InventoryController {
     }
     createProduct(dto, user) {
         return this.inventoryService.createProduct(user.shopId, dto);
+    }
+    async findByBarcode(barcode, user) {
+        const product = await this.inventoryService.findByBarcode(user.shopId, barcode);
+        if (!product) {
+            return { found: false, product: null };
+        }
+        return { found: true, product };
+    }
+    async findBySku(sku, user) {
+        const product = await this.inventoryService.findBySku(user.shopId, sku);
+        if (!product) {
+            return { found: false, product: null };
+        }
+        return { found: true, product };
+    }
+    quickSearch(q, limit, user) {
+        return this.inventoryService.quickSearch(user.shopId, q || '', limit ? parseInt(limit, 10) : 10);
+    }
+    getProduct(productId, user) {
+        return this.inventoryService.getProductById(user.shopId, productId);
+    }
+    updateProduct(productId, dto, user) {
+        return this.inventoryService.updateProduct(user.shopId, productId, dto);
+    }
+    deleteProduct(productId, user) {
+        return this.inventoryService.deleteProduct(user.shopId, productId);
     }
     listCategories(user) {
         return this.inventoryService.listCategories(user.shopId);
@@ -59,7 +86,10 @@ let InventoryController = class InventoryController {
         return this.inventoryService.getLowStockProducts(user.shopId, 10);
     }
     importProducts(dto, user) {
-        return this.inventoryService.importProducts(user.shopId, dto.products);
+        return this.inventoryService.importProducts(user.shopId, dto.products, dto.options);
+    }
+    analyzeImport(dto, user) {
+        return this.inventoryService.analyzeImport(user.shopId, dto.products);
     }
     exportProducts(res, categoryId, user) {
         return this.inventoryService.exportProducts(user.shopId, res, categoryId);
@@ -107,6 +137,9 @@ let InventoryController = class InventoryController {
     async transferBranchStock(dto, user) {
         return this.inventoryService.transferBranchStock(user.shopId, dto.productId, dto.fromBranchId, dto.toBranchId, dto.quantity, user.sub);
     }
+    async getInventoryAnalytics(user) {
+        return this.inventoryService.getInventoryAnalytics(user.shopId);
+    }
 };
 exports.InventoryController = InventoryController;
 __decorate([
@@ -128,6 +161,64 @@ __decorate([
     __metadata("design:paramtypes", [create_product_dto_1.CreateProductDto, Object]),
     __metadata("design:returntype", void 0)
 ], InventoryController.prototype, "createProduct", null);
+__decorate([
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.Get)('products/barcode/:barcode'),
+    __param(0, (0, common_1.Param)('barcode')),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], InventoryController.prototype, "findByBarcode", null);
+__decorate([
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.Get)('products/sku/:sku'),
+    __param(0, (0, common_1.Param)('sku')),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], InventoryController.prototype, "findBySku", null);
+__decorate([
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.Get)('products/search/quick'),
+    __param(0, (0, common_1.Query)('q')),
+    __param(1, (0, common_1.Query)('limit')),
+    __param(2, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, Object]),
+    __metadata("design:returntype", void 0)
+], InventoryController.prototype, "quickSearch", null);
+__decorate([
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.Get)('products/:id'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", void 0)
+], InventoryController.prototype, "getProduct", null);
+__decorate([
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('admin'),
+    (0, common_1.Put)('products/:id'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Body)()),
+    __param(2, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, update_product_dto_1.UpdateProductDto, Object]),
+    __metadata("design:returntype", void 0)
+], InventoryController.prototype, "updateProduct", null);
+__decorate([
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('admin'),
+    (0, common_1.Delete)('products/:id'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", void 0)
+], InventoryController.prototype, "deleteProduct", null);
 __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Get)('categories'),
@@ -213,6 +304,16 @@ __decorate([
     __metadata("design:paramtypes", [Object, Object]),
     __metadata("design:returntype", void 0)
 ], InventoryController.prototype, "importProducts", null);
+__decorate([
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('admin'),
+    (0, common_1.Post)('products/import/analyze'),
+    __param(0, (0, common_1.Body)()),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", void 0)
+], InventoryController.prototype, "analyzeImport", null);
 __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
     (0, roles_decorator_1.Roles)('admin'),
@@ -338,6 +439,15 @@ __decorate([
     __metadata("design:paramtypes", [Object, Object]),
     __metadata("design:returntype", Promise)
 ], InventoryController.prototype, "transferBranchStock", null);
+__decorate([
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('admin'),
+    (0, common_1.Get)('analytics'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], InventoryController.prototype, "getInventoryAnalytics", null);
 exports.InventoryController = InventoryController = __decorate([
     (0, common_1.Controller)('inventory'),
     __metadata("design:paramtypes", [inventory_service_1.InventoryService])

@@ -16,6 +16,7 @@ let Shop = class Shop {
     name;
     email;
     phone;
+    shopId;
     tillNumber;
     ownerId;
     address;
@@ -49,6 +50,10 @@ __decorate([
     __metadata("design:type", String)
 ], Shop.prototype, "phone", void 0);
 __decorate([
+    (0, mongoose_1.Prop)({ required: true, unique: true, trim: true, index: true }),
+    __metadata("design:type", String)
+], Shop.prototype, "shopId", void 0);
+__decorate([
     (0, mongoose_1.Prop)(),
     __metadata("design:type", String)
 ], Shop.prototype, "tillNumber", void 0);
@@ -73,7 +78,19 @@ __decorate([
     __metadata("design:type", String)
 ], Shop.prototype, "businessType", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ type: String, required: false, unique: true, sparse: true, trim: true, default: null }),
+    (0, mongoose_1.Prop)({
+        type: String,
+        required: false,
+        unique: true,
+        sparse: true,
+        trim: true,
+        default: undefined,
+        set: (v) => {
+            if (v === '' || v === null)
+                return undefined;
+            return typeof v === 'string' ? v.trim().toUpperCase() : v;
+        }
+    }),
     __metadata("design:type", String)
 ], Shop.prototype, "kraPin", void 0);
 __decorate([
@@ -124,6 +141,23 @@ exports.Shop = Shop = __decorate([
     (0, mongoose_1.Schema)({ timestamps: true })
 ], Shop);
 exports.ShopSchema = mongoose_1.SchemaFactory.createForClass(Shop);
+exports.ShopSchema.pre('save', function (next) {
+    if (this.kraPin === '' || this.kraPin === null) {
+        this.kraPin = undefined;
+    }
+    next();
+});
+exports.ShopSchema.pre('findOneAndUpdate', function (next) {
+    const update = this.getUpdate();
+    if (update && update.kraPin === '') {
+        update.kraPin = undefined;
+        if (!update.$unset)
+            update.$unset = {};
+        update.$unset.kraPin = 1;
+        delete update.kraPin;
+    }
+    next();
+});
 exports.ShopSchema.index({ status: 1 });
 exports.ShopSchema.index({ createdAt: -1 });
 //# sourceMappingURL=shop.schema.js.map

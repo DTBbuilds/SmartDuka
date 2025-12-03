@@ -18,12 +18,16 @@ const auth_service_1 = require("./auth.service");
 const register_shop_dto_1 = require("./dto/register-shop.dto");
 const login_dto_1 = require("./dto/login.dto");
 const jwt_auth_guard_1 = require("./guards/jwt-auth.guard");
+const google_auth_guard_1 = require("./guards/google-auth.guard");
 const pin_rate_limit_guard_1 = require("./guards/pin-rate-limit.guard");
 const current_user_decorator_1 = require("./decorators/current-user.decorator");
+const config_1 = require("@nestjs/config");
 let AuthController = class AuthController {
     authService;
-    constructor(authService) {
+    configService;
+    constructor(authService, configService) {
         this.authService = authService;
+        this.configService = configService;
     }
     async registerShop(dto) {
         return this.authService.registerShop(dto);
@@ -44,6 +48,38 @@ let AuthController = class AuthController {
     }
     async getProfile(user) {
         return user;
+    }
+    async googleAuth(res) {
+        const clientId = this.configService.get('GOOGLE_CLIENT_ID');
+        if (!clientId || clientId === 'not-configured') {
+            const frontendUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:3000';
+            res.redirect(`${frontendUrl}/login?error=${encodeURIComponent('Google login is not configured')}`);
+            return;
+        }
+    }
+    async googleAuthCallback(req, res) {
+        const ipAddress = req.ip || req.connection.remoteAddress;
+        const userAgent = req.get('user-agent');
+        try {
+            const result = await this.authService.googleLogin(req.user, ipAddress, userAgent);
+            const frontendUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:3000';
+            if (result.isNewUser) {
+                const profileData = encodeURIComponent(JSON.stringify(result.googleProfile));
+                res.redirect(`${frontendUrl}/register-shop?google=${profileData}`);
+            }
+            else {
+                res.redirect(`${frontendUrl}/auth/callback?token=${result.token}`);
+            }
+        }
+        catch (error) {
+            const frontendUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:3000';
+            res.redirect(`${frontendUrl}/login?error=${encodeURIComponent(error.message || 'Google login failed')}`);
+        }
+    }
+    async registerShopWithGoogle(body, req) {
+        const ipAddress = req.ip || req.connection.remoteAddress;
+        const userAgent = req.get('user-agent');
+        return this.authService.registerShopWithGoogle(body.googleProfile, body.shop, ipAddress, userAgent);
     }
 };
 exports.AuthController = AuthController;
@@ -88,8 +124,34 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], AuthController.prototype, "getProfile", null);
+__decorate([
+    (0, common_1.Get)('google'),
+    (0, common_1.UseGuards)(google_auth_guard_1.GoogleAuthGuard),
+    __param(0, (0, common_1.Res)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "googleAuth", null);
+__decorate([
+    (0, common_1.Get)('google/callback'),
+    (0, common_1.UseGuards)(google_auth_guard_1.GoogleAuthGuard),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Res)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "googleAuthCallback", null);
+__decorate([
+    (0, common_1.Post)('register-shop-google'),
+    __param(0, (0, common_1.Body)()),
+    __param(1, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "registerShopWithGoogle", null);
 exports.AuthController = AuthController = __decorate([
     (0, common_1.Controller)('auth'),
-    __metadata("design:paramtypes", [auth_service_1.AuthService])
+    __metadata("design:paramtypes", [auth_service_1.AuthService,
+        config_1.ConfigService])
 ], AuthController);
 //# sourceMappingURL=auth.controller.js.map
