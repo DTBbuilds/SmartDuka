@@ -13,6 +13,7 @@ export interface Product {
   categoryId?: string;
   status: 'active' | 'inactive';
   createdAt?: string;
+  lowStockThreshold?: number;
   branchInventory?: {
     [branchId: string]: {
       stock: number;
@@ -37,7 +38,8 @@ export function filterProducts(products: Product[], filterType: FilterOption): P
       return products.filter((p) => p.status === 'inactive');
 
     case 'low-stock':
-      return products.filter((p) => p.stock !== undefined && p.stock > 0 && p.stock <= 10);
+      // Use each product's lowStockThreshold or default to 10
+      return products.filter((p) => p.stock !== undefined && p.stock > 0 && p.stock <= (p.lowStockThreshold ?? 10));
 
     case 'out-of-stock':
       return products.filter((p) => !p.stock || p.stock === 0);

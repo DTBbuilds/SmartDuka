@@ -10,6 +10,7 @@ exports.AdjustmentsModule = void 0;
 const common_1 = require("@nestjs/common");
 const mongoose_1 = require("@nestjs/mongoose");
 const adjustment_schema_1 = require("./adjustment.schema");
+const product_schema_1 = require("../inventory/schemas/product.schema");
 const adjustments_service_1 = require("./adjustments.service");
 const adjustments_controller_1 = require("./adjustments.controller");
 let AdjustmentsModule = class AdjustmentsModule {
@@ -17,7 +18,12 @@ let AdjustmentsModule = class AdjustmentsModule {
 exports.AdjustmentsModule = AdjustmentsModule;
 exports.AdjustmentsModule = AdjustmentsModule = __decorate([
     (0, common_1.Module)({
-        imports: [mongoose_1.MongooseModule.forFeature([{ name: adjustment_schema_1.Adjustment.name, schema: adjustment_schema_1.AdjustmentSchema }])],
+        imports: [
+            mongoose_1.MongooseModule.forFeature([
+                { name: adjustment_schema_1.Adjustment.name, schema: adjustment_schema_1.AdjustmentSchema },
+                { name: product_schema_1.Product.name, schema: product_schema_1.ProductSchema },
+            ]),
+        ],
         providers: [adjustments_service_1.AdjustmentsService],
         controllers: [adjustments_controller_1.AdjustmentsController],
         exports: [adjustments_service_1.AdjustmentsService],

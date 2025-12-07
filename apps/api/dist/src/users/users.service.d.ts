@@ -1,9 +1,11 @@
 import { Model } from 'mongoose';
 import { User, UserDocument } from './schemas/user.schema';
 import { CreateUserDto } from './dto/create-user.dto';
+import { SubscriptionGuardService } from '../subscriptions/subscription-guard.service';
 export declare class UsersService {
     private readonly userModel;
-    constructor(userModel: Model<UserDocument>);
+    private readonly subscriptionGuard;
+    constructor(userModel: Model<UserDocument>, subscriptionGuard: SubscriptionGuardService);
     create(dto: CreateUserDto): Promise<User>;
     findByEmail(email: string): Promise<User | null>;
     findByEmailAndShop(email: string, shopId: string): Promise<User | null>;
@@ -13,7 +15,10 @@ export declare class UsersService {
     countCashiersByShop(shopId: string): Promise<number>;
     updateStatus(userId: string, status: 'active' | 'disabled'): Promise<User | null>;
     validatePassword(user: User, password: string): Promise<boolean>;
-    deleteUser(userId: string): Promise<any>;
+    deleteUser(shopId: string, userId: string): Promise<{
+        deleted: boolean;
+        message: string;
+    }>;
     findByPin(pin: string, shopId: string): Promise<User | null>;
     validatePin(user: User, pin: string): Promise<boolean>;
     updatePin(userId: string, hashedPin: string): Promise<User | null>;
@@ -37,4 +42,5 @@ export declare class UsersService {
         phone?: string;
         role?: 'admin' | 'cashier';
     }): Promise<User>;
+    countEmployeesByShop(shopId: string): Promise<number>;
 }

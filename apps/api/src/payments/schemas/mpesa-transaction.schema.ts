@@ -230,6 +230,62 @@ export class MpesaTransaction {
   @Prop({ required: false })
   lastError?: string;
 
+  /**
+   * Error category for analytics
+   */
+  @Prop({ required: false })
+  errorCategory?: string;
+
+  // ============================================
+  // POLLING & RECOVERY
+  // ============================================
+
+  /**
+   * Number of status query attempts
+   */
+  @Prop({ default: 0 })
+  queryCount: number;
+
+  /**
+   * Last status query timestamp
+   */
+  @Prop({ required: false })
+  lastQueryAt?: Date;
+
+  /**
+   * Whether transaction was recovered via status query
+   */
+  @Prop({ default: false })
+  recoveredViaQuery: boolean;
+
+  /**
+   * Whether callback was received
+   */
+  @Prop({ default: false })
+  callbackReceived: boolean;
+
+  // ============================================
+  // TIMING METRICS
+  // ============================================
+
+  /**
+   * Time from STK push to callback (milliseconds)
+   */
+  @Prop({ required: false })
+  responseTimeMs?: number;
+
+  /**
+   * Time from creation to completion (milliseconds)
+   */
+  @Prop({ required: false })
+  totalTimeMs?: number;
+
+  /**
+   * Estimated time user took to enter PIN (milliseconds)
+   */
+  @Prop({ required: false })
+  userInputTimeMs?: number;
+
   // ============================================
   // CASHIER INFO
   // ============================================

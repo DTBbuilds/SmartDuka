@@ -24,6 +24,7 @@ import {
   Boxes,
   Receipt,
   FlaskConical,
+  Crown,
 } from 'lucide-react';
 import { Button } from '@smartduka/ui';
 import { useAuth } from '@/lib/auth-context';
@@ -72,7 +73,7 @@ const adminNavSections: NavSection[] = [
   {
     title: 'Procurement',
     items: [
-      { name: 'Suppliers', href: '/suppliers', icon: Truck },
+      { name: 'Suppliers', href: '/admin/suppliers', icon: Truck },
       { name: 'Purchases', href: '/purchases', icon: ShoppingBag },
     ],
   },
@@ -90,6 +91,7 @@ const adminNavSections: NavSection[] = [
 
 // Bottom navigation items
 const bottomNavItems: NavItem[] = [
+  { name: 'Subscription', href: '/admin/subscription', icon: Crown },
   { name: 'Settings', href: '/settings', icon: Settings },
   { name: 'Help', href: '/help', icon: HelpCircle },
 ];

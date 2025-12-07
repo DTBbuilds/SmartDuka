@@ -44,6 +44,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var AuthService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthService = void 0;
 const common_1 = require("@nestjs/common");
@@ -53,21 +54,29 @@ const mongoose_2 = require("mongoose");
 const users_service_1 = require("../users/users.service");
 const shops_service_1 = require("../shops/shops.service");
 const shop_settings_service_1 = require("../shop-settings/shop-settings.service");
+const system_event_manager_service_1 = require("../notifications/system-event-manager.service");
+const subscriptions_service_1 = require("../subscriptions/subscriptions.service");
+const subscription_schema_1 = require("../subscriptions/schemas/subscription.schema");
 const bcryptjs = __importStar(require("bcryptjs"));
-let AuthService = class AuthService {
+let AuthService = AuthService_1 = class AuthService {
     usersService;
     shopsService;
     jwtService;
     shopSettingsService;
     activityService;
     superAdminModel;
-    constructor(usersService, shopsService, jwtService, shopSettingsService, activityService, superAdminModel) {
+    systemEventManager;
+    subscriptionsService;
+    logger = new common_1.Logger(AuthService_1.name);
+    constructor(usersService, shopsService, jwtService, shopSettingsService, activityService, superAdminModel, systemEventManager, subscriptionsService) {
         this.usersService = usersService;
         this.shopsService = shopsService;
         this.jwtService = jwtService;
         this.shopSettingsService = shopSettingsService;
         this.activityService = activityService;
         this.superAdminModel = superAdminModel;
+        this.systemEventManager = systemEventManager;
+        this.subscriptionsService = subscriptionsService;
     }
     async registerShop(dto) {
         const shopData = {
@@ -91,6 +100,37 @@ let AuthService = class AuthService {
         catch (err) {
             console.error('Failed to initialize shop settings:', err);
         }
+        let subscriptionPlanName = 'Free Trial';
+        let subscriptionDetails = {
+            planPrice: 0,
+            billingCycle: 'month',
+            maxShops: 1,
+            maxEmployees: 3,
+            maxProducts: 100,
+        };
+        if (this.subscriptionsService && dto.shop.subscriptionPlanCode) {
+            try {
+                const billingCycle = dto.shop.billingCycle === 'annual' ? subscription_schema_1.BillingCycle.ANNUAL : subscription_schema_1.BillingCycle.MONTHLY;
+                const subscription = await this.subscriptionsService.createSubscription(shop._id.toString(), {
+                    planCode: dto.shop.subscriptionPlanCode,
+                    billingCycle,
+                });
+                subscriptionPlanName = subscription?.planName || dto.shop.subscriptionPlanCode;
+                if (subscription) {
+                    subscriptionDetails = {
+                        planPrice: subscription.currentPrice || 0,
+                        billingCycle: billingCycle === subscription_schema_1.BillingCycle.ANNUAL ? 'year' : 'month',
+                        maxShops: subscription.usage?.shops?.limit || 1,
+                        maxEmployees: subscription.usage?.employees?.limit || 3,
+                        maxProducts: subscription.usage?.products?.limit || 100,
+                    };
+                }
+                this.logger.log(`Subscription created for shop ${shop.name}: ${subscriptionPlanName}`);
+            }
+            catch (err) {
+                this.logger.error('Failed to create subscription:', err);
+            }
+        }
         const user = await this.usersService.create({
             shopId: shop._id.toString(),
             email: dto.admin.email,
@@ -106,6 +146,32 @@ let AuthService = class AuthService {
             role: user.role,
             shopId: shop._id,
         });
+        if (this.systemEventManager) {
+            try {
+                await this.systemEventManager.queueEvent({
+                    type: 'welcome',
+                    shop: {
+                        shopId: shop._id.toString(),
+                        shopName: shop.name,
+                        shopEmail: shop.email,
+                    },
+                    user: {
+                        userId: user._id.toString(),
+                        userName: dto.admin.name,
+                        userEmail: dto.admin.email,
+                    },
+                    data: {
+                        planName: subscriptionPlanName,
+                        trialDays: 14,
+                        ...subscriptionDetails,
+                    },
+                });
+                this.logger.log(`Welcome email queued for ${dto.admin.email}`);
+            }
+            catch (err) {
+                this.logger.error('Failed to queue welcome email:', err);
+            }
+        }
         return {
             shop: {
                 id: shop._id,
@@ -404,14 +470,18 @@ let AuthService = class AuthService {
     }
 };
 exports.AuthService = AuthService;
-exports.AuthService = AuthService = __decorate([
+exports.AuthService = AuthService = AuthService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(4, (0, common_1.Optional)()),
     __param(4, (0, common_1.Inject)('ActivityService')),
     __param(5, (0, mongoose_1.InjectModel)('SuperAdmin')),
+    __param(6, (0, common_1.Optional)()),
+    __param(7, (0, common_1.Optional)()),
     __metadata("design:paramtypes", [users_service_1.UsersService,
         shops_service_1.ShopsService,
         jwt_1.JwtService,
-        shop_settings_service_1.ShopSettingsService, Object, mongoose_2.Model])
+        shop_settings_service_1.ShopSettingsService, Object, mongoose_2.Model,
+        system_event_manager_service_1.SystemEventManagerService,
+        subscriptions_service_1.SubscriptionsService])
 ], AuthService);
 //# sourceMappingURL=auth.service.js.map

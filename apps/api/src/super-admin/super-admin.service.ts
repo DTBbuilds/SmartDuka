@@ -1,8 +1,9 @@
-import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, NotFoundException, Optional } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Shop, ShopDocument } from '../shops/schemas/shop.schema';
 import { ShopAuditLogService } from '../shops/services/shop-audit-log.service';
+import { EmailService } from '../notifications/email.service';
 
 @Injectable()
 export class SuperAdminService {
@@ -11,6 +12,7 @@ export class SuperAdminService {
   constructor(
     @InjectModel(Shop.name) private readonly shopModel: Model<ShopDocument>,
     private readonly auditLogService: ShopAuditLogService,
+    @Optional() private readonly emailService?: EmailService,
   ) {}
 
   /**
@@ -164,6 +166,32 @@ export class SuperAdminService {
     if (!updatedShop) {
       throw new NotFoundException('Shop not found after update');
     }
+
+    // Send verification email to shop owner
+    if (this.emailService && updatedShop.email) {
+      try {
+        await this.emailService.sendTemplateEmail({
+          to: updatedShop.email,
+          templateName: 'shop_verified',
+          variables: {
+            shopName: updatedShop.name,
+            verificationDate: new Date().toLocaleDateString('en-KE', {
+              weekday: 'long',
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+            }),
+            loginUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/login`,
+            dashboardUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/admin`,
+          },
+        });
+        this.logger.log(`Verification email sent to ${updatedShop.email}`);
+      } catch (err) {
+        this.logger.error(`Failed to send verification email: ${err}`);
+        // Don't fail the verification if email fails
+      }
+    }
+
     return updatedShop;
   }
 
@@ -212,6 +240,25 @@ export class SuperAdminService {
     if (!updatedShop) {
       throw new NotFoundException('Shop not found after update');
     }
+
+    // Send rejection email to shop owner
+    if (this.emailService && updatedShop.email) {
+      try {
+        await this.emailService.sendTemplateEmail({
+          to: updatedShop.email,
+          templateName: 'shop_rejected',
+          variables: {
+            shopName: updatedShop.name,
+            rejectionReason: reason,
+            supportEmail: 'smartdukainfo@gmail.com',
+          },
+        });
+        this.logger.log(`Rejection email sent to ${updatedShop.email}`);
+      } catch (err) {
+        this.logger.error(`Failed to send rejection email: ${err}`);
+      }
+    }
+
     return updatedShop;
   }
 
@@ -260,6 +307,25 @@ export class SuperAdminService {
     if (!updatedShop) {
       throw new NotFoundException('Shop not found after update');
     }
+
+    // Send suspension email to shop owner
+    if (this.emailService && updatedShop.email) {
+      try {
+        await this.emailService.sendTemplateEmail({
+          to: updatedShop.email,
+          templateName: 'shop_suspended',
+          variables: {
+            shopName: updatedShop.name,
+            suspensionReason: reason,
+            supportEmail: 'smartdukainfo@gmail.com',
+          },
+        });
+        this.logger.log(`Suspension email sent to ${updatedShop.email}`);
+      } catch (err) {
+        this.logger.error(`Failed to send suspension email: ${err}`);
+      }
+    }
+
     return updatedShop;
   }
 

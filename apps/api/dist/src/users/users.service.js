@@ -51,12 +51,19 @@ const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const bcrypt = __importStar(require("bcryptjs"));
 const user_schema_1 = require("./schemas/user.schema");
+const subscription_guard_service_1 = require("../subscriptions/subscription-guard.service");
 let UsersService = class UsersService {
     userModel;
-    constructor(userModel) {
+    subscriptionGuard;
+    constructor(userModel, subscriptionGuard) {
         this.userModel = userModel;
+        this.subscriptionGuard = subscriptionGuard;
     }
     async create(dto) {
+        const isEmployee = dto.role !== 'admin';
+        if (isEmployee) {
+            await this.subscriptionGuard.enforceLimit(dto.shopId, 'employees');
+        }
         const { password, ...rest } = dto;
         const passwordHash = await bcrypt.hash(password, 10);
         const userData = {
@@ -66,7 +73,11 @@ let UsersService = class UsersService {
             phone: rest.phone && rest.phone.trim() ? rest.phone : null
         };
         const created = new this.userModel(userData);
-        return created.save();
+        const user = await created.save();
+        if (isEmployee) {
+            await this.subscriptionGuard.incrementUsage(dto.shopId, 'employees');
+        }
+        return user;
     }
     async findByEmail(email) {
         return this.userModel.findOne({ email }).exec();
@@ -101,8 +112,20 @@ let UsersService = class UsersService {
     async validatePassword(user, password) {
         return bcrypt.compare(password, user.passwordHash);
     }
-    async deleteUser(userId) {
-        return this.userModel.findByIdAndDelete(userId).exec();
+    async deleteUser(shopId, userId) {
+        const user = await this.userModel.findOne({
+            _id: new mongoose_2.Types.ObjectId(userId),
+            shopId: new mongoose_2.Types.ObjectId(shopId),
+        });
+        if (!user) {
+            throw new common_1.NotFoundException('User not found');
+        }
+        if (user.role === 'admin') {
+            throw new common_1.BadRequestException('Cannot delete admin users. Disable them instead.');
+        }
+        await this.userModel.deleteOne({ _id: new mongoose_2.Types.ObjectId(userId) });
+        await this.subscriptionGuard.decrementUsage(shopId, 'employees');
+        return { deleted: true, message: 'User deleted successfully' };
     }
     async findByPin(pin, shopId) {
         const users = await this.userModel.find({
@@ -168,7 +191,7 @@ let UsersService = class UsersService {
         const uniqueEmail = createCashierDto.email || `cashier-${cashierId}-${shortShopId}@shop.local`;
         const existingUser = await this.userModel.findOne({ email: uniqueEmail });
         if (existingUser) {
-            throw new Error(`A user with this email already exists. Please use a different email.`);
+            throw new common_1.ConflictException(`A user with this email already exists. Please use a different email.`);
         }
         const user = new this.userModel({
             shopId: new mongoose_2.Types.ObjectId(shopId),
@@ -186,7 +209,7 @@ let UsersService = class UsersService {
         }
         catch (err) {
             if (err.code === 11000) {
-                throw new Error('A cashier with this ID already exists. Please try again.');
+                throw new common_1.ConflictException('A cashier with this ID already exists. Please try again.');
             }
             throw err;
         }
@@ -253,11 +276,19 @@ let UsersService = class UsersService {
         });
         return user.save();
     }
+    async countEmployeesByShop(shopId) {
+        return this.userModel.countDocuments({
+            shopId: new mongoose_2.Types.ObjectId(shopId),
+            role: { $ne: 'admin' },
+        }).exec();
+    }
 };
 exports.UsersService = UsersService;
 exports.UsersService = UsersService = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)(user_schema_1.User.name)),
-    __metadata("design:paramtypes", [mongoose_2.Model])
+    __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => subscription_guard_service_1.SubscriptionGuardService))),
+    __metadata("design:paramtypes", [mongoose_2.Model,
+        subscription_guard_service_1.SubscriptionGuardService])
 ], UsersService);
 //# sourceMappingURL=users.service.js.map

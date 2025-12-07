@@ -29,7 +29,7 @@ let UsersController = class UsersController {
     }
     async create(dto, user) {
         if (dto.shopId !== user.shopId) {
-            throw new Error('Unauthorized');
+            throw new common_1.ForbiddenException('You are not allowed to create users for this shop');
         }
         const createdUser = await this.usersService.create(dto);
         const { passwordHash, ...safe } = createdUser.toObject();
@@ -56,7 +56,7 @@ let UsersController = class UsersController {
     }
     async getCashiersByShop(shopId, user) {
         if (user.shopId !== shopId) {
-            throw new Error('Unauthorized');
+            throw new common_1.ForbiddenException('You are not allowed to access this shop');
         }
         const cashiers = await this.usersService.findCashiersByShop(shopId);
         return cashiers.map((c) => {
@@ -67,7 +67,7 @@ let UsersController = class UsersController {
     async updateUser(id, dto, user) {
         const targetUser = await this.usersService.findById(id);
         if (!targetUser || targetUser.shopId.toString() !== user.shopId) {
-            throw new Error('Unauthorized');
+            throw new common_1.ForbiddenException('You are not allowed to update users from this shop');
         }
         const updated = await this.usersService.updateStatus(id, dto.status);
         if (!updated)
@@ -76,14 +76,7 @@ let UsersController = class UsersController {
         return safe;
     }
     async deleteUser(id, user) {
-        const targetUser = await this.usersService.findById(id);
-        if (!targetUser || targetUser.shopId.toString() !== user.shopId) {
-            throw new Error('Unauthorized');
-        }
-        if (targetUser.role === 'admin') {
-            throw new Error('Cannot delete admin users');
-        }
-        return this.usersService.deleteUser(id);
+        return this.usersService.deleteUser(user.shopId, id);
     }
     async createCashier(dto, user) {
         const { user: createdUser, pin } = await this.usersService.createCashierWithPin(user.shopId, dto);

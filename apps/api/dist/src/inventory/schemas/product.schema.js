@@ -49,11 +49,11 @@ __decorate([
     __metadata("design:type", String)
 ], Product.prototype, "name", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ required: false, unique: true, sparse: true, trim: true }),
+    (0, mongoose_1.Prop)({ required: false, trim: true }),
     __metadata("design:type", String)
 ], Product.prototype, "sku", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ required: false, unique: true, sparse: true, trim: true }),
+    (0, mongoose_1.Prop)({ required: false, trim: true }),
     __metadata("design:type", String)
 ], Product.prototype, "barcode", void 0);
 __decorate([
@@ -145,8 +145,8 @@ exports.Product = Product = __decorate([
 ], Product);
 exports.ProductSchema = mongoose_1.SchemaFactory.createForClass(Product);
 exports.ProductSchema.index({ shopId: 1, name: 1 });
-exports.ProductSchema.index({ shopId: 1, barcode: 1 });
-exports.ProductSchema.index({ shopId: 1, sku: 1 });
+exports.ProductSchema.index({ shopId: 1, barcode: 1 }, { unique: true, sparse: true });
+exports.ProductSchema.index({ shopId: 1, sku: 1 }, { unique: true, sparse: true });
 exports.ProductSchema.index({ shopId: 1, status: 1 });
 exports.ProductSchema.index({ shopId: 1, expiryDate: 1 });
 exports.ProductSchema.index({ shopId: 1, stock: 1 });

@@ -3,7 +3,7 @@
 import { SuperAdminGuard } from '@/components/super-admin-guard';
 import { useAuth } from '@/lib/auth-context';
 import { useRouter } from 'next/navigation';
-import { LayoutDashboard, ShoppingBag, MessageSquare, LogOut, Menu } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, MessageSquare, LogOut, Menu, Crown } from 'lucide-react';
 import { useState } from 'react';
 
 export default function SuperAdminLayout({
@@ -62,6 +62,13 @@ export default function SuperAdminLayout({
               href="/super-admin/support"
               open={sidebarOpen}
               onClick={() => router.push('/super-admin/support')}
+            />
+            <NavItem
+              icon={<Crown className="h-5 w-5" />}
+              label="Subscriptions"
+              href="/super-admin/subscriptions"
+              open={sidebarOpen}
+              onClick={() => router.push('/super-admin/subscriptions')}
             />
           </nav>
 

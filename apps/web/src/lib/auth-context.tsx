@@ -45,6 +45,8 @@ type AuthContextType = {
   isAdmin: () => boolean;
   isCashier: () => boolean;
   isSuperAdmin: () => boolean;
+  refreshShop: () => Promise<Shop | null>;
+  updateShop: (shopData: Partial<Shop>) => void;
 };
 
 export type GoogleProfile = {
@@ -321,6 +323,61 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const isAuthenticated = !!user && !!token;
 
+  /**
+   * Refresh shop data from the server
+   * Useful after verification, subscription changes, etc.
+   */
+  const refreshShop = async (): Promise<Shop | null> => {
+    if (!token || !shop?.id) return null;
+    
+    try {
+      const res = await fetch(`${config.apiUrl}/shops/${shop.id}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (res.ok) {
+        const updatedShop = await res.json();
+        const newShop: Shop = {
+          id: updatedShop._id || updatedShop.id,
+          name: updatedShop.name,
+          status: updatedShop.status,
+          email: updatedShop.email,
+          rejectionReason: updatedShop.rejectionReason,
+        };
+        
+        setShop(newShop);
+        window.localStorage.setItem('smartduka:shop', JSON.stringify(newShop));
+        
+        // Exit demo mode if shop is now active
+        if (newShop.status === 'active' && isDemoMode) {
+          setIsDemoMode(false);
+          window.localStorage.removeItem(DEMO_MODE_KEY);
+        }
+        
+        return newShop;
+      }
+      return null;
+    } catch (err) {
+      console.error('Failed to refresh shop:', err);
+      return null;
+    }
+  };
+
+  /**
+   * Update shop data locally (for optimistic updates)
+   */
+  const updateShop = (shopData: Partial<Shop>) => {
+    if (!shop) return;
+    
+    const updatedShop = { ...shop, ...shopData };
+    setShop(updatedShop);
+    window.localStorage.setItem('smartduka:shop', JSON.stringify(updatedShop));
+  };
+
   return (
     <AuthContext.Provider value={{ 
       user, 
@@ -341,7 +398,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       hasRole,
       isAdmin,
       isCashier,
-      isSuperAdmin
+      isSuperAdmin,
+      refreshShop,
+      updateShop,
     }}>
       {children}
     </AuthContext.Provider>

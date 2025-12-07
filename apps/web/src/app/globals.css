@@ -95,4 +95,18 @@
       background-position: -200% 0;
     }
   }
+
+  /* Hide scrollbar utility */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Smooth scroll for touch devices */
+  .scroll-smooth {
+    -webkit-overflow-scrolling: touch;
+  }
 }

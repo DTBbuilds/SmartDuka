@@ -15,13 +15,14 @@
     "ngrok:watch": "node scripts/ngrok-watcher.js"
   },
   "devDependencies": {
+    "baseline-browser-mapping": "^2.9.4",
     "turbo": "^2.1.4"
   },
   "workspaces": [
     "apps/*",
     "packages/*"
   ],
-  "packageManager": "pnpm@10.23.0",
+  "packageManager": "pnpm@10.24.0",
   "dependencies": {
     "@radix-ui/react-checkbox": "^1.3.3",
     "@radix-ui/react-dialog": "^1.1.15",

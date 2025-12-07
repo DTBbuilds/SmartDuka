@@ -290,6 +290,7 @@ export class MpesaService {
    * 2. Validate callback (signature verification)
    * 3. Update transaction status based on result
    * 4. Create payment transaction record if successful
+   * 5. Calculate timing metrics for analytics
    *
    * @param payload - Callback payload from M-Pesa
    * @returns Acknowledgment response
@@ -305,6 +306,8 @@ export class MpesaService {
       ResultDesc,
       CallbackMetadata,
     } = stkCallback;
+
+    const callbackReceivedAt = new Date();
 
     this.logger.log(
       `Processing M-Pesa callback for checkoutRequestId: ${CheckoutRequestID}, resultCode: ${ResultCode}`,
@@ -334,11 +337,25 @@ export class MpesaService {
       return { ResultCode: 0, ResultDesc: 'Already processed' };
     }
 
-    // STEP 3: Store callback payload for audit
+    // STEP 3: Store callback payload and calculate timing metrics
     transaction.callbackPayload = payload;
-    transaction.callbackReceivedAt = new Date();
+    transaction.callbackReceivedAt = callbackReceivedAt;
+    transaction.callbackReceived = true;
     transaction.mpesaResultCode = ResultCode;
     transaction.mpesaResultDesc = ResultDesc;
+
+    // Calculate timing metrics
+    if (transaction.stkPushSentAt) {
+      transaction.responseTimeMs = callbackReceivedAt.getTime() - transaction.stkPushSentAt.getTime();
+      
+      // Estimate user input time (response time minus ~5s for M-Pesa processing)
+      const estimatedProcessingTime = 5000; // 5 seconds for M-Pesa internal processing
+      transaction.userInputTimeMs = Math.max(0, transaction.responseTimeMs - estimatedProcessingTime);
+    }
+
+    if (transaction.createdAt) {
+      transaction.totalTimeMs = callbackReceivedAt.getTime() - transaction.createdAt.getTime();
+    }
 
     // STEP 4: Process based on result code
     if (ResultCode === 0) {
@@ -348,12 +365,12 @@ export class MpesaService {
       transaction.previousStatus = transaction.status;
       transaction.status = MpesaTransactionStatus.COMPLETED;
       transaction.mpesaReceiptNumber = metadata.mpesaReceiptNumber;
-      transaction.completedAt = new Date();
+      transaction.completedAt = callbackReceivedAt;
 
       await transaction.save();
 
       this.logger.log(
-        `M-Pesa payment successful for transaction ${transaction._id}, receipt: ${metadata.mpesaReceiptNumber}`,
+        `M-Pesa payment successful for transaction ${transaction._id}, receipt: ${metadata.mpesaReceiptNumber}, responseTime: ${transaction.responseTimeMs}ms`,
       );
 
       // STEP 5: Create payment transaction record
@@ -388,19 +405,45 @@ export class MpesaService {
       // TODO: Update order payment status
       // TODO: Emit WebSocket event for real-time UI update
     } else {
-      // FAILURE
+      // FAILURE - Categorize the error
       transaction.previousStatus = transaction.status;
       transaction.status = MpesaTransactionStatus.FAILED;
       transaction.lastError = getMpesaErrorMessage(ResultCode);
+      
+      // Categorize error for analytics
+      const errorCategory = this.categorizeError(ResultCode);
+      transaction.errorCategory = errorCategory;
 
       await transaction.save();
 
       this.logger.warn(
-        `M-Pesa payment failed for transaction ${transaction._id}: ${ResultDesc}`,
+        `M-Pesa payment failed for transaction ${transaction._id}: ${ResultDesc} (category: ${errorCategory})`,
       );
     }
 
     return { ResultCode: 0, ResultDesc: 'Callback processed successfully' };
+  }
+
+  /**
+   * Categorize M-Pesa error codes for analytics
+   */
+  private categorizeError(resultCode: number): string {
+    const categories: Record<number, string> = {
+      1: 'insufficient_funds',
+      2: 'invalid_amount',
+      3: 'invalid_amount',
+      4: 'limit_exceeded',
+      5: 'invalid_amount',
+      6: 'invalid_account',
+      7: 'invalid_phone',
+      8: 'invalid_phone',
+      9: 'duplicate_request',
+      17: 'system_busy',
+      1032: 'user_cancelled',
+      1037: 'timeout',
+      2001: 'wrong_pin',
+    };
+    return categories[resultCode] || 'unknown';
   }
 
   /**
@@ -668,6 +711,188 @@ export class MpesaService {
         `Failed to query M-Pesa status for ${transactionId}: ${error.message}`,
       );
     }
+  }
+
+  // ============================================
+  // FAILED & EXPIRED TRANSACTIONS
+  // ============================================
+
+  /**
+   * GET FAILED TRANSACTIONS
+   * 
+   * Returns all failed M-Pesa transactions for a shop
+   */
+  async getFailedTransactions(
+    shopId: string,
+    options: {
+      limit?: number;
+      skip?: number;
+      startDate?: Date;
+      endDate?: Date;
+    } = {},
+  ): Promise<MpesaTransactionDocument[]> {
+    const { limit = 50, skip = 0, startDate, endDate } = options;
+
+    const query: any = {
+      shopId: new Types.ObjectId(shopId),
+      status: MpesaTransactionStatus.FAILED,
+    };
+
+    if (startDate || endDate) {
+      query.createdAt = {};
+      if (startDate) query.createdAt.$gte = startDate;
+      if (endDate) query.createdAt.$lte = endDate;
+    }
+
+    return this.mpesaTransactionModel
+      .find(query)
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .skip(skip)
+      .exec();
+  }
+
+  /**
+   * GET EXPIRED TRANSACTIONS
+   * 
+   * Returns all expired M-Pesa transactions for a shop
+   */
+  async getExpiredTransactions(
+    shopId: string,
+    limit = 50,
+    skip = 0,
+  ): Promise<MpesaTransactionDocument[]> {
+    return this.mpesaTransactionModel
+      .find({
+        shopId: new Types.ObjectId(shopId),
+        status: MpesaTransactionStatus.EXPIRED,
+      })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .skip(skip)
+      .exec();
+  }
+
+  /**
+   * GET TRANSACTION STATISTICS
+   * 
+   * Returns aggregated statistics for M-Pesa transactions
+   */
+  async getTransactionStats(
+    shopId: string,
+    startDate?: Date,
+    endDate?: Date,
+  ): Promise<{
+    total: number;
+    completed: number;
+    failed: number;
+    expired: number;
+    pending: number;
+    totalAmount: number;
+    completedAmount: number;
+    successRate: number;
+    averageAmount: number;
+    byStatus: Record<string, { count: number; amount: number }>;
+    byDay?: Array<{ date: string; count: number; amount: number }>;
+  }> {
+    const matchStage: any = {
+      shopId: new Types.ObjectId(shopId),
+    };
+
+    if (startDate || endDate) {
+      matchStage.createdAt = {};
+      if (startDate) matchStage.createdAt.$gte = startDate;
+      if (endDate) matchStage.createdAt.$lte = endDate;
+    }
+
+    // Aggregate by status
+    const statusStats = await this.mpesaTransactionModel.aggregate([
+      { $match: matchStage },
+      {
+        $group: {
+          _id: '$status',
+          count: { $sum: 1 },
+          amount: { $sum: '$amount' },
+        },
+      },
+    ]);
+
+    // Aggregate by day (last 30 days)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const dailyStats = await this.mpesaTransactionModel.aggregate([
+      {
+        $match: {
+          ...matchStage,
+          createdAt: { $gte: thirtyDaysAgo },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            $dateToString: { format: '%Y-%m-%d', date: '$createdAt' },
+          },
+          count: { $sum: 1 },
+          amount: { $sum: '$amount' },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]);
+
+    // Calculate totals
+    const result = {
+      total: 0,
+      completed: 0,
+      failed: 0,
+      expired: 0,
+      pending: 0,
+      totalAmount: 0,
+      completedAmount: 0,
+      successRate: 0,
+      averageAmount: 0,
+      byStatus: {} as Record<string, { count: number; amount: number }>,
+      byDay: dailyStats.map((d) => ({
+        date: d._id,
+        count: d.count,
+        amount: d.amount,
+      })),
+    };
+
+    for (const stat of statusStats) {
+      result.total += stat.count;
+      result.totalAmount += stat.amount;
+      result.byStatus[stat._id] = { count: stat.count, amount: stat.amount };
+
+      switch (stat._id) {
+        case MpesaTransactionStatus.COMPLETED:
+          result.completed = stat.count;
+          result.completedAmount = stat.amount;
+          break;
+        case MpesaTransactionStatus.FAILED:
+          result.failed = stat.count;
+          break;
+        case MpesaTransactionStatus.EXPIRED:
+          result.expired = stat.count;
+          break;
+        case MpesaTransactionStatus.PENDING:
+        case MpesaTransactionStatus.CREATED:
+          result.pending += stat.count;
+          break;
+      }
+    }
+
+    // Calculate rates
+    const completedOrFailed = result.completed + result.failed;
+    if (completedOrFailed > 0) {
+      result.successRate = Math.round((result.completed / completedOrFailed) * 100);
+    }
+
+    if (result.total > 0) {
+      result.averageAmount = Math.round(result.totalAmount / result.total);
+    }
+
+    return result;
   }
 
   // ============================================

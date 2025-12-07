@@ -3,59 +3,17 @@
 > next dev -p 3000
 
 [baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
- ⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
- We detected multiple lockfiles and selected the directory of E:\BUILds\package-lock.json as the root directory.
- To silence this warning, set `turbopack.root` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
-   See https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory for more information.
- Detected additional lockfiles: 
-   * E:\BUILds\SmartDuka\apps\web\pnpm-lock.yaml
-   * E:\BUILds\SmartDuka\pnpm-lock.yaml
-
    ▲ Next.js 16.0.1 (Turbopack)
    - Local:        http://localhost:3000
-   - Network:      http://192.168.100.32:3000
+   - Network:      http://192.168.9.101:3000
    - Environments: .env.local
 
  ✓ Starting...
- ⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
- ✓ Ready in 4.7s
- ○ Compiling / ...
- GET /admin 200 in 19.5s (compile: 15.0s, proxy.ts: 25ms, render: 4.5s)
- GET /admin 200 in 19.5s (compile: 16.3s, proxy.ts: 33ms, render: 3.2s)
- GET / 200 in 25.4s (compile: 22.4s, proxy.ts: 227ms, render: 2.8s)
- GET /admin 200 in 212ms (compile: 10ms, proxy.ts: 15ms, render: 187ms)
- GET /login 200 in 1340ms (compile: 1149ms, proxy.ts: 12ms, render: 179ms)
- GET /login 200 in 1329ms (compile: 1265ms, proxy.ts: 11ms, render: 54ms)
- GET /auth/callback?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2OTJhOTY4MDlmNDVjMmVkNTIzOTEyNTMiLCJlbWFpbCI6ImRvbnRlY2gxOTE0QGdtYWlsLmNvbSIsIm5hbWUiOiJEb250ZWNoIiwicm9sZSI6ImFkbWluIiwic2hvcElkIjoiNjkyYTk2ODA5ZjQ1YzJlZDUyMzkxMjUxIiwiaWF0IjoxNzY0NTc5MDc1LCJleHAiOjE3NjUxODM4NzV9.ZmiqyQatiUjek61Z9FbQQyCMAzDMG064wqTr38ycH64 200 in 1310ms (compile: 1096ms, proxy.ts: 14ms, render: 199ms)
- GET / 200 in 112ms (compile: 8ms, proxy.ts: 9ms, render: 95ms)
- GET /admin 200 in 348ms (compile: 26ms, proxy.ts: 17ms, render: 305ms)
- GET /admin 200 in 210ms (compile: 35ms, proxy.ts: 20ms, render: 156ms)
- GET / 200 in 79ms (compile: 12ms, proxy.ts: 12ms, render: 54ms)
- GET /admin 200 in 200ms (compile: 29ms, proxy.ts: 11ms, render: 161ms)
- GET /admin 200 in 190ms (compile: 88ms, proxy.ts: 10ms, render: 92ms)
- ○ Compiling /pos ...
- GET /pos 200 in 3.5s (compile: 3.3s, proxy.ts: 9ms, render: 219ms)
- GET /pos 200 in 2.5s (compile: 2.4s, proxy.ts: 12ms, render: 65ms)
- GET /admin 200 in 77ms (compile: 13ms, proxy.ts: 12ms, render: 52ms)
- GET /login 200 in 60ms (compile: 8ms, proxy.ts: 6ms, render: 46ms)
- GET /login 200 in 120ms (compile: 8ms, proxy.ts: 8ms, render: 103ms)
- GET / 200 in 53ms (compile: 8ms, proxy.ts: 7ms, render: 37ms)
- GET /admin 200 in 144ms (compile: 20ms, proxy.ts: 10ms, render: 114ms)
- GET /admin 200 in 135ms (compile: 69ms, proxy.ts: 9ms, render: 58ms)
- GET /stock/adjustments 200 in 1191ms (compile: 1045ms, proxy.ts: 7ms, render: 139ms)
- GET /stock/adjustments 200 in 274ms (compile: 213ms, proxy.ts: 8ms, render: 54ms)
- GET / 200 in 57ms (compile: 7ms, proxy.ts: 11ms, render: 38ms)
- GET /admin 200 in 157ms (compile: 22ms, proxy.ts: 11ms, render: 125ms)
- GET /admin 200 in 150ms (compile: 79ms, proxy.ts: 8ms, render: 64ms)
- GET /admin/analytics/inventory 200 in 1226ms (compile: 984ms, proxy.ts: 9ms, render: 233ms)
- GET /admin/analytics/inventory 200 in 103ms (compile: 12ms, proxy.ts: 8ms, render: 82ms)
- GET /admin/analytics/payments 200 in 1238ms (compile: 987ms, proxy.ts: 6ms, render: 245ms)
- GET /admin/analytics/payments 200 in 167ms (compile: 16ms, proxy.ts: 19ms, render: 131ms)
- GET /pos 200 in 77ms (compile: 13ms, proxy.ts: 13ms, render: 52ms)
- GET / 200 in 92ms (compile: 14ms, proxy.ts: 10ms, render: 68ms)
- GET /admin 200 in 230ms (compile: 32ms, proxy.ts: 7ms, render: 191ms)
- GET /admin 200 in 229ms (compile: 110ms, proxy.ts: 11ms, render: 108ms)
- GET /payments 200 in 1384ms (compile: 1157ms, proxy.ts: 9ms, render: 217ms)
- GET /admin/analytics/inventory 200 in 121ms (compile: 12ms, proxy.ts: 11ms, render: 98ms)
- GET /pos 200 in 99ms (compile: 12ms, proxy.ts: 11ms, render: 76ms)
-Terminate batch job (Y/N)?  ELIFECYCLE  Command failed with exit code 3221225786.
+ ✓ Ready in 3s
+ ○ Compiling /payments ...
+ GET /payments 200 in 8.9s (compile: 7.8s, proxy.ts: 286ms, render: 805ms)
+ GET /customers 200 in 627ms (compile: 569ms, proxy.ts: 6ms, render: 52ms)
+ GET /settings 200 in 546ms (compile: 489ms, proxy.ts: 4ms, render: 53ms)
+ GET /settings 200 in 81ms (compile: 3ms, proxy.ts: 5ms, render: 73ms)
+ GET /stock/adjustments 200 in 402ms (compile: 363ms, proxy.ts: 5ms, render: 34ms)
+ GET /admin 200 in 602ms (compile: 531ms, proxy.ts: 5ms, render: 66ms)

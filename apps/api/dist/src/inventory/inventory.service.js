@@ -22,21 +22,42 @@ const category_schema_1 = require("./schemas/category.schema");
 const stock_adjustment_schema_1 = require("./schemas/stock-adjustment.schema");
 const stock_reconciliation_schema_1 = require("./schemas/stock-reconciliation.schema");
 const category_suggestion_service_1 = require("./services/category-suggestion.service");
+const subscription_guard_service_1 = require("../subscriptions/subscription-guard.service");
 let InventoryService = InventoryService_1 = class InventoryService {
     productModel;
     categoryModel;
     adjustmentModel;
     reconciliationModel;
     categorySuggestionService;
+    subscriptionGuard;
     logger = new common_1.Logger(InventoryService_1.name);
-    constructor(productModel, categoryModel, adjustmentModel, reconciliationModel, categorySuggestionService) {
+    constructor(productModel, categoryModel, adjustmentModel, reconciliationModel, categorySuggestionService, subscriptionGuard) {
         this.productModel = productModel;
         this.categoryModel = categoryModel;
         this.adjustmentModel = adjustmentModel;
         this.reconciliationModel = reconciliationModel;
         this.categorySuggestionService = categorySuggestionService;
+        this.subscriptionGuard = subscriptionGuard;
+    }
+    async onModuleInit() {
+        try {
+            const collection = this.productModel.collection;
+            const indexes = await collection.indexes();
+            for (const index of indexes) {
+                if (index.name === 'sku_1' || index.name === 'barcode_1') {
+                    this.logger.log(`Dropping legacy index: ${index.name}`);
+                    await collection.dropIndex(index.name);
+                }
+            }
+        }
+        catch (err) {
+            if (!err.message?.includes('index not found')) {
+                this.logger.warn(`Index migration warning: ${err.message}`);
+            }
+        }
     }
     async createProduct(shopId, dto) {
+        await this.subscriptionGuard.enforceLimit(shopId, 'products');
         const created = new this.productModel({
             shopId: new mongoose_2.Types.ObjectId(shopId),
             name: dto.name,
@@ -49,7 +70,9 @@ let InventoryService = InventoryService_1 = class InventoryService {
             tax: dto.tax ?? 0,
             status: dto.status ?? 'active',
         });
-        return created.save();
+        const product = await created.save();
+        await this.subscriptionGuard.incrementUsage(shopId, 'products');
+        return product;
     }
     async getProductById(shopId, productId) {
         return this.productModel
@@ -104,6 +127,7 @@ let InventoryService = InventoryService_1 = class InventoryService {
             throw new common_1.NotFoundException('Product not found');
         }
         await this.productModel.deleteOne({ _id: new mongoose_2.Types.ObjectId(productId) });
+        await this.subscriptionGuard.decrementUsage(shopId, 'products');
         return { deleted: true, message: 'Product deleted successfully' };
     }
     async listProducts(shopId, q) {
@@ -346,19 +370,24 @@ let InventoryService = InventoryService_1 = class InventoryService {
             .findOneAndUpdate({ _id: new mongoose_2.Types.ObjectId(productId), shopId: new mongoose_2.Types.ObjectId(shopId) }, { $inc: { stock: quantityChange } }, { new: true })
             .exec();
     }
-    async getLowStockProducts(shopId, threshold = 10) {
+    async getLowStockProducts(shopId, defaultThreshold = 10) {
         return this.productModel
             .find({
             shopId: new mongoose_2.Types.ObjectId(shopId),
-            stock: { $lte: threshold },
             status: 'active',
+            $expr: {
+                $lte: [
+                    '$stock',
+                    { $ifNull: ['$lowStockThreshold', defaultThreshold] }
+                ]
+            }
         })
             .sort({ stock: 1 })
             .exec();
     }
     async importProducts(shopId, products, options = {}) {
         const startTime = Date.now();
-        const { autoCreateCategories = true, autoSuggestCategories = true, updateExisting = false, skipDuplicates = true, } = options;
+        const { autoCreateCategories = true, autoSuggestCategories = true, updateExisting = false, skipDuplicates = true, targetCategoryId, } = options;
         const errors = [];
         let imported = 0;
         let updated = 0;
@@ -366,6 +395,25 @@ let InventoryService = InventoryService_1 = class InventoryService {
         const categoriesCreated = [];
         const categorySuggestions = {};
         const shopObjId = new mongoose_2.Types.ObjectId(shopId);
+        let targetCategory;
+        if (targetCategoryId) {
+            try {
+                const categoryExists = await this.categoryModel.findOne({
+                    _id: new mongoose_2.Types.ObjectId(targetCategoryId),
+                    shopId: shopObjId,
+                });
+                if (categoryExists) {
+                    targetCategory = categoryExists._id;
+                    this.logger.log(`Importing all products to category: ${categoryExists.name}`);
+                }
+                else {
+                    errors.push(`Target category not found: ${targetCategoryId}`);
+                }
+            }
+            catch (err) {
+                errors.push(`Invalid target category ID: ${targetCategoryId}`);
+            }
+        }
         const categoryNameToId = new Map();
         const existingCategories = await this.categoryModel.find({ shopId: shopObjId }).lean().exec();
         existingCategories.forEach(cat => {
@@ -446,7 +494,10 @@ let InventoryService = InventoryService_1 = class InventoryService {
                 continue;
             }
             let categoryId = undefined;
-            if (dto.categoryId) {
+            if (targetCategory) {
+                categoryId = targetCategory;
+            }
+            else if (dto.categoryId) {
                 try {
                     categoryId = new mongoose_2.Types.ObjectId(dto.categoryId);
                 }
@@ -531,7 +582,20 @@ let InventoryService = InventoryService_1 = class InventoryService {
                 if (err.writeErrors) {
                     err.writeErrors.forEach((writeErr) => {
                         const idx = writeErr.index;
-                        errors.push(`Row ${idx + 1}: ${writeErr.errmsg || 'Failed to insert'}`);
+                        const productName = productsToInsert[idx]?.name || 'Unknown';
+                        let errorMsg = writeErr.errmsg || 'Failed to insert';
+                        if (errorMsg.includes('duplicate key') || errorMsg.includes('E11000')) {
+                            if (errorMsg.includes('sku')) {
+                                errorMsg = `Duplicate SKU "${productsToInsert[idx]?.sku}"`;
+                            }
+                            else if (errorMsg.includes('barcode')) {
+                                errorMsg = `Duplicate barcode "${productsToInsert[idx]?.barcode}"`;
+                            }
+                            else {
+                                errorMsg = 'Duplicate product';
+                            }
+                        }
+                        errors.push(`Row ${idx + 1} (${productName}): ${errorMsg}`);
                     });
                 }
             }
@@ -700,7 +764,7 @@ let InventoryService = InventoryService_1 = class InventoryService {
     async createStockReconciliation(shopId, productId, physicalCount, reconciliationDate, reconcililedBy, notes) {
         const product = await this.productModel.findById(productId).exec();
         if (!product) {
-            throw new Error('Product not found');
+            throw new common_1.NotFoundException('Product not found');
         }
         const systemQuantity = product.stock || 0;
         const variance = physicalCount - systemQuantity;
@@ -855,20 +919,27 @@ let InventoryService = InventoryService_1 = class InventoryService {
             .exec();
         const totalProducts = products.length;
         const activeProducts = products.filter(p => p.status === 'active').length;
-        const lowStockThreshold = 10;
-        const lowStockProducts = products.filter(p => (p.stock || 0) <= lowStockThreshold && (p.stock || 0) > 0).length;
+        const defaultThreshold = 10;
+        const lowStockProducts = products.filter(p => {
+            const threshold = p.lowStockThreshold ?? defaultThreshold;
+            const stock = p.stock || 0;
+            return stock <= threshold && stock > 0;
+        }).length;
         const outOfStockProducts = products.filter(p => (p.stock || 0) === 0).length;
         const totalStockValue = products.reduce((sum, p) => sum + ((p.cost || p.price || 0) * (p.stock || 0)), 0);
         const totalStockUnits = products.reduce((sum, p) => sum + (p.stock || 0), 0);
         const averageStockLevel = totalProducts > 0 ? Math.round(totalStockUnits / totalProducts) : 0;
         const lowStockItems = products
-            .filter(p => (p.stock || 0) <= lowStockThreshold)
+            .filter(p => {
+            const threshold = p.lowStockThreshold ?? defaultThreshold;
+            return (p.stock || 0) <= threshold;
+        })
             .sort((a, b) => (a.stock || 0) - (b.stock || 0))
             .slice(0, 10)
             .map(p => ({
             name: p.name,
             stock: p.stock || 0,
-            threshold: lowStockThreshold,
+            threshold: p.lowStockThreshold ?? defaultThreshold,
             sku: p.sku || '',
         }));
         const categoryMap = new Map();
@@ -944,10 +1015,12 @@ exports.InventoryService = InventoryService = InventoryService_1 = __decorate([
     __param(1, (0, mongoose_1.InjectModel)(category_schema_1.Category.name)),
     __param(2, (0, mongoose_1.InjectModel)(stock_adjustment_schema_1.StockAdjustment.name)),
     __param(3, (0, mongoose_1.InjectModel)(stock_reconciliation_schema_1.StockReconciliation.name)),
+    __param(5, (0, common_1.Inject)((0, common_1.forwardRef)(() => subscription_guard_service_1.SubscriptionGuardService))),
     __metadata("design:paramtypes", [mongoose_2.Model,
         mongoose_2.Model,
         mongoose_2.Model,
         mongoose_2.Model,
-        category_suggestion_service_1.CategorySuggestionService])
+        category_suggestion_service_1.CategorySuggestionService,
+        subscription_guard_service_1.SubscriptionGuardService])
 ], InventoryService);
 //# sourceMappingURL=inventory.service.js.map

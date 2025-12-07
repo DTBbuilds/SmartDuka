@@ -21,7 +21,7 @@ export declare class ActivityController {
         timestamp?: string;
     }, user: any): Promise<{
         success: boolean;
-        status: "online" | "idle" | "offline";
+        status: "idle" | "online" | "offline";
     }>;
     heartbeat(dto: {
         status?: 'online' | 'idle' | 'offline';

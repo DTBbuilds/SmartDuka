@@ -17,12 +17,21 @@ export declare class Shop {
         shortCode?: string;
         accountPrefix?: string;
         consumerKey?: string;
+        consumerKeyIv?: string;
+        consumerKeyTag?: string;
         consumerSecret?: string;
+        consumerSecretIv?: string;
+        consumerSecretTag?: string;
         passkey?: string;
+        passkeyIv?: string;
+        passkeyTag?: string;
         callbackUrl?: string;
         enabled?: boolean;
         verifiedAt?: Date;
         verificationStatus?: 'pending' | 'verified' | 'failed';
+        lastTestedAt?: Date;
+        lastTestResult?: 'success' | 'failed';
+        updatedAt?: Date;
     };
     status: 'pending' | 'verified' | 'active' | 'suspended' | 'rejected' | 'flagged';
     verificationBy?: Types.ObjectId;
@@ -45,6 +54,11 @@ export declare class Shop {
     cashierCount: number;
     totalSales: number;
     totalOrders: number;
+    subscriptionId?: Types.ObjectId;
+    subscriptionPlan?: string;
+    subscriptionStatus?: string;
+    subscriptionExpiresAt?: Date;
+    isSubscriptionActive: boolean;
 }
 export declare const ShopSchema: import("mongoose").Schema<Shop, import("mongoose").Model<Shop, any, any, any, import("mongoose").Document<unknown, any, Shop, any, {}> & Shop & {
     _id: Types.ObjectId;

@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, Logger, OnModuleInit, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, FilterQuery, Types } from 'mongoose';
 import { Product, ProductDocument } from './schemas/product.schema';
@@ -11,6 +11,7 @@ import { QueryProductsDto } from './dto/query-products.dto';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { CategorySuggestionService } from './services/category-suggestion.service';
+import { SubscriptionGuardService } from '../subscriptions/subscription-guard.service';
 
 @Injectable()
 export class InventoryService implements OnModuleInit {
@@ -22,6 +23,8 @@ export class InventoryService implements OnModuleInit {
     @InjectModel(StockAdjustment.name) private readonly adjustmentModel: Model<StockAdjustmentDocument>,
     @InjectModel(StockReconciliation.name) private readonly reconciliationModel: Model<StockReconciliationDocument>,
     private readonly categorySuggestionService: CategorySuggestionService,
+    @Inject(forwardRef(() => SubscriptionGuardService))
+    private readonly subscriptionGuard: SubscriptionGuardService,
   ) {}
 
   /**
@@ -48,6 +51,9 @@ export class InventoryService implements OnModuleInit {
   }
 
   async createProduct(shopId: string, dto: CreateProductDto): Promise<ProductDocument> {
+    // Enforce product limit
+    await this.subscriptionGuard.enforceLimit(shopId, 'products');
+
     const created = new this.productModel({
       shopId: new Types.ObjectId(shopId),
       name: dto.name,
@@ -60,7 +66,12 @@ export class InventoryService implements OnModuleInit {
       tax: dto.tax ?? 0,
       status: dto.status ?? 'active',
     });
-    return created.save();
+    const product = await created.save();
+
+    // Update usage count
+    await this.subscriptionGuard.incrementUsage(shopId, 'products');
+
+    return product;
   }
 
   async getProductById(shopId: string, productId: string): Promise<ProductDocument | null> {
@@ -113,6 +124,10 @@ export class InventoryService implements OnModuleInit {
     }
 
     await this.productModel.deleteOne({ _id: new Types.ObjectId(productId) });
+    
+    // Decrement product count
+    await this.subscriptionGuard.decrementUsage(shopId, 'products');
+
     return { deleted: true, message: 'Product deleted successfully' };
   }
 
@@ -434,12 +449,19 @@ export class InventoryService implements OnModuleInit {
       .exec();
   }
 
-  async getLowStockProducts(shopId: string, threshold = 10): Promise<ProductDocument[]> {
+  async getLowStockProducts(shopId: string, defaultThreshold = 10): Promise<ProductDocument[]> {
+    // Use MongoDB $expr to compare stock against each product's own lowStockThreshold
+    // Falls back to defaultThreshold if product doesn't have lowStockThreshold set
     return this.productModel
       .find({
         shopId: new Types.ObjectId(shopId),
-        stock: { $lte: threshold },
         status: 'active',
+        $expr: {
+          $lte: [
+            '$stock',
+            { $ifNull: ['$lowStockThreshold', defaultThreshold] }
+          ]
+        }
       })
       .sort({ stock: 1 })
       .exec();
@@ -477,6 +499,7 @@ export class InventoryService implements OnModuleInit {
       autoSuggestCategories = true,
       updateExisting = false,
       skipDuplicates = true,
+      targetCategoryId, // Import all products to this specific category
     } = options;
 
     const errors: string[] = [];
@@ -486,6 +509,25 @@ export class InventoryService implements OnModuleInit {
     const categoriesCreated: string[] = [];
     const categorySuggestions: { [productName: string]: string } = {};
     const shopObjId = new Types.ObjectId(shopId);
+    
+    // If targetCategoryId is provided, validate it exists
+    let targetCategory: Types.ObjectId | undefined;
+    if (targetCategoryId) {
+      try {
+        const categoryExists = await this.categoryModel.findOne({
+          _id: new Types.ObjectId(targetCategoryId),
+          shopId: shopObjId,
+        });
+        if (categoryExists) {
+          targetCategory = categoryExists._id;
+          this.logger.log(`Importing all products to category: ${categoryExists.name}`);
+        } else {
+          errors.push(`Target category not found: ${targetCategoryId}`);
+        }
+      } catch (err) {
+        errors.push(`Invalid target category ID: ${targetCategoryId}`);
+      }
+    }
 
     // Step 1: Build category name to ID mapping
     const categoryNameToId = new Map<string, Types.ObjectId>();
@@ -583,10 +625,13 @@ export class InventoryService implements OnModuleInit {
         continue;
       }
 
-      // Resolve category ID
+      // Resolve category ID - use targetCategory if provided, otherwise resolve from CSV/suggestions
       let categoryId: Types.ObjectId | undefined = undefined;
       
-      if (dto.categoryId) {
+      if (targetCategory) {
+        // Use the target category for all products
+        categoryId = targetCategory;
+      } else if (dto.categoryId) {
         try {
           categoryId = new Types.ObjectId(dto.categoryId);
         } catch {
@@ -1221,8 +1266,13 @@ export class InventoryService implements OnModuleInit {
     // Basic stats
     const totalProducts = products.length;
     const activeProducts = products.filter(p => p.status === 'active').length;
-    const lowStockThreshold = 10;
-    const lowStockProducts = products.filter(p => (p.stock || 0) <= lowStockThreshold && (p.stock || 0) > 0).length;
+    const defaultThreshold = 10;
+    // Compare each product's stock against its own lowStockThreshold (or default of 10)
+    const lowStockProducts = products.filter(p => {
+      const threshold = p.lowStockThreshold ?? defaultThreshold;
+      const stock = p.stock || 0;
+      return stock <= threshold && stock > 0;
+    }).length;
     const outOfStockProducts = products.filter(p => (p.stock || 0) === 0).length;
 
     // Stock value
@@ -1232,15 +1282,18 @@ export class InventoryService implements OnModuleInit {
     // Average stock level
     const averageStockLevel = totalProducts > 0 ? Math.round(totalStockUnits / totalProducts) : 0;
 
-    // Low stock items
+    // Low stock items - compare each product against its own threshold
     const lowStockItems = products
-      .filter(p => (p.stock || 0) <= lowStockThreshold)
+      .filter(p => {
+        const threshold = p.lowStockThreshold ?? defaultThreshold;
+        return (p.stock || 0) <= threshold;
+      })
       .sort((a, b) => (a.stock || 0) - (b.stock || 0))
       .slice(0, 10)
       .map(p => ({
         name: p.name,
         stock: p.stock || 0,
-        threshold: lowStockThreshold,
+        threshold: p.lowStockThreshold ?? defaultThreshold,
         sku: p.sku || '',
       }));
 

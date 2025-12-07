@@ -1,15 +1,22 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button, Dialog, DialogContent, DialogHeader, DialogTitle } from "@smartduka/ui";
-import { Upload, X, AlertCircle, CheckCircle, FolderPlus, Sparkles, AlertTriangle, FileSpreadsheet } from "lucide-react";
+import { Upload, X, AlertCircle, CheckCircle, FolderPlus, Sparkles, AlertTriangle, FileSpreadsheet, Folder } from "lucide-react";
 import { parseProductsCSV, getCSVTemplate, downloadCSV, CSVParseResult } from "@/lib/csv-parser";
+
+interface Category {
+  _id: string;
+  name: string;
+  slug: string;
+}
 
 interface ImportOptions {
   autoCreateCategories: boolean;
   autoSuggestCategories: boolean;
   updateExisting: boolean;
   skipDuplicates: boolean;
+  targetCategoryId?: string; // Import all products to this category
 }
 
 interface ImportResult {
@@ -25,9 +32,11 @@ interface CSVImportModalProps {
   isOpen: boolean;
   onClose: () => void;
   onImport: (products: any[], options?: ImportOptions) => Promise<ImportResult | void>;
+  token?: string; // For loading categories
+  categories?: Category[]; // Pre-loaded categories (optional)
 }
 
-export function CSVImportModal({ isOpen, onClose, onImport }: CSVImportModalProps) {
+export function CSVImportModal({ isOpen, onClose, onImport, token, categories: preloadedCategories }: CSVImportModalProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [parseResult, setParseResult] = useState<CSVParseResult | null>(null);
@@ -36,6 +45,8 @@ export function CSVImportModal({ isOpen, onClose, onImport }: CSVImportModalProp
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState<string>("");
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [categories, setCategories] = useState<Category[]>(preloadedCategories || []);
+  const [loadingCategories, setLoadingCategories] = useState(false);
   
   // Import options
   const [options, setOptions] = useState<ImportOptions>({
@@ -43,7 +54,33 @@ export function CSVImportModal({ isOpen, onClose, onImport }: CSVImportModalProp
     autoSuggestCategories: true,
     updateExisting: false,
     skipDuplicates: true,
+    targetCategoryId: undefined,
   });
+
+  // Load categories if token is provided and no preloaded categories
+  useEffect(() => {
+    if (!token || !isOpen || preloadedCategories?.length) return;
+
+    const loadCategories = async () => {
+      try {
+        setLoadingCategories(true);
+        const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+        const res = await fetch(`${base}/inventory/categories`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (!res.ok) throw new Error('Failed to load categories');
+        const data = await res.json();
+        setCategories(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error('Failed to load categories:', err);
+      } finally {
+        setLoadingCategories(false);
+      }
+    };
+
+    loadCategories();
+  }, [token, isOpen, preloadedCategories]);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -214,23 +251,60 @@ export function CSVImportModal({ isOpen, onClose, onImport }: CSVImportModalProp
           {parseResult?.data && !importResult && (
             <div className="rounded-md border border-slate-200 dark:border-slate-700 p-3 space-y-3">
               <p className="text-xs font-medium text-slate-700 dark:text-slate-300">Import Options</p>
+              
+              {/* Target Category Selector */}
+              {categories.length > 0 && (
+                <div className="space-y-1">
+                  <label className="flex items-center gap-2 text-xs">
+                    <Folder className="h-3 w-3 text-green-500" />
+                    <span className="font-medium">Import all products to category:</span>
+                  </label>
+                  <select
+                    value={options.targetCategoryId || ''}
+                    onChange={(e) => setOptions({ 
+                      ...options, 
+                      targetCategoryId: e.target.value || undefined,
+                      // Disable auto-create/suggest when target category is selected
+                      autoCreateCategories: e.target.value ? false : options.autoCreateCategories,
+                      autoSuggestCategories: e.target.value ? false : options.autoSuggestCategories,
+                    })}
+                    className="w-full px-2 py-1.5 text-xs border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800"
+                    disabled={loadingCategories}
+                  >
+                    <option value="">Use category from CSV (or auto-detect)</option>
+                    {categories.map((cat) => (
+                      <option key={cat._id} value={cat._id}>
+                        📁 {cat.name}
+                      </option>
+                    ))}
+                  </select>
+                  {options.targetCategoryId && (
+                    <p className="text-xs text-green-600 dark:text-green-400">
+                      ✓ All {parseResult.validRows} products will be imported to this category
+                    </p>
+                  )}
+                </div>
+              )}
+
               <div className="space-y-2">
-                <label className="flex items-center gap-2 text-xs cursor-pointer">
+                <label className={`flex items-center gap-2 text-xs cursor-pointer ${options.targetCategoryId ? 'opacity-50' : ''}`}>
                   <input
                     type="checkbox"
                     checked={options.autoCreateCategories}
                     onChange={(e) => setOptions({ ...options, autoCreateCategories: e.target.checked })}
                     className="rounded border-slate-300"
+                    disabled={!!options.targetCategoryId}
                   />
                   <FolderPlus className="h-3 w-3 text-blue-500" />
                   <span>Auto-create categories from CSV</span>
                 </label>
-                <label className="flex items-center gap-2 text-xs cursor-pointer">
+                <label className={`flex items-center gap-2 text-xs cursor-pointer ${options.targetCategoryId ? 'opacity-50' : ''}`}>
                   <input
                     type="checkbox"
                     checked={options.autoSuggestCategories}
                     onChange={(e) => setOptions({ ...options, autoSuggestCategories: e.target.checked })}
                     className="rounded border-slate-300"
+                    disabled={!!options.targetCategoryId}
                   />
                   <Sparkles className="h-3 w-3 text-purple-500" />
                   <span>Auto-suggest categories by product name</span>

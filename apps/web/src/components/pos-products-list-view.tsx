@@ -1,7 +1,8 @@
 'use client';
 
+import { useState, useCallback } from 'react';
 import { Button } from '@smartduka/ui';
-import { ShoppingCart, AlertCircle } from 'lucide-react';
+import { ShoppingCart, AlertCircle, Plus, Check } from 'lucide-react';
 
 export interface POSProduct {
   _id: string;
@@ -19,6 +20,8 @@ interface POSProductsListViewProps {
   error?: string;
   formatCurrency: (amount: number) => string;
   maxHeight?: string;
+  /** Map of productId -> quantity in cart, for real-time stock display */
+  cartQuantities?: Record<string, number>;
 }
 
 export function POSProductsListView({
@@ -28,11 +31,32 @@ export function POSProductsListView({
   error,
   formatCurrency,
   maxHeight = 'max-h-[calc(100vh-400px)]',
+  cartQuantities = {},
 }: POSProductsListViewProps) {
+  // Track recently added items for visual feedback
+  const [recentlyAdded, setRecentlyAdded] = useState<Set<string>>(new Set());
+
+  const handleAddToCart = useCallback((product: POSProduct) => {
+    onAddToCart(product);
+    
+    // Visual feedback - show checkmark briefly
+    setRecentlyAdded(prev => new Set(prev).add(product._id));
+    setTimeout(() => {
+      setRecentlyAdded(prev => {
+        const next = new Set(prev);
+        next.delete(product._id);
+        return next;
+      });
+    }, 600);
+  }, [onAddToCart]);
+
   if (isLoading) {
     return (
       <div className="py-8 text-center text-sm text-muted-foreground">
-        Loading products…
+        <div className="animate-pulse flex flex-col items-center gap-2">
+          <div className="h-8 w-8 rounded-full bg-slate-200 dark:bg-slate-700" />
+          <span>Loading products…</span>
+        </div>
       </div>
     );
   }
@@ -55,86 +79,133 @@ export function POSProductsListView({
   }
 
   return (
-    <div className={`${maxHeight} overflow-y-auto border rounded-lg bg-slate-50 dark:bg-slate-950/50 flex flex-col`}>
-      <div className="space-y-0 flex-1">
-        {products.map((product, index) => {
-          const isOutOfStock = product.stock === 0 || product.stock === undefined;
-          const isLowStock = product.stock && product.stock > 0 && product.stock <= 5;
+    <div className={`${maxHeight} overflow-y-auto overscroll-contain rounded-lg bg-slate-50 dark:bg-slate-950/50`}>
+      {/* Mobile: Grid view for better tap targets */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-1 gap-2 p-2 lg:p-0 lg:gap-0">
+        {products.map((product) => {
+          // Calculate available stock (original stock - items in cart)
+          const inCart = cartQuantities[product._id] || 0;
+          const originalStock = product.stock ?? 0;
+          const availableStock = Math.max(0, originalStock - inCart);
+          
+          const isOutOfStock = availableStock === 0;
+          const isLowStock = availableStock > 0 && availableStock <= 5;
+          const wasJustAdded = recentlyAdded.has(product._id);
 
           return (
-            <div
-              key={product._id}
-              className={`border-b last:border-b-0 px-2 py-1.5 hover:bg-slate-100 dark:hover:bg-slate-900/50 transition-colors ${
-                isOutOfStock ? 'opacity-60' : ''
-              }`}
-            >
-              {/* Product Header - Compact */}
-              <div className="flex items-center justify-between gap-2 mb-1">
-                <div className="flex-1 min-w-0">
-                  <h4 className="font-semibold text-xs truncate">{product.name}</h4>
-                </div>
-              </div>
-
-              {/* Product Details Grid - Compact */}
-              <div className="grid grid-cols-4 gap-1.5 items-center">
-                {/* Price */}
-                <div className="bg-white dark:bg-slate-900 rounded px-1.5 py-1">
-                  <p className="font-bold text-xs text-primary">{formatCurrency(product.price)}</p>
-                </div>
-
-                {/* Stock */}
-                <div className={`rounded px-1.5 py-1 text-center ${
-                  isOutOfStock
-                    ? 'bg-red-50 dark:bg-red-950/30'
-                    : isLowStock
-                    ? 'bg-yellow-50 dark:bg-yellow-950/30'
-                    : 'bg-green-50 dark:bg-green-950/30'
-                }`}>
-                  <p className={`font-semibold text-xs ${
-                    isOutOfStock
-                      ? 'text-red-600 dark:text-red-400'
-                      : isLowStock
-                      ? 'text-yellow-600 dark:text-yellow-400'
-                      : 'text-green-600 dark:text-green-400'
-                  }`}>
-                    {product.stock ?? 0}
-                  </p>
-                </div>
-
-                {/* Barcode (if available) */}
-                {product.barcode && (
-                  <div className="text-xs text-muted-foreground truncate px-1">
-                    {product.barcode}
+            <div key={product._id}>
+              {/* Mobile Card View (< lg) */}
+              <button
+                onClick={() => !isOutOfStock && handleAddToCart(product)}
+                disabled={isOutOfStock}
+                className={`lg:hidden w-full text-left rounded-xl border-2 p-3 transition-all duration-200 active:scale-[0.97] ${
+                  isOutOfStock 
+                    ? 'opacity-50 bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 cursor-not-allowed' 
+                    : wasJustAdded
+                    ? 'bg-green-50 dark:bg-green-950/30 border-green-400 dark:border-green-600 shadow-md'
+                    : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-primary/50 hover:shadow-md active:bg-primary/5'
+                }`}
+              >
+                {/* Product Name */}
+                <h4 className="font-semibold text-sm leading-tight line-clamp-2 mb-2">
+                  {product.name}
+                </h4>
+                
+                {/* Price & Stock Row */}
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-bold text-base text-primary">
+                    {formatCurrency(product.price)}
+                  </span>
+                  
+                  <div className="flex items-center gap-2">
+                    {/* Stock Badge - Shows available stock with cart indicator */}
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full transition-all ${
+                      isOutOfStock
+                        ? 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400'
+                        : isLowStock
+                        ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-400'
+                        : 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400'
+                    }`}>
+                      {isOutOfStock ? 'Out' : availableStock}
+                      {inCart > 0 && !isOutOfStock && (
+                        <span className="ml-1 opacity-60">(-{inCart})</span>
+                      )}
+                    </span>
+                    
+                    {/* Add Icon */}
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
+                      isOutOfStock 
+                        ? 'bg-slate-200 dark:bg-slate-700' 
+                        : wasJustAdded
+                        ? 'bg-green-500 text-white'
+                        : 'bg-primary text-primary-foreground'
+                    }`}>
+                      {wasJustAdded ? (
+                        <Check className="h-4 w-4 animate-in zoom-in duration-200" />
+                      ) : (
+                        <Plus className="h-4 w-4" />
+                      )}
+                    </div>
                   </div>
-                )}
+                </div>
+              </button>
 
-                {/* Add to Cart Button - Compact */}
+              {/* Desktop List View (>= lg) */}
+              <div
+                className={`hidden lg:flex border-b last:border-b-0 px-3 py-2 items-center gap-3 transition-colors ${
+                  isOutOfStock ? 'opacity-50' : 'hover:bg-slate-100 dark:hover:bg-slate-900/50'
+                } ${wasJustAdded ? 'bg-green-50 dark:bg-green-950/30' : ''}`}
+              >
+                {/* Product Info */}
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-semibold text-sm truncate">{product.name}</h4>
+                  {product.barcode && (
+                    <p className="text-xs text-muted-foreground truncate">{product.barcode}</p>
+                  )}
+                </div>
+
+                {/* Price */}
+                <div className="font-bold text-sm text-primary whitespace-nowrap">
+                  {formatCurrency(product.price)}
+                </div>
+
+                {/* Stock Badge - Shows available stock */}
+                <div className={`text-xs font-medium px-2 py-1 rounded-full min-w-[4rem] text-center transition-all ${
+                  isOutOfStock
+                    ? 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400'
+                    : isLowStock
+                    ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-400'
+                    : 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400'
+                }`}>
+                  {isOutOfStock ? 'Out' : availableStock}
+                  {inCart > 0 && (
+                    <span className="ml-1 text-[10px] opacity-70">({inCart})</span>
+                  )}
+                </div>
+
+                {/* Add Button */}
                 <Button
-                  onClick={() => onAddToCart(product)}
+                  onClick={() => handleAddToCart(product)}
                   disabled={isOutOfStock}
                   size="sm"
-                  className="h-7 px-2 flex items-center justify-center gap-1"
-                  title={isOutOfStock ? 'Out of stock' : 'Add to cart'}
+                  variant={wasJustAdded ? 'default' : 'default'}
+                  className={`h-8 px-3 gap-1.5 transition-all ${
+                    wasJustAdded ? 'bg-green-500 hover:bg-green-600' : ''
+                  }`}
                 >
-                  <ShoppingCart className="h-3 w-3" />
-                  <span className="text-xs font-medium hidden sm:inline">Add</span>
+                  {wasJustAdded ? (
+                    <>
+                      <Check className="h-3.5 w-3.5" />
+                      <span className="text-xs">Added</span>
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="h-3.5 w-3.5" />
+                      <span className="text-xs">Add</span>
+                    </>
+                  )}
                 </Button>
               </div>
-
-              {/* Stock Status Alert - Compact */}
-              {isOutOfStock && (
-                <div className="flex items-center gap-1 mt-1 px-1 py-0.5 rounded bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-300">
-                  <AlertCircle className="h-2.5 w-2.5 flex-shrink-0" />
-                  <span className="text-xs">Out of stock</span>
-                </div>
-              )}
-
-              {isLowStock && !isOutOfStock && (
-                <div className="flex items-center gap-1 mt-1 px-1 py-0.5 rounded bg-yellow-50 dark:bg-yellow-950/30 text-yellow-700 dark:text-yellow-300">
-                  <AlertCircle className="h-2.5 w-2.5 flex-shrink-0" />
-                  <span className="text-xs">Low: {product.stock}</span>
-                </div>
-              )}
             </div>
           );
         })}

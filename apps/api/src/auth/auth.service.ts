@@ -1,16 +1,21 @@
-import { Injectable, UnauthorizedException, BadRequestException, Optional, Inject } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException, Optional, Inject, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { UsersService } from '../users/users.service';
 import { ShopsService } from '../shops/shops.service';
 import { ShopSettingsService } from '../shop-settings/shop-settings.service';
+import { SystemEventManagerService } from '../notifications/system-event-manager.service';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
+import { BillingCycle } from '../subscriptions/schemas/subscription.schema';
 import { RegisterShopDto } from './dto/register-shop.dto';
 import { LoginDto } from './dto/login.dto';
 import * as bcryptjs from 'bcryptjs';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly usersService: UsersService,
     private readonly shopsService: ShopsService,
@@ -18,6 +23,8 @@ export class AuthService {
     private readonly shopSettingsService: ShopSettingsService,
     @Optional() @Inject('ActivityService') private readonly activityService?: any,
     @InjectModel('SuperAdmin') private readonly superAdminModel?: Model<any>,
+    @Optional() private readonly systemEventManager?: SystemEventManagerService,
+    @Optional() private readonly subscriptionsService?: SubscriptionsService,
   ) {}
 
   async registerShop(dto: RegisterShopDto) {
@@ -46,6 +53,46 @@ export class AuthService {
       // Don't fail registration if settings sync fails
     }
 
+    // Create subscription for the shop
+    let subscriptionPlanName = 'Free Trial';
+    let subscriptionDetails = {
+      planPrice: 0,
+      billingCycle: 'month',
+      maxShops: 1,
+      maxEmployees: 3,
+      maxProducts: 100,
+    };
+    
+    if (this.subscriptionsService && dto.shop.subscriptionPlanCode) {
+      try {
+        const billingCycle = dto.shop.billingCycle === 'annual' ? BillingCycle.ANNUAL : BillingCycle.MONTHLY;
+        const subscription = await this.subscriptionsService.createSubscription(
+          (shop as any)._id.toString(),
+          {
+            planCode: dto.shop.subscriptionPlanCode,
+            billingCycle,
+          },
+        );
+        subscriptionPlanName = subscription?.planName || dto.shop.subscriptionPlanCode;
+        
+        // Get plan details for email
+        if (subscription) {
+          subscriptionDetails = {
+            planPrice: subscription.currentPrice || 0,
+            billingCycle: billingCycle === BillingCycle.ANNUAL ? 'year' : 'month',
+            maxShops: subscription.usage?.shops?.limit || 1,
+            maxEmployees: subscription.usage?.employees?.limit || 3,
+            maxProducts: subscription.usage?.products?.limit || 100,
+          };
+        }
+        
+        this.logger.log(`Subscription created for shop ${shop.name}: ${subscriptionPlanName}`);
+      } catch (err) {
+        this.logger.error('Failed to create subscription:', err);
+        // Don't fail registration if subscription creation fails - will default to trial
+      }
+    }
+
     // Create admin user for shop
     const user = await this.usersService.create({
       shopId: (shop as any)._id.toString(),
@@ -64,6 +111,34 @@ export class AuthService {
       role: user.role,
       shopId: (shop as any)._id,
     });
+
+    // Send welcome email
+    if (this.systemEventManager) {
+      try {
+        await this.systemEventManager.queueEvent({
+          type: 'welcome',
+          shop: {
+            shopId: (shop as any)._id.toString(),
+            shopName: shop.name,
+            shopEmail: shop.email,
+          },
+          user: {
+            userId: (user as any)._id.toString(),
+            userName: dto.admin.name,
+            userEmail: dto.admin.email,
+          },
+          data: {
+            planName: subscriptionPlanName,
+            trialDays: 14,
+            ...subscriptionDetails,
+          },
+        });
+        this.logger.log(`Welcome email queued for ${dto.admin.email}`);
+      } catch (err) {
+        this.logger.error('Failed to queue welcome email:', err);
+        // Don't fail registration if email fails
+      }
+    }
 
     return {
       shop: {

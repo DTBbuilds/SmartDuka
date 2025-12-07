@@ -3,10 +3,28 @@
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ShoppingCart, Eye, EyeOff, Store, User, ArrowRight, ArrowLeft, Building2, MapPin, FileText, Info, CheckCircle, Loader2, BarChart3, Users, Shield, Zap } from "lucide-react";
+import { ShoppingCart, Eye, EyeOff, Store, User, ArrowRight, ArrowLeft, Building2, MapPin, FileText, Info, CheckCircle, Loader2, BarChart3, Users, Shield, Zap, Package, Crown, Sparkles, Check, Star } from "lucide-react";
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label } from "@smartduka/ui";
 import { useAuth, GoogleProfile } from "@/lib/auth-context";
 import { ThemeToggleOutline } from "@/components/theme-toggle";
+import { api } from "@/lib/api-client";
+
+// Subscription Plan Interface
+interface SubscriptionPlan {
+  _id: string;
+  code: string;
+  name: string;
+  description?: string;
+  monthlyPrice: number;
+  annualPrice: number;
+  setupPrice: number;
+  maxShops: number;
+  maxEmployees: number;
+  maxProducts: number;
+  features: string[];
+  badge?: string;
+  colorTheme?: string;
+}
 
 // Kenya counties for dropdown
 const KENYA_COUNTIES = [
@@ -41,13 +59,57 @@ const BUSINESS_TYPES = [
   "Other"
 ];
 
+// Plan color configurations
+const planColors: Record<string, { 
+  gradient: string; 
+  border: string; 
+  bg: string;
+  ring: string;
+  icon: string;
+}> = {
+  blue: { 
+    gradient: 'from-blue-500 to-blue-600', 
+    border: 'border-blue-400',
+    bg: 'bg-blue-50 dark:bg-blue-950/30',
+    ring: 'ring-blue-500',
+    icon: 'text-blue-600',
+  },
+  green: { 
+    gradient: 'from-emerald-500 to-emerald-600', 
+    border: 'border-emerald-400',
+    bg: 'bg-emerald-50 dark:bg-emerald-950/30',
+    ring: 'ring-emerald-500',
+    icon: 'text-emerald-600',
+  },
+  purple: { 
+    gradient: 'from-violet-500 to-violet-600', 
+    border: 'border-violet-400',
+    bg: 'bg-violet-50 dark:bg-violet-950/30',
+    ring: 'ring-violet-500',
+    icon: 'text-violet-600',
+  },
+  gold: { 
+    gradient: 'from-amber-500 to-orange-500', 
+    border: 'border-amber-400',
+    bg: 'bg-amber-50 dark:bg-amber-950/30',
+    ring: 'ring-amber-500',
+    icon: 'text-amber-600',
+  },
+};
+
 function RegisterShopContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { registerShop, registerShopWithGoogle, loginWithGoogle } = useAuth();
-  const [step, setStep] = useState(1); // 1: Shop info, 2: Admin info
+  const [step, setStep] = useState(1); // 1: Plan selection, 2: Shop info, 3: Admin info
   const [googleProfile, setGoogleProfile] = useState<GoogleProfile | null>(null);
   const [isGoogleFlow, setIsGoogleFlow] = useState(false);
+  
+  // Subscription plans
+  const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
+  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null);
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly');
+  const [loadingPlans, setLoadingPlans] = useState(true);
   
   const [shopData, setShopData] = useState({
     shopName: "",
@@ -71,6 +133,26 @@ function RegisterShopContent() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  // Fetch subscription plans on mount
+  useEffect(() => {
+    const fetchPlans = async () => {
+      try {
+        const plans = await api.get<SubscriptionPlan[]>('/subscriptions/plans');
+        const activePlans = (plans || []).filter((p: SubscriptionPlan) => p.code !== 'free');
+        setPlans(activePlans);
+        // Auto-select the first plan (usually Starter)
+        if (activePlans.length > 0) {
+          setSelectedPlan(activePlans[0]);
+        }
+      } catch (err) {
+        console.error('Failed to fetch plans:', err);
+      } finally {
+        setLoadingPlans(false);
+      }
+    };
+    fetchPlans();
+  }, []);
 
   // Check for Google OAuth redirect
   useEffect(() => {
@@ -158,11 +240,20 @@ function RegisterShopContent() {
     return true;
   };
 
+  const handlePlanNext = () => {
+    setError("");
+    if (!selectedPlan) {
+      setError("Please select a subscription plan");
+      return;
+    }
+    setStep(2);
+  };
+
   const handleShopNext = (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     if (validateShopData()) {
-      setStep(2);
+      setStep(3);
     }
   };
 
@@ -171,16 +262,28 @@ function RegisterShopContent() {
     setError("");
 
     if (!validateAdminData()) return;
+    if (!selectedPlan) {
+      setError("Please select a subscription plan");
+      setStep(1);
+      return;
+    }
 
     setIsLoading(true);
 
     try {
+      // Include subscription plan in shop data
+      const shopDataWithPlan = {
+        ...shopData,
+        subscriptionPlanCode: selectedPlan.code,
+        billingCycle: billingCycle,
+      };
+
       if (isGoogleFlow && googleProfile) {
         // Register with Google profile - include phone in shop data
-        await registerShopWithGoogle(googleProfile, { ...shopData, phone: adminData.phone });
+        await registerShopWithGoogle(googleProfile, { ...shopDataWithPlan, phone: adminData.phone });
       } else {
         // Regular registration
-        await registerShop(shopData, adminData);
+        await registerShop(shopDataWithPlan, adminData);
       }
       
       // Redirect to onboarding
@@ -281,19 +384,27 @@ function RegisterShopContent() {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-xl font-bold text-foreground">Register Your Shop</h2>
-              <p className="text-muted-foreground text-sm">Step {step} of 2: {step === 1 ? 'Shop Information' : 'Admin Account'}</p>
+              <p className="text-muted-foreground text-sm">
+                Step {step} of 3: {step === 1 ? 'Choose Plan' : step === 2 ? 'Shop Information' : 'Admin Account'}
+              </p>
             </div>
             
             {/* Progress Indicator */}
-            <div className="flex items-center gap-2">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${step >= 1 ? "bg-primary text-white" : "bg-gray-200"}`}>
-                {step > 1 ? "✓" : "1"}
+            <div className="flex items-center gap-1.5">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all ${step >= 1 ? "bg-primary text-white" : "bg-gray-200 dark:bg-gray-700"}`}>
+                {step > 1 ? <Check className="h-4 w-4" /> : "1"}
               </div>
-              <div className="w-12 h-1 bg-gray-200 rounded">
-                <div className={`h-full rounded transition-all ${step >= 2 ? "bg-primary w-full" : "w-0"}`} />
+              <div className="w-8 h-1 bg-gray-200 dark:bg-gray-700 rounded">
+                <div className={`h-full rounded transition-all bg-primary ${step >= 2 ? "w-full" : "w-0"}`} />
               </div>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${step >= 2 ? "bg-primary text-white" : "bg-gray-200"}`}>
-                2
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all ${step >= 2 ? "bg-primary text-white" : "bg-gray-200 dark:bg-gray-700"}`}>
+                {step > 2 ? <Check className="h-4 w-4" /> : "2"}
+              </div>
+              <div className="w-8 h-1 bg-gray-200 dark:bg-gray-700 rounded">
+                <div className={`h-full rounded transition-all bg-primary ${step >= 3 ? "w-full" : "w-0"}`} />
+              </div>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all ${step >= 3 ? "bg-primary text-white" : "bg-gray-200 dark:bg-gray-700"}`}>
+                3
               </div>
             </div>
           </div>
@@ -308,6 +419,145 @@ function RegisterShopContent() {
           )}
 
           {step === 1 ? (
+            /* Plan Selection Step */
+            <div className="space-y-4">
+              {/* Header with Billing Toggle */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-primary">
+                  <Crown className="h-5 w-5" />
+                  <h3 className="text-lg font-bold">Choose Your Plan</h3>
+                </div>
+                
+                {/* Billing Cycle Toggle */}
+                <div className="inline-flex items-center bg-muted rounded-full p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setBillingCycle('monthly')}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                      billingCycle === 'monthly' 
+                        ? 'bg-primary text-white shadow-sm' 
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    Monthly
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBillingCycle('annual')}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-1 ${
+                      billingCycle === 'annual' 
+                        ? 'bg-primary text-white shadow-sm' 
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    Annual
+                    <span className="bg-green-500 text-white text-[10px] px-1.5 py-0.5 rounded-full">-17%</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Plans Grid */}
+              {loadingPlans ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                  {plans.map((plan) => {
+                    const colors = planColors[plan.colorTheme || 'blue'];
+                    // Compare by code since _id might not always be available
+                    const isSelected = selectedPlan?.code === plan.code;
+                    const price = billingCycle === 'monthly' ? plan.monthlyPrice : Math.round(plan.annualPrice / 12);
+                    
+                    return (
+                      <div
+                        key={plan.code}
+                        onClick={() => setSelectedPlan(plan)}
+                        className={`relative cursor-pointer rounded-lg p-3 transition-all ${
+                          isSelected 
+                            ? 'bg-emerald-600 text-white shadow-xl scale-[1.03] border-2 border-emerald-600' 
+                            : 'bg-muted/50 border-2 border-border hover:border-primary/50 hover:shadow-md hover:bg-card'
+                        }`}
+                      >
+                        {/* Badge */}
+                        {plan.badge && !isSelected && (
+                          <div className={`absolute -top-2 left-2 px-2 py-0.5 rounded-full text-[10px] font-bold text-white bg-gradient-to-r ${colors.gradient}`}>
+                            {plan.badge}
+                          </div>
+                        )}
+
+                        {/* Selected Checkmark */}
+                        {isSelected && (
+                          <div className="absolute -top-2 -right-2 bg-white text-emerald-600 w-6 h-6 rounded-full shadow-lg flex items-center justify-center border-2 border-emerald-600">
+                            <Check className="h-4 w-4" strokeWidth={3} />
+                          </div>
+                        )}
+
+                        {/* Plan Name */}
+                        <h4 className={`text-sm font-bold mt-2 ${isSelected ? 'text-white' : 'text-foreground'}`}>{plan.name}</h4>
+
+                        {/* Price */}
+                        <div className="mt-2">
+                          <span className={`text-xl font-bold ${isSelected ? 'text-white' : 'text-foreground'}`}>
+                            KES {price.toLocaleString()}
+                          </span>
+                          <span className={`text-xs ${isSelected ? 'text-white/80' : 'text-muted-foreground'}`}>/mo</span>
+                        </div>
+
+                        {/* Limits - Compact */}
+                        <div className={`flex items-center gap-3 mt-2 text-xs ${isSelected ? 'text-white/80' : 'text-muted-foreground'}`}>
+                          <span className="flex items-center gap-1">
+                            <Store className="h-3 w-3" />
+                            {plan.maxShops}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Users className="h-3 w-3" />
+                            {plan.maxEmployees}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Package className="h-3 w-3" />
+                            {plan.maxProducts >= 10000 ? '∞' : plan.maxProducts}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* 14-day trial notice + Selected Plan */}
+              <div className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg mt-4">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-green-600 flex-shrink-0" />
+                  <span className="text-sm font-medium text-green-800 dark:text-green-200">14-Day Free Trial</span>
+                </div>
+                {selectedPlan && (
+                  <div className="text-right">
+                    <span className="text-sm font-bold text-primary">
+                      {selectedPlan.name} - KES {(billingCycle === 'monthly' ? selectedPlan.monthlyPrice : selectedPlan.annualPrice).toLocaleString()}/{billingCycle === 'monthly' ? 'mo' : 'yr'}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between mt-4">
+                <p className="text-xs text-muted-foreground">
+                  Have an account?{" "}
+                  <Link href="/login" className="text-primary hover:underline font-medium">
+                    Sign in
+                  </Link>
+                </p>
+                <Button 
+                  type="button" 
+                  onClick={handlePlanNext} 
+                  disabled={!selectedPlan}
+                >
+                  Continue
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          ) : step === 2 ? (
             <form onSubmit={handleShopNext} className="space-y-5">
               <div className="flex items-center gap-2 text-primary mb-4">
                 <Store className="h-5 w-5" />
@@ -421,20 +671,52 @@ function RegisterShopContent() {
                 <p className="text-xs text-muted-foreground mt-1">{shopData.description.length}/500 characters</p>
               </div>
 
-              <Button type="submit" className="w-full" size="lg">
-                Next: Admin Account
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
+              {/* Selected Plan Reminder */}
+              {selectedPlan && (
+                <div className="p-3 bg-muted rounded-lg flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Crown className="h-4 w-4 text-primary" />
+                    <span className="text-sm">
+                      <span className="font-medium">{selectedPlan.name}</span>
+                      <span className="text-muted-foreground"> - KES {(billingCycle === 'monthly' ? selectedPlan.monthlyPrice : selectedPlan.annualPrice).toLocaleString()}/{billingCycle === 'monthly' ? 'mo' : 'yr'}</span>
+                    </span>
+                  </div>
+                  <button 
+                    type="button" 
+                    onClick={() => setStep(1)} 
+                    className="text-xs text-primary hover:underline"
+                  >
+                    Change
+                  </button>
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setStep(1)}
+                  className="flex-1"
+                  size="lg"
+                >
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Back
+                </Button>
+                <Button type="submit" className="flex-1" size="lg">
+                  Next: Admin Account
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
 
               {/* Google Signup Option */}
               {!isGoogleFlow && (
                 <>
                   <div className="relative my-4">
                     <div className="absolute inset-0 flex items-center">
-                      <span className="w-full border-t border-slate-200" />
+                      <span className="w-full border-t border-border" />
                     </div>
                     <div className="relative flex justify-center text-xs uppercase">
-                      <span className="bg-white px-2 text-slate-500">Or register with</span>
+                      <span className="bg-background px-2 text-muted-foreground">Or register with</span>
                     </div>
                   </div>
 
@@ -602,11 +884,31 @@ function RegisterShopContent() {
                 )}
               </div>
 
+              {/* Selected Plan Reminder */}
+              {selectedPlan && (
+                <div className="p-3 bg-muted rounded-lg flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Crown className="h-4 w-4 text-primary" />
+                    <span className="text-sm">
+                      <span className="font-medium">{selectedPlan.name}</span>
+                      <span className="text-muted-foreground"> - KES {(billingCycle === 'monthly' ? selectedPlan.monthlyPrice : selectedPlan.annualPrice).toLocaleString()}/{billingCycle === 'monthly' ? 'mo' : 'yr'}</span>
+                    </span>
+                  </div>
+                  <button 
+                    type="button" 
+                    onClick={() => setStep(1)} 
+                    className="text-xs text-primary hover:underline"
+                  >
+                    Change
+                  </button>
+                </div>
+              )}
+
               <div className="flex gap-3">
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setStep(1)}
+                  onClick={() => setStep(2)}
                   className="flex-1"
                   size="lg"
                 >
@@ -614,20 +916,18 @@ function RegisterShopContent() {
                   Back
                 </Button>
                 <Button type="submit" className="flex-1" disabled={isLoading} size="lg">
-                  {isLoading ? "Creating Account..." : "Create Account"}
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Creating Account...
+                    </>
+                  ) : (
+                    "Create Account"
+                  )}
                 </Button>
               </div>
             </form>
           )}
-
-          <div className="mt-6 text-center">
-            <p className="text-sm text-muted-foreground">
-              Already have an account?{" "}
-              <Link href="/login" className="text-primary hover:underline font-medium">
-                Sign in
-              </Link>
-            </p>
-          </div>
         </div>
       </div>
     </div>

@@ -68,7 +68,7 @@ let SalesController = class SalesController {
     dailySales(dateStr, user) {
         const date = new Date(dateStr);
         if (isNaN(date.getTime())) {
-            throw new Error('Invalid date format');
+            throw new common_1.BadRequestException('Invalid date format. Please use YYYY-MM-DD format');
         }
         return this.salesService.getDailySales(user.shopId, date);
     }
@@ -78,7 +78,7 @@ let SalesController = class SalesController {
     dailySalesByBranch(branchId, dateStr, user) {
         const date = new Date(dateStr);
         if (isNaN(date.getTime())) {
-            throw new Error('Invalid date format');
+            throw new common_1.BadRequestException('Invalid date format. Please use YYYY-MM-DD format');
         }
         return this.salesService.getDailySalesByBranch(user.shopId, branchId, date);
     }

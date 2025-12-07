@@ -18,25 +18,52 @@ const common_1 = require("@nestjs/common");
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const adjustment_schema_1 = require("./adjustment.schema");
+const product_schema_1 = require("../inventory/schemas/product.schema");
 let AdjustmentsService = AdjustmentsService_1 = class AdjustmentsService {
     adjustmentModel;
+    productModel;
     logger = new common_1.Logger(AdjustmentsService_1.name);
-    constructor(adjustmentModel) {
+    constructor(adjustmentModel, productModel) {
         this.adjustmentModel = adjustmentModel;
+        this.productModel = productModel;
     }
     async create(shopId, userId, dto) {
+        const product = await this.productModel.findOne({
+            _id: new mongoose_2.Types.ObjectId(dto.productId),
+            shopId: new mongoose_2.Types.ObjectId(shopId),
+        });
+        if (!product) {
+            throw new common_1.NotFoundException(`Product not found: ${dto.productId}`);
+        }
+        const previousStock = product.stock || 0;
+        const newStock = previousStock + dto.delta;
+        if (newStock < 0) {
+            throw new common_1.BadRequestException(`Cannot reduce stock below zero. Current stock: ${previousStock}, Adjustment: ${dto.delta}`);
+        }
+        const updatedProduct = await this.productModel.findByIdAndUpdate(dto.productId, {
+            $inc: { stock: dto.delta },
+            $set: { lastRestockDate: dto.delta > 0 ? new Date() : undefined }
+        }, { new: true });
+        if (!updatedProduct) {
+            throw new common_1.BadRequestException('Failed to update product stock');
+        }
         const adjustment = new this.adjustmentModel({
             productId: new mongoose_2.Types.ObjectId(dto.productId),
-            productName: dto.productName,
+            productName: dto.productName || product.name,
             delta: dto.delta,
             reason: dto.reason,
             description: dto.description,
             reference: dto.reference,
             shopId: new mongoose_2.Types.ObjectId(shopId),
             adjustedBy: new mongoose_2.Types.ObjectId(userId),
+            previousStock,
+            newStock: updatedProduct.stock,
         });
-        this.logger.log(`Stock adjustment: ${dto.productName} ${dto.delta > 0 ? '+' : ''}${dto.delta} (${dto.reason})`);
-        return adjustment.save();
+        const savedAdjustment = await adjustment.save();
+        this.logger.log(`Stock adjustment: ${product.name} ${dto.delta > 0 ? '+' : ''}${dto.delta} (${dto.reason}) | ` +
+            `Previous: ${previousStock} → New: ${updatedProduct.stock} | ` +
+            `By: ${userId} | Ref: ${dto.reference || 'N/A'}`);
+        return savedAdjustment;
     }
     async findAll(shopId) {
         return this.adjustmentModel
@@ -94,6 +121,8 @@ exports.AdjustmentsService = AdjustmentsService;
 exports.AdjustmentsService = AdjustmentsService = AdjustmentsService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)(adjustment_schema_1.Adjustment.name)),
-    __metadata("design:paramtypes", [mongoose_2.Model])
+    __param(1, (0, mongoose_1.InjectModel)(product_schema_1.Product.name)),
+    __metadata("design:paramtypes", [mongoose_2.Model,
+        mongoose_2.Model])
 ], AdjustmentsService);
 //# sourceMappingURL=adjustments.service.js.map

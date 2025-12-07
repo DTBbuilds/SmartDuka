@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ShoppingCart, AlertCircle, Lock, Store, BarChart3, Users, Shield, Sparkles, ArrowRight } from 'lucide-react';
+import { ShoppingCart, AlertCircle, Lock, Store, BarChart3, Users, Shield, Sparkles, ArrowRight, Clock } from 'lucide-react';
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@smartduka/ui';
 import { useAuth } from '@/lib/auth-context';
 import { config } from '@/lib/config';
@@ -21,18 +21,23 @@ export default function LoginPage() {
   const [superAdminPassword, setSuperAdminPassword] = useState('');
   const [superAdminError, setSuperAdminError] = useState('');
   const [superAdminLoading, setSuperAdminLoading] = useState(false);
+  const [sessionExpired, setSessionExpired] = useState(false);
 
   const { login, loginWithPin, loginWithGoogle, enterDemoMode } = useAuth();
   const router = useRouter();
   const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
   const googleError = searchParams.get('error');
+  const expired = searchParams.get('expired');
 
   useEffect(() => {
     fetchShops();
     if (googleError) {
       setError(decodeURIComponent(googleError));
     }
-  }, [googleError]);
+    if (expired === 'true') {
+      setSessionExpired(true);
+    }
+  }, [googleError, expired]);
 
   const fetchShops = async () => {
     try {
@@ -225,6 +230,14 @@ export default function LoginPage() {
                 </button>
               </div>
             </div>
+
+            {/* Session Expired Alert */}
+            {sessionExpired && (
+              <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg flex items-center gap-2 mb-3">
+                <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                <p className="text-amber-700 dark:text-amber-300 text-xs">Your session has expired. Please log in again.</p>
+              </div>
+            )}
 
             {/* Error Alert - Compact */}
             {error && (

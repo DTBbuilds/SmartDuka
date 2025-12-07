@@ -41,6 +41,8 @@ const reorder_module_1 = require("./reorder/reorder.module");
 const branches_module_1 = require("./branches/branches.module");
 const audit_module_1 = require("./audit/audit.module");
 const health_module_1 = require("./health/health.module");
+const subscriptions_module_1 = require("./subscriptions/subscriptions.module");
+const notifications_module_1 = require("./notifications/notifications.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -96,6 +98,8 @@ exports.AppModule = AppModule = __decorate([
             reorder_module_1.ReorderModule,
             branches_module_1.BranchesModule,
             audit_module_1.AuditModule,
+            subscriptions_module_1.SubscriptionsModule,
+            notifications_module_1.NotificationsModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [

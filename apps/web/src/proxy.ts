@@ -21,7 +21,7 @@ const authRoutes = ['/login', '/login-pin', '/register'];
 // Public routes that don't need any checks
 const publicRoutes = ['/', '/about', '/contact', '/privacy', '/terms'];
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Get token from cookies

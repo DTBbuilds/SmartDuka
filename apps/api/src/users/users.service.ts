@@ -1,17 +1,26 @@
-import { Injectable, BadRequestException, ConflictException, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { Injectable, BadRequestException, ConflictException, NotFoundException, UnauthorizedException, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import * as bcrypt from 'bcryptjs';
 import { User, UserDocument } from './schemas/user.schema';
 import { CreateUserDto } from './dto/create-user.dto';
+import { SubscriptionGuardService } from '../subscriptions/subscription-guard.service';
 
 @Injectable()
 export class UsersService {
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
+    @Inject(forwardRef(() => SubscriptionGuardService))
+    private readonly subscriptionGuard: SubscriptionGuardService,
   ) {}
 
   async create(dto: CreateUserDto): Promise<User> {
+    // Enforce employee limit for non-admin roles (cashiers count as employees)
+    const isEmployee = dto.role !== 'admin';
+    if (isEmployee) {
+      await this.subscriptionGuard.enforceLimit(dto.shopId, 'employees');
+    }
+
     const { password, ...rest } = dto as any;
     const passwordHash = await bcrypt.hash(password, 10);
     
@@ -24,7 +33,14 @@ export class UsersService {
     };
     
     const created = new this.userModel(userData);
-    return created.save();
+    const user = await created.save();
+
+    // Update usage count for employees
+    if (isEmployee) {
+      await this.subscriptionGuard.incrementUsage(dto.shopId, 'employees');
+    }
+
+    return user;
   }
 
   async findByEmail(email: string): Promise<User | null> {
@@ -72,8 +88,31 @@ export class UsersService {
     return bcrypt.compare(password, (user as any).passwordHash);
   }
 
-  async deleteUser(userId: string): Promise<any> {
-    return this.userModel.findByIdAndDelete(userId).exec();
+  /**
+   * Delete a user (employee/cashier)
+   * Only non-admin users can be deleted
+   */
+  async deleteUser(shopId: string, userId: string): Promise<{ deleted: boolean; message: string }> {
+    const user = await this.userModel.findOne({
+      _id: new Types.ObjectId(userId),
+      shopId: new Types.ObjectId(shopId),
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Prevent deleting admin users
+    if (user.role === 'admin') {
+      throw new BadRequestException('Cannot delete admin users. Disable them instead.');
+    }
+
+    await this.userModel.deleteOne({ _id: new Types.ObjectId(userId) });
+
+    // Decrement employee count
+    await this.subscriptionGuard.decrementUsage(shopId, 'employees');
+
+    return { deleted: true, message: 'User deleted successfully' };
   }
 
   async findByPin(pin: string, shopId: string): Promise<User | null> {
@@ -314,5 +353,15 @@ export class UsersService {
     });
 
     return user.save();
+  }
+
+  /**
+   * Count employees (non-admin users) for a shop
+   */
+  async countEmployeesByShop(shopId: string): Promise<number> {
+    return this.userModel.countDocuments({
+      shopId: new Types.ObjectId(shopId),
+      role: { $ne: 'admin' },
+    }).exec();
   }
 }

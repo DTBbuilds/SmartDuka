@@ -32,9 +32,9 @@ export interface RequestOptions extends Omit<RequestInit, 'body'> {
 function getAuthToken(): string | null {
   if (typeof window === 'undefined') return null;
   
-  // Try localStorage first, then sessionStorage
-  return localStorage.getItem('smartduka_token') || 
-         sessionStorage.getItem('smartduka_token') ||
+  // Try localStorage first (matches auth-context.tsx key)
+  return localStorage.getItem('smartduka:token') || 
+         sessionStorage.getItem('smartduka:token') ||
          null;
 }
 
@@ -97,6 +97,19 @@ async function request<T = unknown>(
   const data = await response.json().catch(() => ({}));
   
   if (!response.ok) {
+    // Handle 401 Unauthorized - redirect to login
+    if (response.status === 401 && typeof window !== 'undefined') {
+      // Clear stored tokens (matches auth-context.tsx key)
+      localStorage.removeItem('smartduka:token');
+      sessionStorage.removeItem('smartduka:token');
+      
+      // Redirect to login page if not already there
+      if (!window.location.pathname.includes('/login')) {
+        window.location.href = '/login?expired=true';
+        return {} as T; // Return empty to prevent further processing
+      }
+    }
+    
     const error: ApiError = {
       message: data.message || data.error || 'An error occurred',
       statusCode: response.status,
@@ -142,10 +155,10 @@ export const api = {
     request<T>(endpoint, { ...options, method: 'PATCH', body }),
   
   /**
-   * DELETE request
+   * DELETE request (supports optional body for APIs that require it)
    */
-  delete: <T = unknown>(endpoint: string, options?: RequestOptions) =>
-    request<T>(endpoint, { ...options, method: 'DELETE' }),
+  delete: <T = unknown>(endpoint: string, body?: unknown, options?: RequestOptions) =>
+    request<T>(endpoint, { ...options, method: 'DELETE', body }),
   
   /**
    * Upload file(s)

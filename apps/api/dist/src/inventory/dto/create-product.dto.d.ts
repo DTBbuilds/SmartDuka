@@ -20,6 +20,7 @@ export declare class BulkImportOptionsDto {
     autoSuggestCategories?: boolean;
     updateExisting?: boolean;
     skipDuplicates?: boolean;
+    targetCategoryId?: string;
 }
 export declare class BulkImportDto {
     products: CreateProductDto[];

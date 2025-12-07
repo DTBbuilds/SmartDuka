@@ -18,9 +18,13 @@ const users_module_1 = require("../users/users.module");
 const shops_module_1 = require("../shops/shops.module");
 const activity_module_1 = require("../activity/activity.module");
 const shop_settings_module_1 = require("../shop-settings/shop-settings.module");
+const notifications_module_1 = require("../notifications/notifications.module");
+const subscriptions_module_1 = require("../subscriptions/subscriptions.module");
 const jwt_strategy_1 = require("./strategies/jwt.strategy");
 const google_strategy_1 = require("./strategies/google.strategy");
+const subscription_status_guard_1 = require("./guards/subscription-status.guard");
 const super_admin_schema_1 = require("./schemas/super-admin.schema");
+const subscription_schema_1 = require("../subscriptions/schemas/subscription.schema");
 let AuthModule = class AuthModule {
 };
 exports.AuthModule = AuthModule;
@@ -31,12 +35,18 @@ exports.AuthModule = AuthModule = __decorate([
             shops_module_1.ShopsModule,
             activity_module_1.ActivityModule,
             shop_settings_module_1.ShopSettingsModule,
+            notifications_module_1.NotificationsModule,
+            (0, common_1.forwardRef)(() => subscriptions_module_1.SubscriptionsModule),
             passport_1.PassportModule,
             mongoose_1.MongooseModule.forFeature([
                 {
                     name: 'SuperAdmin',
                     schema: super_admin_schema_1.SuperAdminSchema,
                     collection: 'super_admins',
+                },
+                {
+                    name: subscription_schema_1.Subscription.name,
+                    schema: subscription_schema_1.SubscriptionSchema,
                 },
             ]),
             jwt_1.JwtModule.registerAsync({
@@ -47,9 +57,9 @@ exports.AuthModule = AuthModule = __decorate([
                 }),
             }),
         ],
-        providers: [auth_service_1.AuthService, jwt_strategy_1.JwtStrategy, google_strategy_1.GoogleStrategy],
+        providers: [auth_service_1.AuthService, jwt_strategy_1.JwtStrategy, google_strategy_1.GoogleStrategy, subscription_status_guard_1.SubscriptionStatusGuard],
         controllers: [auth_controller_1.AuthController],
-        exports: [auth_service_1.AuthService],
+        exports: [auth_service_1.AuthService, subscription_status_guard_1.SubscriptionStatusGuard],
     })
 ], AuthModule);
 //# sourceMappingURL=auth.module.js.map

@@ -8,6 +8,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { NavbarEnhancedV2 } from "./navbar-enhanced-v2";
 import { AdminLayout } from "./admin-layout";
 import { DemoModeBanner, DemoModeIndicator } from "./demo-mode-banner";
+import { PWAInstallPrompt } from "./pwa-install-prompt";
 import "@/lib/i18n";
 
 export function Providers({ children }: { children: ReactNode }) {
@@ -24,6 +25,7 @@ export function Providers({ children }: { children: ReactNode }) {
               </div>
             </AdminLayout>
             <DemoModeIndicator />
+            <PWAInstallPrompt />
           </ThemeProvider>
         </LoadingProvider>
       </BranchProvider>

@@ -57,15 +57,21 @@ function CashiersContent() {
   const [generatedCashierName, setGeneratedCashierName] = useState('');
 
   useEffect(() => {
-    fetchCashiers();
-  }, [user, shop, token, router]);
+    if (shop?.id && token) {
+      fetchCashiers();
+    }
+  }, [shop?.id, token]);
 
   const fetchCashiers = async () => {
+    if (!shop?.id || !token) {
+      return;
+    }
+    
     try {
       setIsLoading(true);
       const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
-      const res = await fetch(`${base}/users/shop/${shop?.id}/cashiers`, {
+      const res = await fetch(`${base}/users/shop/${shop.id}/cashiers`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },

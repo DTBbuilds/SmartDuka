@@ -46,6 +46,11 @@ let Shop = class Shop {
     cashierCount;
     totalSales;
     totalOrders;
+    subscriptionId;
+    subscriptionPlan;
+    subscriptionStatus;
+    subscriptionExpiresAt;
+    isSubscriptionActive;
 };
 exports.Shop = Shop;
 __decorate([
@@ -180,6 +185,26 @@ __decorate([
     (0, mongoose_1.Prop)({ default: 0 }),
     __metadata("design:type", Number)
 ], Shop.prototype, "totalOrders", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, type: mongoose_2.Types.ObjectId, ref: 'Subscription' }),
+    __metadata("design:type", mongoose_2.Types.ObjectId)
+], Shop.prototype, "subscriptionId", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false }),
+    __metadata("design:type", String)
+], Shop.prototype, "subscriptionPlan", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false }),
+    __metadata("design:type", String)
+], Shop.prototype, "subscriptionStatus", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false }),
+    __metadata("design:type", Date)
+], Shop.prototype, "subscriptionExpiresAt", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ default: false }),
+    __metadata("design:type", Boolean)
+], Shop.prototype, "isSubscriptionActive", void 0);
 exports.Shop = Shop = __decorate([
     (0, mongoose_1.Schema)({ timestamps: true })
 ], Shop);

@@ -87,16 +87,8 @@ export class UsersController {
   @Roles('admin')
   @Delete(':id')
   async deleteUser(@Param('id') id: string, @CurrentUser() user: any) {
-    // Verify user belongs to same shop
-    const targetUser = await this.usersService.findById(id);
-    if (!targetUser || (targetUser as any).shopId.toString() !== user.shopId) {
-      throw new ForbiddenException('You are not allowed to delete users from this shop');
-    }
-    // Prevent deleting admin users
-    if ((targetUser as any).role === 'admin') {
-      throw new BadRequestException('Cannot delete admin users');
-    }
-    return this.usersService.deleteUser(id);
+    // The service handles multi-tenant safety and admin check
+    return this.usersService.deleteUser(user.shopId, id);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

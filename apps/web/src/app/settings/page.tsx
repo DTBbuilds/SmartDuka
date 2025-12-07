@@ -1,16 +1,23 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { config } from "@/lib/config";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Tabs, TabsContent, TabsList, TabsTrigger, Input, Label, Button, Textarea } from "@smartduka/ui";
-import { Store, User, Lock, Settings as SettingsIcon, ShieldAlert } from "lucide-react";
+import { Store, User, Lock, Settings as SettingsIcon, ShieldAlert, CreditCard, Crown, TrendingUp, Users, Package, Receipt, AlertCircle, Check, Clock, X, Phone, Loader2, Smartphone } from "lucide-react";
 import { TableSkeleton } from "@/components/shared/loading-skeleton";
+import { useSubscription, useSubscriptionPlans, useBillingHistory, type BillingCycle, type SubscriptionPlan } from "@/hooks/use-subscription";
+import { MpesaSettings } from "@/components/settings/mpesa-settings";
+import { PaymentConfigs } from "@/components/settings/payment-configs";
 
 export default function SettingsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, token, loading } = useAuth();
+  
+  // Get initial tab from URL query parameter
+  const initialTab = searchParams.get('tab') || 'shop';
   
   // Role-based access control - only admin can access settings
   const isAdmin = user?.role === 'admin';
@@ -226,11 +233,19 @@ export default function SettingsPage() {
         </div>
       )}
 
-      <Tabs defaultValue="shop" className="space-y-6">
-        <TabsList>
+      <Tabs defaultValue={initialTab} className="space-y-6">
+        <TabsList className="flex-wrap">
           <TabsTrigger value="shop" className="flex items-center gap-2">
             <Store className="h-4 w-4" />
             Shop Settings
+          </TabsTrigger>
+          <TabsTrigger value="mpesa" className="flex items-center gap-2">
+            <Smartphone className="h-4 w-4" />
+            M-Pesa
+          </TabsTrigger>
+          <TabsTrigger value="subscription" className="flex items-center gap-2">
+            <Crown className="h-4 w-4" />
+            Subscription
           </TabsTrigger>
           <TabsTrigger value="profile" className="flex items-center gap-2">
             <User className="h-4 w-4" />
@@ -339,6 +354,34 @@ export default function SettingsPage() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="mpesa">
+          <div className="space-y-8">
+            {/* Multiple Payment Configurations */}
+            <PaymentConfigs 
+              token={token || ''} 
+              onMessage={setMessage}
+            />
+            
+            {/* Legacy Single Config (for backward compatibility) */}
+            <div className="border-t pt-8">
+              <h3 className="text-lg font-semibold mb-4 text-muted-foreground">
+                Legacy Configuration (Deprecated)
+              </h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                This section is kept for backward compatibility. Please use the new configuration system above.
+              </p>
+              <MpesaSettings 
+                token={token || ''} 
+                onMessage={setMessage}
+              />
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="subscription">
+          <SubscriptionSettingsTab />
         </TabsContent>
 
         <TabsContent value="profile">
@@ -450,6 +493,472 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+// Subscription Settings Tab Component
+function SubscriptionSettingsTab() {
+  const { subscription, loading: subLoading, changePlan, cancelSubscription, reactivateSubscription } = useSubscription();
+  const { plans, loading: plansLoading } = useSubscriptionPlans();
+  const { invoices, pendingInvoices, loading: billingLoading, initiatePayment } = useBillingHistory();
+  
+  const [billingCycle, setBillingCycle] = useState<BillingCycle>('monthly');
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null);
+  const [selectedInvoice, setSelectedInvoice] = useState<string | null>(null);
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [processing, setProcessing] = useState(false);
+
+  const loading = subLoading || plansLoading || billingLoading;
+
+  // Plan color themes - high contrast
+  const planColors: Record<string, { bg: string; border: string; badge: string; iconBg: string; iconColor: string; headerGradient: string }> = {
+    blue: { bg: 'bg-white', border: 'border-blue-300', badge: 'bg-blue-600', iconBg: 'bg-blue-100', iconColor: 'text-blue-700', headerGradient: 'from-blue-600 to-blue-700' },
+    green: { bg: 'bg-white', border: 'border-emerald-300', badge: 'bg-emerald-600', iconBg: 'bg-emerald-100', iconColor: 'text-emerald-700', headerGradient: 'from-emerald-600 to-emerald-700' },
+    purple: { bg: 'bg-white', border: 'border-violet-300', badge: 'bg-violet-600', iconBg: 'bg-violet-100', iconColor: 'text-violet-700', headerGradient: 'from-violet-600 to-violet-700' },
+    gold: { bg: 'bg-amber-50', border: 'border-amber-400', badge: 'bg-amber-600', iconBg: 'bg-amber-200', iconColor: 'text-amber-800', headerGradient: 'from-amber-500 to-orange-600' },
+  };
+
+  // Status colors - high contrast
+  const statusColors: Record<string, { bg: string; text: string; border: string; icon: React.ReactNode }> = {
+    trial: { bg: 'bg-blue-100', text: 'text-blue-900', border: 'border-blue-300', icon: <Clock className="h-4 w-4" /> },
+    active: { bg: 'bg-emerald-100', text: 'text-emerald-900', border: 'border-emerald-300', icon: <Check className="h-4 w-4" /> },
+    past_due: { bg: 'bg-amber-100', text: 'text-amber-900', border: 'border-amber-300', icon: <AlertCircle className="h-4 w-4" /> },
+    suspended: { bg: 'bg-red-100', text: 'text-red-900', border: 'border-red-300', icon: <AlertCircle className="h-4 w-4" /> },
+    cancelled: { bg: 'bg-gray-200', text: 'text-gray-900', border: 'border-gray-400', icon: <X className="h-4 w-4" /> },
+    expired: { bg: 'bg-gray-200', text: 'text-gray-900', border: 'border-gray-400', icon: <Clock className="h-4 w-4" /> },
+  };
+
+  const handleUpgrade = async (plan: SubscriptionPlan) => {
+    if (!subscription) return;
+    setProcessing(true);
+    try {
+      await changePlan(plan.code, billingCycle);
+      setShowUpgradeModal(false);
+      setSelectedPlan(null);
+    } catch (error: any) {
+      alert(error.message);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handlePayment = async () => {
+    if (!selectedInvoice || !phoneNumber) return;
+    setProcessing(true);
+    try {
+      const result = await initiatePayment(selectedInvoice, phoneNumber);
+      if (result.success) {
+        alert(result.message);
+        setShowPaymentModal(false);
+        setSelectedInvoice(null);
+        setPhoneNumber('');
+      } else {
+        alert(result.message);
+      }
+    } catch (error: any) {
+      alert(error.message);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Current Subscription Card */}
+      {subscription ? (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Crown className="h-5 w-5 text-amber-500" />
+                  {subscription.planName} Plan
+                </CardTitle>
+                <CardDescription>
+                  {subscription.billingCycle === 'annual' ? 'Annual' : 'Monthly'} billing • 
+                  KES {subscription.currentPrice.toLocaleString()}/{subscription.billingCycle === 'annual' ? 'year' : 'month'}
+                </CardDescription>
+              </div>
+              <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-bold border ${statusColors[subscription.status]?.bg} ${statusColors[subscription.status]?.text} ${statusColors[subscription.status]?.border}`}>
+                {statusColors[subscription.status]?.icon}
+                {subscription.status.replace('_', ' ').toUpperCase()}
+              </span>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Period Info */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-muted/50 rounded-lg p-3">
+                <p className="text-sm text-muted-foreground">Started</p>
+                <p className="font-medium">{new Date(subscription.startDate).toLocaleDateString()}</p>
+              </div>
+              <div className="bg-muted/50 rounded-lg p-3">
+                <p className="text-sm text-muted-foreground">Current Period</p>
+                <p className="font-medium">{new Date(subscription.currentPeriodEnd).toLocaleDateString()}</p>
+              </div>
+              <div className="bg-muted/50 rounded-lg p-3">
+                <p className="text-sm text-muted-foreground">Days Remaining</p>
+                <p className="font-medium text-primary">{subscription.daysRemaining} days</p>
+              </div>
+              <div className="bg-muted/50 rounded-lg p-3">
+                <p className="text-sm text-muted-foreground">Auto Renew</p>
+                <p className="font-medium">{subscription.autoRenew ? 'Yes' : 'No'}</p>
+              </div>
+            </div>
+
+            {/* Usage Stats */}
+            <div>
+              <h4 className="font-medium mb-3">Usage</h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="border rounded-lg p-4">
+                  <div className="flex items-center gap-2 text-muted-foreground mb-2">
+                    <Store className="h-4 w-4" />
+                    <span className="text-sm">Shops/Branches</span>
+                  </div>
+                  <div className="flex items-end gap-2">
+                    <span className="text-2xl font-bold">{subscription.usage.shops.current}</span>
+                    <span className="text-muted-foreground text-sm">/ {subscription.usage.shops.limit}</span>
+                  </div>
+                  <div className="mt-2 h-2 bg-muted rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-blue-500 rounded-full"
+                      style={{ width: `${Math.min((subscription.usage.shops.current / subscription.usage.shops.limit) * 100, 100)}%` }}
+                    />
+                  </div>
+                </div>
+
+                <div className="border rounded-lg p-4">
+                  <div className="flex items-center gap-2 text-muted-foreground mb-2">
+                    <Users className="h-4 w-4" />
+                    <span className="text-sm">Employees</span>
+                  </div>
+                  <div className="flex items-end gap-2">
+                    <span className="text-2xl font-bold">{subscription.usage.employees.current}</span>
+                    <span className="text-muted-foreground text-sm">/ {subscription.usage.employees.limit}</span>
+                  </div>
+                  <div className="mt-2 h-2 bg-muted rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-green-500 rounded-full"
+                      style={{ width: `${Math.min((subscription.usage.employees.current / subscription.usage.employees.limit) * 100, 100)}%` }}
+                    />
+                  </div>
+                </div>
+
+                <div className="border rounded-lg p-4">
+                  <div className="flex items-center gap-2 text-muted-foreground mb-2">
+                    <Package className="h-4 w-4" />
+                    <span className="text-sm">Products</span>
+                  </div>
+                  <div className="flex items-end gap-2">
+                    <span className="text-2xl font-bold">{subscription.usage.products.current}</span>
+                    <span className="text-muted-foreground text-sm">/ {subscription.usage.products.limit}</span>
+                  </div>
+                  <div className="mt-2 h-2 bg-muted rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-purple-500 rounded-full"
+                      style={{ width: `${Math.min((subscription.usage.products.current / subscription.usage.products.limit) * 100, 100)}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3 pt-4 border-t">
+              <Button onClick={() => setShowUpgradeModal(true)}>
+                <TrendingUp className="h-4 w-4 mr-2" />
+                Upgrade Plan
+              </Button>
+              {subscription.status === 'cancelled' || subscription.status === 'expired' ? (
+                <Button variant="outline" onClick={() => reactivateSubscription()}>
+                  Reactivate Subscription
+                </Button>
+              ) : (
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    if (confirm('Are you sure you want to cancel your subscription?')) {
+                      cancelSubscription('User requested cancellation');
+                    }
+                  }}
+                >
+                  Cancel Subscription
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <Crown className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+            <h3 className="text-lg font-semibold mb-2">No Active Subscription</h3>
+            <p className="text-muted-foreground mb-4">Choose a plan below to get started with SmartDuka</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Pending Invoices Alert */}
+      {pendingInvoices.length > 0 && (
+        <Card className="border-yellow-200 bg-yellow-50">
+          <CardContent className="py-4">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5" />
+              <div className="flex-1">
+                <h3 className="font-medium text-yellow-800">Payment Required</h3>
+                <p className="text-yellow-700 text-sm mt-1">
+                  You have {pendingInvoices.length} pending invoice(s) totaling KES{' '}
+                  {pendingInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0).toLocaleString()}
+                </p>
+                <Button
+                  size="sm"
+                  className="mt-2 bg-yellow-600 hover:bg-yellow-700"
+                  onClick={() => {
+                    setSelectedInvoice(pendingInvoices[0]?.id);
+                    setShowPaymentModal(true);
+                  }}
+                >
+                  Pay Now
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Available Plans */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Available Plans</CardTitle>
+            <div className="flex items-center gap-2 bg-muted rounded-lg p-1">
+              <button
+                onClick={() => setBillingCycle('monthly')}
+                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  billingCycle === 'monthly' ? 'bg-background shadow text-foreground' : 'text-muted-foreground'
+                }`}
+              >
+                Monthly
+              </button>
+              <button
+                onClick={() => setBillingCycle('annual')}
+                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  billingCycle === 'annual' ? 'bg-background shadow text-foreground' : 'text-muted-foreground'
+                }`}
+              >
+                Annual (Save 17%)
+              </button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+            {plans.map((plan) => {
+              const colors = planColors[plan.colorTheme || 'blue'];
+              const isCurrentPlan = subscription?.planCode === plan.code;
+              const price = billingCycle === 'annual' ? plan.annualPrice : plan.monthlyPrice;
+
+              return (
+                <div
+                  key={plan.code}
+                  className={`relative rounded-xl border-2 overflow-hidden shadow-md hover:shadow-lg transition-all ${colors.border} ${colors.bg} ${
+                    isCurrentPlan ? 'ring-2 ring-primary ring-offset-2' : ''
+                  }`}
+                >
+                  {/* Header with gradient */}
+                  <div className={`bg-gradient-to-br ${colors.headerGradient} px-5 py-4`}>
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-lg font-bold text-white">{plan.name}</h3>
+                      {plan.badge && (
+                        <span className="px-2.5 py-1 text-xs font-bold text-white bg-white/20 rounded-full backdrop-blur-sm">
+                          {plan.badge}
+                        </span>
+                      )}
+                    </div>
+                    {isCurrentPlan && (
+                      <span className="inline-block mt-2 px-2.5 py-0.5 text-xs font-bold text-white bg-white/30 rounded-full">
+                        Current Plan
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Price */}
+                  <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-b from-gray-50 to-white">
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-sm font-semibold text-gray-600">KES</span>
+                      <span className="text-3xl font-extrabold text-gray-900">{price.toLocaleString()}</span>
+                      <span className="text-gray-600 font-medium">/{billingCycle === 'annual' ? 'yr' : 'mo'}</span>
+                    </div>
+                  </div>
+
+                  {/* Limits */}
+                  <div className="px-5 py-4 space-y-3">
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2 ${colors.iconBg} rounded-lg`}>
+                        <Store className={`h-4 w-4 ${colors.iconColor}`} />
+                      </div>
+                      <span className="font-semibold text-gray-900">{plan.maxShops} Shop{plan.maxShops > 1 ? 's' : ''}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2 ${colors.iconBg} rounded-lg`}>
+                        <Users className={`h-4 w-4 ${colors.iconColor}`} />
+                      </div>
+                      <span className="font-semibold text-gray-900">{plan.maxEmployees} Employees</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2 ${colors.iconBg} rounded-lg`}>
+                        <Package className={`h-4 w-4 ${colors.iconColor}`} />
+                      </div>
+                      <span className="font-semibold text-gray-900">{plan.maxProducts.toLocaleString()} Products</span>
+                    </div>
+                  </div>
+
+                  {/* CTA */}
+                  <div className="px-5 pb-5">
+                    <Button
+                      className="w-full font-bold shadow-sm"
+                      variant={isCurrentPlan ? "outline" : "default"}
+                      disabled={isCurrentPlan}
+                      onClick={() => {
+                        setSelectedPlan(plan);
+                        setShowUpgradeModal(true);
+                      }}
+                    >
+                      {isCurrentPlan ? 'Current Plan' : 'Select Plan'}
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Billing History */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Receipt className="h-5 w-5" />
+            Billing History
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {invoices.length === 0 ? (
+            <p className="text-center text-muted-foreground py-8">No billing history yet</p>
+          ) : (
+            <div className="divide-y">
+              {invoices.slice(0, 5).map((invoice) => (
+                <div key={invoice.id} className="py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-lg ${invoice.status === 'paid' ? 'bg-green-100' : 'bg-yellow-100'}`}>
+                      <Receipt className={`h-4 w-4 ${invoice.status === 'paid' ? 'text-green-600' : 'text-yellow-600'}`} />
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">{invoice.description}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {invoice.invoiceNumber} • {new Date(invoice.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-semibold text-sm">KES {invoice.totalAmount.toLocaleString()}</p>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                      invoice.status === 'paid' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                    }`}>
+                      {invoice.status.toUpperCase()}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Upgrade Modal */}
+      {showUpgradeModal && selectedPlan && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-background rounded-xl max-w-md w-full p-6">
+            <h3 className="text-lg font-semibold">
+              {subscription ? 'Change to' : 'Subscribe to'} {selectedPlan.name}
+            </h3>
+            <p className="text-muted-foreground mt-2">
+              KES {(billingCycle === 'annual' ? selectedPlan.annualPrice : selectedPlan.monthlyPrice).toLocaleString()}
+              /{billingCycle === 'annual' ? 'year' : 'month'}
+            </p>
+
+            <div className="mt-4 p-4 bg-muted rounded-lg">
+              <h4 className="font-medium mb-2">Includes:</h4>
+              <ul className="space-y-1 text-sm text-muted-foreground">
+                <li>• {selectedPlan.maxShops} Shop(s)</li>
+                <li>• Up to {selectedPlan.maxEmployees} Employees</li>
+                <li>• Up to {selectedPlan.maxProducts.toLocaleString()} Products</li>
+              </ul>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <Button variant="outline" className="flex-1" onClick={() => { setShowUpgradeModal(false); setSelectedPlan(null); }}>
+                Cancel
+              </Button>
+              <Button className="flex-1" onClick={() => handleUpgrade(selectedPlan)} disabled={processing}>
+                {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirm'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment Modal */}
+      {showPaymentModal && selectedInvoice && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-background rounded-xl max-w-md w-full p-6">
+            <h3 className="text-lg font-semibold">Pay with M-Pesa</h3>
+            <p className="text-muted-foreground mt-2">
+              Enter your M-Pesa phone number to receive the payment prompt.
+            </p>
+
+            <div className="mt-4">
+              <Label htmlFor="mpesaPhone">Phone Number</Label>
+              <div className="relative mt-1">
+                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="mpesaPhone"
+                  type="tel"
+                  value={phoneNumber}
+                  onChange={(e) => setPhoneNumber(e.target.value)}
+                  placeholder="0712345678"
+                  className="pl-10"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Format: 07XX XXX XXX or 01XX XXX XXX
+              </p>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <Button variant="outline" className="flex-1" onClick={() => { setShowPaymentModal(false); setSelectedInvoice(null); setPhoneNumber(''); }}>
+                Cancel
+              </Button>
+              <Button className="flex-1" onClick={handlePayment} disabled={processing || !phoneNumber}>
+                {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Send M-Pesa Prompt'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

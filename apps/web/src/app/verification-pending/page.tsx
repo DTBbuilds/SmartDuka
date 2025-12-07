@@ -7,13 +7,17 @@ import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } fro
 import { useAuth } from "@/lib/auth-context";
 import { ThemeToggleOutline } from "@/components/theme-toggle";
 
+// Auto-refresh interval in milliseconds (30 seconds)
+const AUTO_REFRESH_INTERVAL = 30000;
+
 export default function VerificationPendingPage() {
   const router = useRouter();
-  const { user, shop, token, logout, enterDemoMode, isDemoMode } = useAuth();
+  const { user, shop, token, logout, enterDemoMode, isDemoMode, refreshShop } = useAuth();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [shopStatus, setShopStatus] = useState(shop?.status);
   const [submittedTime, setSubmittedTime] = useState<Date | null>(null);
   const [expectedTime, setExpectedTime] = useState<Date | null>(null);
+  const [lastChecked, setLastChecked] = useState<Date | null>(null);
 
   // Handle entering demo mode
   const handleEnterDemoMode = () => {
@@ -59,16 +63,10 @@ export default function VerificationPendingPage() {
     
     setIsRefreshing(true);
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-      const res = await fetch(`${base}/shops/${shop.id}`, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (res.ok) {
-        const updatedShop = await res.json();
+      const updatedShop = await refreshShop();
+      setLastChecked(new Date());
+      
+      if (updatedShop) {
         setShopStatus(updatedShop.status);
 
         // If verified, redirect to dashboard
@@ -89,6 +87,20 @@ export default function VerificationPendingPage() {
       setIsRefreshing(false);
     }
   };
+
+  // Auto-refresh shop status every 30 seconds
+  useEffect(() => {
+    if (!shop || shop.status !== 'pending') return;
+    
+    const interval = setInterval(() => {
+      handleRefreshStatus();
+    }, AUTO_REFRESH_INTERVAL);
+
+    // Initial check
+    setLastChecked(new Date());
+
+    return () => clearInterval(interval);
+  }, [shop?.status]);
 
   const handleLogout = () => {
     logout();

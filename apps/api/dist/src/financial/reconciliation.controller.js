@@ -35,7 +35,7 @@ let ReconciliationController = class ReconciliationController {
     }
     async getVarianceReport(startDate, endDate, user) {
         if (!startDate || !endDate) {
-            throw new Error('startDate and endDate are required');
+            throw new common_1.BadRequestException('startDate and endDate are required');
         }
         return this.reconciliationService.getVarianceReport(user.shopId, new Date(startDate), new Date(endDate));
     }

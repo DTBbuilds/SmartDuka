@@ -48,17 +48,19 @@ function AdminMonitoringContent() {
   const [autoRefresh, setAutoRefresh] = useState(true);
 
   useEffect(() => {
-    loadMonitoringData();
+    if (shop?.id && token) {
+      loadMonitoringData();
+    }
     
     // Auto-refresh every 30 seconds if enabled
-    const interval = autoRefresh ? setInterval(loadMonitoringData, 30000) : null;
+    const interval = autoRefresh && shop?.id ? setInterval(loadMonitoringData, 30000) : null;
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [token, autoRefresh]);
+  }, [token, autoRefresh, shop?.id]);
 
   const loadMonitoringData = async () => {
-    if (!token || !user) return;
+    if (!token || !user || !shop?.id) return;
 
     try {
       setLoading(true);
@@ -66,7 +68,7 @@ function AdminMonitoringContent() {
       const headers = { Authorization: `Bearer ${token}` };
 
       // Get cashiers
-      const cashiersRes = await fetch(`${base}/users/shop/${shop?.id}/cashiers`, {
+      const cashiersRes = await fetch(`${base}/users/shop/${shop.id}/cashiers`, {
         headers,
       });
 

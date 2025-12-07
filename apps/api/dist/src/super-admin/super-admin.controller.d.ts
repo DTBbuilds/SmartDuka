@@ -60,7 +60,7 @@ export declare class SuperAdminController {
         name: string;
         email: string;
         phone: string;
-        status: "active" | "pending" | "verified" | "suspended" | "rejected" | "flagged";
+        status: "active" | "suspended" | "pending" | "verified" | "rejected" | "flagged";
         complianceScore: number;
         chargebackRate: number;
         refundRate: number;

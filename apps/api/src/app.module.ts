@@ -32,6 +32,8 @@ import { ReorderModule } from './reorder/reorder.module';
 import { BranchesModule } from './branches/branches.module';
 import { AuditModule } from './audit/audit.module';
 import { HealthModule } from './health/health.module';
+import { SubscriptionsModule } from './subscriptions/subscriptions.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -85,6 +87,8 @@ import { HealthModule } from './health/health.module';
     ReorderModule,
     BranchesModule,
     AuditModule,
+    SubscriptionsModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [

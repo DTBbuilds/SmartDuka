@@ -6,10 +6,16 @@ interface StockIndicatorProps {
   stock: number;
   productName: string;
   showLabel?: boolean;
+  lowStockThreshold?: number;
 }
 
-export function StockIndicator({ stock, productName, showLabel = true }: StockIndicatorProps) {
-  if (stock > 10) {
+export function StockIndicator({ 
+  stock, 
+  productName, 
+  showLabel = true,
+  lowStockThreshold = 10 
+}: StockIndicatorProps) {
+  if (stock > lowStockThreshold) {
     return (
       <div className="flex items-center gap-1 text-green-600 dark:text-green-400">
         <CheckCircle className="h-4 w-4" />

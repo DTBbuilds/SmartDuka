@@ -6,6 +6,8 @@ export declare class ShopInfoDto {
     address?: string;
     kraPin?: string;
     description?: string;
+    subscriptionPlanCode?: string;
+    billingCycle?: string;
 }
 export declare class AdminInfoDto {
     name: string;

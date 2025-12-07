@@ -1,0 +1,328 @@
+import {
+  Controller,
+  Get,
+  Post,
+  Query,
+  Param,
+  Body,
+  UseGuards,
+  Logger,
+  Res,
+} from '@nestjs/common';
+import type { Response } from 'express';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { SystemManagementService } from './services/system-management.service';
+import { SystemAuditService } from './services/system-audit.service';
+import { EmailLogService } from './services/email-log.service';
+import { AuditActionCategory } from './schemas/system-audit-log.schema';
+
+/**
+ * System Management Controller
+ * 
+ * Super Admin endpoints for comprehensive system oversight:
+ * - Dashboard statistics
+ * - Transaction history
+ * - Email logs
+ * - Audit logs
+ * - Revenue analytics
+ * - System health
+ */
+@Controller('super-admin/system')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('super_admin')
+export class SystemManagementController {
+  private readonly logger = new Logger(SystemManagementController.name);
+
+  constructor(
+    private readonly systemService: SystemManagementService,
+    private readonly auditService: SystemAuditService,
+    private readonly emailLogService: EmailLogService,
+  ) {}
+
+  // ============================================
+  // DASHBOARD
+  // ============================================
+
+  /**
+   * Get comprehensive dashboard statistics
+   */
+  @Get('dashboard')
+  async getDashboard() {
+    this.logger.log('Fetching system dashboard stats');
+    return this.systemService.getDashboardStats();
+  }
+
+  /**
+   * Get system health metrics
+   */
+  @Get('health')
+  async getSystemHealth() {
+    return this.systemService.getSystemHealth();
+  }
+
+  // ============================================
+  // TRANSACTIONS & PAYMENTS
+  // ============================================
+
+  /**
+   * Get all subscription invoices/payments
+   */
+  @Get('invoices')
+  async getAllInvoices(
+    @Query('status') status?: string,
+    @Query('shopId') shopId?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('limit') limit?: string,
+    @Query('skip') skip?: string,
+  ) {
+    return this.systemService.getAllInvoices({
+      status,
+      shopId,
+      startDate: startDate ? new Date(startDate) : undefined,
+      endDate: endDate ? new Date(endDate) : undefined,
+      limit: limit ? parseInt(limit) : 50,
+      skip: skip ? parseInt(skip) : 0,
+    });
+  }
+
+  /**
+   * Get all payment transactions (shop sales)
+   */
+  @Get('transactions')
+  async getAllTransactions(
+    @Query('paymentMethod') paymentMethod?: string,
+    @Query('status') status?: string,
+    @Query('shopId') shopId?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('limit') limit?: string,
+    @Query('skip') skip?: string,
+  ) {
+    return this.systemService.getAllTransactions({
+      paymentMethod,
+      status,
+      shopId,
+      startDate: startDate ? new Date(startDate) : undefined,
+      endDate: endDate ? new Date(endDate) : undefined,
+      limit: limit ? parseInt(limit) : 50,
+      skip: skip ? parseInt(skip) : 0,
+    });
+  }
+
+  /**
+   * Get revenue analytics
+   */
+  @Get('revenue')
+  async getRevenueAnalytics(
+    @Query('period') period?: 'day' | 'week' | 'month' | 'year',
+  ) {
+    return this.systemService.getRevenueAnalytics(period || 'month');
+  }
+
+  // ============================================
+  // SUBSCRIPTIONS
+  // ============================================
+
+  /**
+   * Get all subscriptions
+   */
+  @Get('subscriptions')
+  async getAllSubscriptions(
+    @Query('status') status?: string,
+    @Query('planCode') planCode?: string,
+    @Query('limit') limit?: string,
+    @Query('skip') skip?: string,
+  ) {
+    return this.systemService.getAllSubscriptions({
+      status,
+      planCode,
+      limit: limit ? parseInt(limit) : 50,
+      skip: skip ? parseInt(skip) : 0,
+    });
+  }
+
+  // ============================================
+  // AUDIT LOGS
+  // ============================================
+
+  /**
+   * Get system audit logs
+   */
+  @Get('audit-logs')
+  async getAuditLogs(
+    @Query('category') category?: AuditActionCategory,
+    @Query('action') action?: string,
+    @Query('actorEmail') actorEmail?: string,
+    @Query('shopId') shopId?: string,
+    @Query('status') status?: 'success' | 'failure' | 'warning',
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('limit') limit?: string,
+    @Query('skip') skip?: string,
+  ) {
+    return this.auditService.query({
+      category,
+      action,
+      actorEmail,
+      shopId,
+      status,
+      startDate: startDate ? new Date(startDate) : undefined,
+      endDate: endDate ? new Date(endDate) : undefined,
+      limit: limit ? parseInt(limit) : 50,
+      skip: skip ? parseInt(skip) : 0,
+    });
+  }
+
+  /**
+   * Get recent activity
+   */
+  @Get('audit-logs/recent')
+  async getRecentActivity(@Query('limit') limit?: string) {
+    return this.auditService.getRecentActivity(limit ? parseInt(limit) : 20);
+  }
+
+  /**
+   * Get failed actions
+   */
+  @Get('audit-logs/failures')
+  async getFailedActions(
+    @Query('limit') limit?: string,
+    @Query('skip') skip?: string,
+  ) {
+    return this.auditService.getFailedActions(
+      limit ? parseInt(limit) : 50,
+      skip ? parseInt(skip) : 0,
+    );
+  }
+
+  /**
+   * Get audit log statistics
+   */
+  @Get('audit-logs/stats')
+  async getAuditStats(
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.auditService.getStats(
+      startDate ? new Date(startDate) : undefined,
+      endDate ? new Date(endDate) : undefined,
+    );
+  }
+
+  /**
+   * Export audit logs to CSV
+   */
+  @Get('audit-logs/export')
+  async exportAuditLogs(
+    @Res() res: Response,
+    @Query('category') category?: AuditActionCategory,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    const csv = await this.auditService.exportToCsv({
+      category,
+      startDate: startDate ? new Date(startDate) : undefined,
+      endDate: endDate ? new Date(endDate) : undefined,
+    });
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=audit-logs-${new Date().toISOString().split('T')[0]}.csv`);
+    res.send(csv);
+  }
+
+  // ============================================
+  // EMAIL LOGS
+  // ============================================
+
+  /**
+   * Get email logs
+   */
+  @Get('emails')
+  async getEmailLogs(
+    @Query('to') to?: string,
+    @Query('shopId') shopId?: string,
+    @Query('status') status?: string,
+    @Query('category') category?: string,
+    @Query('templateName') templateName?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('limit') limit?: string,
+    @Query('skip') skip?: string,
+  ) {
+    return this.emailLogService.query({
+      to,
+      shopId,
+      status,
+      category,
+      templateName,
+      startDate: startDate ? new Date(startDate) : undefined,
+      endDate: endDate ? new Date(endDate) : undefined,
+      limit: limit ? parseInt(limit) : 50,
+      skip: skip ? parseInt(skip) : 0,
+    });
+  }
+
+  /**
+   * Get recent emails
+   */
+  @Get('emails/recent')
+  async getRecentEmails(@Query('limit') limit?: string) {
+    return this.emailLogService.getRecent(limit ? parseInt(limit) : 20);
+  }
+
+  /**
+   * Get failed emails
+   */
+  @Get('emails/failed')
+  async getFailedEmails(
+    @Query('limit') limit?: string,
+    @Query('skip') skip?: string,
+  ) {
+    return this.emailLogService.getFailed(
+      limit ? parseInt(limit) : 50,
+      skip ? parseInt(skip) : 0,
+    );
+  }
+
+  /**
+   * Get email statistics
+   */
+  @Get('emails/stats')
+  async getEmailStats(
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.emailLogService.getStats(
+      startDate ? new Date(startDate) : undefined,
+      endDate ? new Date(endDate) : undefined,
+    );
+  }
+
+  /**
+   * Retry a failed email
+   */
+  @Post('emails/:id/retry')
+  async retryEmail(@Param('id') emailId: string) {
+    return this.emailLogService.retryEmail(emailId);
+  }
+
+  /**
+   * Get emails for a specific shop
+   */
+  @Get('emails/shop/:shopId')
+  async getShopEmails(
+    @Param('shopId') shopId: string,
+    @Query('limit') limit?: string,
+    @Query('skip') skip?: string,
+  ) {
+    return this.emailLogService.getByShop(
+      shopId,
+      limit ? parseInt(limit) : 50,
+      skip ? parseInt(skip) : 0,
+    );
+  }
+}

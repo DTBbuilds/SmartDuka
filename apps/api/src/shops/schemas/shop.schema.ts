@@ -39,6 +39,7 @@ export class Shop {
   tillNumber?: string;
 
   // M-Pesa Configuration - Each shop can have their own M-Pesa credentials
+  // Sensitive fields (consumerKey, consumerSecret, passkey) are encrypted using AES-256-GCM
   @Prop({ type: Object, default: {} })
   mpesaConfig?: {
     // Type: 'paybill' or 'till' (Buy Goods)
@@ -47,11 +48,21 @@ export class Shop {
     shortCode?: string;
     // For Paybill: Account number prefix (optional)
     accountPrefix?: string;
-    // Daraja API credentials (encrypted in production)
+    
+    // Daraja API credentials (ENCRYPTED)
     consumerKey?: string;
+    consumerKeyIv?: string;  // Initialization vector for decryption
+    consumerKeyTag?: string; // Auth tag for decryption
+    
     consumerSecret?: string;
-    // Passkey for STK Push (Lipa Na M-Pesa Online)
+    consumerSecretIv?: string;
+    consumerSecretTag?: string;
+    
+    // Passkey for STK Push (ENCRYPTED)
     passkey?: string;
+    passkeyIv?: string;
+    passkeyTag?: string;
+    
     // Callback URL for this shop (optional - defaults to platform callback)
     callbackUrl?: string;
     // Whether M-Pesa is enabled for this shop
@@ -60,6 +71,12 @@ export class Shop {
     verifiedAt?: Date;
     // Verification status
     verificationStatus?: 'pending' | 'verified' | 'failed';
+    // Last test transaction date
+    lastTestedAt?: Date;
+    // Test transaction result
+    lastTestResult?: 'success' | 'failed';
+    // Configuration updated date
+    updatedAt?: Date;
   };
 
   @Prop({ enum: ['pending', 'verified', 'active', 'suspended', 'rejected', 'flagged'], default: 'pending' })
@@ -130,6 +147,22 @@ export class Shop {
 
   @Prop({ default: 0 })
   totalOrders: number;
+
+  // Subscription fields
+  @Prop({ required: false, type: Types.ObjectId, ref: 'Subscription' })
+  subscriptionId?: Types.ObjectId;
+
+  @Prop({ required: false })
+  subscriptionPlan?: string; // 'starter', 'basic', 'silver', 'gold'
+
+  @Prop({ required: false })
+  subscriptionStatus?: string; // 'trial', 'active', 'past_due', 'suspended', 'cancelled', 'expired'
+
+  @Prop({ required: false })
+  subscriptionExpiresAt?: Date;
+
+  @Prop({ default: false })
+  isSubscriptionActive: boolean;
 }
 
 export const ShopSchema = SchemaFactory.createForClass(Shop);

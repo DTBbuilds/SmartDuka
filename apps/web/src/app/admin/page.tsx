@@ -16,7 +16,7 @@ import {
   TabsTrigger,
   Textarea,
 } from '@smartduka/ui';
-import { Plus, Trash2, Edit2, Download, Upload, Users, Activity, ChevronDown, ChevronUp, Package, Zap, BarChart3, Copy, Archive, Eye, Search, Filter, MapPin, TrendingUp, ShoppingCart, CreditCard, AlertTriangle, ArrowUpRight, Boxes } from 'lucide-react';
+import { Plus, Trash2, Edit2, Download, Upload, Users, Activity, ChevronDown, ChevronUp, Package, Zap, BarChart3, Copy, Archive, Eye, Search, Filter, MapPin, TrendingUp, ShoppingCart, CreditCard, AlertTriangle, ArrowUpRight, Boxes, Smartphone, Settings } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
@@ -39,6 +39,7 @@ type Product = {
   cost?: number;
   stock?: number;
   status: 'active' | 'inactive';
+  lowStockThreshold?: number;
 };
 
 type Category = {
@@ -66,6 +67,12 @@ function AdminContent() {
     totalRevenue: number;
     totalOrders: number;
   } | null>(null);
+  const [mpesaStatus, setMpesaStatus] = useState<{
+    isConfigured: boolean;
+    isVerified: boolean;
+    isEnabled: boolean;
+    message: string;
+  } | null>(null);
   const [isCSVImportOpen, setIsCSVImportOpen] = useState(false);
   const [isCategoryImportExportOpen, setIsCategoryImportExportOpen] = useState(false);
   const [isQuickAddExpanded, setIsQuickAddExpanded] = useState(false);
@@ -88,11 +95,12 @@ function AdminContent() {
       const branchParam = currentBranch ? `branchId=${currentBranch._id}` : '';
       const branchQuery = branchParam ? `&${branchParam}` : '';
 
-      const [productsRes, categoriesRes, lowStockRes, salesStatsRes] = await Promise.all([
+      const [productsRes, categoriesRes, lowStockRes, salesStatsRes, mpesaStatusRes] = await Promise.all([
         fetch(`${base}/inventory/products?limit=200${branchQuery}`, { headers }),
         fetch(`${base}/inventory/categories`, { headers }),
         fetch(`${base}/inventory/stock/low-stock${branchParam ? `?${branchParam}` : ''}`, { headers }),
         fetch(`${base}/sales/stats${branchParam ? `?${branchParam}` : ''}`, { headers }),
+        fetch(`${base}/payments/mpesa/config/status`, { headers }),
       ]);
 
       // Handle products
@@ -138,6 +146,15 @@ function AdminContent() {
       } else {
         console.error('Failed to load sales stats:', salesStatsRes.status);
         setSalesStats(null);
+      }
+
+      // Handle M-Pesa status
+      if (mpesaStatusRes.ok) {
+        const data = await mpesaStatusRes.json();
+        setMpesaStatus(data);
+      } else {
+        console.error('Failed to load M-Pesa status:', mpesaStatusRes.status);
+        setMpesaStatus(null);
       }
     } catch (err: any) {
       console.error('Error loading data:', err);
@@ -307,6 +324,75 @@ function AdminContent() {
           <h1 className="text-3xl font-bold">Admin Dashboard</h1>
           <p className="text-muted-foreground">Manage your inventory and operations</p>
         </div>
+
+        {/* M-Pesa Configuration Alert */}
+        {mpesaStatus && !mpesaStatus.isConfigured && (
+          <Card className="mb-6 border-orange-500/40 bg-orange-500/10">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-orange-500/20">
+                    <Smartphone className="h-5 w-5 text-orange-600" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-orange-700 dark:text-orange-400 text-lg">
+                      M-Pesa Setup Required
+                    </CardTitle>
+                    <CardDescription className="text-orange-600/80">
+                      Configure your Paybill/Till number to accept mobile payments
+                    </CardDescription>
+                  </div>
+                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="border-orange-500/40 text-orange-700 hover:bg-orange-500/10"
+                  onClick={() => router.push('/settings?tab=mpesa')}
+                >
+                  <Settings className="h-4 w-4 mr-2" />
+                  Configure Now
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <p className="text-sm text-orange-700/80 dark:text-orange-300/80">
+                Each shop must configure their own M-Pesa credentials. Payments cannot be processed until your Paybill/Till number is set up and verified.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* M-Pesa Verification Pending Alert */}
+        {mpesaStatus && mpesaStatus.isConfigured && !mpesaStatus.isVerified && (
+          <Card className="mb-6 border-blue-500/40 bg-blue-500/10">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-blue-500/20">
+                    <Smartphone className="h-5 w-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-blue-700 dark:text-blue-400 text-lg">
+                      M-Pesa Verification Pending
+                    </CardTitle>
+                    <CardDescription className="text-blue-600/80">
+                      Your credentials need to be verified before accepting payments
+                    </CardDescription>
+                  </div>
+                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="border-blue-500/40 text-blue-700 hover:bg-blue-500/10"
+                  onClick={() => router.push('/settings?tab=mpesa')}
+                >
+                  <Settings className="h-4 w-4 mr-2" />
+                  Verify Now
+                </Button>
+              </div>
+            </CardHeader>
+          </Card>
+        )}
 
         {/* Low Stock Alert */}
         {lowStockProducts.length > 0 && (
@@ -862,6 +948,8 @@ function AdminContent() {
           isOpen={isCSVImportOpen}
           onClose={() => setIsCSVImportOpen(false)}
           onImport={handleCSVImport}
+          token={token || ''}
+          categories={categories}
         />
 
         {/* Category Import/Export Modal */}

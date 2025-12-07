@@ -4,6 +4,7 @@ import { Model, Types } from 'mongoose';
 import { ConfigService } from '@nestjs/config';
 import { Shop, ShopDocument } from '../../shops/schemas/shop.schema';
 import { MpesaTransaction, MpesaTransactionDocument } from '../schemas/mpesa-transaction.schema';
+import { MpesaEncryptionService } from './mpesa-encryption.service';
 
 /**
  * Multi-Tenant M-Pesa Service
@@ -17,6 +18,11 @@ import { MpesaTransaction, MpesaTransactionDocument } from '../schemas/mpesa-tra
  * 1. Shop-specific credentials: Each shop can configure their own M-Pesa account
  * 2. Platform fallback: Shops without credentials use platform's shared account
  * 3. Account Reference: Contains shopId for transaction routing
+ * 
+ * Security:
+ * - All sensitive credentials are encrypted at rest using AES-256-GCM
+ * - Credentials are decrypted only when needed for API calls
+ * - Each shop's credentials are isolated from other shops
  */
 @Injectable()
 export class MpesaMultiTenantService {
@@ -28,6 +34,7 @@ export class MpesaMultiTenantService {
     @InjectModel(Shop.name) private readonly shopModel: Model<ShopDocument>,
     @InjectModel(MpesaTransaction.name) private readonly transactionModel: Model<MpesaTransactionDocument>,
     private readonly configService: ConfigService,
+    private readonly encryptionService: MpesaEncryptionService,
   ) {
     // Use sandbox for development, production URL for live
     const environment = this.configService.get<string>('MPESA_ENVIRONMENT', 'sandbox');
@@ -38,7 +45,8 @@ export class MpesaMultiTenantService {
 
   /**
    * Get M-Pesa credentials for a shop
-   * Falls back to platform credentials if shop doesn't have their own
+   * NO FALLBACK - Each shop MUST configure their own M-Pesa credentials
+   * Decrypts encrypted credentials before returning
    */
   async getShopMpesaConfig(shopId: string): Promise<{
     shortCode: string;
@@ -48,7 +56,8 @@ export class MpesaMultiTenantService {
     passkey: string;
     callbackUrl: string;
     accountPrefix?: string;
-    isShopSpecific: boolean;
+    isConfigured: boolean;
+    isVerified: boolean;
   }> {
     const shop = await this.shopModel.findById(shopId).exec();
     
@@ -57,31 +66,121 @@ export class MpesaMultiTenantService {
     }
 
     // Check if shop has their own M-Pesa configuration
-    if (shop.mpesaConfig?.enabled && shop.mpesaConfig?.shortCode && shop.mpesaConfig?.consumerKey) {
-      this.logger.log(`Using shop-specific M-Pesa config for shop ${shopId}`);
+    const hasConfig = !!(
+      shop.mpesaConfig?.enabled && 
+      shop.mpesaConfig?.shortCode && 
+      shop.mpesaConfig?.consumerKey &&
+      shop.mpesaConfig?.consumerSecret &&
+      shop.mpesaConfig?.passkey
+    );
+
+    if (!hasConfig) {
+      this.logger.warn(`Shop ${shopId} has not configured M-Pesa credentials`);
       return {
-        shortCode: shop.mpesaConfig.shortCode,
-        type: shop.mpesaConfig.type || 'paybill',
-        consumerKey: shop.mpesaConfig.consumerKey,
-        consumerSecret: shop.mpesaConfig.consumerSecret || '',
-        passkey: shop.mpesaConfig.passkey || '',
-        callbackUrl: shop.mpesaConfig.callbackUrl || this.getDefaultCallbackUrl(),
-        accountPrefix: shop.mpesaConfig.accountPrefix,
-        isShopSpecific: true,
+        shortCode: '',
+        type: 'paybill',
+        consumerKey: '',
+        consumerSecret: '',
+        passkey: '',
+        callbackUrl: this.getDefaultCallbackUrl(),
+        isConfigured: false,
+        isVerified: false,
       };
     }
 
-    // Fall back to platform credentials
-    this.logger.log(`Using platform M-Pesa config for shop ${shopId}`);
+    // Decrypt credentials
+    const decryptedConfig = this.encryptionService.decryptMpesaConfig(shop.mpesaConfig!);
+    
+    this.logger.log(`Using shop-specific M-Pesa config for shop ${shopId}`);
+    
     return {
-      shortCode: this.configService.get<string>('MPESA_SHORTCODE', '174379'),
-      type: this.configService.get<'paybill' | 'till'>('MPESA_TYPE', 'paybill'),
-      consumerKey: this.configService.get<string>('MPESA_CONSUMER_KEY', ''),
-      consumerSecret: this.configService.get<string>('MPESA_CONSUMER_SECRET', ''),
-      passkey: this.configService.get<string>('MPESA_PASSKEY', ''),
-      callbackUrl: this.getDefaultCallbackUrl(),
-      isShopSpecific: false,
+      shortCode: shop.mpesaConfig!.shortCode!,
+      type: shop.mpesaConfig!.type || 'paybill',
+      consumerKey: decryptedConfig.consumerKey || '',
+      consumerSecret: decryptedConfig.consumerSecret || '',
+      passkey: decryptedConfig.passkey || '',
+      callbackUrl: shop.mpesaConfig!.callbackUrl || this.getDefaultCallbackUrl(),
+      accountPrefix: shop.mpesaConfig!.accountPrefix,
+      isConfigured: true,
+      isVerified: shop.mpesaConfig!.verificationStatus === 'verified',
     };
+  }
+
+  /**
+   * Check if a shop has M-Pesa configured and verified
+   */
+  async getMpesaConfigStatus(shopId: string): Promise<{
+    isConfigured: boolean;
+    isVerified: boolean;
+    isEnabled: boolean;
+    shortCode?: string;
+    type?: 'paybill' | 'till';
+    verificationStatus?: 'pending' | 'verified' | 'failed';
+    lastTestedAt?: Date;
+    message: string;
+  }> {
+    const shop = await this.shopModel.findById(shopId).exec();
+    
+    if (!shop) {
+      throw new BadRequestException('Shop not found');
+    }
+
+    const mpesaConfig = shop.mpesaConfig;
+
+    // Check configuration completeness
+    const hasCredentials = !!(
+      mpesaConfig?.shortCode &&
+      mpesaConfig?.consumerKey &&
+      mpesaConfig?.consumerSecret &&
+      mpesaConfig?.passkey
+    );
+
+    const isEnabled = mpesaConfig?.enabled === true;
+    const isVerified = mpesaConfig?.verificationStatus === 'verified';
+
+    let message = '';
+    if (!hasCredentials) {
+      message = 'M-Pesa not configured. Please add your Paybill/Till credentials to accept mobile payments.';
+    } else if (!isEnabled) {
+      message = 'M-Pesa credentials saved but not enabled. Enable M-Pesa in settings to accept payments.';
+    } else if (!isVerified) {
+      message = 'M-Pesa credentials pending verification. Please verify your credentials.';
+    } else {
+      message = 'M-Pesa is configured and ready to accept payments.';
+    }
+
+    return {
+      isConfigured: hasCredentials,
+      isVerified,
+      isEnabled,
+      shortCode: mpesaConfig?.shortCode,
+      type: mpesaConfig?.type,
+      verificationStatus: mpesaConfig?.verificationStatus,
+      lastTestedAt: mpesaConfig?.lastTestedAt,
+      message,
+    };
+  }
+
+  /**
+   * Get all shops that don't have M-Pesa configured (for admin reminders)
+   */
+  async getShopsWithoutMpesaConfig(): Promise<{ shopId: string; shopName: string; email: string; createdAt: Date }[]> {
+    const shops = await this.shopModel.find({
+      status: 'active',
+      $or: [
+        { 'mpesaConfig.enabled': { $ne: true } },
+        { 'mpesaConfig.shortCode': { $exists: false } },
+        { 'mpesaConfig.consumerKey': { $exists: false } },
+        { 'mpesaConfig.verificationStatus': { $ne: 'verified' } },
+      ],
+    }).select('_id name email createdAt').lean().exec();
+
+    return shops.map(shop => ({
+      shopId: shop._id.toString(),
+      shopName: shop.name,
+      email: shop.email,
+      createdAt: (shop as any).createdAt,
+    }));
   }
 
   /**
@@ -129,7 +228,7 @@ export class MpesaMultiTenantService {
 
   /**
    * Initiate STK Push for a shop
-   * Uses shop-specific credentials if available, otherwise platform credentials
+   * REQUIRES shop-specific credentials - no fallback to platform credentials
    */
   async initiateSTKPush(params: {
     shopId: string;
@@ -152,8 +251,17 @@ export class MpesaMultiTenantService {
     // Get shop's M-Pesa configuration
     const config = await this.getShopMpesaConfig(shopId);
 
-    if (!config.consumerKey || !config.consumerSecret || !config.passkey) {
-      throw new BadRequestException('M-Pesa is not configured for this shop');
+    // Strict check - shop MUST have their own M-Pesa configured
+    if (!config.isConfigured) {
+      throw new BadRequestException(
+        'M-Pesa is not configured for this shop. Please configure your Paybill/Till number in Settings → M-Pesa to accept mobile payments.'
+      );
+    }
+
+    if (!config.isVerified) {
+      throw new BadRequestException(
+        'M-Pesa credentials are not verified. Please verify your credentials in Settings → M-Pesa before accepting payments.'
+      );
     }
 
     // Format phone number (ensure it starts with 254)
@@ -165,12 +273,8 @@ export class MpesaMultiTenantService {
     // Generate password (Base64 of ShortCode + Passkey + Timestamp)
     const password = Buffer.from(`${config.shortCode}${config.passkey}${timestamp}`).toString('base64');
 
-    // Build account reference
-    // For platform account: include shopId for routing
-    // For shop-specific: use order number or custom prefix
-    const accountReference = config.isShopSpecific
-      ? `${config.accountPrefix || ''}${orderNumber}`.slice(0, 12)
-      : `${shopId.slice(-6)}-${orderNumber}`.slice(0, 12);
+    // Build account reference using shop's prefix or order number
+    const accountReference = `${config.accountPrefix || ''}${orderNumber}`.slice(0, 12);
 
     try {
       // Get access token
@@ -216,7 +320,7 @@ export class MpesaMultiTenantService {
           accountReference,
           status: 'PENDING',
           shortCode: config.shortCode,
-          isShopSpecific: config.isShopSpecific,
+          isShopSpecific: true, // All configs are now shop-specific
         });
         await transaction.save();
 
@@ -375,6 +479,7 @@ export class MpesaMultiTenantService {
 
   /**
    * Update shop's M-Pesa configuration
+   * Encrypts sensitive credentials before storing
    */
   async updateShopMpesaConfig(shopId: string, config: {
     type?: 'paybill' | 'till';
@@ -385,26 +490,51 @@ export class MpesaMultiTenantService {
     accountPrefix?: string;
     enabled?: boolean;
   }): Promise<ShopDocument | null> {
+    // Encrypt sensitive credentials
+    const encryptedConfig = this.encryptionService.encryptMpesaConfig({
+      consumerKey: config.consumerKey,
+      consumerSecret: config.consumerSecret,
+      passkey: config.passkey,
+    });
+
+    const updateData: any = {
+      'mpesaConfig.type': config.type,
+      'mpesaConfig.shortCode': config.shortCode,
+      'mpesaConfig.accountPrefix': config.accountPrefix,
+      'mpesaConfig.enabled': config.enabled,
+      'mpesaConfig.verificationStatus': 'pending',
+      'mpesaConfig.updatedAt': new Date(),
+    };
+
+    // Add encrypted credentials
+    if (config.consumerKey) {
+      updateData['mpesaConfig.consumerKey'] = encryptedConfig.consumerKey;
+      updateData['mpesaConfig.consumerKeyIv'] = encryptedConfig.consumerKeyIv;
+      updateData['mpesaConfig.consumerKeyTag'] = encryptedConfig.consumerKeyTag;
+    }
+
+    if (config.consumerSecret) {
+      updateData['mpesaConfig.consumerSecret'] = encryptedConfig.consumerSecret;
+      updateData['mpesaConfig.consumerSecretIv'] = encryptedConfig.consumerSecretIv;
+      updateData['mpesaConfig.consumerSecretTag'] = encryptedConfig.consumerSecretTag;
+    }
+
+    if (config.passkey) {
+      updateData['mpesaConfig.passkey'] = encryptedConfig.passkey;
+      updateData['mpesaConfig.passkeyIv'] = encryptedConfig.passkeyIv;
+      updateData['mpesaConfig.passkeyTag'] = encryptedConfig.passkeyTag;
+    }
+
     return this.shopModel.findByIdAndUpdate(
       shopId,
-      {
-        $set: {
-          'mpesaConfig.type': config.type,
-          'mpesaConfig.shortCode': config.shortCode,
-          'mpesaConfig.consumerKey': config.consumerKey,
-          'mpesaConfig.consumerSecret': config.consumerSecret,
-          'mpesaConfig.passkey': config.passkey,
-          'mpesaConfig.accountPrefix': config.accountPrefix,
-          'mpesaConfig.enabled': config.enabled,
-          'mpesaConfig.verificationStatus': 'pending',
-        },
-      },
+      { $set: updateData },
       { new: true },
     );
   }
 
   /**
    * Verify shop's M-Pesa credentials by attempting to get an access token
+   * Decrypts credentials before verification
    */
   async verifyShopMpesaCredentials(shopId: string): Promise<{
     success: boolean;
@@ -417,14 +547,23 @@ export class MpesaMultiTenantService {
         return { success: false, message: 'M-Pesa credentials not configured' };
       }
 
-      // Try to get an access token
-      await this.getAccessToken(shop.mpesaConfig.consumerKey, shop.mpesaConfig.consumerSecret);
+      // Decrypt credentials
+      const decryptedConfig = this.encryptionService.decryptMpesaConfig(shop.mpesaConfig);
+
+      if (!decryptedConfig.consumerKey || !decryptedConfig.consumerSecret) {
+        return { success: false, message: 'Failed to decrypt M-Pesa credentials' };
+      }
+
+      // Try to get an access token with decrypted credentials
+      await this.getAccessToken(decryptedConfig.consumerKey, decryptedConfig.consumerSecret);
 
       // Update verification status
       await this.shopModel.findByIdAndUpdate(shopId, {
         $set: {
           'mpesaConfig.verificationStatus': 'verified',
           'mpesaConfig.verifiedAt': new Date(),
+          'mpesaConfig.lastTestedAt': new Date(),
+          'mpesaConfig.lastTestResult': 'success',
         },
       });
 
@@ -434,6 +573,8 @@ export class MpesaMultiTenantService {
       await this.shopModel.findByIdAndUpdate(shopId, {
         $set: {
           'mpesaConfig.verificationStatus': 'failed',
+          'mpesaConfig.lastTestedAt': new Date(),
+          'mpesaConfig.lastTestResult': 'failed',
         },
       });
 

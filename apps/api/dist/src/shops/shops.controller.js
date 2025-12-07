@@ -47,7 +47,7 @@ let ShopsController = class ShopsController {
     }
     async getStats(id, user) {
         if (user.shopId !== id) {
-            throw new Error('Unauthorized');
+            throw new common_1.ForbiddenException('You are not allowed to access stats for this shop');
         }
         return this.shopsService.getStats(id);
     }

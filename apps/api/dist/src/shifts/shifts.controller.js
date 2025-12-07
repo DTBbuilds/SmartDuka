@@ -26,7 +26,7 @@ let ShiftsController = class ShiftsController {
     }
     async clockIn(body, user) {
         if (user.shopId !== body.shopId) {
-            throw new Error('Unauthorized');
+            throw new common_1.ForbiddenException('You are not allowed to clock in for this shop');
         }
         const shift = await this.shiftsService.clockIn(body.shopId, user.sub, user.name || user.email, body.openingBalance);
         return shift;

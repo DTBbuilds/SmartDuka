@@ -45,6 +45,8 @@ interface Adjustment {
   reference?: string;
   adjustedBy?: string;
   adjustedByName?: string;
+  previousStock?: number;
+  newStock?: number;
   createdAt: string;
 }
 
@@ -379,7 +381,7 @@ export default function StockAdjustmentsPage() {
       </Card>
 
       {/* Low Stock Alert */}
-      {products.filter(p => p.stock <= (p.lowStockThreshold || 5)).length > 0 && (
+      {products.filter(p => p.stock <= (p.lowStockThreshold ?? 10)).length > 0 && (
         <Card className="border-orange-200 bg-orange-50 dark:bg-orange-900/10">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-2">
@@ -387,7 +389,7 @@ export default function StockAdjustmentsPage() {
               <span className="font-semibold text-orange-800 dark:text-orange-400">Low Stock Products</span>
             </div>
             <div className="flex flex-wrap gap-2">
-              {products.filter(p => p.stock <= (p.lowStockThreshold || 5)).slice(0, 5).map(p => (
+              {products.filter(p => p.stock <= (p.lowStockThreshold ?? 10)).slice(0, 5).map(p => (
                 <Badge key={p._id} variant="outline" className="cursor-pointer hover:bg-orange-100" onClick={() => { setFormData({ ...formData, productId: p._id, adjustmentType: "increase", reason: "received" }); setIsModalOpen(true); }}>
                   {p.name}: {p.stock} left
                 </Badge>

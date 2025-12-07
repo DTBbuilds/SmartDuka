@@ -1,11 +1,13 @@
 import { Model, Types } from 'mongoose';
 import { ShopDocument } from '../shops/schemas/shop.schema';
 import { ShopAuditLogService } from '../shops/services/shop-audit-log.service';
+import { EmailService } from '../notifications/email.service';
 export declare class SuperAdminService {
     private readonly shopModel;
     private readonly auditLogService;
+    private readonly emailService?;
     private readonly logger;
-    constructor(shopModel: Model<ShopDocument>, auditLogService: ShopAuditLogService);
+    constructor(shopModel: Model<ShopDocument>, auditLogService: ShopAuditLogService, emailService?: EmailService | undefined);
     getPendingShops(limit?: number, skip?: number): Promise<ShopDocument[]>;
     getVerifiedShops(limit?: number, skip?: number): Promise<ShopDocument[]>;
     getActiveShops(limit?: number, skip?: number): Promise<ShopDocument[]>;
@@ -35,7 +37,7 @@ export declare class SuperAdminService {
         name: string;
         email: string;
         phone: string;
-        status: "active" | "pending" | "verified" | "suspended" | "rejected" | "flagged";
+        status: "active" | "suspended" | "pending" | "verified" | "rejected" | "flagged";
         complianceScore: number;
         chargebackRate: number;
         refundRate: number;

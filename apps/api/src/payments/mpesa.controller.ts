@@ -13,6 +13,8 @@ import {
 } from '@nestjs/common';
 import { MpesaService } from './services/mpesa.service';
 import { MpesaMultiTenantService } from './services/mpesa-multi-tenant.service';
+import { MpesaTransactionManagerService, MPESA_TIMING } from './services/mpesa-transaction-manager.service';
+import { MpesaReconciliationService } from './services/mpesa-reconciliation.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -34,6 +36,8 @@ export class MpesaController {
   constructor(
     private readonly mpesaService: MpesaService,
     private readonly mpesaMultiTenantService: MpesaMultiTenantService,
+    private readonly transactionManager: MpesaTransactionManagerService,
+    private readonly reconciliationService: MpesaReconciliationService,
   ) {}
 
   /**
@@ -228,6 +232,18 @@ export class MpesaController {
   // ============================================
 
   /**
+   * GET SHOP M-PESA CONFIGURATION STATUS
+   * 
+   * Returns the current M-Pesa configuration status for the shop.
+   * Used to show reminders and status in the admin dashboard.
+   */
+  @UseGuards(JwtAuthGuard)
+  @Get('config/status')
+  async getMpesaConfigStatus(@CurrentUser() user: JwtPayload) {
+    return this.mpesaMultiTenantService.getMpesaConfigStatus(user.shopId);
+  }
+
+  /**
    * GET SHOP M-PESA CONFIGURATION
    * 
    * Returns the current M-Pesa configuration for the shop.
@@ -245,7 +261,8 @@ export class MpesaController {
       shortCode: config.shortCode,
       accountPrefix: config.accountPrefix,
       callbackUrl: config.callbackUrl,
-      isShopSpecific: config.isShopSpecific,
+      isConfigured: config.isConfigured,
+      isVerified: config.isVerified,
       hasCredentials: !!(config.consumerKey && config.consumerSecret && config.passkey),
       // Don't expose actual keys
       consumerKey: config.consumerKey ? '****' + config.consumerKey.slice(-4) : null,
@@ -335,5 +352,314 @@ export class MpesaController {
     const result = await this.mpesaMultiTenantService.handleCallback(payload);
     
     return { ResultCode: 0, ResultDesc: 'Callback processed' };
+  }
+
+  // ============================================
+  // FAILED PAYMENTS & RECONCILIATION ENDPOINTS
+  // ============================================
+
+  /**
+   * GET FAILED TRANSACTIONS
+   * 
+   * Returns all failed M-Pesa transactions for the shop.
+   * Useful for admin dashboard and troubleshooting.
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'cashier')
+  @Get('failed')
+  async getFailedTransactions(
+    @CurrentUser() user: JwtPayload,
+    @Query('limit') limit?: string,
+    @Query('skip') skip?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    const transactions = await this.mpesaService.getFailedTransactions(
+      user.shopId,
+      {
+        limit: limit ? parseInt(limit, 10) : 50,
+        skip: skip ? parseInt(skip, 10) : 0,
+        startDate: startDate ? new Date(startDate) : undefined,
+        endDate: endDate ? new Date(endDate) : undefined,
+      },
+    );
+
+    return {
+      transactions,
+      count: transactions.length,
+    };
+  }
+
+  /**
+   * GET TRANSACTION STATISTICS
+   * 
+   * Returns M-Pesa transaction statistics for the shop.
+   * Includes success rate, total amounts, and status breakdown.
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Get('stats')
+  async getTransactionStats(
+    @CurrentUser() user: JwtPayload,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.mpesaService.getTransactionStats(
+      user.shopId,
+      startDate ? new Date(startDate) : undefined,
+      endDate ? new Date(endDate) : undefined,
+    );
+  }
+
+  /**
+   * MANUAL RECONCILIATION
+   * 
+   * Manually triggers reconciliation for a specific transaction.
+   * Queries M-Pesa for the actual status and updates local record.
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Post('reconcile/:id')
+  @HttpCode(HttpStatus.OK)
+  async reconcileTransaction(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+  ) {
+    this.logger.log(`Manual reconciliation for transaction ${id} by ${user.email}`);
+    
+    // First verify the transaction belongs to this shop
+    const status = await this.mpesaService.getTransactionStatus(user.shopId, id);
+    
+    if (!status) {
+      return { success: false, message: 'Transaction not found' };
+    }
+
+    // Query M-Pesa for actual status
+    const result = await this.mpesaService.queryMpesaStatus(user.shopId, id);
+    
+    // Get updated status
+    const updatedStatus = await this.mpesaService.getTransactionStatus(user.shopId, id);
+    
+    return {
+      success: true,
+      previousStatus: status.status,
+      currentStatus: updatedStatus.status,
+      mpesaReceiptNumber: updatedStatus.mpesaReceiptNumber,
+      message: `Transaction reconciled: ${status.status} → ${updatedStatus.status}`,
+    };
+  }
+
+  /**
+   * GET EXPIRED TRANSACTIONS
+   * 
+   * Returns all expired M-Pesa transactions for the shop.
+   * These are transactions that timed out without a response.
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Get('expired')
+  async getExpiredTransactions(
+    @CurrentUser() user: JwtPayload,
+    @Query('limit') limit?: string,
+    @Query('skip') skip?: string,
+  ) {
+    const transactions = await this.mpesaService.getExpiredTransactions(
+      user.shopId,
+      limit ? parseInt(limit, 10) : 50,
+      skip ? parseInt(skip, 10) : 0,
+    );
+
+    return {
+      transactions,
+      count: transactions.length,
+    };
+  }
+
+  // ============================================
+  // ENHANCED TRANSACTION MANAGEMENT ENDPOINTS
+  // ============================================
+
+  /**
+   * GET REAL-TIME TRANSACTION STATE
+   * 
+   * Returns detailed transaction state with timing information
+   * for real-time UI updates.
+   */
+  @UseGuards(JwtAuthGuard)
+  @Get('transactions/:id/state')
+  async getTransactionState(
+    @Param('id') transactionId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const state = await this.transactionManager.getTransactionState(transactionId);
+    return {
+      success: true,
+      data: state,
+    };
+  }
+
+  /**
+   * START POLLING FOR TRANSACTION
+   * 
+   * Starts real-time polling for a transaction.
+   * Use with SSE or WebSocket for real-time updates.
+   */
+  @UseGuards(JwtAuthGuard)
+  @Post('transactions/:id/poll/start')
+  @HttpCode(HttpStatus.OK)
+  async startPolling(
+    @Param('id') transactionId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    this.transactionManager.startPolling(transactionId);
+    return {
+      success: true,
+      message: 'Polling started',
+      transactionId,
+    };
+  }
+
+  /**
+   * STOP POLLING FOR TRANSACTION
+   */
+  @UseGuards(JwtAuthGuard)
+  @Post('transactions/:id/poll/stop')
+  @HttpCode(HttpStatus.OK)
+  async stopPolling(
+    @Param('id') transactionId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    this.transactionManager.stopPolling(transactionId);
+    return {
+      success: true,
+      message: 'Polling stopped',
+      transactionId,
+    };
+  }
+
+  /**
+   * QUERY M-PESA STATUS WITH STATE
+   * 
+   * Queries M-Pesa directly for transaction status and returns full state.
+   * Useful when callback is delayed or missed.
+   */
+  @UseGuards(JwtAuthGuard)
+  @Post('transactions/:id/query-state')
+  @HttpCode(HttpStatus.OK)
+  async queryMpesaStatusWithState(
+    @Param('id') transactionId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const state = await this.transactionManager.queryMpesaStatus(transactionId);
+    return {
+      success: true,
+      data: state,
+    };
+  }
+
+  /**
+   * CHECK IF TRANSACTION CAN BE RETRIED
+   */
+  @UseGuards(JwtAuthGuard)
+  @Get('transactions/:id/can-retry')
+  async canRetryTransaction(
+    @Param('id') transactionId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const result = await this.transactionManager.canRetry(transactionId);
+    return {
+      success: true,
+      data: result,
+    };
+  }
+
+  /**
+   * MANUAL RECONCILIATION VIA SERVICE
+   * 
+   * Manually reconcile a specific transaction using the reconciliation service.
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Post('transactions/:id/reconcile-service')
+  @HttpCode(HttpStatus.OK)
+  async reconcileTransactionViaService(
+    @Param('id') transactionId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const result = await this.reconciliationService.reconcileTransaction(transactionId);
+    return result;
+  }
+
+  /**
+   * GET TRANSACTION METRICS
+   * 
+   * Returns aggregated transaction metrics for monitoring.
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Get('metrics')
+  async getTransactionMetrics(
+    @CurrentUser() user: JwtPayload,
+    @Query('hours') hours?: string,
+  ) {
+    const metrics = await this.transactionManager.getTransactionMetrics(
+      user.shopId,
+      hours ? parseInt(hours, 10) : 24,
+    );
+    return {
+      success: true,
+      data: metrics,
+    };
+  }
+
+  /**
+   * GET RECONCILIATION STATS
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Get('reconciliation/stats')
+  async getReconciliationStats(@CurrentUser() user: JwtPayload) {
+    const stats = await this.reconciliationService.getReconciliationStats(user.shopId);
+    return {
+      success: true,
+      data: stats,
+    };
+  }
+
+  /**
+   * GET M-PESA TIMING CONFIGURATION
+   * 
+   * Returns the timing configuration for M-Pesa transactions.
+   * Useful for frontend to display accurate progress indicators.
+   */
+  @UseGuards(JwtAuthGuard)
+  @Get('timing-config')
+  getTimingConfig() {
+    return {
+      success: true,
+      data: {
+        stkPromptTimeoutMs: MPESA_TIMING.STK_PROMPT_TIMEOUT_MS,
+        userInputTimeoutMs: MPESA_TIMING.USER_INPUT_TIMEOUT_MS,
+        transactionTimeoutMs: MPESA_TIMING.TRANSACTION_TIMEOUT_MS,
+        gracePeriodMs: MPESA_TIMING.GRACE_PERIOD_MS,
+        pollIntervalMs: MPESA_TIMING.POLL_INTERVAL_MS,
+        maxPollAttempts: MPESA_TIMING.MAX_POLL_ATTEMPTS,
+      },
+    };
+  }
+
+  /**
+   * GET ERROR INFO FOR RESULT CODE
+   * 
+   * Returns detailed error information for an M-Pesa result code.
+   */
+  @UseGuards(JwtAuthGuard)
+  @Get('error-info/:resultCode')
+  getErrorInfo(@Param('resultCode') resultCode: string) {
+    const errorInfo = this.transactionManager.getErrorInfo(parseInt(resultCode, 10));
+    return {
+      success: true,
+      data: errorInfo,
+    };
   }
 }

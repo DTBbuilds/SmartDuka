@@ -86,6 +86,10 @@ export class BulkImportOptionsDto {
   @IsOptional()
   @IsBoolean()
   skipDuplicates?: boolean;
+
+  @IsOptional()
+  @IsString()
+  targetCategoryId?: string; // Import all products to this specific category
 }
 
 export class BulkImportDto {

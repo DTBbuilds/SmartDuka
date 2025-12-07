@@ -65,7 +65,7 @@ __decorate([
     __metadata("design:type", mongoose_2.Types.ObjectId)
 ], PaymentTransaction.prototype, "branchId", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ required: true, enum: ['cash', 'card', 'mpesa', 'other'], default: 'cash' }),
+    (0, mongoose_1.Prop)({ required: true, enum: ['cash', 'card', 'mpesa', 'qr', 'other'], default: 'cash' }),
     __metadata("design:type", String)
 ], PaymentTransaction.prototype, "paymentMethod", void 0);
 __decorate([

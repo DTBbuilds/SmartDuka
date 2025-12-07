@@ -35,7 +35,7 @@ let PaymentReconciliationController = class PaymentReconciliationController {
     }
     async getVarianceReport(startDate, endDate, user) {
         if (!startDate || !endDate) {
-            throw new Error('startDate and endDate are required');
+            throw new common_1.BadRequestException('startDate and endDate are required');
         }
         return this.reconciliationService.getVarianceReport(user.shopId, new Date(startDate), new Date(endDate));
     }
@@ -60,8 +60,9 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], PaymentReconciliationController.prototype, "getHistory", null);
 __decorate([
-    (0, common_1.Get)('variance-report'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
     (0, roles_decorator_1.Roles)('admin'),
+    (0, common_1.Get)('variance-report'),
     __param(0, (0, common_1.Query)('startDate')),
     __param(1, (0, common_1.Query)('endDate')),
     __param(2, (0, current_user_decorator_1.CurrentUser)()),

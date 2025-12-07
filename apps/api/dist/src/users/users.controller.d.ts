@@ -11,7 +11,10 @@ export declare class UsersController {
     findByEmail(email?: string): Promise<any[]>;
     getCashiersByShop(shopId: string, user: any): Promise<any[]>;
     updateUser(id: string, dto: any, user: any): Promise<any>;
-    deleteUser(id: string, user: any): Promise<any>;
+    deleteUser(id: string, user: any): Promise<{
+        deleted: boolean;
+        message: string;
+    }>;
     createCashier(dto: CreateCashierDto, user: any): Promise<{
         user: {
             id: any;

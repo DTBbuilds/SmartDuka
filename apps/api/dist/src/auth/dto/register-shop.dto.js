@@ -29,6 +29,8 @@ class ShopInfoDto {
     address;
     kraPin;
     description;
+    subscriptionPlanCode;
+    billingCycle;
 }
 exports.ShopInfoDto = ShopInfoDto;
 __decorate([
@@ -80,6 +82,17 @@ __decorate([
     (0, class_validator_1.MaxLength)(500),
     __metadata("design:type", String)
 ], ShopInfoDto.prototype, "description", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], ShopInfoDto.prototype, "subscriptionPlanCode", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsIn)(['monthly', 'annual']),
+    __metadata("design:type", String)
+], ShopInfoDto.prototype, "billingCycle", void 0);
 class AdminInfoDto {
     name;
     email;

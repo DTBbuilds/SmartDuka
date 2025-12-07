@@ -19,13 +19,16 @@ const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const shop_schema_1 = require("../shops/schemas/shop.schema");
 const shop_audit_log_service_1 = require("../shops/services/shop-audit-log.service");
+const email_service_1 = require("../notifications/email.service");
 let SuperAdminService = SuperAdminService_1 = class SuperAdminService {
     shopModel;
     auditLogService;
+    emailService;
     logger = new common_1.Logger(SuperAdminService_1.name);
-    constructor(shopModel, auditLogService) {
+    constructor(shopModel, auditLogService, emailService) {
         this.shopModel = shopModel;
         this.auditLogService = auditLogService;
+        this.emailService = emailService;
     }
     async getPendingShops(limit = 50, skip = 0) {
         return this.shopModel
@@ -131,6 +134,29 @@ let SuperAdminService = SuperAdminService_1 = class SuperAdminService {
         if (!updatedShop) {
             throw new common_1.NotFoundException('Shop not found after update');
         }
+        if (this.emailService && updatedShop.email) {
+            try {
+                await this.emailService.sendTemplateEmail({
+                    to: updatedShop.email,
+                    templateName: 'shop_verified',
+                    variables: {
+                        shopName: updatedShop.name,
+                        verificationDate: new Date().toLocaleDateString('en-KE', {
+                            weekday: 'long',
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric',
+                        }),
+                        loginUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/login`,
+                        dashboardUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/admin`,
+                    },
+                });
+                this.logger.log(`Verification email sent to ${updatedShop.email}`);
+            }
+            catch (err) {
+                this.logger.error(`Failed to send verification email: ${err}`);
+            }
+        }
         return updatedShop;
     }
     async rejectShop(shopId, superAdminId, reason, notes) {
@@ -160,6 +186,23 @@ let SuperAdminService = SuperAdminService_1 = class SuperAdminService {
         if (!updatedShop) {
             throw new common_1.NotFoundException('Shop not found after update');
         }
+        if (this.emailService && updatedShop.email) {
+            try {
+                await this.emailService.sendTemplateEmail({
+                    to: updatedShop.email,
+                    templateName: 'shop_rejected',
+                    variables: {
+                        shopName: updatedShop.name,
+                        rejectionReason: reason,
+                        supportEmail: 'smartdukainfo@gmail.com',
+                    },
+                });
+                this.logger.log(`Rejection email sent to ${updatedShop.email}`);
+            }
+            catch (err) {
+                this.logger.error(`Failed to send rejection email: ${err}`);
+            }
+        }
         return updatedShop;
     }
     async suspendShop(shopId, superAdminId, reason, notes) {
@@ -188,6 +231,23 @@ let SuperAdminService = SuperAdminService_1 = class SuperAdminService {
         this.logger.log(`Shop ${shopId} suspended by ${superAdminId}`);
         if (!updatedShop) {
             throw new common_1.NotFoundException('Shop not found after update');
+        }
+        if (this.emailService && updatedShop.email) {
+            try {
+                await this.emailService.sendTemplateEmail({
+                    to: updatedShop.email,
+                    templateName: 'shop_suspended',
+                    variables: {
+                        shopName: updatedShop.name,
+                        suspensionReason: reason,
+                        supportEmail: 'smartdukainfo@gmail.com',
+                    },
+                });
+                this.logger.log(`Suspension email sent to ${updatedShop.email}`);
+            }
+            catch (err) {
+                this.logger.error(`Failed to send suspension email: ${err}`);
+            }
         }
         return updatedShop;
     }
@@ -316,7 +376,9 @@ exports.SuperAdminService = SuperAdminService;
 exports.SuperAdminService = SuperAdminService = SuperAdminService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)(shop_schema_1.Shop.name)),
+    __param(2, (0, common_1.Optional)()),
     __metadata("design:paramtypes", [mongoose_2.Model,
-        shop_audit_log_service_1.ShopAuditLogService])
+        shop_audit_log_service_1.ShopAuditLogService,
+        email_service_1.EmailService])
 ], SuperAdminService);
 //# sourceMappingURL=super-admin.service.js.map

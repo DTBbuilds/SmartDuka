@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
-import { TrendingUp, Package, Users, ShoppingCart } from 'lucide-react';
+import { TrendingUp, Package, Users, ShoppingCart, Crown } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { SubscriptionStatusCard } from '@/components/subscription-status-card';
 
 interface DashboardStats {
   totalRevenue: number;
@@ -104,6 +105,9 @@ export default function DashboardPage() {
       )}
 
       <div className="grid gap-4 md:grid-cols-2">
+        {/* Subscription Status */}
+        <SubscriptionStatusCard />
+
         <Card>
           <CardHeader>
             <CardTitle>Alerts</CardTitle>
@@ -119,7 +123,9 @@ export default function DashboardPage() {
             </div>
           </CardContent>
         </Card>
+      </div>
 
+      <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Quick Links</CardTitle>
@@ -133,6 +139,9 @@ export default function DashboardPage() {
             </a>
             <a href="/admin/audit-logs" className="block text-blue-600 hover:underline">
               → Audit Logs
+            </a>
+            <a href="/admin/subscription" className="block text-blue-600 hover:underline">
+              → Subscription & Billing
             </a>
           </CardContent>
         </Card>

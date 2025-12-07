@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from 'react';
 export interface StockUpdate {
   productId: string;
   stock: number;
+  lowStockThreshold: number;
   lastUpdated: number;
 }
 
@@ -27,6 +28,7 @@ export function useStockSync(apiUrl: string, token: string | null) {
         newStockData.set(product._id, {
           productId: product._id,
           stock: product.stock ?? 0,
+          lowStockThreshold: product.lowStockThreshold ?? 10,
           lastUpdated: Date.now(),
         });
       });
@@ -64,13 +66,19 @@ export function useStockSync(apiUrl: string, token: string | null) {
     return getStock(productId) > 0;
   }, [getStock]);
 
-  // Get stock status
+  // Get low stock threshold for a product
+  const getLowStockThreshold = useCallback((productId: string): number => {
+    return stockData.get(productId)?.lowStockThreshold ?? 10;
+  }, [stockData]);
+
+  // Get stock status - uses product-specific threshold
   const getStockStatus = useCallback((productId: string): 'in-stock' | 'low-stock' | 'out-of-stock' => {
     const stock = getStock(productId);
+    const threshold = getLowStockThreshold(productId);
     if (stock === 0) return 'out-of-stock';
-    if (stock <= 10) return 'low-stock';
+    if (stock <= threshold) return 'low-stock';
     return 'in-stock';
-  }, [getStock]);
+  }, [getStock, getLowStockThreshold]);
 
   // Manual refresh
   const refresh = useCallback(async () => {
@@ -82,6 +90,7 @@ export function useStockSync(apiUrl: string, token: string | null) {
     isConnected,
     lastSyncTime,
     getStock,
+    getLowStockThreshold,
     isInStock,
     getStockStatus,
     refresh,

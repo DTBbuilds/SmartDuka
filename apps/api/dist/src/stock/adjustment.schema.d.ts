@@ -4,11 +4,15 @@ export declare class Adjustment {
     productId: Types.ObjectId;
     productName: string;
     delta: number;
-    reason: 'damage' | 'loss' | 'recount' | 'return' | 'correction' | 'other';
+    reason: string;
     description?: string;
     shopId: Types.ObjectId;
     adjustedBy?: Types.ObjectId;
+    adjustedByName?: string;
     reference?: string;
+    previousStock?: number;
+    newStock?: number;
+    branchId?: Types.ObjectId;
     createdAt: Date;
     updatedAt: Date;
 }

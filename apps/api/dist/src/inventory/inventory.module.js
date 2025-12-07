@@ -16,6 +16,7 @@ const product_schema_1 = require("./schemas/product.schema");
 const category_schema_1 = require("./schemas/category.schema");
 const stock_adjustment_schema_1 = require("./schemas/stock-adjustment.schema");
 const stock_reconciliation_schema_1 = require("./schemas/stock-reconciliation.schema");
+const subscriptions_module_1 = require("../subscriptions/subscriptions.module");
 let InventoryModule = class InventoryModule {
 };
 exports.InventoryModule = InventoryModule;
@@ -28,6 +29,7 @@ exports.InventoryModule = InventoryModule = __decorate([
                 { name: stock_adjustment_schema_1.StockAdjustment.name, schema: stock_adjustment_schema_1.StockAdjustmentSchema },
                 { name: stock_reconciliation_schema_1.StockReconciliation.name, schema: stock_reconciliation_schema_1.StockReconciliationSchema },
             ]),
+            (0, common_1.forwardRef)(() => subscriptions_module_1.SubscriptionsModule),
         ],
         providers: [inventory_service_1.InventoryService, category_suggestion_service_1.CategorySuggestionService],
         controllers: [inventory_controller_1.InventoryController],

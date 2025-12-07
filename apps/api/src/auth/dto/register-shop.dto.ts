@@ -54,6 +54,15 @@ export class ShopInfoDto {
   @IsString()
   @MaxLength(500)
   description?: string;
+
+  @IsOptional()
+  @IsString()
+  subscriptionPlanCode?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['monthly', 'annual'])
+  billingCycle?: string;
 }
 
 export class AdminInfoDto {

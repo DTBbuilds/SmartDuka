@@ -73,6 +73,7 @@ import { TransactionHistory, type Transaction } from "@/components/transaction-h
 import { POSCartCompact } from "@/components/pos-cart-compact";
 import { POSCheckoutBar } from "@/components/pos-checkout-bar";
 import { POSProductsListView } from "@/components/pos-products-list-view";
+import { POSMobileCartSheet } from "@/components/pos-mobile-cart-sheet";
 import { ReceiptsHistoryModal, type StoredReceipt } from "@/components/receipts-history-modal";
 import { PaymentMethodModal } from "@/components/payment-method-modal";
 import { MpesaPaymentFlow } from "@/components/mpesa-payment-flow";
@@ -165,6 +166,7 @@ function POSContent() {
   const [showMpesaFlow, setShowMpesaFlow] = useState(false);
   const [mpesaPhoneNumber, setMpesaPhoneNumber] = useState('');
   const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
+  const [showMobileCart, setShowMobileCart] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const { user, shop, token, logout } = useAuth();
@@ -480,7 +482,35 @@ function POSContent() {
   const tax = calculateTax();
   const total = subtotalAfterDiscount + tax;
 
+  // Create a map of productId -> quantity in cart for real-time stock display
+  const cartQuantities = useMemo(() => {
+    const quantities: Record<string, number> = {};
+    cartItems.forEach(item => {
+      quantities[item.productId] = item.quantity;
+    });
+    return quantities;
+  }, [cartItems]);
+
+  // Create a map of productId -> total stock for mobile cart validation
+  const productStocks = useMemo(() => {
+    const stocks: Record<string, number> = {};
+    products.forEach(product => {
+      if (product.stock !== undefined) {
+        stocks[product._id] = product.stock;
+      }
+    });
+    return stocks;
+  }, [products]);
+
   const handleAddToCart = (product: Product) => {
+    // Check if adding would exceed available stock
+    const currentInCart = cartQuantities[product._id] || 0;
+    const availableStock = (product.stock ?? 0) - currentInCart;
+    
+    if (availableStock <= 0) {
+      toast({ type: 'error', title: 'Out of stock', message: `${product.name} has no more available stock` });
+      return;
+    }
     setCartItems((prev) => {
       const existing = prev.find((item) => item.productId === product._id);
       if (existing) {
@@ -940,6 +970,30 @@ function POSContent() {
     toast({ type: 'info', title: 'Item removed', message: 'Item removed from cart' });
   };
 
+  const handleUpdateQuantity = (productId: string, quantity: number) => {
+    if (quantity <= 0) {
+      handleRemoveItem(productId);
+      return;
+    }
+    
+    // Check if new quantity exceeds available stock
+    const product = products.find(p => p._id === productId);
+    if (product && product.stock !== undefined && quantity > product.stock) {
+      toast({ 
+        type: 'error', 
+        title: 'Insufficient stock', 
+        message: `Only ${product.stock} available` 
+      });
+      return;
+    }
+    
+    setCartItems((prev) =>
+      prev.map((item) =>
+        item.productId === productId ? { ...item, quantity } : item
+      )
+    );
+  };
+
   const handleClearCart = () => {
     if (cartItems.length === 0) return;
     
@@ -1173,28 +1227,22 @@ function POSContent() {
         onComplete={() => setShowSuccessAnimation(false)}
       />
       
-      {/* Header - Compact, single row, full width */}
-      <header className="sticky top-16 lg:top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 py-2">
-        <div className="w-full px-3 lg:px-4">
+      {/* Header - Ultra compact on mobile */}
+      <header className="sticky top-16 lg:top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 py-1.5 lg:py-2">
+        <div className="w-full px-2 lg:px-4">
           <div className="flex items-center justify-between gap-2 text-xs">
-            {/* Left: Shop name and POS title */}
-            <div className="flex-1 min-w-0 flex items-center gap-2">
-              <ShoppingCart className="h-3 w-3 flex-shrink-0 text-primary" />
-              <div className="truncate">
-                {shop && (
-                  <span className="font-medium text-primary truncate">
-                    {shop.name}
-                  </span>
-                )}
-                {!shop && <span className="text-muted-foreground">SmartDuka POS</span>}
-              </div>
+            {/* Left: Shop name */}
+            <div className="flex-1 min-w-0 flex items-center gap-1.5">
+              <ShoppingCart className="h-4 w-4 flex-shrink-0 text-primary" />
+              <span className="font-semibold text-sm truncate">
+                {shop?.name || 'SmartDuka POS'}
+              </span>
             </div>
 
-            {/* Center: Time and Shift Info Bar */}
-            <div className="flex items-center gap-2 text-muted-foreground flex-shrink-0">
+            {/* Desktop: Shift Info Bar */}
+            <div className="hidden lg:flex items-center gap-2 text-muted-foreground">
               <span>{currentTime || "Loading..."}</span>
-              {/* Slim Shift Info Bar */}
-              <div className="hidden lg:flex items-center gap-1 px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-xs">
+              <div className="flex items-center gap-1 px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-xs">
                 <span className="text-slate-600 dark:text-slate-400">{cashierName}</span>
                 <span className="text-slate-400">•</span>
                 <span className="text-slate-600 dark:text-slate-400">Sales: <span className="font-semibold text-green-600 dark:text-green-400">{formatCurrency(totalSalesAmount)}</span></span>
@@ -1203,37 +1251,26 @@ function POSContent() {
               </div>
             </div>
 
-            {/* Right: Status badges and cashier info */}
+            {/* Right: Minimal on mobile */}
             <div className="flex items-center gap-1.5 flex-shrink-0">
               {/* Pending count badge */}
               {pendingCount > 0 && (
-                <div className="flex items-center gap-0.5 rounded-full border border-dashed border-slate-300 px-1.5 py-0.5 text-xs text-muted-foreground dark:border-slate-700">
-                  <RefreshCw className="h-2.5 w-2.5 animate-spin text-primary" />
+                <div className="flex items-center gap-0.5 rounded-full border border-dashed border-orange-400 bg-orange-50 dark:bg-orange-950/30 px-1.5 py-0.5 text-xs text-orange-600 dark:text-orange-400">
+                  <RefreshCw className="h-2.5 w-2.5 animate-spin" />
                   <span>{pendingCount}</span>
                 </div>
               )}
-              
-              {/* Payment method badge */}
-              <div className="flex items-center gap-0.5 rounded-full border border-green-500/30 bg-green-500/10 px-1.5 py-0.5 text-xs font-medium text-green-700 dark:text-green-400">
-                <Smartphone className="h-2.5 w-2.5" />
-                <span className="hidden sm:inline">M-Pesa</span>
-              </div>
-
-              {/* Cashier info - Compact (mobile only) */}
-              <div className="lg:hidden flex items-center gap-0.5 text-muted-foreground truncate">
-                <span className="truncate">{cashierName}</span>
-              </div>
 
               {/* Logout Button */}
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={logout}
-                className="text-destructive hover:text-destructive hover:bg-destructive/10 h-8 px-2"
+                className="text-destructive hover:text-destructive hover:bg-destructive/10 h-7 lg:h-8 px-2"
                 title="Logout"
               >
                 <LogOut className="h-4 w-4" />
-                <span className="hidden sm:inline ml-1">Logout</span>
+                <span className="hidden lg:inline ml-1">Logout</span>
               </Button>
             </div>
           </div>
@@ -1244,44 +1281,47 @@ function POSContent() {
 
       {/* Main content - Responsive grid (hidden during checkout) */}
       {!isCheckoutMode && (
-      <div className="flex-1 w-full px-3 lg:px-4 py-3 lg:py-4 pb-20 lg:pb-4 overflow-hidden">
-        <div className="grid gap-3 lg:gap-4 grid-cols-1 lg:grid-cols-[1fr_380px] xl:grid-cols-[1fr_420px] h-[calc(100vh-180px)] lg:h-[calc(100vh-100px)]">
-          <section className="space-y-3 overflow-hidden flex flex-col">
-            <Card className="border-dashed flex-1 flex flex-col overflow-hidden">
-              <CardHeader className="gap-4 pb-0">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                  <div className="flex grow items-center gap-2 rounded-full border px-3 py-2">
-                    <Search className="h-4 w-4 text-muted-foreground" />
-                    <Input
-                      ref={searchInputRef}
-                      placeholder="Search products or scan barcode"
-                      className="border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
-                      value={q}
-                      onChange={(e) => setQ(e.target.value)}
-                      aria-label="Search products"
-                    />
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setIsScannerOpen(true)}
-                      title="Open barcode scanner"
+      <div className="flex-1 w-full px-2 lg:px-4 py-2 lg:py-4 pb-24 lg:pb-4 overflow-hidden">
+        <div className="grid gap-2 lg:gap-4 grid-cols-1 lg:grid-cols-[1fr_380px] xl:grid-cols-[1fr_420px] h-[calc(100vh-140px)] lg:h-[calc(100vh-100px)]">
+          <section className="space-y-2 lg:space-y-3 overflow-hidden flex flex-col">
+            <Card className="border-dashed lg:border-solid flex-1 flex flex-col overflow-hidden">
+              <CardHeader className="p-2 lg:p-4 pb-0">
+                {/* Search Bar - Compact on mobile */}
+                <div className="flex items-center gap-2 rounded-full border bg-slate-50 dark:bg-slate-900/50 px-3 py-2">
+                  <Search className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <Input
+                    ref={searchInputRef}
+                    placeholder="Search products..."
+                    className="border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 text-sm"
+                    value={q}
+                    onChange={(e) => setQ(e.target.value)}
+                    aria-label="Search products"
+                  />
+                  {q && (
+                    <button
+                      onClick={() => setQ('')}
+                      className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full"
                     >
-                      <QrCode className="h-4 w-4" />
-                    </Button>
-                  </div>
+                      <X className="h-3.5 w-3.5 text-muted-foreground" />
+                    </button>
+                  )}
                 </div>
               </CardHeader>
-              <CardContent className="pt-4 flex-1 overflow-hidden flex flex-col">
+              <CardContent className="p-2 lg:pt-4 lg:px-4 flex-1 overflow-hidden flex flex-col">
                 <Tabs value={tab} onValueChange={setTab} className="flex-1 flex flex-col overflow-hidden">
-                  <TabsList className="w-full justify-start overflow-x-auto">
+                  <TabsList className="w-full justify-start overflow-x-auto scrollbar-hide mb-2">
                     {categoryTabs.map((category) => (
-                      <TabsTrigger key={category.id} value={category.id} className="px-5">
+                      <TabsTrigger 
+                        key={category.id} 
+                        value={category.id} 
+                        className="px-3 lg:px-5 text-xs lg:text-sm whitespace-nowrap"
+                      >
                         {category.label}
                       </TabsTrigger>
                     ))}
                   </TabsList>
                   {categoryTabs.map((category) => (
-                    <TabsContent key={category.id} value={category.id} className="flex-1 overflow-hidden mt-4">
+                    <TabsContent key={category.id} value={category.id} className="flex-1 overflow-hidden mt-0 lg:mt-2">
                       <POSProductsListView
                         products={products}
                         onAddToCart={handleAddToCart}
@@ -1289,6 +1329,7 @@ function POSContent() {
                         error={error || undefined}
                         formatCurrency={formatCurrency}
                         maxHeight="h-full"
+                        cartQuantities={cartQuantities}
                       />
                     </TabsContent>
                   ))}
@@ -1313,8 +1354,8 @@ function POSContent() {
 
           </section>
 
-          {/* Cart section - Full height, scrollable layout */}
-          <section className="flex flex-col overflow-y-auto h-full gap-1">
+          {/* Cart section - Hidden on mobile, shown on desktop */}
+          <section className="hidden lg:flex flex-col overflow-y-auto h-full gap-1">
             {/* Cart Component - Fixed height, scrollable items */}
             <POSCartCompact
               cartItems={cartItems}
@@ -1540,9 +1581,33 @@ function POSContent() {
         }}
       />
 
+      {/* Mobile Cart Sheet */}
+      <POSMobileCartSheet
+        isOpen={showMobileCart}
+        onClose={() => setShowMobileCart(false)}
+        cartItems={cartItems}
+        subtotal={subtotal}
+        totalDiscount={totalDiscount}
+        tax={tax}
+        total={total}
+        customerName={customerName}
+        isCheckingOut={isCheckingOut}
+        onCustomerNameChange={setCustomerName}
+        onRemoveItem={handleRemoveItem}
+        onUpdateQuantity={handleUpdateQuantity}
+        onCheckout={handleCheckout}
+        onClearCart={() => {
+          setCartItems([]);
+          setCustomerName('');
+          toast({ type: 'info', title: 'Cart cleared' });
+        }}
+        productStocks={productStocks}
+      />
+
       {/* Fixed Bottom Checkout Bar */}
       <POSCheckoutBar
         cartItemsCount={cartItems.length}
+        cartTotal={total}
         isCheckingOut={isCheckingOut}
         receiptsCount={receiptsHistory.length}
         onHoldSale={handleHoldSale}
@@ -1558,8 +1623,16 @@ function POSContent() {
           toast({ type: 'info', title: 'Manual item', message: 'Feature coming soon' });
         }}
         onOpenScanner={() => setIsScannerOpen(true)}
-        onCheckout={handleCheckout}
+        onCheckout={() => {
+          // On mobile, open cart sheet first; on desktop, go straight to checkout
+          if (window.innerWidth < 1024) {
+            setShowMobileCart(true);
+          } else {
+            handleCheckout();
+          }
+        }}
         onOpenReceiptsHistory={() => setIsReceiptsHistoryOpen(true)}
+        formatCurrency={formatCurrency}
       />
     </main>
   );

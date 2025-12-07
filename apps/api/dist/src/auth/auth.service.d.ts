@@ -3,6 +3,8 @@ import { Model } from 'mongoose';
 import { UsersService } from '../users/users.service';
 import { ShopsService } from '../shops/shops.service';
 import { ShopSettingsService } from '../shop-settings/shop-settings.service';
+import { SystemEventManagerService } from '../notifications/system-event-manager.service';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { RegisterShopDto } from './dto/register-shop.dto';
 import { LoginDto } from './dto/login.dto';
 export declare class AuthService {
@@ -12,13 +14,16 @@ export declare class AuthService {
     private readonly shopSettingsService;
     private readonly activityService?;
     private readonly superAdminModel?;
-    constructor(usersService: UsersService, shopsService: ShopsService, jwtService: JwtService, shopSettingsService: ShopSettingsService, activityService?: any | undefined, superAdminModel?: Model<any> | undefined);
+    private readonly systemEventManager?;
+    private readonly subscriptionsService?;
+    private readonly logger;
+    constructor(usersService: UsersService, shopsService: ShopsService, jwtService: JwtService, shopSettingsService: ShopSettingsService, activityService?: any | undefined, superAdminModel?: Model<any> | undefined, systemEventManager?: SystemEventManagerService | undefined, subscriptionsService?: SubscriptionsService | undefined);
     registerShop(dto: RegisterShopDto): Promise<{
         shop: {
             id: any;
             shopId: any;
             name: string;
-            status: "active" | "pending" | "verified" | "suspended";
+            status: "active" | "suspended" | "pending" | "verified";
             email: string;
         };
         user: {
@@ -131,7 +136,7 @@ export declare class AuthService {
             id: any;
             shopId: any;
             name: string;
-            status: "active" | "pending" | "verified" | "suspended";
+            status: "active" | "suspended" | "pending" | "verified";
             email: string;
         };
         user: {

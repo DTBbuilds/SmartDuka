@@ -20,13 +20,17 @@ let Adjustment = class Adjustment {
     description;
     shopId;
     adjustedBy;
+    adjustedByName;
     reference;
+    previousStock;
+    newStock;
+    branchId;
     createdAt;
     updatedAt;
 };
 exports.Adjustment = Adjustment;
 __decorate([
-    (0, mongoose_1.Prop)({ type: mongoose_2.Types.ObjectId, required: true }),
+    (0, mongoose_1.Prop)({ type: mongoose_2.Types.ObjectId, required: true, index: true }),
     __metadata("design:type", mongoose_2.Types.ObjectId)
 ], Adjustment.prototype, "productId", void 0);
 __decorate([
@@ -38,7 +42,10 @@ __decorate([
     __metadata("design:type", Number)
 ], Adjustment.prototype, "delta", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ required: true }),
+    (0, mongoose_1.Prop)({ required: true, enum: [
+            'damage', 'loss', 'recount', 'return', 'correction',
+            'received', 'transfer_in', 'transfer_out', 'expired', 'theft', 'other'
+        ] }),
     __metadata("design:type", String)
 ], Adjustment.prototype, "reason", void 0);
 __decorate([
@@ -46,17 +53,33 @@ __decorate([
     __metadata("design:type", String)
 ], Adjustment.prototype, "description", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ type: mongoose_2.Types.ObjectId, required: true }),
+    (0, mongoose_1.Prop)({ type: mongoose_2.Types.ObjectId, required: true, index: true }),
     __metadata("design:type", mongoose_2.Types.ObjectId)
 ], Adjustment.prototype, "shopId", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ type: mongoose_2.Types.ObjectId }),
+    (0, mongoose_1.Prop)({ type: mongoose_2.Types.ObjectId, ref: 'User' }),
     __metadata("design:type", mongoose_2.Types.ObjectId)
 ], Adjustment.prototype, "adjustedBy", void 0);
 __decorate([
     (0, mongoose_1.Prop)(),
     __metadata("design:type", String)
+], Adjustment.prototype, "adjustedByName", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
 ], Adjustment.prototype, "reference", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: Number }),
+    __metadata("design:type", Number)
+], Adjustment.prototype, "previousStock", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: Number }),
+    __metadata("design:type", Number)
+], Adjustment.prototype, "newStock", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: mongoose_2.Types.ObjectId, ref: 'Branch' }),
+    __metadata("design:type", mongoose_2.Types.ObjectId)
+], Adjustment.prototype, "branchId", void 0);
 __decorate([
     (0, mongoose_1.Prop)({ default: Date.now }),
     __metadata("design:type", Date)
@@ -69,4 +92,7 @@ exports.Adjustment = Adjustment = __decorate([
     (0, mongoose_1.Schema)({ timestamps: true })
 ], Adjustment);
 exports.AdjustmentSchema = mongoose_1.SchemaFactory.createForClass(Adjustment);
+exports.AdjustmentSchema.index({ shopId: 1, createdAt: -1 });
+exports.AdjustmentSchema.index({ shopId: 1, productId: 1 });
+exports.AdjustmentSchema.index({ shopId: 1, reason: 1 });
 //# sourceMappingURL=adjustment.schema.js.map

@@ -12,7 +12,7 @@ export declare class AuthController {
             id: any;
             shopId: any;
             name: string;
-            status: "active" | "pending" | "verified" | "suspended";
+            status: "active" | "suspended" | "pending" | "verified";
             email: string;
         };
         user: {
@@ -95,7 +95,7 @@ export declare class AuthController {
             id: any;
             shopId: any;
             name: string;
-            status: "active" | "pending" | "verified" | "suspended";
+            status: "active" | "suspended" | "pending" | "verified";
             email: string;
         };
         user: {

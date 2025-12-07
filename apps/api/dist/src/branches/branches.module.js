@@ -17,6 +17,7 @@ const branches_controller_1 = require("./branches.controller");
 const staff_assignment_service_1 = require("./staff-assignment.service");
 const staff_assignment_controller_1 = require("./staff-assignment.controller");
 const branch_validation_middleware_1 = require("./branch-validation.middleware");
+const subscriptions_module_1 = require("../subscriptions/subscriptions.module");
 let BranchesModule = class BranchesModule {
 };
 exports.BranchesModule = BranchesModule;
@@ -28,6 +29,7 @@ exports.BranchesModule = BranchesModule = __decorate([
                 { name: audit_log_schema_1.AuditLog.name, schema: audit_log_schema_1.AuditLogSchema },
                 { name: user_schema_1.User.name, schema: user_schema_1.UserSchema },
             ]),
+            (0, common_1.forwardRef)(() => subscriptions_module_1.SubscriptionsModule),
         ],
         providers: [branches_service_1.BranchesService, staff_assignment_service_1.StaffAssignmentService, branch_validation_middleware_1.BranchValidationMiddleware],
         controllers: [branches_controller_1.BranchesController, staff_assignment_controller_1.StaffAssignmentController],

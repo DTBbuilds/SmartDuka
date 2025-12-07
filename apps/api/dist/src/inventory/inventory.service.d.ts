@@ -1,3 +1,4 @@
+import { OnModuleInit } from '@nestjs/common';
 import { Model } from 'mongoose';
 import { ProductDocument } from './schemas/product.schema';
 import { CategoryDocument } from './schemas/category.schema';
@@ -9,14 +10,17 @@ import { QueryProductsDto } from './dto/query-products.dto';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { CategorySuggestionService } from './services/category-suggestion.service';
-export declare class InventoryService {
+import { SubscriptionGuardService } from '../subscriptions/subscription-guard.service';
+export declare class InventoryService implements OnModuleInit {
     private readonly productModel;
     private readonly categoryModel;
     private readonly adjustmentModel;
     private readonly reconciliationModel;
     private readonly categorySuggestionService;
+    private readonly subscriptionGuard;
     private readonly logger;
-    constructor(productModel: Model<ProductDocument>, categoryModel: Model<CategoryDocument>, adjustmentModel: Model<StockAdjustmentDocument>, reconciliationModel: Model<StockReconciliationDocument>, categorySuggestionService: CategorySuggestionService);
+    constructor(productModel: Model<ProductDocument>, categoryModel: Model<CategoryDocument>, adjustmentModel: Model<StockAdjustmentDocument>, reconciliationModel: Model<StockReconciliationDocument>, categorySuggestionService: CategorySuggestionService, subscriptionGuard: SubscriptionGuardService);
+    onModuleInit(): Promise<void>;
     createProduct(shopId: string, dto: CreateProductDto): Promise<ProductDocument>;
     getProductById(shopId: string, productId: string): Promise<ProductDocument | null>;
     updateProduct(shopId: string, productId: string, dto: UpdateProductDto): Promise<ProductDocument | null>;
@@ -35,7 +39,7 @@ export declare class InventoryService {
     getCategoryWithProducts(shopId: string, categoryId: string): Promise<any>;
     getCategoryHierarchy(shopId: string): Promise<any[]>;
     updateStock(shopId: string, productId: string, quantityChange: number): Promise<ProductDocument | null>;
-    getLowStockProducts(shopId: string, threshold?: number): Promise<ProductDocument[]>;
+    getLowStockProducts(shopId: string, defaultThreshold?: number): Promise<ProductDocument[]>;
     importProducts(shopId: string, products: CreateProductDto[], options?: BulkImportOptionsDto): Promise<{
         imported: number;
         updated: number;
