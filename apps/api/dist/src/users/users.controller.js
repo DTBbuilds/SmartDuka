@@ -45,41 +45,99 @@ let UsersController = class UsersController {
     async me(req) {
         return req.user;
     }
-    async findByEmail(email) {
-        if (!email)
-            return [];
-        const user = await this.usersService.findByEmail(email);
-        if (!user)
-            return [];
-        const { passwordHash, ...safe } = user.toObject();
-        return [safe];
+    async findUsers(email, role, branchId, status, user) {
+        if (email && !role && !branchId) {
+            const foundUser = await this.usersService.findByEmail(email);
+            if (!foundUser)
+                return [];
+            const { passwordHash, ...safe } = foundUser.toObject();
+            return [safe];
+        }
+        const users = await this.usersService.findUsersWithFilters(user.shopId, { role, branchId, status });
+        return users.map((u) => {
+            const { passwordHash, pinHash, ...safe } = u.toObject ? u.toObject() : u;
+            return safe;
+        });
     }
-    async getCashiersByShop(shopId, user) {
+    async getCashiersByShop(shopId, branchId, user) {
         if (user.shopId !== shopId) {
             throw new common_1.ForbiddenException('You are not allowed to access this shop');
         }
-        const cashiers = await this.usersService.findCashiersByShop(shopId);
+        let effectiveBranchId = branchId;
+        if (user.role === 'branch_manager' && user.branchId) {
+            effectiveBranchId = user.branchId;
+        }
+        const cashiers = await this.usersService.findCashiersByShop(shopId, effectiveBranchId);
         return cashiers.map((c) => {
-            const { passwordHash, pinHash, ...safe } = c.toObject();
+            const { passwordHash, pinHash, ...safe } = c.toObject ? c.toObject() : c;
             return safe;
         });
+    }
+    async getCashiersByBranch(branchId, user) {
+        if (user.role === 'branch_manager' && user.branchId !== branchId) {
+            throw new common_1.ForbiddenException('You can only access cashiers in your branch');
+        }
+        const cashiers = await this.usersService.findCashiersByBranch(branchId);
+        return cashiers.map((c) => {
+            const { passwordHash, pinHash, ...safe } = c.toObject ? c.toObject() : c;
+            return safe;
+        });
+    }
+    async getCashierDetails(id, user) {
+        const cashier = await this.usersService.getCashierDetails(user.shopId, id);
+        const { passwordHash, pinHash, ...safe } = cashier.toObject ? cashier.toObject() : cashier;
+        return safe;
     }
     async updateUser(id, dto, user) {
         const targetUser = await this.usersService.findById(id);
         if (!targetUser || targetUser.shopId.toString() !== user.shopId) {
             throw new common_1.ForbiddenException('You are not allowed to update users from this shop');
         }
-        const updated = await this.usersService.updateStatus(id, dto.status);
+        const updated = await this.usersService.updateCashier(user.shopId, id, {
+            name: dto.name,
+            phone: dto.phone,
+            branchId: dto.branchId,
+            permissions: dto.permissions,
+        });
         if (!updated)
             return null;
-        const { passwordHash, ...safe } = updated.toObject();
+        const { passwordHash, pinHash, ...safe } = updated.toObject();
+        return safe;
+    }
+    async updateUserStatus(id, dto, user) {
+        const targetUser = await this.usersService.findById(id);
+        if (!targetUser || targetUser.shopId.toString() !== user.shopId) {
+            throw new common_1.ForbiddenException('You are not allowed to update users from this shop');
+        }
+        const updated = await this.usersService.updateStatus(id, dto.status);
+        if (!updated) {
+            throw new common_1.NotFoundException('User not found');
+        }
+        const { passwordHash, pinHash, ...safe } = updated.toObject();
+        return safe;
+    }
+    async updateCashierPermissions(id, dto, user) {
+        const updated = await this.usersService.updateCashier(user.shopId, id, {
+            permissions: dto,
+        });
+        if (!updated) {
+            throw new common_1.NotFoundException('User not found');
+        }
+        const { passwordHash, pinHash, ...safe } = updated.toObject();
         return safe;
     }
     async deleteUser(id, user) {
         return this.usersService.deleteUser(user.shopId, id);
     }
     async createCashier(dto, user) {
-        const { user: createdUser, pin } = await this.usersService.createCashierWithPin(user.shopId, dto);
+        let branchId = dto.branchId;
+        if (user.role === 'branch_manager') {
+            if (!user.branchId) {
+                throw new common_1.ForbiddenException('Branch manager must be assigned to a branch');
+            }
+            branchId = user.branchId;
+        }
+        const { user: createdUser, pin } = await this.usersService.createCashierWithPin(user.shopId, { ...dto, branchId });
         return {
             user: {
                 id: createdUser._id,
@@ -87,13 +145,50 @@ let UsersController = class UsersController {
                 email: createdUser.email,
                 phone: createdUser.phone,
                 cashierId: createdUser.cashierId,
+                branchId: createdUser.branchId,
                 role: createdUser.role,
                 status: createdUser.status,
             },
             pin,
         };
     }
+    async assignCashierToBranch(userId, dto, user) {
+        if (!dto.branchId) {
+            throw new common_1.BadRequestException('branchId is required');
+        }
+        const updated = await this.usersService.assignCashierToBranch(user.shopId, userId, dto.branchId);
+        if (!updated) {
+            throw new common_1.NotFoundException('Cashier not found');
+        }
+        const { passwordHash, pinHash, ...safe } = updated.toObject ? updated.toObject() : updated;
+        return safe;
+    }
+    async unassignCashierFromBranch(userId, user) {
+        const updated = await this.usersService.unassignCashierFromBranch(user.shopId, userId);
+        if (!updated) {
+            throw new common_1.NotFoundException('Cashier not found');
+        }
+        const { passwordHash, pinHash, ...safe } = updated.toObject ? updated.toObject() : updated;
+        return safe;
+    }
+    async transferCashierToBranch(userId, dto, user) {
+        if (!dto.branchId) {
+            throw new common_1.BadRequestException('branchId is required');
+        }
+        const updated = await this.usersService.transferCashierToBranch(user.shopId, userId, dto.branchId);
+        if (!updated) {
+            throw new common_1.NotFoundException('Cashier not found');
+        }
+        const { passwordHash, pinHash, ...safe } = updated.toObject ? updated.toObject() : updated;
+        return safe;
+    }
     async resetPin(userId, user) {
+        if (user.role === 'branch_manager') {
+            const cashier = await this.usersService.findById(userId);
+            if (!cashier || cashier.branchId?.toString() !== user.branchId) {
+                throw new common_1.ForbiddenException('You can only reset PIN for cashiers in your branch');
+            }
+        }
         const newPin = await this.usersService.resetPin(userId, user.shopId);
         return {
             message: 'PIN reset successfully',
@@ -135,22 +230,49 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], UsersController.prototype, "me", null);
 __decorate([
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('admin', 'branch_admin', 'branch_manager'),
     (0, common_1.Get)(),
     __param(0, (0, common_1.Query)('email')),
+    __param(1, (0, common_1.Query)('role')),
+    __param(2, (0, common_1.Query)('branchId')),
+    __param(3, (0, common_1.Query)('status')),
+    __param(4, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
+    __metadata("design:paramtypes", [String, String, String, String, Object]),
     __metadata("design:returntype", Promise)
-], UsersController.prototype, "findByEmail", null);
+], UsersController.prototype, "findUsers", null);
 __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
-    (0, roles_decorator_1.Roles)('admin'),
+    (0, roles_decorator_1.Roles)('admin', 'branch_admin', 'branch_manager'),
     (0, common_1.Get)('shop/:shopId/cashiers'),
     __param(0, (0, common_1.Param)('shopId')),
+    __param(1, (0, common_1.Query)('branchId')),
+    __param(2, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, Object]),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "getCashiersByShop", null);
+__decorate([
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('admin', 'branch_admin', 'branch_manager'),
+    (0, common_1.Get)('branch/:branchId/cashiers'),
+    __param(0, (0, common_1.Param)('branchId')),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, Object]),
     __metadata("design:returntype", Promise)
-], UsersController.prototype, "getCashiersByShop", null);
+], UsersController.prototype, "getCashiersByBranch", null);
+__decorate([
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('admin', 'branch_admin', 'branch_manager'),
+    (0, common_1.Get)(':id/details'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "getCashierDetails", null);
 __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
     (0, roles_decorator_1.Roles)('admin'),
@@ -165,6 +287,28 @@ __decorate([
 __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
     (0, roles_decorator_1.Roles)('admin'),
+    (0, common_1.Patch)(':id/status'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Body)()),
+    __param(2, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object, Object]),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "updateUserStatus", null);
+__decorate([
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('admin'),
+    (0, common_1.Patch)(':id/permissions'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Body)()),
+    __param(2, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object, Object]),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "updateCashierPermissions", null);
+__decorate([
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('admin'),
     (0, common_1.Delete)(':id'),
     __param(0, (0, common_1.Param)('id')),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
@@ -174,7 +318,7 @@ __decorate([
 ], UsersController.prototype, "deleteUser", null);
 __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
-    (0, roles_decorator_1.Roles)('admin'),
+    (0, roles_decorator_1.Roles)('admin', 'branch_admin', 'branch_manager'),
     (0, common_1.Post)('cashier'),
     __param(0, (0, common_1.Body)()),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
@@ -184,7 +328,39 @@ __decorate([
 ], UsersController.prototype, "createCashier", null);
 __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
-    (0, roles_decorator_1.Roles)('admin'),
+    (0, roles_decorator_1.Roles)('admin', 'branch_admin'),
+    (0, common_1.Patch)(':id/assign-branch'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Body)()),
+    __param(2, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object, Object]),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "assignCashierToBranch", null);
+__decorate([
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('admin', 'branch_admin'),
+    (0, common_1.Patch)(':id/unassign-branch'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "unassignCashierFromBranch", null);
+__decorate([
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('admin', 'branch_admin'),
+    (0, common_1.Patch)(':id/transfer-branch'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Body)()),
+    __param(2, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object, Object]),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "transferCashierToBranch", null);
+__decorate([
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('admin', 'branch_admin', 'branch_manager'),
     (0, common_1.Post)(':id/reset-pin'),
     __param(0, (0, common_1.Param)('id')),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),

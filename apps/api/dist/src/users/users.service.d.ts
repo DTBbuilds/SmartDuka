@@ -11,8 +11,34 @@ export declare class UsersService {
     findByEmailAndShop(email: string, shopId: string): Promise<User | null>;
     findById(id: string): Promise<User | null>;
     findByShop(shopId: string): Promise<User[]>;
-    findCashiersByShop(shopId: string): Promise<User[]>;
+    findCashiersByShop(shopId: string, branchId?: string): Promise<User[]>;
+    findCashiersByBranch(branchId: string): Promise<User[]>;
     countCashiersByShop(shopId: string): Promise<number>;
+    countCashiersByBranch(branchId: string): Promise<number>;
+    findUsersWithFilters(shopId: string, filters: {
+        role?: string;
+        branchId?: string;
+        status?: string;
+    }): Promise<User[]>;
+    assignCashierToBranch(shopId: string, userId: string, branchId: string): Promise<User | null>;
+    unassignCashierFromBranch(shopId: string, userId: string): Promise<User | null>;
+    transferCashierToBranch(shopId: string, userId: string, newBranchId: string): Promise<User | null>;
+    updateCashier(shopId: string, userId: string, updateData: {
+        name?: string;
+        phone?: string;
+        branchId?: string;
+        permissions?: {
+            canVoid?: boolean;
+            canRefund?: boolean;
+            canDiscount?: boolean;
+            maxDiscountAmount?: number;
+            maxRefundAmount?: number;
+            voidRequiresApproval?: boolean;
+            refundRequiresApproval?: boolean;
+            discountRequiresApproval?: boolean;
+        };
+    }): Promise<User | null>;
+    getCashierDetails(shopId: string, userId: string): Promise<any>;
     updateStatus(userId: string, status: 'active' | 'disabled'): Promise<User | null>;
     validatePassword(user: User, password: string): Promise<boolean>;
     deleteUser(shopId: string, userId: string): Promise<{

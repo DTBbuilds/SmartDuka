@@ -91,7 +91,7 @@ export default function CashiersPage() {
     email: '',
     phone: '',
     password: '',
-    branchId: '',
+    branchId: 'none',
   });
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
@@ -99,16 +99,16 @@ export default function CashiersPage() {
   useEffect(() => {
     fetchCashiers();
     fetchBranches();
-  }, [currentBranch]);
+  }, [filterBranch]);
 
   const fetchCashiers = async () => {
     try {
       setIsLoading(true);
       let url = `${apiUrl}/users?role=cashier`;
-      
-      // Filter by current branch if selected
-      if (currentBranch) {
-        url += `&branchId=${currentBranch._id}`;
+
+      // Filter by selected branch from UI filter ("All" = no branch filter)
+      if (filterBranch !== 'all') {
+        url += `&branchId=${filterBranch}`;
       }
 
       const res = await fetch(url, {
@@ -153,7 +153,7 @@ export default function CashiersPage() {
       email: '',
       phone: '',
       password: '',
-      branchId: currentBranch?._id || '',
+      branchId: currentBranch?._id || 'none',
     });
     setIsDialogOpen(true);
   };
@@ -165,7 +165,7 @@ export default function CashiersPage() {
       email: cashier.email,
       phone: cashier.phone || '',
       password: '',
-      branchId: cashier.branchId || '',
+      branchId: cashier.branchId || 'none',
     });
     setIsDialogOpen(true);
   };
@@ -191,7 +191,7 @@ export default function CashiersPage() {
         name: formData.name,
         email: formData.email,
         phone: formData.phone || undefined,
-        branchId: formData.branchId || undefined,
+        branchId: formData.branchId !== 'none' ? formData.branchId : undefined,
       };
 
       if (formData.password) {
@@ -302,8 +302,8 @@ export default function CashiersPage() {
   // Filter cashiers
   const filteredCashiers = cashiers.filter((cashier) => {
     const matchesSearch =
-      cashier.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      cashier.email.toLowerCase().includes(searchQuery.toLowerCase());
+      cashier.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      cashier.email?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesBranch = filterBranch === 'all' || cashier.branchId === filterBranch;
     const matchesStatus = filterStatus === 'all' || cashier.status === filterStatus;
     return matchesSearch && matchesBranch && matchesStatus;
@@ -593,7 +593,7 @@ export default function CashiersPage() {
                   <SelectValue placeholder="Select a branch" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">No specific branch</SelectItem>
+                  <SelectItem value="none">No specific branch</SelectItem>
                   {branches.map((branch) => (
                     <SelectItem key={branch._id} value={branch._id}>
                       {branch.name} ({branch.code})

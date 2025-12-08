@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsPhoneNumber, MinLength } from 'class-validator';
+import { IsString, IsOptional, IsPhoneNumber, MinLength, IsMongoId, IsObject } from 'class-validator';
 
 export class CreateCashierDto {
   @IsString()
@@ -12,4 +12,21 @@ export class CreateCashierDto {
   @IsOptional()
   @IsString()
   email?: string;
+
+  @IsOptional()
+  @IsMongoId()
+  branchId?: string;
+
+  @IsOptional()
+  @IsObject()
+  permissions?: {
+    canVoid?: boolean;
+    canRefund?: boolean;
+    canDiscount?: boolean;
+    maxDiscountAmount?: number;
+    maxRefundAmount?: number;
+    voidRequiresApproval?: boolean;
+    refundRequiresApproval?: boolean;
+    discountRequiresApproval?: boolean;
+  };
 }

@@ -23,14 +23,14 @@ export declare class AuthService {
             id: any;
             shopId: any;
             name: string;
-            status: "active" | "suspended" | "pending" | "verified";
+            status: "active" | "pending" | "verified" | "suspended";
             email: string;
         };
         user: {
             id: any;
             email: string;
             name: any;
-            role: "admin" | "branch_admin" | "branch_manager" | "supervisor" | "cashier";
+            role: "admin" | "cashier" | "branch_admin" | "branch_manager" | "supervisor";
         };
         token: string;
     }>;
@@ -47,8 +47,10 @@ export declare class AuthService {
             id: any;
             email: string;
             name: any;
-            role: "admin" | "branch_admin" | "branch_manager" | "supervisor" | "cashier";
+            cashierId: any;
+            role: "admin" | "cashier" | "branch_admin" | "branch_manager" | "supervisor";
             shopId: any;
+            branchId: any;
         };
         shop: {
             id: unknown;
@@ -71,8 +73,10 @@ export declare class AuthService {
             id: any;
             email: string;
             name: any;
-            role: "admin" | "branch_admin" | "branch_manager" | "supervisor" | "cashier";
+            cashierId: any;
+            role: "admin" | "cashier" | "branch_admin" | "branch_manager" | "supervisor";
             shopId: any;
+            branchId: any;
         };
         shop: {
             id: unknown;
@@ -106,8 +110,10 @@ export declare class AuthService {
             id: any;
             email: string;
             name: any;
-            role: "admin" | "branch_admin" | "branch_manager" | "supervisor" | "cashier";
+            cashierId: any;
+            role: "admin" | "cashier" | "branch_admin" | "branch_manager" | "supervisor";
             shopId: any;
+            branchId: any;
             avatarUrl: any;
         };
         shop: {
@@ -136,14 +142,14 @@ export declare class AuthService {
             id: any;
             shopId: any;
             name: string;
-            status: "active" | "suspended" | "pending" | "verified";
+            status: "active" | "pending" | "verified" | "suspended";
             email: string;
         };
         user: {
             id: any;
             email: string;
             name: any;
-            role: "admin" | "branch_admin" | "branch_manager" | "supervisor" | "cashier";
+            role: "admin" | "cashier" | "branch_admin" | "branch_manager" | "supervisor";
             avatarUrl: any;
         };
         token: string;

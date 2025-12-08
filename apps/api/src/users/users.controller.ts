@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query, Req, UseGuards, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, Req, UseGuards, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { CreateCashierDto } from './dto/create-cashier.dto';
@@ -40,28 +40,103 @@ export class UsersController {
     return req.user;
   }
 
+  /**
+   * Get users with optional filters (role, branchId, status)
+   * GET /users?role=cashier&branchId=xxx&status=active
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'branch_admin', 'branch_manager')
   @Get()
-  async findByEmail(@Query('email') email?: string) {
-    if (!email) return [];
-    const user = await this.usersService.findByEmail(email);
-    if (!user) return [];
-    const { passwordHash, ...safe } = (user as any).toObject();
-    return [safe];
+  async findUsers(
+    @Query('email') email?: string,
+    @Query('role') role?: string,
+    @Query('branchId') branchId?: string,
+    @Query('status') status?: string,
+    @CurrentUser() user?: any,
+  ) {
+    // If only email query, return single user (backward compatibility)
+    if (email && !role && !branchId) {
+      const foundUser = await this.usersService.findByEmail(email);
+      if (!foundUser) return [];
+      const { passwordHash, ...safe } = (foundUser as any).toObject();
+      return [safe];
+    }
+
+    // Get users with filters
+    const users = await this.usersService.findUsersWithFilters(
+      user.shopId,
+      { role, branchId, status },
+    );
+    
+    return users.map((u: any) => {
+      const { passwordHash, pinHash, ...safe } = u.toObject ? u.toObject() : u;
+      return safe;
+    });
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('admin', 'branch_admin', 'branch_manager')
   @Get('shop/:shopId/cashiers')
-  async getCashiersByShop(@Param('shopId') shopId: string, @CurrentUser() user: any) {
+  async getCashiersByShop(
+    @Param('shopId') shopId: string,
+    @Query('branchId') branchId?: string,
+    @CurrentUser() user?: any,
+  ) {
     // Verify user belongs to this shop
     if (user.shopId !== shopId) {
       throw new ForbiddenException('You are not allowed to access this shop');
     }
-    const cashiers = await this.usersService.findCashiersByShop(shopId);
+    
+    // Branch managers can only see cashiers in their branch
+    let effectiveBranchId = branchId;
+    if (user.role === 'branch_manager' && user.branchId) {
+      effectiveBranchId = user.branchId;
+    }
+    
+    const cashiers = await this.usersService.findCashiersByShop(shopId, effectiveBranchId);
     return cashiers.map((c: any) => {
-      const { passwordHash, pinHash, ...safe } = c.toObject();
+      const { passwordHash, pinHash, ...safe } = c.toObject ? c.toObject() : c;
       return safe;
     });
+  }
+
+  /**
+   * Get cashiers by branch (for branch managers)
+   * GET /users/branch/:branchId/cashiers
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'branch_admin', 'branch_manager')
+  @Get('branch/:branchId/cashiers')
+  async getCashiersByBranch(
+    @Param('branchId') branchId: string,
+    @CurrentUser() user: any,
+  ) {
+    // Branch managers can only access their own branch
+    if (user.role === 'branch_manager' && user.branchId !== branchId) {
+      throw new ForbiddenException('You can only access cashiers in your branch');
+    }
+    
+    const cashiers = await this.usersService.findCashiersByBranch(branchId);
+    return cashiers.map((c: any) => {
+      const { passwordHash, pinHash, ...safe } = c.toObject ? c.toObject() : c;
+      return safe;
+    });
+  }
+
+  /**
+   * Get cashier details with branch info
+   * GET /users/:id/details
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'branch_admin', 'branch_manager')
+  @Get(':id/details')
+  async getCashierDetails(
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+  ) {
+    const cashier = await this.usersService.getCashierDetails(user.shopId, id);
+    const { passwordHash, pinHash, ...safe } = cashier.toObject ? cashier.toObject() : cashier;
+    return safe;
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -77,9 +152,77 @@ export class UsersController {
     if (!targetUser || (targetUser as any).shopId.toString() !== user.shopId) {
       throw new ForbiddenException('You are not allowed to update users from this shop');
     }
-    const updated = await this.usersService.updateStatus(id, dto.status);
+    
+    // Use updateCashier for comprehensive updates
+    const updated = await this.usersService.updateCashier(user.shopId, id, {
+      name: dto.name,
+      phone: dto.phone,
+      branchId: dto.branchId,
+      permissions: dto.permissions,
+    });
+    
     if (!updated) return null;
-    const { passwordHash, ...safe } = (updated as any).toObject();
+    const { passwordHash, pinHash, ...safe } = (updated as any).toObject();
+    return safe;
+  }
+
+  /**
+   * Update user status (enable/disable)
+   * PATCH /users/:id/status
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Patch(':id/status')
+  async updateUserStatus(
+    @Param('id') id: string,
+    @Body() dto: { status: 'active' | 'disabled' },
+    @CurrentUser() user: any,
+  ) {
+    // Verify user belongs to same shop
+    const targetUser = await this.usersService.findById(id);
+    if (!targetUser || (targetUser as any).shopId.toString() !== user.shopId) {
+      throw new ForbiddenException('You are not allowed to update users from this shop');
+    }
+    
+    const updated = await this.usersService.updateStatus(id, dto.status);
+    if (!updated) {
+      throw new NotFoundException('User not found');
+    }
+    
+    const { passwordHash, pinHash, ...safe } = (updated as any).toObject();
+    return safe;
+  }
+
+  /**
+   * Update cashier permissions
+   * PATCH /users/:id/permissions
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Patch(':id/permissions')
+  async updateCashierPermissions(
+    @Param('id') id: string,
+    @Body() dto: {
+      canVoid?: boolean;
+      canRefund?: boolean;
+      canDiscount?: boolean;
+      maxDiscountAmount?: number;
+      maxRefundAmount?: number;
+      voidRequiresApproval?: boolean;
+      refundRequiresApproval?: boolean;
+      discountRequiresApproval?: boolean;
+    },
+    @CurrentUser() user: any,
+  ) {
+    const updated = await this.usersService.updateCashier(user.shopId, id, {
+      permissions: dto,
+    });
+    
+    if (!updated) {
+      throw new NotFoundException('User not found');
+    }
+    
+    const { passwordHash, pinHash, ...safe } = (updated as any).toObject();
     return safe;
   }
 
@@ -91,16 +234,30 @@ export class UsersController {
     return this.usersService.deleteUser(user.shopId, id);
   }
 
+  /**
+   * Create a new cashier
+   * POST /users/cashier
+   * Admin can create for any branch, branch_manager creates for their branch
+   */
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('admin', 'branch_admin', 'branch_manager')
   @Post('cashier')
   async createCashier(
     @Body() dto: CreateCashierDto,
     @CurrentUser() user: any,
   ) {
+    // Branch managers must assign cashier to their branch
+    let branchId = dto.branchId;
+    if (user.role === 'branch_manager') {
+      if (!user.branchId) {
+        throw new ForbiddenException('Branch manager must be assigned to a branch');
+      }
+      branchId = user.branchId;
+    }
+
     const { user: createdUser, pin } = await this.usersService.createCashierWithPin(
       user.shopId,
-      dto,
+      { ...dto, branchId },
     );
 
     return {
@@ -110,6 +267,7 @@ export class UsersController {
         email: createdUser.email,
         phone: createdUser.phone,
         cashierId: createdUser.cashierId,
+        branchId: createdUser.branchId,
         role: createdUser.role,
         status: createdUser.status,
       },
@@ -117,13 +275,105 @@ export class UsersController {
     };
   }
 
+  /**
+   * Assign cashier to a branch
+   * PATCH /users/:id/assign-branch
+   */
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('admin', 'branch_admin')
+  @Patch(':id/assign-branch')
+  async assignCashierToBranch(
+    @Param('id') userId: string,
+    @Body() dto: { branchId: string },
+    @CurrentUser() user: any,
+  ) {
+    if (!dto.branchId) {
+      throw new BadRequestException('branchId is required');
+    }
+
+    const updated = await this.usersService.assignCashierToBranch(
+      user.shopId,
+      userId,
+      dto.branchId,
+    );
+
+    if (!updated) {
+      throw new NotFoundException('Cashier not found');
+    }
+
+    const { passwordHash, pinHash, ...safe } = (updated as any).toObject ? (updated as any).toObject() : updated;
+    return safe;
+  }
+
+  /**
+   * Unassign cashier from branch
+   * PATCH /users/:id/unassign-branch
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'branch_admin')
+  @Patch(':id/unassign-branch')
+  async unassignCashierFromBranch(
+    @Param('id') userId: string,
+    @CurrentUser() user: any,
+  ) {
+    const updated = await this.usersService.unassignCashierFromBranch(
+      user.shopId,
+      userId,
+    );
+
+    if (!updated) {
+      throw new NotFoundException('Cashier not found');
+    }
+
+    const { passwordHash, pinHash, ...safe } = (updated as any).toObject ? (updated as any).toObject() : updated;
+    return safe;
+  }
+
+  /**
+   * Transfer cashier to another branch
+   * PATCH /users/:id/transfer-branch
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'branch_admin')
+  @Patch(':id/transfer-branch')
+  async transferCashierToBranch(
+    @Param('id') userId: string,
+    @Body() dto: { branchId: string },
+    @CurrentUser() user: any,
+  ) {
+    if (!dto.branchId) {
+      throw new BadRequestException('branchId is required');
+    }
+
+    const updated = await this.usersService.transferCashierToBranch(
+      user.shopId,
+      userId,
+      dto.branchId,
+    );
+
+    if (!updated) {
+      throw new NotFoundException('Cashier not found');
+    }
+
+    const { passwordHash, pinHash, ...safe } = (updated as any).toObject ? (updated as any).toObject() : updated;
+    return safe;
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'branch_admin', 'branch_manager')
   @Post(':id/reset-pin')
   async resetPin(
     @Param('id') userId: string,
     @CurrentUser() user: any,
   ) {
+    // Branch managers can only reset PIN for cashiers in their branch
+    if (user.role === 'branch_manager') {
+      const cashier = await this.usersService.findById(userId);
+      if (!cashier || (cashier as any).branchId?.toString() !== user.branchId) {
+        throw new ForbiddenException('You can only reset PIN for cashiers in your branch');
+      }
+    }
+
     const newPin = await this.usersService.resetPin(userId, user.shopId);
 
     return {

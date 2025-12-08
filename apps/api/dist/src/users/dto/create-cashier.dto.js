@@ -15,6 +15,8 @@ class CreateCashierDto {
     name;
     phone;
     email;
+    branchId;
+    permissions;
 }
 exports.CreateCashierDto = CreateCashierDto;
 __decorate([
@@ -32,4 +34,14 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateCashierDto.prototype, "email", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsMongoId)(),
+    __metadata("design:type", String)
+], CreateCashierDto.prototype, "branchId", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsObject)(),
+    __metadata("design:type", Object)
+], CreateCashierDto.prototype, "permissions", void 0);
 //# sourceMappingURL=create-cashier.dto.js.map

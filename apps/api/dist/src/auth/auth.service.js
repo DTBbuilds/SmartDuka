@@ -223,8 +223,10 @@ let AuthService = AuthService_1 = class AuthService {
             sub: user._id,
             email: user.email,
             name: user.name || user.email,
+            cashierId: user.cashierId,
             role: user.role,
             shopId: user.shopId,
+            branchId: user.branchId,
         });
         if (this.activityService) {
             await this.activityService.logActivity(user.shopId.toString(), user._id.toString(), user.name || user.email, user.role, 'login', { email: user.email }, ipAddress, userAgent);
@@ -234,8 +236,10 @@ let AuthService = AuthService_1 = class AuthService {
                 id: user._id,
                 email: user.email,
                 name: user.name,
+                cashierId: user.cashierId,
                 role: user.role,
                 shopId: user.shopId,
+                branchId: user.branchId,
             },
             shop: {
                 id: shop._id,
@@ -311,8 +315,11 @@ let AuthService = AuthService_1 = class AuthService {
         const token = this.jwtService.sign({
             sub: user._id,
             email: user.email,
+            name: user.name || user.email,
+            cashierId: user.cashierId,
             role: user.role,
             shopId: user.shopId,
+            branchId: user.branchId,
         });
         await this.usersService.updateLastLogin(user._id.toString());
         if (this.activityService) {
@@ -323,8 +330,10 @@ let AuthService = AuthService_1 = class AuthService {
                 id: user._id,
                 email: user.email,
                 name: user.name,
+                cashierId: user.cashierId,
                 role: user.role,
                 shopId: user.shopId,
+                branchId: user.branchId,
             },
             shop: {
                 id: shop._id,
@@ -384,8 +393,10 @@ let AuthService = AuthService_1 = class AuthService {
             sub: user._id,
             email: user.email,
             name: user.name || user.email,
+            cashierId: user.cashierId,
             role: user.role,
             shopId: user.shopId,
+            branchId: user.branchId,
         });
         if (this.activityService) {
             await this.activityService.logActivity(user.shopId.toString(), user._id.toString(), user.name || user.email, user.role, 'login_google', { email: user.email, method: 'Google OAuth' }, ipAddress, userAgent);
@@ -397,8 +408,10 @@ let AuthService = AuthService_1 = class AuthService {
                 id: user._id,
                 email: user.email,
                 name: user.name,
+                cashierId: user.cashierId,
                 role: user.role,
                 shopId: user.shopId,
+                branchId: user.branchId,
                 avatarUrl: user.avatarUrl,
             },
             shop: {

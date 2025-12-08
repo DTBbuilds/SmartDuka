@@ -37,8 +37,9 @@ export class User {
   @Prop({ required: false })
   pinHash?: string;
 
-  // Unique cashier ID (e.g., C001)
-  @Prop({ required: false, unique: true, sparse: true })
+  // Unique cashier ID per shop (e.g., C001)
+  // Format: shopId prefix ensures global uniqueness
+  @Prop({ required: false, sparse: true })
   cashierId?: string;
 
   // Session timeout in minutes
@@ -122,7 +123,8 @@ export const UserSchema = SchemaFactory.createForClass(User);
 // Note: email and phone already have indexes from @Prop({ unique: true })
 UserSchema.index({ shopId: 1, role: 1 });
 UserSchema.index({ shopId: 1, branchId: 1 });
-UserSchema.index({ shopId: 1, cashierId: 1 });
+UserSchema.index({ shopId: 1, branchId: 1, role: 1 }); // For branch-level cashier queries
+UserSchema.index({ shopId: 1, cashierId: 1 }, { unique: true, sparse: true }); // Unique cashierId per shop
 UserSchema.index({ branches: 1 });
 UserSchema.index({ createdAt: -1 });
 UserSchema.index({ lastLoginAt: -1 });

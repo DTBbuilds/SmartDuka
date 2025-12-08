@@ -78,7 +78,7 @@ __decorate([
     __metadata("design:type", String)
 ], User.prototype, "pinHash", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ required: false, unique: true, sparse: true }),
+    (0, mongoose_1.Prop)({ required: false, sparse: true }),
     __metadata("design:type", String)
 ], User.prototype, "cashierId", void 0);
 __decorate([
@@ -135,7 +135,8 @@ exports.User = User = __decorate([
 exports.UserSchema = mongoose_1.SchemaFactory.createForClass(User);
 exports.UserSchema.index({ shopId: 1, role: 1 });
 exports.UserSchema.index({ shopId: 1, branchId: 1 });
-exports.UserSchema.index({ shopId: 1, cashierId: 1 });
+exports.UserSchema.index({ shopId: 1, branchId: 1, role: 1 });
+exports.UserSchema.index({ shopId: 1, cashierId: 1 }, { unique: true, sparse: true });
 exports.UserSchema.index({ branches: 1 });
 exports.UserSchema.index({ createdAt: -1 });
 exports.UserSchema.index({ lastLoginAt: -1 });

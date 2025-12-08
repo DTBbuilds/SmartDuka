@@ -666,7 +666,11 @@ function AdminContent() {
               <Activity className="h-4 w-4" />
               Monitoring
             </TabsTrigger>
-            <TabsTrigger value="cashiers" onClick={() => router.push('/users/cashiers')} className="gap-2">
+            <TabsTrigger
+              value="cashiers"
+              onClick={() => router.push('/admin/cashiers')}
+              className="gap-2"
+            >
               <Users className="h-4 w-4" />
               Cashiers
             </TabsTrigger>

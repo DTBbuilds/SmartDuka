@@ -204,13 +204,15 @@ export class AuthService {
       throw new UnauthorizedException('Shop is suspended');
     }
 
-    // Generate JWT token
+    // Generate JWT token - include user's registered name for receipts
     const token = this.jwtService.sign({
       sub: (user as any)._id,
       email: user.email,
       name: (user as any).name || user.email,
+      cashierId: (user as any).cashierId,
       role: user.role,
       shopId: (user as any).shopId,
+      branchId: (user as any).branchId,
     });
 
     // Log login activity (if activity service is available)
@@ -232,8 +234,10 @@ export class AuthService {
         id: (user as any)._id,
         email: user.email,
         name: (user as any).name,
+        cashierId: (user as any).cashierId,
         role: user.role,
         shopId: (user as any).shopId,
+        branchId: (user as any).branchId,
       },
       shop: {
         id: shop._id,
@@ -332,12 +336,15 @@ export class AuthService {
       throw new UnauthorizedException('Shop is suspended');
     }
 
-    // Generate JWT token
+    // Generate JWT token - include cashier's registered name for receipts
     const token = this.jwtService.sign({
       sub: (user as any)._id,
       email: user.email,
+      name: (user as any).name || user.email,
+      cashierId: (user as any).cashierId,
       role: user.role,
       shopId: (user as any).shopId,
+      branchId: (user as any).branchId,
     });
 
     // Update last login time
@@ -362,8 +369,10 @@ export class AuthService {
         id: (user as any)._id,
         email: user.email,
         name: (user as any).name,
+        cashierId: (user as any).cashierId,
         role: user.role,
         shopId: (user as any).shopId,
+        branchId: (user as any).branchId,
       },
       shop: {
         id: shop._id,
@@ -447,13 +456,15 @@ export class AuthService {
       throw new UnauthorizedException('Shop is suspended');
     }
 
-    // Generate JWT token
+    // Generate JWT token - include user's registered name for receipts
     const token = this.jwtService.sign({
       sub: (user as any)._id,
       email: user.email,
       name: (user as any).name || user.email,
+      cashierId: (user as any).cashierId,
       role: user.role,
       shopId: (user as any).shopId,
+      branchId: (user as any).branchId,
     });
 
     // Log login activity
@@ -477,8 +488,10 @@ export class AuthService {
         id: (user as any)._id,
         email: user.email,
         name: (user as any).name,
+        cashierId: (user as any).cashierId,
         role: user.role,
         shopId: (user as any).shopId,
+        branchId: (user as any).branchId,
         avatarUrl: (user as any).avatarUrl,
       },
       shop: {
