@@ -11,7 +11,12 @@ const all_exceptions_filter_1 = require("./common/filters/all-exceptions.filter"
 const helmet_1 = __importDefault(require("helmet"));
 const compression_1 = __importDefault(require("compression"));
 async function bootstrap() {
-    const app = await core_1.NestFactory.create(app_module_1.AppModule);
+    const logger = new common_1.Logger('Bootstrap');
+    const app = await core_1.NestFactory.create(app_module_1.AppModule, {
+        logger: process.env.NODE_ENV === 'production'
+            ? ['error', 'warn', 'log']
+            : ['error', 'warn', 'log', 'debug', 'verbose'],
+    });
     app.use((0, helmet_1.default)());
     app.use((0, compression_1.default)());
     app.useGlobalPipes(new common_1.ValidationPipe({
@@ -80,10 +85,22 @@ Include the token in the Authorization header: \`Bearer <token>\`
         exposedHeaders: ['Content-Type', 'Authorization', 'Cache-Control'],
     });
     const port = process.env.PORT ?? 5000;
+    app.enableShutdownHooks();
+    process.on('uncaughtException', (error) => {
+        logger.error(`Uncaught Exception: ${error.message}`, error.stack);
+        process.exit(1);
+    });
+    process.on('unhandledRejection', (reason, promise) => {
+        logger.error(`Unhandled Rejection at: ${promise}, reason: ${reason}`);
+    });
     await app.listen(port);
-    console.log(`🚀 Backend API running on http://localhost:${port}`);
-    console.log(`📚 API Docs available at http://localhost:${port}/api/docs`);
-    console.log(`❤️ Health check at http://localhost:${port}/health`);
+    if (process.send) {
+        process.send('ready');
+    }
+    logger.log(`🚀 Backend API running on http://localhost:${port}`);
+    logger.log(`📚 API Docs available at http://localhost:${port}/api/docs`);
+    logger.log(`❤️ Health check at http://localhost:${port}/health`);
+    logger.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
 }
 bootstrap();
 //# sourceMappingURL=main.js.map

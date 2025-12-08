@@ -64,9 +64,11 @@ export default function BranchInventoryPage() {
 
       if (res.ok) {
         const data = await res.json();
-        setBranches(Array.isArray(data) ? data : []);
-        if (data.length > 0) {
-          setSelectedBranch(data[0]._id);
+        // Handle both array response and {success, data} response format
+        const branchList = Array.isArray(data) ? data : (data.data || []);
+        setBranches(branchList);
+        if (branchList.length > 0) {
+          setSelectedBranch(branchList[0]._id);
         }
       }
     } catch (error) {

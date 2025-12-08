@@ -1,0 +1,36 @@
+2025-12-08 14:45:09 +03:00: (node:11360) [MONGOOSE] Warning: Duplicate schema index on {"timestamp":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+(Use `node --trace-warnings ...` to show where the warning was created)
+2025-12-08 14:45:09 +03:00: (node:11360) [MONGOOSE] Warning: Duplicate schema index on {"shopId":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+2025-12-08 14:45:20 +03:00: (node:2080) [MONGOOSE] Warning: Duplicate schema index on {"timestamp":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+(Use `node --trace-warnings ...` to show where the warning was created)
+2025-12-08 14:45:20 +03:00: (node:2080) [MONGOOSE] Warning: Duplicate schema index on {"shopId":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+2025-12-08 14:45:30 +03:00: (node:4156) [MONGOOSE] Warning: Duplicate schema index on {"timestamp":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+(Use `node --trace-warnings ...` to show where the warning was created)
+2025-12-08 14:45:30 +03:00: (node:4156) [MONGOOSE] Warning: Duplicate schema index on {"shopId":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+2025-12-08 14:45:40 +03:00: (node:14968) [MONGOOSE] Warning: Duplicate schema index on {"timestamp":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+(Use `node --trace-warnings ...` to show where the warning was created)
+2025-12-08 14:45:40 +03:00: (node:14968) [MONGOOSE] Warning: Duplicate schema index on {"shopId":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+2025-12-08 14:45:50 +03:00: (node:3156) [MONGOOSE] Warning: Duplicate schema index on {"timestamp":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+(Use `node --trace-warnings ...` to show where the warning was created)
+2025-12-08 14:45:50 +03:00: (node:3156) [MONGOOSE] Warning: Duplicate schema index on {"shopId":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+2025-12-08 14:46:17 +03:00: (node:16708) [MONGOOSE] Warning: Duplicate schema index on {"timestamp":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+(Use `node --trace-warnings ...` to show where the warning was created)
+2025-12-08 14:46:17 +03:00: (node:16708) [MONGOOSE] Warning: Duplicate schema index on {"shopId":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+2025-12-08 14:46:20 +03:00: (node:17344) [MONGOOSE] Warning: Duplicate schema index on {"timestamp":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+(Use `node --trace-warnings ...` to show where the warning was created)
+2025-12-08 14:46:20 +03:00: (node:17344) [MONGOOSE] Warning: Duplicate schema index on {"shopId":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+2025-12-08 14:46:30 +03:00: (node:16528) [MONGOOSE] Warning: Duplicate schema index on {"timestamp":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+(Use `node --trace-warnings ...` to show where the warning was created)
+2025-12-08 14:46:30 +03:00: (node:16528) [MONGOOSE] Warning: Duplicate schema index on {"shopId":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+2025-12-08 14:46:40 +03:00: (node:16500) [MONGOOSE] Warning: Duplicate schema index on {"timestamp":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+(Use `node --trace-warnings ...` to show where the warning was created)
+2025-12-08 14:46:40 +03:00: (node:16500) [MONGOOSE] Warning: Duplicate schema index on {"shopId":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+2025-12-08 14:46:50 +03:00: (node:14648) [MONGOOSE] Warning: Duplicate schema index on {"timestamp":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+(Use `node --trace-warnings ...` to show where the warning was created)
+2025-12-08 14:46:50 +03:00: (node:14648) [MONGOOSE] Warning: Duplicate schema index on {"shopId":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+2025-12-08 14:47:01 +03:00: (node:16864) [MONGOOSE] Warning: Duplicate schema index on {"timestamp":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+(Use `node --trace-warnings ...` to show where the warning was created)
+2025-12-08 14:47:01 +03:00: (node:16864) [MONGOOSE] Warning: Duplicate schema index on {"shopId":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+2025-12-08 14:50:42 +03:00: (node:17344) [MONGOOSE] Warning: Duplicate schema index on {"timestamp":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+2025-12-08 14:50:42 +03:00: (Use `node --trace-warnings ...` to show where the warning was created)
+2025-12-08 14:50:42 +03:00: (node:17344) [MONGOOSE] Warning: Duplicate schema index on {"shopId":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.

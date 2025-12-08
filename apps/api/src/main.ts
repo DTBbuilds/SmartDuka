@@ -1,5 +1,5 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
@@ -7,7 +7,12 @@ import helmet from 'helmet';
 import compression from 'compression';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const logger = new Logger('Bootstrap');
+  const app = await NestFactory.create(AppModule, {
+    logger: process.env.NODE_ENV === 'production' 
+      ? ['error', 'warn', 'log'] 
+      : ['error', 'warn', 'log', 'debug', 'verbose'],
+  });
 
   // Security: HTTP headers protection
   app.use(helmet());
@@ -103,9 +108,30 @@ Include the token in the Authorization header: \`Bearer <token>\`
   });
 
   const port = process.env.PORT ?? 5000;
+  
+  // Graceful shutdown handling
+  app.enableShutdownHooks();
+  
+  // Handle uncaught exceptions
+  process.on('uncaughtException', (error) => {
+    logger.error(`Uncaught Exception: ${error.message}`, error.stack);
+    process.exit(1);
+  });
+
+  process.on('unhandledRejection', (reason, promise) => {
+    logger.error(`Unhandled Rejection at: ${promise}, reason: ${reason}`);
+  });
+
   await app.listen(port);
-  console.log(`🚀 Backend API running on http://localhost:${port}`);
-  console.log(`📚 API Docs available at http://localhost:${port}/api/docs`);
-  console.log(`❤️ Health check at http://localhost:${port}/health`);
+  
+  // Signal PM2 that app is ready
+  if (process.send) {
+    process.send('ready');
+  }
+  
+  logger.log(`🚀 Backend API running on http://localhost:${port}`);
+  logger.log(`📚 API Docs available at http://localhost:${port}/api/docs`);
+  logger.log(`❤️ Health check at http://localhost:${port}/health`);
+  logger.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
 }
 bootstrap();

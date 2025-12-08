@@ -54,12 +54,14 @@ export function BranchProvider({ children }: { children: ReactNode }) {
 
       if (res.ok) {
         const data = await res.json();
-        setBranches(data);
+        // Handle both array response and {success, data} response format
+        const branchList = Array.isArray(data) ? data : (data.data || []);
+        setBranches(branchList);
         
         // Restore previously selected branch from localStorage
         const savedBranchId = localStorage.getItem(BRANCH_STORAGE_KEY);
         if (savedBranchId && savedBranchId !== 'all') {
-          const savedBranch = data.find((b: Branch) => b._id === savedBranchId);
+          const savedBranch = branchList.find((b: Branch) => b._id === savedBranchId);
           if (savedBranch) {
             setCurrentBranchState(savedBranch);
           }

@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Plus, Edit2, Trash2, Building2, AlertCircle } from 'lucide-react';
+import { Plus, Edit2, Trash2, Building2, AlertCircle, Eye, Settings, MapPin, Users, TrendingUp, Package, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -23,6 +24,7 @@ interface Branch {
 }
 
 export default function BranchesPage() {
+  const router = useRouter();
   const { token, user } = useAuth();
   const [branches, setBranches] = useState<Branch[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -53,7 +55,9 @@ export default function BranchesPage() {
 
       if (res.ok) {
         const data = await res.json();
-        setBranches(Array.isArray(data) ? data : []);
+        // Handle both array response and {success, data} response format
+        const branchList = Array.isArray(data) ? data : (data.data || []);
+        setBranches(branchList);
       } else {
         setError('Failed to fetch branches');
       }
@@ -232,20 +236,28 @@ export default function BranchesPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => handleEdit(branch)}
+                  onClick={() => router.push(`/admin/branches/${branch._id}`)}
                   className="flex-1 gap-2"
                 >
-                  <Edit2 className="h-4 w-4" />
-                  Edit
+                  <Eye className="h-4 w-4" />
+                  View
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => handleDelete(branch._id)}
-                  className="flex-1 gap-2 text-red-600 hover:text-red-700"
+                  onClick={() => router.push(`/admin/branches/${branch._id}/settings`)}
+                  className="flex-1 gap-2"
                 >
-                  <Trash2 className="h-4 w-4" />
-                  Delete
+                  <Settings className="h-4 w-4" />
+                  Settings
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleEdit(branch)}
+                  title="Quick Edit"
+                >
+                  <Edit2 className="h-4 w-4" />
                 </Button>
               </div>
             </Card>

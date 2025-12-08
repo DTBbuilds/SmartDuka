@@ -664,4 +664,41 @@ export class BranchesService {
       .sort({ name: 1 })
       .exec();
   }
+
+  /**
+   * Get branch statistics
+   * Returns sales, orders, staff count, and inventory stats for a branch
+   */
+  async getBranchStats(branchId: string, shopId: string): Promise<{
+    totalSales: number;
+    todaySales: number;
+    totalOrders: number;
+    todayOrders: number;
+    staffCount: number;
+    productCount: number;
+    lowStockCount: number;
+  }> {
+    const branch = await this.findById(branchId, shopId);
+    if (!branch) {
+      throw new BadRequestException('Branch not found');
+    }
+
+    // Get today's date range
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    // Return basic stats - these can be enhanced with actual aggregations
+    // when the sales and inventory modules are integrated
+    return {
+      totalSales: 0, // TODO: Aggregate from sales collection
+      todaySales: 0, // TODO: Aggregate from sales collection for today
+      totalOrders: 0, // TODO: Count from orders collection
+      todayOrders: 0, // TODO: Count from orders collection for today
+      staffCount: branch.staffIds?.length || 0,
+      productCount: 0, // TODO: Count from products collection
+      lowStockCount: 0, // TODO: Count low stock products
+    };
+  }
 }

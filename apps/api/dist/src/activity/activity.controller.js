@@ -24,6 +24,14 @@ let ActivityController = class ActivityController {
     constructor(activityService) {
         this.activityService = activityService;
     }
+    async getActivityLog(branchId, limit = '50', skip = '0', user) {
+        const activities = await this.activityService.getActivityLog(user.shopId, branchId, parseInt(limit), parseInt(skip));
+        return {
+            success: true,
+            data: activities,
+            count: activities.length,
+        };
+    }
     async getShopActivityLog(limit = '50', skip = '0', user) {
         const activities = await this.activityService.getShopActivityLog(user.shopId, parseInt(limit), parseInt(skip));
         return activities;
@@ -66,6 +74,18 @@ let ActivityController = class ActivityController {
     }
 };
 exports.ActivityController = ActivityController;
+__decorate([
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('admin', 'branch_admin', 'branch_manager'),
+    (0, common_1.Get)(),
+    __param(0, (0, common_1.Query)('branchId')),
+    __param(1, (0, common_1.Query)('limit')),
+    __param(2, (0, common_1.Query)('skip')),
+    __param(3, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, String, Object]),
+    __metadata("design:returntype", Promise)
+], ActivityController.prototype, "getActivityLog", null);
 __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
     (0, roles_decorator_1.Roles)('admin'),

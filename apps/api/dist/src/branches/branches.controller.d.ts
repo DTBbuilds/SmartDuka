@@ -37,6 +37,18 @@ export declare class BranchesController {
         success: boolean;
         data: import("./branch.schema").BranchDocument | null;
     }>;
+    getBranchStats(id: string, user: any): Promise<{
+        success: boolean;
+        data: {
+            totalSales: number;
+            todaySales: number;
+            totalOrders: number;
+            todayOrders: number;
+            staffCount: number;
+            productCount: number;
+            lowStockCount: number;
+        };
+    }>;
     getPaymentConfigStatus(id: string, user: any): Promise<{
         success: boolean;
         data: {

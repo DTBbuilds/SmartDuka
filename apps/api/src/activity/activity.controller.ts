@@ -10,6 +10,32 @@ export class ActivityController {
   constructor(private readonly activityService: ActivityService) {}
 
   /**
+   * Get activity log with optional branch filter
+   * GET /activity?branchId=xxx&limit=10
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'branch_admin', 'branch_manager')
+  @Get()
+  async getActivityLog(
+    @Query('branchId') branchId: string,
+    @Query('limit') limit: string = '50',
+    @Query('skip') skip: string = '0',
+    @CurrentUser() user: any,
+  ) {
+    const activities = await this.activityService.getActivityLog(
+      user.shopId,
+      branchId,
+      parseInt(limit),
+      parseInt(skip),
+    );
+    return {
+      success: true,
+      data: activities,
+      count: activities.length,
+    };
+  }
+
+  /**
    * Get shop activity log (admin only)
    */
   @UseGuards(JwtAuthGuard, RolesGuard)

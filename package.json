@@ -8,11 +8,22 @@
     "dev:api": "pnpm --filter @smartduka/api start:dev",
     "dev:ngrok": "node scripts/dev-with-ngrok.js",
     "build": "turbo run build",
+    "build:api": "pnpm --filter @smartduka/api build",
+    "build:web": "pnpm --filter @smartduka/web build",
     "lint": "turbo run lint",
     "test": "turbo run test",
     "format": "pnpm --filter @smartduka/api format",
     "ngrok:start": "ngrok http 5000",
-    "ngrok:watch": "node scripts/ngrok-watcher.js"
+    "ngrok:watch": "node scripts/ngrok-watcher.js",
+    "pm2:start": "pm2 start ecosystem.config.js --env production",
+    "pm2:stop": "pm2 stop all",
+    "pm2:restart": "pm2 restart all",
+    "pm2:reload": "pm2 reload all",
+    "pm2:logs": "pm2 logs",
+    "pm2:monit": "pm2 monit",
+    "pm2:status": "pm2 status",
+    "start:prod": "pnpm build:api && pm2 start ecosystem.config.js --env production",
+    "start:prod:win": "powershell -ExecutionPolicy Bypass -File scripts/start-production.ps1"
   },
   "devDependencies": {
     "baseline-browser-mapping": "^2.9.4",

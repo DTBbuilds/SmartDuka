@@ -79,6 +79,13 @@ let BranchesController = class BranchesController {
             data: branch,
         };
     }
+    async getBranchStats(id, user) {
+        const stats = await this.branchesService.getBranchStats(id, user.shopId);
+        return {
+            success: true,
+            data: stats,
+        };
+    }
     async getPaymentConfigStatus(id, user) {
         const status = await this.branchesService.getPaymentConfigStatus(id, user.shopId);
         return {
@@ -197,6 +204,15 @@ __decorate([
     __metadata("design:paramtypes", [String, Object]),
     __metadata("design:returntype", Promise)
 ], BranchesController.prototype, "findById", null);
+__decorate([
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.Get)(':id/stats'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], BranchesController.prototype, "getBranchStats", null);
 __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
     (0, roles_decorator_1.Roles)('admin', 'branch_admin', 'branch_manager'),

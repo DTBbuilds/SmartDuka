@@ -163,4 +163,13 @@ export declare class BranchesService {
     removeStaff(branchId: string, shopId: string, userId: string, staffId: string): Promise<BranchDocument | null>;
     getByCounty(shopId: string, county: string): Promise<BranchDocument[]>;
     getDeliveryBranches(shopId: string): Promise<BranchDocument[]>;
+    getBranchStats(branchId: string, shopId: string): Promise<{
+        totalSales: number;
+        todaySales: number;
+        totalOrders: number;
+        todayOrders: number;
+        staffCount: number;
+        productCount: number;
+        lowStockCount: number;
+    }>;
 }

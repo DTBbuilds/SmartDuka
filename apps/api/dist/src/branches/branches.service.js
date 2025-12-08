@@ -343,6 +343,25 @@ let BranchesService = BranchesService_1 = class BranchesService {
             .sort({ name: 1 })
             .exec();
     }
+    async getBranchStats(branchId, shopId) {
+        const branch = await this.findById(branchId, shopId);
+        if (!branch) {
+            throw new common_1.BadRequestException('Branch not found');
+        }
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        return {
+            totalSales: 0,
+            todaySales: 0,
+            totalOrders: 0,
+            todayOrders: 0,
+            staffCount: branch.staffIds?.length || 0,
+            productCount: 0,
+            lowStockCount: 0,
+        };
+    }
 };
 exports.BranchesService = BranchesService;
 exports.BranchesService = BranchesService = BranchesService_1 = __decorate([

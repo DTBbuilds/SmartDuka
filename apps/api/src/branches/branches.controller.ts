@@ -121,6 +121,20 @@ export class BranchesController {
   }
 
   /**
+   * Get branch statistics
+   * GET /branches/:id/stats
+   */
+  @UseGuards(JwtAuthGuard)
+  @Get(':id/stats')
+  async getBranchStats(@Param('id') id: string, @CurrentUser() user: any) {
+    const stats = await this.branchesService.getBranchStats(id, user.shopId);
+    return {
+      success: true,
+      data: stats,
+    };
+  }
+
+  /**
    * Get branch payment config status
    * GET /branches/:id/payment-config
    */

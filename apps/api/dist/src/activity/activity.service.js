@@ -47,6 +47,18 @@ let ActivityService = ActivityService_1 = class ActivityService {
             return null;
         }
     }
+    async getActivityLog(shopId, branchId, limit = 50, skip = 0) {
+        const query = { shopId: new mongoose_2.Types.ObjectId(shopId) };
+        if (branchId) {
+            query['details.branchId'] = branchId;
+        }
+        return this.activityModel
+            .find(query)
+            .sort({ timestamp: -1 })
+            .limit(limit)
+            .skip(skip)
+            .exec();
+    }
     async getShopActivityLog(shopId, limit = 50, skip = 0) {
         return this.activityModel
             .find({ shopId: new mongoose_2.Types.ObjectId(shopId) })

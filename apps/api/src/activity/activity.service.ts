@@ -50,6 +50,29 @@ export class ActivityService {
   }
 
   /**
+   * Get activity log with optional branch filter
+   */
+  async getActivityLog(
+    shopId: string,
+    branchId?: string,
+    limit: number = 50,
+    skip: number = 0,
+  ): Promise<ActivityDocument[]> {
+    const query: any = { shopId: new Types.ObjectId(shopId) };
+    
+    if (branchId) {
+      query['details.branchId'] = branchId;
+    }
+
+    return this.activityModel
+      .find(query)
+      .sort({ timestamp: -1 })
+      .limit(limit)
+      .skip(skip)
+      .exec();
+  }
+
+  /**
    * Get activity log for a shop
    */
   async getShopActivityLog(

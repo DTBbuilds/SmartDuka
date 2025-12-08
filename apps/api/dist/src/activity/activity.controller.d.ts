@@ -2,6 +2,11 @@ import { ActivityService } from './activity.service';
 export declare class ActivityController {
     private readonly activityService;
     constructor(activityService: ActivityService);
+    getActivityLog(branchId: string, limit: string | undefined, skip: string | undefined, user: any): Promise<{
+        success: boolean;
+        data: import("./schemas/activity.schema").ActivityDocument[];
+        count: number;
+    }>;
     getShopActivityLog(limit: string | undefined, skip: string | undefined, user: any): Promise<import("./schemas/activity.schema").ActivityDocument[]>;
     getOwnTransactions(limit: string | undefined, user: any): Promise<import("./schemas/activity.schema").ActivityDocument[]>;
     getCashierActivityLog(cashierId: string, limit: string | undefined, skip: string | undefined, user: any): Promise<import("./schemas/activity.schema").ActivityDocument[]>;

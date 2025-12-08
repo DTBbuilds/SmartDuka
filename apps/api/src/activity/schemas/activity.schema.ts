@@ -77,3 +77,5 @@ ActivitySchema.index({ shopId: 1, createdAt: -1 });
 ActivitySchema.index({ shopId: 1, userId: 1, createdAt: -1 });
 ActivitySchema.index({ shopId: 1, action: 1 });
 ActivitySchema.index({ userId: 1, action: 1 });
+ActivitySchema.index({ shopId: 1, 'details.branchId': 1, createdAt: -1 }); // Branch activity queries
+ActivitySchema.index({ timestamp: 1 }, { expireAfterSeconds: 7776000 }); // TTL: 90 days auto-cleanup
