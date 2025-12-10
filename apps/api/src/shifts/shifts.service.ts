@@ -2,11 +2,13 @@ import { Injectable, BadRequestException, NotFoundException } from '@nestjs/comm
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Shift, ShiftDocument } from './schemas/shift.schema';
+import { Order } from '../sales/schemas/order.schema';
 
 @Injectable()
 export class ShiftsService {
   constructor(
     @InjectModel(Shift.name) private shiftModel: Model<ShiftDocument>,
+    @InjectModel('Order') private orderModel: Model<Order>,
   ) {}
 
   async clockIn(
@@ -65,6 +67,43 @@ export class ShiftsService {
     });
   }
 
+  async getShiftSalesData(shiftId: string, shopId: string): Promise<{
+    totalSales: number;
+    transactionCount: number;
+    expectedCash: number;
+  }> {
+    const shift = await this.getShiftById(shiftId, shopId);
+    if (!shift) {
+      return { totalSales: 0, transactionCount: 0, expectedCash: 0 };
+    }
+
+    const sales = await this.orderModel.aggregate([
+      {
+        $match: {
+          shopId: new Types.ObjectId(shopId),
+          shiftId: new Types.ObjectId(shiftId),
+          status: { $in: ['completed', 'paid'] },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalSales: { $sum: '$total' },
+          transactionCount: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const shiftSales = sales.length > 0 ? sales[0] : { totalSales: 0, transactionCount: 0 };
+    const expectedCash = shift.openingBalance + shiftSales.totalSales;
+
+    return {
+      totalSales: shiftSales.totalSales,
+      transactionCount: shiftSales.transactionCount,
+      expectedCash,
+    };
+  }
+
   async getShiftById(shiftId: string, shopId: string): Promise<Shift | null> {
     return this.shiftModel.findOne({
       _id: new Types.ObjectId(shiftId),
@@ -92,12 +131,33 @@ export class ShiftsService {
       throw new BadRequestException('Shift must be closed before reconciliation');
     }
 
-    const expectedCash = shift.openingBalance;
+    // Calculate actual sales from orders during this shift
+    const sales = await this.orderModel.aggregate([
+      {
+        $match: {
+          shopId: new Types.ObjectId(shopId),
+          shiftId: new Types.ObjectId(shiftId),
+          status: { $in: ['completed', 'paid'] },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalSales: { $sum: '$total' },
+          transactionCount: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const shiftSales = sales.length > 0 ? sales[0] : { totalSales: 0, transactionCount: 0 };
+    const expectedCash = shift.openingBalance + shiftSales.totalSales;
     const variance = actualCash - expectedCash;
 
     shift.actualCash = actualCash;
     shift.expectedCash = expectedCash;
     shift.variance = variance;
+    shift.totalSales = shiftSales.totalSales;
+    shift.transactionCount = shiftSales.transactionCount;
     shift.status = 'reconciled';
     shift.reconciliedBy = new Types.ObjectId(reconciliedBy);
     shift.reconciliedAt = new Date();

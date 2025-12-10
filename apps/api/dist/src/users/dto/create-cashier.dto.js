@@ -13,8 +13,8 @@ exports.CreateCashierDto = void 0;
 const class_validator_1 = require("class-validator");
 class CreateCashierDto {
     name;
-    phone;
     email;
+    phone;
     branchId;
     permissions;
 }
@@ -25,15 +25,14 @@ __decorate([
     __metadata("design:type", String)
 ], CreateCashierDto.prototype, "name", void 0);
 __decorate([
+    (0, class_validator_1.IsEmail)(),
+    __metadata("design:type", String)
+], CreateCashierDto.prototype, "email", void 0);
+__decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsPhoneNumber)('KE'),
     __metadata("design:type", String)
 ], CreateCashierDto.prototype, "phone", void 0);
-__decorate([
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], CreateCashierDto.prototype, "email", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsMongoId)(),

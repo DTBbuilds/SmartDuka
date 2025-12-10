@@ -51,6 +51,10 @@ let ShiftsController = class ShiftsController {
         const shifts = await this.shiftsService.getShiftHistory(user.shopId, cashierId, parseInt(limit, 10));
         return shifts;
     }
+    async getShiftSales(shiftId, user) {
+        const salesData = await this.shiftsService.getShiftSalesData(shiftId, user.shopId);
+        return salesData;
+    }
     async getShiftsByStatus(status, user) {
         const shifts = await this.shiftsService.getShiftsByStatus(user.shopId, status);
         return shifts;
@@ -118,6 +122,16 @@ __decorate([
     __metadata("design:paramtypes", [Object, String, String]),
     __metadata("design:returntype", Promise)
 ], ShiftsController.prototype, "getShiftHistory", null);
+__decorate([
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('admin', 'cashier'),
+    (0, common_1.Get)(':id/sales'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], ShiftsController.prototype, "getShiftSales", null);
 __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
     (0, roles_decorator_1.Roles)('admin'),

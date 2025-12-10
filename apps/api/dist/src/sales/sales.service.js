@@ -57,6 +57,7 @@ let SalesService = class SalesService {
                 branchId: branchId ? new mongoose_2.Types.ObjectId(branchId) : undefined,
                 userId: new mongoose_2.Types.ObjectId(userId),
                 orderNumber,
+                shiftId: dto.shiftId ? new mongoose_2.Types.ObjectId(dto.shiftId) : undefined,
                 items: dto.items.map((item) => ({
                     productId: item.productId,
                     name: item.name,

@@ -122,6 +122,7 @@ class CheckoutDto {
     status;
     taxRate;
     isOffline;
+    shiftId;
 }
 exports.CheckoutDto = CheckoutDto;
 __decorate([
@@ -179,4 +180,9 @@ __decorate([
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], CheckoutDto.prototype, "isOffline", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CheckoutDto.prototype, "shiftId", void 0);
 //# sourceMappingURL=checkout.dto.js.map

@@ -114,6 +114,17 @@ export class ShiftsController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'cashier')
+  @Get(':id/sales')
+  async getShiftSales(
+    @Param('id') shiftId: string,
+    @CurrentUser() user: any,
+  ) {
+    const salesData = await this.shiftsService.getShiftSalesData(shiftId, user.shopId);
+    return salesData;
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
   @Get('status/:status')
   async getShiftsByStatus(

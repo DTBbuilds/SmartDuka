@@ -26,6 +26,9 @@ interface Shift {
   endTime?: string;
   openingBalance: number;
   status: 'open' | 'closed' | 'reconciled';
+  totalSales?: number;
+  transactionCount?: number;
+  expectedCash?: number;
 }
 
 interface CashierStats {
@@ -54,13 +57,16 @@ function CashierDashboardContent() {
     loadCashierStats();
     loadCurrentShift();
     
-    // Update shift duration every minute
+    // Update shift duration and sales every minute
     const interval = setInterval(() => {
       updateShiftDuration();
+      if (shift && shift.status === 'open') {
+        loadCurrentShift(); // Refresh sales data
+      }
     }, 60000);
 
     return () => clearInterval(interval);
-  }, [token]);
+  }, [token, shift?.status]);
 
   const updateShiftDuration = () => {
     const shiftData = localStorage.getItem('smartduka:shift');
@@ -97,6 +103,25 @@ function CashierDashboardContent() {
         if (data) {
           localStorage.setItem('smartduka:shift', JSON.stringify(data));
           updateShiftDuration();
+          
+          // Load sales data for this shift
+          try {
+            const salesRes = await fetch(`${base}/shifts/${data._id}/sales`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            
+            if (salesRes.ok) {
+              const salesData = await salesRes.json();
+              setShift(prev => prev ? {
+                ...prev,
+                totalSales: salesData.totalSales,
+                transactionCount: salesData.transactionCount,
+                expectedCash: salesData.expectedCash,
+              } : null);
+            }
+          } catch (salesError) {
+            console.error('Failed to load sales data:', salesError);
+          }
         }
       } else if (res.status === 404) {
         // No active shift - this is normal
@@ -228,6 +253,18 @@ function CashierDashboardContent() {
                 <div>
                   <p className="text-xs text-muted-foreground">Opening Balance</p>
                   <p className="font-semibold">{formatCurrency(shift.openingBalance)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Total Sales</p>
+                  <p className="font-semibold text-green-600">{formatCurrency(shift.totalSales || 0)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Transactions</p>
+                  <p className="font-semibold">{shift.transactionCount || 0}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Expected Cash</p>
+                  <p className="font-semibold">{formatCurrency(shift.expectedCash || shift.openingBalance)}</p>
                 </div>
               </div>
               <div className="flex gap-2">

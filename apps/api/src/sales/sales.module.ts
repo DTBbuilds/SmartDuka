@@ -10,6 +10,7 @@ import { InvoiceService } from './services/invoice.service';
 import { InventoryModule } from '../inventory/inventory.module';
 import { ActivityModule } from '../activity/activity.module';
 import { PaymentsModule } from '../payments/payments.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { PaymentsModule } from '../payments/payments.module';
     InventoryModule,
     ActivityModule,
     PaymentsModule,
+    NotificationsModule,
   ],
   providers: [SalesService, ReceiptService, InvoiceService],
   controllers: [SalesController],

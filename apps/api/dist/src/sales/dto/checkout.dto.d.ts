@@ -29,4 +29,5 @@ export declare class CheckoutDto {
     status?: 'pending' | 'completed' | 'void';
     taxRate?: number;
     isOffline?: boolean;
+    shiftId?: string;
 }

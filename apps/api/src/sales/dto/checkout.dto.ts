@@ -124,4 +124,8 @@ export class CheckoutDto {
   @IsOptional()
   @IsBoolean()
   isOffline?: boolean;
+
+  @IsOptional()
+  @IsString()
+  shiftId?: string;
 }

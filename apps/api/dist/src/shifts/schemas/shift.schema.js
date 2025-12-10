@@ -23,6 +23,8 @@ let Shift = class Shift {
     expectedCash;
     actualCash;
     variance;
+    totalSales;
+    transactionCount;
     status;
     notes;
     reconciliedBy;
@@ -71,6 +73,14 @@ __decorate([
     (0, mongoose_1.Prop)(),
     __metadata("design:type", Number)
 ], Shift.prototype, "variance", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ default: 0 }),
+    __metadata("design:type", Number)
+], Shift.prototype, "totalSales", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ default: 0 }),
+    __metadata("design:type", Number)
+], Shift.prototype, "transactionCount", void 0);
 __decorate([
     (0, mongoose_1.Prop)({ enum: ['open', 'closed', 'reconciled'], default: 'open' }),
     __metadata("design:type", String)

@@ -74,6 +74,7 @@ export class SalesService {
         branchId: branchId ? new Types.ObjectId(branchId) : undefined,
         userId: new Types.ObjectId(userId),
         orderNumber,
+        shiftId: dto.shiftId ? new Types.ObjectId(dto.shiftId) : undefined,
         items: dto.items.map((item) => ({
           productId: item.productId,
           name: item.name,

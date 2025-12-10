@@ -264,4 +264,271 @@ export class EmailAdminController {
     await this.emailService.seedTemplates();
     return { success: true, message: 'Templates reseeded successfully' };
   }
+
+  // ==================== EMAIL LOG MANAGEMENT ====================
+
+  /**
+   * Get detailed email log by ID
+   */
+  @Get('logs/:id')
+  async getEmailLog(@Param('id') id: string) {
+    const log = await this.notificationModel.findById(id).exec();
+    if (!log) {
+      return { error: 'Email log not found' };
+    }
+    return log;
+  }
+
+  /**
+   * Delete email log
+   */
+  @Delete('logs/:id')
+  async deleteEmailLog(@Param('id') id: string) {
+    const result = await this.notificationModel.deleteOne({ _id: id });
+    return { deleted: result.deletedCount > 0 };
+  }
+
+  /**
+   * Bulk delete email logs
+   */
+  @Delete('logs/bulk')
+  async bulkDeleteEmailLogs(@Body() body: { ids: string[] }) {
+    const result = await this.notificationModel.deleteMany({ 
+      _id: { $in: body.ids } 
+    });
+    return { deleted: result.deletedCount };
+  }
+
+  /**
+   * Retry failed email
+   */
+  @Post('logs/:id/retry')
+  async retryEmail(@Param('id') id: string) {
+    const log = await this.notificationModel.findById(id).exec();
+    if (!log) {
+      return { error: 'Email log not found' };
+    }
+    
+    if (log.status !== 'failed') {
+      return { error: 'Only failed emails can be retried' };
+    }
+
+    // Mark as pending for retry
+    log.status = 'pending';
+    log.retryCount = (log.retryCount || 0) + 1;
+    log.lastRetryAt = new Date();
+    await log.save();
+
+    // Trigger retry logic (this would be handled by a background job)
+    return { success: true, message: 'Email queued for retry' };
+  }
+
+  // ==================== EMAIL SETTINGS & CONFIGURATION ====================
+
+  /**
+   * Get email configuration status
+   */
+  @Get('config/status')
+  async getEmailConfig() {
+    return {
+      smtpConfigured: !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS),
+      smtpHost: process.env.SMTP_HOST,
+      smtpPort: process.env.SMTP_PORT,
+      smtpUser: process.env.SMTP_USER,
+      fromEmail: process.env.SMTP_FROM,
+      frontendUrl: process.env.FRONTEND_URL,
+    };
+  }
+
+  /**
+   * Test SMTP connection
+   */
+  @Post('config/test-connection')
+  async testSmtpConnection() {
+    try {
+      // This would test the actual SMTP connection
+      const testResult = await this.emailService.sendEmail({
+        to: process.env.SMTP_USER || 'test@example.com',
+        subject: 'SMTP Connection Test',
+        html: '<h1>SMTP Connection Test</h1><p>If you receive this, SMTP is working correctly.</p>',
+      });
+      
+      return testResult;
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  // ==================== EMAIL ANALYTICS ====================
+
+  /**
+   * Get detailed email analytics
+   */
+  @Get('analytics/detailed')
+  async getDetailedAnalytics(
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('groupBy') groupBy?: string,
+  ) {
+    const dateFilter: any = {};
+    if (startDate) dateFilter.$gte = new Date(startDate);
+    if (endDate) dateFilter.$lte = new Date(endDate);
+
+    const matchStage: any = {};
+    if (Object.keys(dateFilter).length > 0) {
+      matchStage.createdAt = dateFilter;
+    }
+
+    // Group by different time periods
+    let groupFormat = '%Y-%m-%d';
+    if (groupBy === 'hour') groupFormat = '%Y-%m-%d %H';
+    if (groupBy === 'week') groupFormat = '%Y-%U';
+    if (groupBy === 'month') groupFormat = '%Y-%m';
+
+    const timeline = await this.notificationModel.aggregate([
+      { $match: matchStage },
+      {
+        $group: {
+          _id: { $dateToString: { format: groupFormat, date: '$createdAt' } },
+          total: { $sum: 1 },
+          sent: { $sum: { $cond: [{ $eq: ['$emailSent', true] }, 1, 0] } },
+          failed: { $sum: { $cond: [{ $eq: ['$status', 'failed'] }, 1, 0] } },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]);
+
+    // Top recipients
+    const topRecipients = await this.notificationModel.aggregate([
+      { $match: matchStage },
+      { $group: { _id: '$to', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 10 },
+    ]);
+
+    // Email performance by template
+    const templatePerformance = await this.notificationModel.aggregate([
+      { $match: { ...matchStage, templateName: { $exists: true } } },
+      {
+        $group: {
+          _id: '$templateName',
+          total: { $sum: 1 },
+          sent: { $sum: { $cond: [{ $eq: ['$emailSent', true] }, 1, 0] } },
+          failed: { $sum: { $cond: [{ $eq: ['$status', 'failed'] }, 1, 0] } },
+        },
+      },
+      { $sort: { total: -1 } },
+    ]);
+
+    return {
+      timeline,
+      topRecipients,
+      templatePerformance,
+    };
+  }
+
+  // ==================== BULK EMAIL OPERATIONS ====================
+
+  /**
+   * Send bulk email to multiple recipients
+   */
+  @Post('bulk/send')
+  async sendBulkEmail(@Body() body: {
+    to: string[];
+    subject: string;
+    templateName?: string;
+    content?: string;
+    variables?: Record<string, any>;
+  }) {
+    const results: Array<{
+      recipient: string;
+      success: boolean;
+      messageId?: string;
+      error?: string;
+    }> = [];
+    
+    for (const recipient of body.to) {
+      try {
+        let result;
+        
+        if (body.templateName) {
+          result = await this.emailService.sendTemplateEmail({
+            to: recipient,
+            templateName: body.templateName,
+            variables: body.variables || {},
+          });
+        } else {
+          result = await this.emailService.sendEmail({
+            to: recipient,
+            subject: body.subject,
+            html: body.content || '<p>Bulk email message</p>',
+          });
+        }
+        
+        results.push({ recipient, success: result.success, messageId: result.messageId });
+      } catch (error: any) {
+        results.push({ recipient, success: false, error: error.message });
+      }
+    }
+
+    return {
+      total: body.to.length,
+      successful: results.filter(r => r.success).length,
+      failed: results.filter(r => !r.success).length,
+      results,
+    };
+  }
+
+  /**
+   * Export email logs to CSV
+   */
+  @Get('export/csv')
+  async exportEmailLogs(
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('status') status?: string,
+  ) {
+    const query: any = {};
+    if (startDate || endDate) {
+      query.createdAt = {};
+      if (startDate) query.createdAt.$gte = new Date(startDate);
+      if (endDate) query.createdAt.$lte = new Date(endDate);
+    }
+    if (status) query.status = status;
+
+    const logs = await this.notificationModel
+      .find(query)
+      .sort({ createdAt: -1 })
+      .limit(10000) // Limit for performance
+      .exec();
+
+    // Convert to CSV format
+    const csvHeaders = [
+      'ID', 'To', 'Subject', 'Template', 'Status', 
+      'Created At', 'Sent At', 'Error Message', 'Shop ID', 'User ID'
+    ];
+    
+    const csvRows = logs.map((log) => {
+      const anyLog = log as any;
+      return [
+        anyLog._id,
+        anyLog.to || '',
+        anyLog.subject || '',
+        anyLog.templateName || '',
+        anyLog.status,
+        anyLog.createdAt || '',
+        anyLog.emailSentAt || '',
+        anyLog.errorMessage || '',
+        anyLog.shopId?.toString() || '',
+        anyLog.userId?.toString() || '',
+      ];
+    });
+
+    const csvContent = [
+      csvHeaders.join(','),
+      ...csvRows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    return csvContent;
+  }
 }

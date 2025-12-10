@@ -157,6 +157,7 @@ function POSContent() {
   const [transactionHistory, setTransactionHistory] = useState<Transaction[]>([]);
   const [totalSalesAmount, setTotalSalesAmount] = useState(0);
   const [shiftStartTime, setShiftStartTime] = useState<Date | undefined>();
+  const [currentShift, setCurrentShift] = useState<any>(null);
   const [isCheckoutMode, setIsCheckoutMode] = useState(false);
   const [showReceiptPreview, setShowReceiptPreview] = useState(false);
   const [shopSettings, setShopSettings] = useState<any>(null);
@@ -321,6 +322,32 @@ function POSContent() {
     if (typeof window === "undefined") return;
     window.localStorage.setItem("smartduka:cashierName", cashierName);
   }, [cashierName]);
+
+  // Load current shift
+  useEffect(() => {
+    if (!token || !user) return;
+    
+    const loadCurrentShift = async () => {
+      try {
+        const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+        const res = await fetch(`${base}/shifts/current`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        
+        if (res.ok) {
+          const shift = await res.json();
+          setCurrentShift(shift);
+          if (shift) {
+            setShiftStartTime(new Date(shift.startTime));
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load current shift:', error);
+      }
+    };
+    
+    loadCurrentShift();
+  }, [token, user]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
@@ -629,6 +656,7 @@ function POSContent() {
           customerPhone: phoneNumber,
           cashierId,
           cashierName,
+          shiftId: currentShift?._id,
         };
         
         const res = await fetch(`${base}/sales/checkout`, {
@@ -799,6 +827,7 @@ function POSContent() {
         customerPhone: customerName || undefined, // Add to order level too
         cashierId,
         cashierName,
+        shiftId: currentShift?._id,
       };
       const res = await fetch(`${base}/sales/checkout`, {
         method: "POST",

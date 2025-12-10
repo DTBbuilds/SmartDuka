@@ -19,8 +19,10 @@ const mongoose_2 = require("mongoose");
 const shift_schema_1 = require("./schemas/shift.schema");
 let ShiftsService = class ShiftsService {
     shiftModel;
-    constructor(shiftModel) {
+    orderModel;
+    constructor(shiftModel, orderModel) {
         this.shiftModel = shiftModel;
+        this.orderModel = orderModel;
     }
     async clockIn(shopId, cashierId, cashierName, openingBalance) {
         const existingShift = await this.shiftModel.findOne({
@@ -63,6 +65,35 @@ let ShiftsService = class ShiftsService {
             status: 'open',
         });
     }
+    async getShiftSalesData(shiftId, shopId) {
+        const shift = await this.getShiftById(shiftId, shopId);
+        if (!shift) {
+            return { totalSales: 0, transactionCount: 0, expectedCash: 0 };
+        }
+        const sales = await this.orderModel.aggregate([
+            {
+                $match: {
+                    shopId: new mongoose_2.Types.ObjectId(shopId),
+                    shiftId: new mongoose_2.Types.ObjectId(shiftId),
+                    status: { $in: ['completed', 'paid'] },
+                },
+            },
+            {
+                $group: {
+                    _id: null,
+                    totalSales: { $sum: '$total' },
+                    transactionCount: { $sum: 1 },
+                },
+            },
+        ]);
+        const shiftSales = sales.length > 0 ? sales[0] : { totalSales: 0, transactionCount: 0 };
+        const expectedCash = shift.openingBalance + shiftSales.totalSales;
+        return {
+            totalSales: shiftSales.totalSales,
+            transactionCount: shiftSales.transactionCount,
+            expectedCash,
+        };
+    }
     async getShiftById(shiftId, shopId) {
         return this.shiftModel.findOne({
             _id: new mongoose_2.Types.ObjectId(shiftId),
@@ -80,11 +111,30 @@ let ShiftsService = class ShiftsService {
         if (shift.status !== 'closed') {
             throw new common_1.BadRequestException('Shift must be closed before reconciliation');
         }
-        const expectedCash = shift.openingBalance;
+        const sales = await this.orderModel.aggregate([
+            {
+                $match: {
+                    shopId: new mongoose_2.Types.ObjectId(shopId),
+                    shiftId: new mongoose_2.Types.ObjectId(shiftId),
+                    status: { $in: ['completed', 'paid'] },
+                },
+            },
+            {
+                $group: {
+                    _id: null,
+                    totalSales: { $sum: '$total' },
+                    transactionCount: { $sum: 1 },
+                },
+            },
+        ]);
+        const shiftSales = sales.length > 0 ? sales[0] : { totalSales: 0, transactionCount: 0 };
+        const expectedCash = shift.openingBalance + shiftSales.totalSales;
         const variance = actualCash - expectedCash;
         shift.actualCash = actualCash;
         shift.expectedCash = expectedCash;
         shift.variance = variance;
+        shift.totalSales = shiftSales.totalSales;
+        shift.transactionCount = shiftSales.transactionCount;
         shift.status = 'reconciled';
         shift.reconciliedBy = new mongoose_2.Types.ObjectId(reconciliedBy);
         shift.reconciliedAt = new Date();
@@ -134,6 +184,8 @@ exports.ShiftsService = ShiftsService;
 exports.ShiftsService = ShiftsService = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)(shift_schema_1.Shift.name)),
-    __metadata("design:paramtypes", [mongoose_2.Model])
+    __param(1, (0, mongoose_1.InjectModel)('Order')),
+    __metadata("design:paramtypes", [mongoose_2.Model,
+        mongoose_2.Model])
 ], ShiftsService);
 //# sourceMappingURL=shifts.service.js.map

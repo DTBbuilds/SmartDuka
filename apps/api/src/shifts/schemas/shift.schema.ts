@@ -35,6 +35,12 @@ export class Shift {
   @Prop()
   variance?: number;
 
+  @Prop({ default: 0 })
+  totalSales?: number;
+
+  @Prop({ default: 0 })
+  transactionCount?: number;
+
   @Prop({ enum: ['open', 'closed', 'reconciled'], default: 'open' })
   status: 'open' | 'closed' | 'reconciled';
 

@@ -280,14 +280,10 @@ let UsersService = class UsersService {
             }
             const nextNum = maxNum + 1 + attempt;
             const cashierId = `C${String(nextNum).padStart(3, '0')}`;
-            const shortShopId = shopId.slice(-6);
-            const timestamp = Date.now().toString(36);
-            const uniqueEmail = createCashierDto.email || `cashier-${cashierId}-${shortShopId}-${timestamp}@shop.local`;
-            if (createCashierDto.email) {
-                const existingUser = await this.userModel.findOne({ email: uniqueEmail });
-                if (existingUser) {
-                    throw new common_1.ConflictException(`A user with this email already exists. Please use a different email.`);
-                }
+            const uniqueEmail = createCashierDto.email;
+            const existingUser = await this.userModel.findOne({ email: uniqueEmail });
+            if (existingUser) {
+                throw new common_1.ConflictException(`A user with this email already exists. Please use a different email.`);
             }
             const existingCashier = await this.userModel.findOne({
                 shopId: new mongoose_2.Types.ObjectId(shopId),

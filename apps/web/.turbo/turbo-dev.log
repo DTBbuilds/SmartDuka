@@ -4,30 +4,11 @@
 
    ▲ Next.js 16.0.7 (Turbopack)
    - Local:         http://localhost:3000
-   - Network:       http://192.168.9.101:3000
+   - Network:       http://192.168.9.102:3000
    - Environments: .env.local
 
  ✓ Starting...
- ✓ Ready in 3.2s
- ○ Compiling / ...
- GET /admin 200 in 11.2s (compile: 10.8s, proxy.ts: 28ms, render: 376ms)
- GET /admin 200 in 11.0s (compile: 10.9s, proxy.ts: 21ms, render: 157ms)
- GET / 200 in 15.5s (compile: 13.6s, proxy.ts: 274ms, render: 1578ms)
- GET /admin/monitoring 200 in 817ms (compile: 699ms, proxy.ts: 21ms, render: 97ms)
- GET / 200 in 52ms (compile: 8ms, proxy.ts: 6ms, render: 37ms)
- GET /admin 200 in 146ms (compile: 11ms, proxy.ts: 10ms, render: 124ms)
- GET /admin 200 in 146ms (compile: 51ms, proxy.ts: 12ms, render: 83ms)
- GET /users/cashiers 200 in 1004ms (compile: 920ms, proxy.ts: 12ms, render: 72ms)
- ✓ Compiled in 1018ms
- GET /users/cashiers 200 in 178ms (compile: 12ms, proxy.ts: 8ms, render: 158ms)
- GET /pos 200 in 2.9s (compile: 2.8s, proxy.ts: 11ms, render: 104ms)
- GET / 200 in 46ms (compile: 13ms, proxy.ts: 7ms, render: 25ms)
- GET /admin 200 in 459ms (compile: 235ms, proxy.ts: 9ms, render: 215ms)
- GET /admin 200 in 131ms (compile: 10ms, proxy.ts: 13ms, render: 108ms)
- GET /admin/cashiers 200 in 1026ms (compile: 957ms, proxy.ts: 5ms, render: 64ms)
- ✓ Compiled in 944ms
- ✓ Compiled in 734ms
- ✓ Compiled in 1018ms
- ✓ Compiled in 796ms
- ✓ Compiled in 845ms
- ✓ Compiled in 820ms
+ ✓ Ready in 1460ms
+ ○ Compiling /super-admin/emails ...
+ GET /super-admin/emails 200 in 5.5s (compile: 5.2s, proxy.ts: 148ms, render: 144ms)
+ GET /super-admin/emails 200 in 82ms (compile: 7ms, proxy.ts: 8ms, render: 68ms)

@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
+import { AdminNavigation } from '@/components/admin-navigation';
+import { AdminHeader } from '@/components/admin-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -170,12 +172,26 @@ export default function CashiersPage() {
     setIsDialogOpen(true);
   };
 
-  const handleSubmit = async () => {
-    if (!formData.name || !formData.email) {
-      setError('Please fill in required fields (Name, Email)');
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSuccess(null);
+
+    // Basic validation
+    if (!formData.name.trim()) {
+      setError('Name is required');
       return;
     }
-
+    if (!formData.email.trim()) {
+      setError('Email is required');
+      return;
+    }
+    // Basic email format validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      setError('Please enter a valid email address');
+      return;
+    }
     if (!editingCashier && !formData.password) {
       setError('Password is required for new cashiers');
       return;
@@ -315,22 +331,25 @@ export default function CashiersPage() {
 
   return (
     <div className="space-y-6">
+      {/* Admin Navigation */}
+      <AdminNavigation activeTab="cashiers" />
+
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-            <Users className="h-8 w-8" />
-            Cashier Management
-          </h1>
-          <p className="text-muted-foreground mt-2">
-            Manage cashiers{currentBranch ? ` for ${currentBranch.name}` : ' across all branches'}
-          </p>
-        </div>
-        <Button onClick={handleAddCashier} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Add Cashier
-        </Button>
-      </div>
+      <AdminHeader
+        title="Cashier Management"
+        subtitle={`Manage cashiers${currentBranch ? ` for ${currentBranch.name}` : ' across all branches'}`}
+        icon={<Users className="h-6 w-6 text-primary" />}
+        badge={activeCashiers > 0 ? `${activeCashiers} active` : undefined}
+        showSearch={true}
+        searchValue={searchQuery}
+        onSearchChange={setSearchQuery}
+        actions={
+          <Button onClick={handleAddCashier} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Add Cashier
+          </Button>
+        }
+      />
 
       {/* Alerts */}
       {error && (
@@ -560,6 +579,7 @@ export default function CashiersPage() {
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 placeholder="e.g., john@shop.com"
+                required
               />
             </div>
             <div className="space-y-2">

@@ -16,5 +16,10 @@ export declare class ShiftsController {
         notes?: string;
     }, user: any): Promise<import("./schemas/shift.schema").Shift>;
     getShiftHistory(user: any, limit?: string, cashierId?: string): Promise<import("./schemas/shift.schema").Shift[]>;
+    getShiftSales(shiftId: string, user: any): Promise<{
+        totalSales: number;
+        transactionCount: number;
+        expectedCash: number;
+    }>;
     getShiftsByStatus(status: 'open' | 'closed' | 'reconciled', user: any): Promise<import("./schemas/shift.schema").Shift[]>;
 }

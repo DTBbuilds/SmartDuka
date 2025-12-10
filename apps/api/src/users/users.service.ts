@@ -388,18 +388,13 @@ export class UsersService {
       const nextNum = maxNum + 1 + attempt;
       const cashierId = `C${String(nextNum).padStart(3, '0')}`;
 
-      // Generate unique email using shopId and timestamp to avoid collisions
-      const shortShopId = shopId.slice(-6);
-      const timestamp = Date.now().toString(36);
-      const uniqueEmail =
-        createCashierDto.email || `cashier-${cashierId}-${shortShopId}-${timestamp}@shop.local`;
+      // Email is now required, so use the provided email
+      const uniqueEmail = createCashierDto.email;
 
-      // Check if email already exists (only for user-provided emails)
-      if (createCashierDto.email) {
-        const existingUser = await this.userModel.findOne({ email: uniqueEmail });
-        if (existingUser) {
-          throw new ConflictException(`A user with this email already exists. Please use a different email.`);
-        }
+      // Check if email already exists
+      const existingUser = await this.userModel.findOne({ email: uniqueEmail });
+      if (existingUser) {
+        throw new ConflictException(`A user with this email already exists. Please use a different email.`);
       }
 
       // Check if cashierId already exists for this shop

@@ -12,6 +12,9 @@ interface Shift {
   startTime: string;
   openingBalance: number;
   status: string;
+  totalSales?: number;
+  transactionCount?: number;
+  expectedCash?: number;
 }
 
 function ShiftEndContent() {
@@ -43,6 +46,26 @@ function ShiftEndContent() {
 
       if (!data) {
         setError('No active shift found');
+        return;
+      }
+
+      // Load sales data for this shift
+      try {
+        const salesRes = await fetch(`${base}/shifts/${data._id}/sales`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        
+        if (salesRes.ok) {
+          const salesData = await salesRes.json();
+          setShift(prev => prev ? {
+            ...prev,
+            totalSales: salesData.totalSales,
+            transactionCount: salesData.transactionCount,
+            expectedCash: salesData.expectedCash,
+          } : null);
+        }
+      } catch (salesError) {
+        console.error('Failed to load sales data:', salesError);
       }
     } catch (err: any) {
       setError(err.message || 'Failed to load shift');
@@ -129,8 +152,10 @@ function ShiftEndContent() {
     return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
   };
 
-  const variance = (parseFloat(actualCash) || 0) - (shift?.openingBalance || 0);
-  const variancePercent = shift?.openingBalance ? ((variance / shift.openingBalance) * 100).toFixed(2) : '0';
+  const variance = (parseFloat(actualCash) || 0) - (shift?.expectedCash || shift?.openingBalance || 0);
+  const variancePercent = (shift?.expectedCash || shift?.openingBalance || 0) > 0 
+    ? ((variance / (shift?.expectedCash || shift?.openingBalance || 0)) * 100).toFixed(2) 
+    : '0';
 
   if (isLoading) {
     return (
@@ -211,6 +236,18 @@ function ShiftEndContent() {
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-600">Opening Balance:</span>
                   <span className="font-medium">{formatCurrency(shift.openingBalance)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-600">Total Sales:</span>
+                  <span className="font-medium text-green-600">{formatCurrency(shift.totalSales || 0)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-600">Transactions:</span>
+                  <span className="font-medium">{shift.transactionCount || 0}</span>
+                </div>
+                <div className="flex justify-between text-sm font-medium">
+                  <span className="text-slate-700">Expected Cash:</span>
+                  <span className="text-slate-900">{formatCurrency(shift.expectedCash || shift.openingBalance)}</span>
                 </div>
               </div>
 

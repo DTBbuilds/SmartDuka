@@ -11,6 +11,8 @@ export declare class Shift {
     expectedCash?: number;
     actualCash?: number;
     variance?: number;
+    totalSales?: number;
+    transactionCount?: number;
     status: 'open' | 'closed' | 'reconciled';
     notes?: string;
     reconciliedBy?: Types.ObjectId;

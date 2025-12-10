@@ -12,6 +12,7 @@ const mongoose_1 = require("@nestjs/mongoose");
 const shifts_service_1 = require("./shifts.service");
 const shifts_controller_1 = require("./shifts.controller");
 const shift_schema_1 = require("./schemas/shift.schema");
+const order_schema_1 = require("../sales/schemas/order.schema");
 let ShiftsModule = class ShiftsModule {
 };
 exports.ShiftsModule = ShiftsModule;
@@ -22,6 +23,10 @@ exports.ShiftsModule = ShiftsModule = __decorate([
                 {
                     name: shift_schema_1.Shift.name,
                     schema: shift_schema_1.ShiftSchema,
+                },
+                {
+                    name: order_schema_1.Order.name,
+                    schema: order_schema_1.OrderSchema,
                 },
             ]),
         ],

@@ -90,6 +90,25 @@ export class Notification {
 
   @Prop({ type: Date, expires: 2592000 }) // Auto-delete after 30 days
   expiresAt?: Date;
+
+  // Email specific fields
+  @Prop()
+  to?: string;
+
+  @Prop()
+  subject?: string;
+
+  @Prop()
+  templateName?: string;
+
+  @Prop({ default: 0 })
+  retryCount?: number;
+
+  @Prop()
+  lastRetryAt?: Date;
+
+  @Prop()
+  errorMessage?: string;
 }
 
 export const NotificationSchema = SchemaFactory.createForClass(Notification);

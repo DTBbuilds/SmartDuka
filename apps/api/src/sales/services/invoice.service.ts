@@ -1,10 +1,11 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { nanoid } from 'nanoid';
 import { Invoice, InvoiceDocument } from '../schemas/invoice.schema';
 import { Order, OrderDocument } from '../schemas/order.schema';
 import { CreateInvoiceDto, RecordPaymentDto } from '../dto/invoice.dto';
+import { EmailService } from '../../notifications/email.service';
 
 export interface InvoiceFilters {
   from?: string;
@@ -20,9 +21,12 @@ export interface InvoiceFilters {
 
 @Injectable()
 export class InvoiceService {
+  private readonly logger = new Logger(InvoiceService.name);
+
   constructor(
     @InjectModel(Invoice.name) private readonly invoiceModel: Model<InvoiceDocument>,
     @InjectModel(Order.name) private readonly orderModel: Model<OrderDocument>,
+    private readonly emailService: EmailService,
   ) {}
 
   /**
@@ -111,7 +115,12 @@ export class InvoiceService {
       currency: 'KES',
     });
 
-    return await invoice.save();
+    const savedInvoice = await invoice.save();
+
+    // Send invoice email if customer email is available
+    await this.safeSendInvoiceEmail(savedInvoice);
+
+    return savedInvoice;
   }
 
   /**
@@ -201,7 +210,12 @@ export class InvoiceService {
       createdBy: new Types.ObjectId(userId),
     });
 
-    return await invoice.save();
+    const savedInvoice = await invoice.save();
+
+    // Send invoice email if customer email is available
+    await this.safeSendInvoiceEmail(savedInvoice);
+
+    return savedInvoice;
   }
 
   /**
@@ -555,5 +569,30 @@ export class InvoiceService {
 </body>
 </html>
     `;
+  }
+
+  /**
+   * Safely send invoice email without breaking invoice creation flow
+   */
+  private async safeSendInvoiceEmail(invoice: InvoiceDocument): Promise<void> {
+    try {
+      if (!invoice.customerEmail) {
+        return;
+      }
+
+      const html = this.generateInvoiceHTML(invoice);
+
+      const fromName = invoice.businessName || 'SmartDuka';
+      const fromEmail = invoice.businessEmail || process.env.SMTP_FROM || 'SmartDuka <noreply@smartduka.co.ke>';
+
+      await this.emailService.sendEmail({
+        to: invoice.customerEmail,
+        subject: `Invoice ${invoice.invoiceNumber} from ${fromName}`,
+        html,
+        from: fromEmail,
+      });
+    } catch (error: any) {
+      this.logger.error(`Failed to send invoice email for ${invoice._id}: ${error.message}`);
+    }
   }
 }

@@ -1,7 +1,7 @@
 export declare class CreateCashierDto {
     name: string;
+    email: string;
     phone?: string;
-    email?: string;
     branchId?: string;
     permissions?: {
         canVoid?: boolean;

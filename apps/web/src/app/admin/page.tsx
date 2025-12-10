@@ -28,6 +28,8 @@ import { CategoryManagement } from '@/components/category-management';
 import { CategoryImportExport } from '@/components/category-import-export';
 import { generateProductsCSV, downloadCSV } from '@/lib/csv-parser';
 import { AuthGuard } from '@/components/auth-guard';
+import { AdminNavigation } from '@/components/admin-navigation';
+import { AdminHeader } from '@/components/admin-header';
 import { QuickAddProductForm } from '@/components/quick-add-product-form';
 import { BranchesShortcuts } from '@/components/branches-shortcuts';
 
@@ -314,16 +316,24 @@ function AdminContent() {
     <main className="bg-background py-6">
       <ToastContainer toasts={toasts} onDismiss={dismiss} />
       <div className="container">
+        {/* Admin Navigation */}
+        <AdminNavigation activeTab="products" />
+
         {/* Header */}
-        <div className="mb-8">
-          {shop && (
-            <p className="text-xs font-medium text-primary mb-2">
-              {shop.name} • Shop Status: <span className="capitalize">{shop.status}</span>
-            </p>
-          )}
-          <h1 className="text-3xl font-bold">Admin Dashboard</h1>
-          <p className="text-muted-foreground">Manage your inventory and operations</p>
-        </div>
+        <AdminHeader
+          title="Admin Dashboard"
+          subtitle="Manage your inventory and operations"
+          icon={<Package className="h-6 w-6 text-primary" />}
+          showSearch={true}
+          searchValue={searchQuery}
+          onSearchChange={setSearchQuery}
+          actions={
+            <Button onClick={() => setIsQuickAddExpanded(!isQuickAddExpanded)} className="gap-2">
+              <Plus className="h-4 w-4" />
+              Add Product
+            </Button>
+          }
+        />
 
         {/* M-Pesa Configuration Alert */}
         {mpesaStatus && !mpesaStatus.isConfigured && (
@@ -628,7 +638,7 @@ function AdminContent() {
             <CardContent>
               <QuickAddProductForm
                 categories={categories}
-                onSubmit={async (product) => {
+                onSubmit={async (product: any) => {
                   if (!token) return;
                   try {
                     const base = config.apiUrl;
@@ -654,26 +664,17 @@ function AdminContent() {
           </Card>
         )}
 
+        {/* Admin Navigation */}
+        <AdminNavigation activeTab="products" />
+
         <Tabs defaultValue="products" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-5 hidden">
+            {/* Hidden tabs for state management - actual navigation handled by AdminNavigation */}
             <TabsTrigger value="products">Products</TabsTrigger>
+            <TabsTrigger value="cashiers">Cashiers</TabsTrigger>
+            <TabsTrigger value="monitoring">Monitoring</TabsTrigger>
             <TabsTrigger value="categories">Categories</TabsTrigger>
-            <TabsTrigger value="branches" className="gap-2">
-              <MapPin className="h-4 w-4" />
-              Branches
-            </TabsTrigger>
-            <TabsTrigger value="monitoring" onClick={() => router.push('/admin/monitoring')} className="gap-2">
-              <Activity className="h-4 w-4" />
-              Monitoring
-            </TabsTrigger>
-            <TabsTrigger
-              value="cashiers"
-              onClick={() => router.push('/admin/cashiers')}
-              className="gap-2"
-            >
-              <Users className="h-4 w-4" />
-              Cashiers
-            </TabsTrigger>
+            <TabsTrigger value="branches">Branches</TabsTrigger>
           </TabsList>
 
           <TabsContent value="products" className="space-y-4">

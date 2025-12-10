@@ -19,6 +19,7 @@ const invoice_service_1 = require("./services/invoice.service");
 const inventory_module_1 = require("../inventory/inventory.module");
 const activity_module_1 = require("../activity/activity.module");
 const payments_module_1 = require("../payments/payments.module");
+const notifications_module_1 = require("../notifications/notifications.module");
 let SalesModule = class SalesModule {
 };
 exports.SalesModule = SalesModule;
@@ -33,6 +34,7 @@ exports.SalesModule = SalesModule = __decorate([
             inventory_module_1.InventoryModule,
             activity_module_1.ActivityModule,
             payments_module_1.PaymentsModule,
+            notifications_module_1.NotificationsModule,
         ],
         providers: [sales_service_1.SalesService, receipt_service_1.ReceiptService, invoice_service_1.InvoiceService],
         controllers: [sales_controller_1.SalesController],

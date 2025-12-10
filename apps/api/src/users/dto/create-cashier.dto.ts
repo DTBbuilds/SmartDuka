@@ -1,17 +1,16 @@
-import { IsString, IsOptional, IsPhoneNumber, MinLength, IsMongoId, IsObject } from 'class-validator';
+import { IsString, IsOptional, IsPhoneNumber, MinLength, IsMongoId, IsObject, IsEmail } from 'class-validator';
 
 export class CreateCashierDto {
   @IsString()
   @MinLength(2)
   name: string;
 
+  @IsEmail()
+  email: string;
+
   @IsOptional()
   @IsPhoneNumber('KE')
   phone?: string;
-
-  @IsOptional()
-  @IsString()
-  email?: string;
 
   @IsOptional()
   @IsMongoId()
