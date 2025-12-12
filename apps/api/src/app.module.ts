@@ -34,6 +34,7 @@ import { AuditModule } from './audit/audit.module';
 import { HealthModule } from './health/health.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { StripeModule } from './stripe/stripe.module';
 
 @Module({
   imports: [
@@ -89,6 +90,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     AuditModule,
     SubscriptionsModule,
     NotificationsModule,
+    StripeModule.forRootAsync(),
   ],
   controllers: [AppController],
   providers: [

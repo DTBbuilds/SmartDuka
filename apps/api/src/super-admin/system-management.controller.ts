@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Query,
   Param,
   Body,
@@ -14,9 +15,13 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { SystemManagementService } from './services/system-management.service';
 import { SystemAuditService } from './services/system-audit.service';
 import { EmailLogService } from './services/email-log.service';
+import { SystemConfigService } from './services/system-config.service';
+import { PaymentAttemptService } from '../subscriptions/services/payment-attempt.service';
+import { PaymentAttemptStatus, PaymentMethod } from '../subscriptions/schemas/payment-attempt.schema';
 import { AuditActionCategory } from './schemas/system-audit-log.schema';
 
 /**
@@ -40,6 +45,8 @@ export class SystemManagementController {
     private readonly systemService: SystemManagementService,
     private readonly auditService: SystemAuditService,
     private readonly emailLogService: EmailLogService,
+    private readonly configService: SystemConfigService,
+    private readonly paymentAttemptService: PaymentAttemptService,
   ) {}
 
   // ============================================
@@ -323,6 +330,106 @@ export class SystemManagementController {
       shopId,
       limit ? parseInt(limit) : 50,
       skip ? parseInt(skip) : 0,
+    );
+  }
+
+  // ============================================
+  // SYSTEM CONFIGURATION (M-Pesa, Stripe, etc.)
+  // ============================================
+
+  /**
+   * Get M-Pesa configuration for display (masked credentials)
+   */
+  @Get('config/mpesa')
+  async getMpesaConfig() {
+    this.logger.log('Fetching M-Pesa system configuration');
+    return this.configService.getMpesaConfigForDisplay();
+  }
+
+  /**
+   * Save M-Pesa configuration
+   */
+  @Put('config/mpesa')
+  async saveMpesaConfig(
+    @CurrentUser() user: any,
+    @Body() body: {
+      environment: 'sandbox' | 'production';
+      shortCode: string;
+      consumerKey: string;
+      consumerSecret: string;
+      passkey: string;
+      callbackUrl?: string;
+      isActive?: boolean;
+    },
+  ) {
+    this.logger.log(`Saving M-Pesa configuration by ${user.email}`);
+    return this.configService.saveMpesaConfig({
+      ...body,
+      updatedByEmail: user.email,
+    });
+  }
+
+  /**
+   * Test M-Pesa configuration
+   */
+  @Post('config/mpesa/test')
+  async testMpesaConfig() {
+    this.logger.log('Testing M-Pesa configuration');
+    return this.configService.testMpesaConfig();
+  }
+
+  /**
+   * Toggle M-Pesa active status
+   */
+  @Put('config/mpesa/toggle')
+  async toggleMpesaActive(
+    @Body() body: { isActive: boolean },
+  ) {
+    this.logger.log(`Toggling M-Pesa active status to ${body.isActive}`);
+    return this.configService.toggleMpesaActive(body.isActive);
+  }
+
+  // ============================================
+  // PAYMENT ATTEMPTS (All payment methods)
+  // ============================================
+
+  /**
+   * Get all payment attempts with filtering
+   */
+  @Get('payment-attempts')
+  async getPaymentAttempts(
+    @Query('status') status?: string,
+    @Query('method') method?: string,
+    @Query('shopId') shopId?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('limit') limit?: string,
+    @Query('skip') skip?: string,
+  ) {
+    this.logger.log('Fetching payment attempts');
+    return this.paymentAttemptService.getAllAttempts({
+      status: status as PaymentAttemptStatus,
+      method: method as PaymentMethod,
+      shopId,
+      startDate: startDate ? new Date(startDate) : undefined,
+      endDate: endDate ? new Date(endDate) : undefined,
+      limit: limit ? parseInt(limit) : 50,
+      skip: skip ? parseInt(skip) : 0,
+    });
+  }
+
+  /**
+   * Get payment attempt statistics
+   */
+  @Get('payment-attempts/stats')
+  async getPaymentAttemptStats(
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    this.logger.log('Fetching payment attempt statistics');
+    return this.paymentAttemptService.getStatistics(
+      startDate ? new Date(startDate) : undefined,
+      endDate ? new Date(endDate) : undefined,
     );
   }
 }

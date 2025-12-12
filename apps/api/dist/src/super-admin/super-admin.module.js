@@ -17,6 +17,7 @@ const payment_transaction_schema_1 = require("../payments/schemas/payment-transa
 const user_schema_1 = require("../users/schemas/user.schema");
 const system_audit_log_schema_1 = require("./schemas/system-audit-log.schema");
 const email_log_schema_1 = require("./schemas/email-log.schema");
+const system_config_schema_1 = require("./schemas/system-config.schema");
 const super_admin_service_1 = require("./super-admin.service");
 const super_admin_controller_1 = require("./super-admin.controller");
 const system_management_controller_1 = require("./system-management.controller");
@@ -24,7 +25,10 @@ const shop_audit_log_service_1 = require("../shops/services/shop-audit-log.servi
 const system_audit_service_1 = require("./services/system-audit.service");
 const email_log_service_1 = require("./services/email-log.service");
 const system_management_service_1 = require("./services/system-management.service");
+const system_config_service_1 = require("./services/system-config.service");
 const notifications_module_1 = require("../notifications/notifications.module");
+const payments_module_1 = require("../payments/payments.module");
+const subscriptions_module_1 = require("../subscriptions/subscriptions.module");
 let SuperAdminModule = class SuperAdminModule {
 };
 exports.SuperAdminModule = SuperAdminModule;
@@ -40,8 +44,11 @@ exports.SuperAdminModule = SuperAdminModule = __decorate([
                 { name: user_schema_1.User.name, schema: user_schema_1.UserSchema },
                 { name: system_audit_log_schema_1.SystemAuditLog.name, schema: system_audit_log_schema_1.SystemAuditLogSchema },
                 { name: email_log_schema_1.EmailLog.name, schema: email_log_schema_1.EmailLogSchema },
+                { name: system_config_schema_1.SystemConfig.name, schema: system_config_schema_1.SystemConfigSchema },
             ]),
             notifications_module_1.NotificationsModule,
+            payments_module_1.PaymentsModule,
+            subscriptions_module_1.SubscriptionsModule,
         ],
         providers: [
             super_admin_service_1.SuperAdminService,
@@ -49,6 +56,7 @@ exports.SuperAdminModule = SuperAdminModule = __decorate([
             system_audit_service_1.SystemAuditService,
             email_log_service_1.EmailLogService,
             system_management_service_1.SystemManagementService,
+            system_config_service_1.SystemConfigService,
         ],
         controllers: [super_admin_controller_1.SuperAdminController, system_management_controller_1.SystemManagementController],
         exports: [
@@ -57,6 +65,7 @@ exports.SuperAdminModule = SuperAdminModule = __decorate([
             system_audit_service_1.SystemAuditService,
             email_log_service_1.EmailLogService,
             system_management_service_1.SystemManagementService,
+            system_config_service_1.SystemConfigService,
         ],
     })
 ], SuperAdminModule);

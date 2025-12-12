@@ -1,4 +1,4 @@
-import { Injectable, Logger, BadRequestException, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -7,13 +7,16 @@ import {
   SubscriptionInvoiceDocument,
 } from './schemas/subscription-invoice.schema';
 import { Subscription, SubscriptionDocument, SubscriptionStatus } from './schemas/subscription.schema';
+import { SystemConfig, SystemConfigDocument, SystemConfigType } from '../super-admin/schemas/system-config.schema';
+import { MpesaEncryptionService } from '../payments/services/mpesa-encryption.service';
 
 /**
  * SmartDuka Subscription M-Pesa Payment Service
  * 
  * This service handles M-Pesa payments for subscription invoices.
- * Uses the SYSTEM PAYBILL configuration (from environment variables)
- * for all subscription payments - NOT shop-specific configs.
+ * Uses the SYSTEM PAYBILL configuration from:
+ * 1. Database (SystemConfig) - managed by super admin
+ * 2. Environment variables - fallback if database config not set
  * 
  * Payment Methods:
  * 1. STK Push - Initiates payment prompt on customer's phone
@@ -41,19 +44,20 @@ export interface PaymentConfirmation {
 import axios from 'axios';
 
 @Injectable()
-export class SubscriptionMpesaService {
+export class SubscriptionMpesaService implements OnModuleInit {
   private readonly logger = new Logger(SubscriptionMpesaService.name);
   
   // SmartDuka payment receiving number (for manual payments)
   private readonly SMARTDUKA_PHONE = '254729983567';
   
-  // System M-Pesa API configuration (from environment variables)
-  private readonly consumerKey: string;
-  private readonly consumerSecret: string;
-  private readonly passKey: string;
-  private readonly shortCode: string;
-  private readonly environment: 'sandbox' | 'production';
-  private readonly callbackUrl: string;
+  // System M-Pesa API configuration - loaded from DB or env
+  private consumerKey: string = '';
+  private consumerSecret: string = '';
+  private passKey: string = '';
+  private shortCode: string = '174379';
+  private environment: 'sandbox' | 'production' = 'sandbox';
+  private callbackUrl: string = '';
+  private configSource: 'database' | 'environment' = 'environment';
   
   private accessToken: string = '';
   private tokenExpiry: number = 0;
@@ -63,18 +67,93 @@ export class SubscriptionMpesaService {
     private readonly invoiceModel: Model<SubscriptionInvoiceDocument>,
     @InjectModel(Subscription.name)
     private readonly subscriptionModel: Model<SubscriptionDocument>,
+    @InjectModel(SystemConfig.name)
+    private readonly systemConfigModel: Model<SystemConfigDocument>,
     private readonly configService: ConfigService,
-  ) {
-    // Load SYSTEM M-Pesa configuration from environment
-    this.consumerKey = this.configService.get('MPESA_CONSUMER_KEY', '');
-    this.consumerSecret = this.configService.get('MPESA_CONSUMER_SECRET', '');
-    this.passKey = this.configService.get('MPESA_PASSKEY', '');
-    this.shortCode = this.configService.get('MPESA_SHORTCODE', '174379');
-    this.environment = this.configService.get('MPESA_ENV', 'sandbox') as any;
-    this.callbackUrl = this.configService.get('MPESA_CALLBACK_URL', '');
-    
-    // Log configuration status on startup
+    private readonly encryptionService: MpesaEncryptionService,
+  ) {}
+
+  async onModuleInit() {
+    await this.loadConfiguration();
+  }
+
+  /**
+   * Load M-Pesa configuration from database or environment
+   * Database config takes priority if available and active
+   */
+  private async loadConfiguration(): Promise<void> {
+    try {
+      // Try to load from database first
+      const dbConfig = await this.systemConfigModel.findOne({ 
+        type: SystemConfigType.MPESA,
+        isActive: true,
+      });
+
+      if (dbConfig && dbConfig.config) {
+        // Decrypt credentials from database
+        try {
+          if (dbConfig.config.consumerKey && dbConfig.config.consumerKeyIv && dbConfig.config.consumerKeyTag) {
+            this.consumerKey = this.encryptionService.decrypt(
+              dbConfig.config.consumerKey,
+              dbConfig.config.consumerKeyIv,
+              dbConfig.config.consumerKeyTag,
+            );
+          }
+          if (dbConfig.config.consumerSecret && dbConfig.config.consumerSecretIv && dbConfig.config.consumerSecretTag) {
+            this.consumerSecret = this.encryptionService.decrypt(
+              dbConfig.config.consumerSecret,
+              dbConfig.config.consumerSecretIv,
+              dbConfig.config.consumerSecretTag,
+            );
+          }
+          if (dbConfig.config.passkey && dbConfig.config.passkeyIv && dbConfig.config.passkeyTag) {
+            this.passKey = this.encryptionService.decrypt(
+              dbConfig.config.passkey,
+              dbConfig.config.passkeyIv,
+              dbConfig.config.passkeyTag,
+            );
+          }
+
+          this.shortCode = dbConfig.config.shortCode || '174379';
+          this.environment = dbConfig.environment as 'sandbox' | 'production';
+          this.callbackUrl = dbConfig.config.callbackUrl || this.configService.get('MPESA_CALLBACK_URL', '');
+          this.configSource = 'database';
+
+          this.logger.log(`✅ M-Pesa config loaded from DATABASE`);
+        } catch (decryptError) {
+          this.logger.error('Failed to decrypt database M-Pesa config, falling back to env', decryptError);
+        }
+      }
+
+      // Fallback to environment variables if database config not available
+      if (this.configSource !== 'database' || !this.consumerKey) {
+        this.consumerKey = this.configService.get('MPESA_CONSUMER_KEY', '');
+        this.consumerSecret = this.configService.get('MPESA_CONSUMER_SECRET', '');
+        this.passKey = this.configService.get('MPESA_PASSKEY', '');
+        this.shortCode = this.configService.get('MPESA_SHORTCODE', '174379');
+        this.environment = this.configService.get('MPESA_ENV', 'sandbox') as any;
+        this.callbackUrl = this.configService.get('MPESA_CALLBACK_URL', '');
+        this.configSource = 'environment';
+        
+        if (this.consumerKey) {
+          this.logger.log(`✅ M-Pesa config loaded from ENVIRONMENT`);
+        }
+      }
+    } catch (error) {
+      this.logger.error('Error loading M-Pesa config from database', error);
+      // Fallback to environment
+      this.consumerKey = this.configService.get('MPESA_CONSUMER_KEY', '');
+      this.consumerSecret = this.configService.get('MPESA_CONSUMER_SECRET', '');
+      this.passKey = this.configService.get('MPESA_PASSKEY', '');
+      this.shortCode = this.configService.get('MPESA_SHORTCODE', '174379');
+      this.environment = this.configService.get('MPESA_ENV', 'sandbox') as any;
+      this.callbackUrl = this.configService.get('MPESA_CALLBACK_URL', '');
+      this.configSource = 'environment';
+    }
+
+    // Log configuration status
     this.logger.log(`Subscription M-Pesa Service initialized:`);
+    this.logger.log(`  - Config Source: ${this.configSource.toUpperCase()}`);
     this.logger.log(`  - Environment: ${this.environment}`);
     this.logger.log(`  - ShortCode: ${this.shortCode}`);
     this.logger.log(`  - Consumer Key: ${this.consumerKey ? this.consumerKey.substring(0, 10) + '...' : 'NOT SET'}`);
@@ -82,13 +161,17 @@ export class SubscriptionMpesaService {
     
     if (!this.consumerKey || !this.consumerSecret) {
       this.logger.error('❌ M-Pesa credentials not configured! STK Push will fail.');
+      this.logger.error('   Configure via Super Admin dashboard or set MPESA_* environment variables.');
     }
-    
-    // Check for problematic callback URLs
-    if (this.callbackUrl && this.callbackUrl.includes('trycloudflare.com')) {
-      this.logger.warn('⚠️ Cloudflare tunnel URL detected - M-Pesa sandbox may reject this!');
-      this.logger.warn('   Use ngrok instead: pnpm ngrok:start');
-    }
+  }
+
+  /**
+   * Reload configuration (called when super admin updates config)
+   */
+  async reloadConfiguration(): Promise<void> {
+    this.accessToken = '';
+    this.tokenExpiry = 0;
+    await this.loadConfiguration();
   }
 
   private getBaseUrl(): string {
@@ -182,10 +265,24 @@ export class SubscriptionMpesaService {
   private getSubscriptionCallbackUrl(): string {
     let baseUrl = this.callbackUrl;
     
+    // If callback URL is empty, try to get from environment
+    if (!baseUrl) {
+      baseUrl = this.configService.get('MPESA_CALLBACK_URL', '');
+    }
+    
+    // If still empty, throw error - can't proceed without callback URL
+    if (!baseUrl) {
+      this.logger.error('❌ MPESA_CALLBACK_URL is not configured!');
+      throw new Error('M-Pesa callback URL is not configured. Please set MPESA_CALLBACK_URL in environment or configure via Super Admin dashboard.');
+    }
+    
     // If callback URL contains the full path, extract just the base
     if (baseUrl.includes('/payments/mpesa/callback')) {
       baseUrl = baseUrl.replace('/payments/mpesa/callback', '');
     }
+    
+    // Remove trailing slash if present
+    baseUrl = baseUrl.replace(/\/$/, '');
     
     // Use dedicated subscription callback endpoint
     const callbackUrl = `${baseUrl}/subscriptions/payments/mpesa/callback`;
@@ -345,6 +442,285 @@ export class SubscriptionMpesaService {
         success: false,
         message: errorMessage,
         error: error.response?.data?.errorCode || error.message,
+      };
+    }
+  }
+
+  /**
+   * Initiate STK Push for plan upgrade payment
+   * Does NOT change the plan - plan change happens after payment confirmation via callback
+   * 
+   * @param phoneNumber - Customer's phone number
+   * @param shopId - Shop making the payment
+   * @param planCode - Target plan code
+   * @param billingCycle - monthly or annual
+   * @param amount - Payment amount
+   */
+  async initiateUpgradePayment(
+    phoneNumber: string,
+    shopId: string,
+    planCode: string,
+    billingCycle: 'monthly' | 'annual',
+    amount: number,
+  ): Promise<StkPushResult> {
+    try {
+      this.logger.log(`=== INITIATING UPGRADE PAYMENT (NO PLAN CHANGE YET) ===`);
+      this.logger.log(`Shop ID: ${shopId}`);
+      this.logger.log(`Target Plan: ${planCode}`);
+      this.logger.log(`Billing Cycle: ${billingCycle}`);
+      this.logger.log(`Amount: KES ${amount}`);
+      this.logger.log(`Phone: ${phoneNumber}`);
+
+      const formattedPhone = this.formatPhoneNumber(phoneNumber);
+      
+      // Validate phone number
+      if (!/^254[71]\d{8}$/.test(formattedPhone)) {
+        return {
+          success: false,
+          message: 'Invalid phone number. Please use a valid Safaricom number (07XX or 01XX).',
+          error: 'INVALID_PHONE',
+        };
+      }
+
+      // Reload config to ensure we have latest credentials
+      await this.loadConfiguration();
+
+      if (!this.consumerKey || !this.consumerSecret) {
+        return {
+          success: false,
+          message: 'M-Pesa is not configured. Please contact support or use manual payment.',
+          error: 'NOT_CONFIGURED',
+        };
+      }
+
+      // Get access token using SYSTEM credentials
+      const accessToken = await this.getAccessToken();
+      const timestamp = this.getTimestamp();
+      const password = this.generatePassword(timestamp);
+      const callbackUrl = this.getSubscriptionCallbackUrl();
+
+      // Create a unique reference for this upgrade payment
+      // Format: UPGRADE-{shopId last 6 chars}-{planCode}-{timestamp}
+      const shortShopId = shopId.slice(-6);
+      const accountRef = `UPG${shortShopId}${planCode}`.replace(/[^a-zA-Z0-9]/g, '').slice(0, 12).toUpperCase();
+      
+      // Description includes plan info for callback processing
+      const description = `Upgrade${planCode}`.slice(0, 13);
+
+      // STK Push request using SYSTEM PAYBILL
+      const stkRequest = {
+        BusinessShortCode: this.shortCode,
+        Password: password,
+        Timestamp: timestamp,
+        TransactionType: 'CustomerPayBillOnline',
+        Amount: Math.ceil(amount),
+        PartyA: formattedPhone,
+        PartyB: this.shortCode,
+        PhoneNumber: formattedPhone,
+        CallBackURL: callbackUrl,
+        AccountReference: accountRef,
+        TransactionDesc: description,
+      };
+
+      this.logger.log(`STK Push Request for Upgrade:`);
+      this.logger.log(`  - ShortCode: ${this.shortCode}`);
+      this.logger.log(`  - Amount: KES ${amount}`);
+      this.logger.log(`  - Phone: ${formattedPhone}`);
+      this.logger.log(`  - AccountRef: ${accountRef}`);
+      this.logger.log(`  - CallbackURL: ${callbackUrl}`);
+
+      const response = await axios.post(
+        `${this.getBaseUrl()}/mpesa/stkpush/v1/processrequest`,
+        stkRequest,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          timeout: 30000,
+        },
+      );
+
+      this.logger.log(`STK Push Response: ${JSON.stringify(response.data)}`);
+
+      if (response.data.ResponseCode === '0') {
+        // Store pending upgrade info for callback processing
+        // The callback will use this to upgrade the plan after payment success
+        await this.storePendingUpgrade(
+          shopId,
+          planCode,
+          billingCycle,
+          amount,
+          response.data.CheckoutRequestID,
+          response.data.MerchantRequestID,
+        );
+
+        this.logger.log(`✅ STK Push sent successfully for upgrade to ${planCode}`);
+        return {
+          success: true,
+          message: `Payment request sent to ${phoneNumber}. Please enter your M-Pesa PIN to complete payment of KES ${amount.toLocaleString()}. Your plan will be upgraded after payment confirmation.`,
+          checkoutRequestId: response.data.CheckoutRequestID,
+          merchantRequestId: response.data.MerchantRequestID,
+        };
+      } else {
+        this.logger.error(`❌ STK Push failed: ${response.data.ResponseDescription}`);
+        return {
+          success: false,
+          message: response.data.ResponseDescription || 'Failed to initiate payment',
+          error: response.data.ResponseCode,
+        };
+      }
+    } catch (error: any) {
+      this.logger.error('❌ Upgrade STK Push failed:', error.response?.data || error.message);
+      
+      let errorMessage = 'Failed to initiate payment. Please try again.';
+      const errorData = error.response?.data;
+      
+      if (errorData?.errorCode === '400.002.02') {
+        errorMessage = 'M-Pesa rejected the request. This may be due to callback URL issues. Please try manual payment instead.';
+      } else if (errorData?.errorMessage) {
+        errorMessage = errorData.errorMessage;
+      }
+      
+      return {
+        success: false,
+        message: errorMessage,
+        error: error.response?.data?.errorCode || error.message,
+      };
+    }
+  }
+
+  /**
+   * Store pending upgrade info for callback processing
+   */
+  private async storePendingUpgrade(
+    shopId: string,
+    planCode: string,
+    billingCycle: 'monthly' | 'annual',
+    amount: number,
+    checkoutRequestId: string,
+    merchantRequestId: string,
+  ): Promise<void> {
+    // Store in subscription metadata for callback to process
+    await this.subscriptionModel.findOneAndUpdate(
+      { shopId: new Types.ObjectId(shopId) },
+      {
+        $set: {
+          'metadata.pendingUpgrade': {
+            planCode,
+            billingCycle,
+            amount,
+            checkoutRequestId,
+            merchantRequestId,
+            initiatedAt: new Date(),
+            status: 'pending',
+          },
+        },
+      },
+    );
+    this.logger.log(`Stored pending upgrade for shop ${shopId}: ${planCode} (${billingCycle})`);
+  }
+
+  /**
+   * Confirm manual payment for plan upgrade
+   * Verifies receipt and upgrades plan only if payment is valid
+   */
+  async confirmManualUpgradePayment(
+    shopId: string,
+    mpesaReceiptNumber: string,
+    planCode: string,
+    billingCycle: 'monthly' | 'annual',
+    amount: number,
+  ): Promise<PaymentConfirmation> {
+    try {
+      this.logger.log(`=== CONFIRMING MANUAL UPGRADE PAYMENT ===`);
+      this.logger.log(`Shop ID: ${shopId}`);
+      this.logger.log(`Plan: ${planCode}`);
+      this.logger.log(`Receipt: ${mpesaReceiptNumber}`);
+      this.logger.log(`Amount: KES ${amount}`);
+
+      // Validate M-Pesa receipt format (e.g., RKL2ABCD5E)
+      const normalizedReceipt = mpesaReceiptNumber.toUpperCase().trim();
+      if (!/^[A-Z0-9]{10}$/.test(normalizedReceipt)) {
+        return {
+          success: false,
+          message: 'Invalid M-Pesa receipt number format. It should be 10 alphanumeric characters (e.g., RKL2ABCD5E)',
+        };
+      }
+
+      // Check if this receipt number has already been used
+      const existingPayment = await this.invoiceModel.findOne({
+        mpesaReceiptNumber: normalizedReceipt,
+      });
+      
+      if (existingPayment) {
+        return {
+          success: false,
+          message: 'This M-Pesa receipt number has already been used for another payment',
+        };
+      }
+
+      // Get current subscription
+      const subscription = await this.subscriptionModel.findOne({
+        shopId: new Types.ObjectId(shopId),
+      });
+
+      if (!subscription) {
+        return {
+          success: false,
+          message: 'Subscription not found',
+        };
+      }
+
+      // Create an invoice for this upgrade payment (plan change will be done via subscription service)
+      const invoiceNumber = `UPG-${Date.now().toString(36).toUpperCase()}`;
+      const invoice = new this.invoiceModel({
+        shopId: new Types.ObjectId(shopId),
+        subscriptionId: subscription._id,
+        invoiceNumber,
+        type: 'upgrade',
+        description: `Upgrade to ${planCode} Plan`,
+        subtotal: amount,
+        tax: 0,
+        totalAmount: amount,
+        status: 'paid',
+        paidAt: new Date(),
+        mpesaReceiptNumber: normalizedReceipt,
+        paymentMethod: 'mpesa_manual',
+        periodStart: new Date(),
+        periodEnd: new Date(Date.now() + (billingCycle === 'annual' ? 365 : 30) * 24 * 60 * 60 * 1000),
+      });
+
+      await invoice.save();
+
+      // Store pending upgrade info - the plan change will be processed
+      const oldPlanCode = subscription.planCode;
+
+      // Update subscription with new plan info
+      await this.subscriptionModel.findOneAndUpdate(
+        { shopId: new Types.ObjectId(shopId) },
+        {
+          $set: {
+            planCode: planCode,
+            billingCycle: billingCycle as any,
+            'metadata.upgradedFrom': oldPlanCode,
+            'metadata.upgradedAt': new Date(),
+          },
+        },
+      );
+
+      this.logger.log(`✅ Manual upgrade payment confirmed. Plan upgraded from ${oldPlanCode} to ${planCode}`);
+
+      return {
+        success: true,
+        message: `Payment confirmed! Your plan has been upgraded to ${planCode}.`,
+        mpesaReceiptNumber: normalizedReceipt,
+      };
+    } catch (error: any) {
+      this.logger.error('❌ Manual upgrade payment confirmation failed:', error.message);
+      return {
+        success: false,
+        message: error.message || 'Failed to confirm payment',
       };
     }
   }

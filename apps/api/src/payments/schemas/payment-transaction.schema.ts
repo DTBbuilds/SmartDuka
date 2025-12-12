@@ -23,8 +23,8 @@ export class PaymentTransaction {
   @Prop({ required: false, type: Types.ObjectId, ref: 'Branch' })
   branchId?: Types.ObjectId;
 
-  @Prop({ required: true, enum: ['cash', 'card', 'mpesa', 'qr', 'other'], default: 'cash' })
-  paymentMethod: 'cash' | 'card' | 'mpesa' | 'qr' | 'other';
+  @Prop({ required: true, enum: ['cash', 'card', 'mpesa', 'qr', 'stripe', 'bank', 'other'], default: 'cash' })
+  paymentMethod: 'cash' | 'card' | 'mpesa' | 'qr' | 'stripe' | 'bank' | 'other';
 
   @Prop({ required: true })
   amount: number;
@@ -54,6 +54,19 @@ export class PaymentTransaction {
 
   @Prop({ required: false })
   cardBrand?: string;
+
+  // Stripe specific fields
+  @Prop({ required: false })
+  stripePaymentIntentId?: string;
+
+  @Prop({ required: false })
+  stripeChargeId?: string;
+
+  @Prop({ required: false })
+  stripeCustomerId?: string;
+
+  @Prop({ required: false })
+  stripeReceiptUrl?: string;
 
   // Cash specific fields
   @Prop({ required: false })

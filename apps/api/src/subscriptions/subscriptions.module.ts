@@ -12,8 +12,12 @@ import { SubscriptionPaymentController } from './subscription-payment.controller
 import { Subscription, SubscriptionSchema } from './schemas/subscription.schema';
 import { SubscriptionPlan, SubscriptionPlanSchema } from './schemas/subscription-plan.schema';
 import { SubscriptionInvoice, SubscriptionInvoiceSchema } from './schemas/subscription-invoice.schema';
+import { PaymentAttempt, PaymentAttemptSchema } from './schemas/payment-attempt.schema';
+import { PaymentAttemptService } from './services/payment-attempt.service';
 import { Shop, ShopSchema } from '../shops/schemas/shop.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
+import { SystemConfig, SystemConfigSchema } from '../super-admin/schemas/system-config.schema';
+import { PaymentsModule } from '../payments/payments.module';
 
 @Module({
   imports: [
@@ -25,7 +29,10 @@ import { User, UserSchema } from '../users/schemas/user.schema';
       { name: SubscriptionInvoice.name, schema: SubscriptionInvoiceSchema },
       { name: Shop.name, schema: ShopSchema },
       { name: User.name, schema: UserSchema },
+      { name: SystemConfig.name, schema: SystemConfigSchema },
+      { name: PaymentAttempt.name, schema: PaymentAttemptSchema },
     ]),
+    PaymentsModule,
   ],
   controllers: [SubscriptionsController, SubscriptionPaymentController],
   providers: [
@@ -34,8 +41,9 @@ import { User, UserSchema } from '../users/schemas/user.schema';
     SubscriptionMpesaService,
     SubscriptionSchedulerService,
     SubscriptionMigrationService,
+    PaymentAttemptService,
   ],
-  exports: [SubscriptionsService, SubscriptionGuardService, SubscriptionMpesaService, SubscriptionMigrationService],
+  exports: [SubscriptionsService, SubscriptionGuardService, SubscriptionMpesaService, SubscriptionMigrationService, PaymentAttemptService],
 })
 export class SubscriptionsModule implements OnModuleInit {
   constructor(private readonly subscriptionsService: SubscriptionsService) {}

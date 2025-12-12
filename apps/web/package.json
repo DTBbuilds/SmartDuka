@@ -17,6 +17,8 @@
     "@radix-ui/react-switch": "^1.1.2",
     "@radix-ui/react-tabs": "^1.1.13",
     "@smartduka/ui": "workspace:*",
+    "@stripe/react-stripe-js": "^5.4.1",
+    "@stripe/stripe-js": "^8.5.3",
     "@vercel/analytics": "^1.6.1",
     "@zxing/browser": "^0.1.5",
     "class-variance-authority": "^0.7.0",

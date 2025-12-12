@@ -11,6 +11,8 @@ import {
 } from '@nestjs/common';
 import { SubscriptionsService } from './subscriptions.service';
 import { SubscriptionMpesaService } from './subscription-mpesa.service';
+import { PaymentAttemptService } from './services/payment-attempt.service';
+import { PaymentMethod, PaymentAttemptType } from './schemas/payment-attempt.schema';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -33,6 +35,7 @@ export class SubscriptionPaymentController {
   constructor(
     private readonly subscriptionsService: SubscriptionsService,
     private readonly mpesaService: SubscriptionMpesaService,
+    private readonly paymentAttemptService: PaymentAttemptService,
   ) {}
 
   /**
@@ -62,6 +65,72 @@ export class SubscriptionPaymentController {
       dto.phoneNumber,
       user.shopId,
     );
+
+    return result;
+  }
+
+  /**
+   * Initiate M-Pesa STK Push for plan upgrade
+   * 
+   * This endpoint initiates payment WITHOUT changing the plan.
+   * The plan will only be upgraded after payment is confirmed via callback.
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Post('mpesa/initiate-upgrade')
+  @HttpCode(HttpStatus.OK)
+  async initiateUpgradePayment(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: { 
+      phoneNumber: string; 
+      planCode: string; 
+      billingCycle: 'monthly' | 'annual';
+      amount: number;
+    },
+  ): Promise<{
+    success: boolean;
+    message: string;
+    checkoutRequestId?: string;
+    merchantRequestId?: string;
+    error?: string;
+  }> {
+    this.logger.log(`Initiating upgrade payment for shop ${user.shopId} to plan ${dto.planCode}`);
+
+    // Track payment attempt
+    const attempt = await this.paymentAttemptService.createAttempt({
+      shopId: user.shopId,
+      userEmail: user.email,
+      method: PaymentMethod.MPESA_STK,
+      type: PaymentAttemptType.UPGRADE,
+      amount: dto.amount,
+      planCode: dto.planCode,
+      billingCycle: dto.billingCycle,
+      phoneNumber: dto.phoneNumber,
+      metadata: { source: 'subscription_upgrade' },
+    });
+
+    const result = await this.mpesaService.initiateUpgradePayment(
+      dto.phoneNumber,
+      user.shopId,
+      dto.planCode,
+      dto.billingCycle,
+      dto.amount,
+    );
+
+    // Update attempt with result
+    if (result.success && result.checkoutRequestId) {
+      await this.paymentAttemptService.updateWithStkDetails(
+        attempt._id.toString(),
+        result.checkoutRequestId,
+        result.merchantRequestId || '',
+      );
+    } else {
+      await this.paymentAttemptService.markFailed(
+        attempt._id.toString(),
+        result.error,
+        result.message,
+      );
+    }
 
     return result;
   }
@@ -137,6 +206,70 @@ export class SubscriptionPaymentController {
       dto.mpesaReceiptNumber,
       dto.paidAmount,
     );
+
+    return result;
+  }
+
+  /**
+   * Confirm manual M-Pesa payment for plan upgrade
+   * 
+   * Verifies receipt and upgrades plan only if payment is valid
+   * Does NOT change plan before verification
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Post('manual/confirm-upgrade')
+  @HttpCode(HttpStatus.OK)
+  async confirmManualUpgradePayment(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: { 
+      mpesaReceiptNumber: string; 
+      planCode: string;
+      billingCycle: 'monthly' | 'annual';
+      amount: number;
+    },
+  ): Promise<{
+    success: boolean;
+    message: string;
+  }> {
+    this.logger.log(`Confirming manual upgrade payment for shop ${user.shopId} to plan ${dto.planCode}`);
+
+    // Track payment attempt
+    const attempt = await this.paymentAttemptService.createAttempt({
+      shopId: user.shopId,
+      userEmail: user.email,
+      method: PaymentMethod.MPESA_MANUAL,
+      type: PaymentAttemptType.UPGRADE,
+      amount: dto.amount,
+      planCode: dto.planCode,
+      billingCycle: dto.billingCycle,
+      metadata: { 
+        source: 'subscription_upgrade_manual',
+        mpesaReceiptNumber: dto.mpesaReceiptNumber,
+      },
+    });
+
+    const result = await this.mpesaService.confirmManualUpgradePayment(
+      user.shopId,
+      dto.mpesaReceiptNumber,
+      dto.planCode,
+      dto.billingCycle,
+      dto.amount,
+    );
+
+    // Update attempt with result
+    if (result.success) {
+      await this.paymentAttemptService.markSuccess(
+        attempt._id.toString(),
+        dto.mpesaReceiptNumber,
+      );
+    } else {
+      await this.paymentAttemptService.markFailed(
+        attempt._id.toString(),
+        'VERIFICATION_FAILED',
+        result.message,
+      );
+    }
 
     return result;
   }

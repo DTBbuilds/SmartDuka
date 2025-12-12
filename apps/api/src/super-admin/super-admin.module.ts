@@ -8,6 +8,7 @@ import { PaymentTransaction, PaymentTransactionSchema } from '../payments/schema
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { SystemAuditLog, SystemAuditLogSchema } from './schemas/system-audit-log.schema';
 import { EmailLog, EmailLogSchema } from './schemas/email-log.schema';
+import { SystemConfig, SystemConfigSchema } from './schemas/system-config.schema';
 import { SuperAdminService } from './super-admin.service';
 import { SuperAdminController } from './super-admin.controller';
 import { SystemManagementController } from './system-management.controller';
@@ -15,7 +16,10 @@ import { ShopAuditLogService } from '../shops/services/shop-audit-log.service';
 import { SystemAuditService } from './services/system-audit.service';
 import { EmailLogService } from './services/email-log.service';
 import { SystemManagementService } from './services/system-management.service';
+import { SystemConfigService } from './services/system-config.service';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { PaymentsModule } from '../payments/payments.module';
+import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 
 @Module({
   imports: [
@@ -28,8 +32,11 @@ import { NotificationsModule } from '../notifications/notifications.module';
       { name: User.name, schema: UserSchema },
       { name: SystemAuditLog.name, schema: SystemAuditLogSchema },
       { name: EmailLog.name, schema: EmailLogSchema },
+      { name: SystemConfig.name, schema: SystemConfigSchema },
     ]),
     NotificationsModule,
+    PaymentsModule,
+    SubscriptionsModule,
   ],
   providers: [
     SuperAdminService,
@@ -37,6 +44,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     SystemAuditService,
     EmailLogService,
     SystemManagementService,
+    SystemConfigService,
   ],
   controllers: [SuperAdminController, SystemManagementController],
   exports: [
@@ -45,6 +53,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     SystemAuditService,
     EmailLogService,
     SystemManagementService,
+    SystemConfigService,
   ],
 })
 export class SuperAdminModule {}

@@ -19,6 +19,7 @@ import {
   X,
   ArrowRight,
   Phone,
+  Building2,
 } from 'lucide-react';
 
 export interface PaymentOption {
@@ -43,6 +44,13 @@ export const defaultPaymentOptions: PaymentOption[] = [
     label: 'Cash',
     icon: Banknote,
     description: 'Cash payment',
+    primary: true,
+  },
+  {
+    id: 'stripe',
+    label: 'Card/Bank',
+    icon: Building2,
+    description: 'Stripe card & bank payments',
     primary: true,
   },
   {

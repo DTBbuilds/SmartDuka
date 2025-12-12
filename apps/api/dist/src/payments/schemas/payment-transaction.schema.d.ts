@@ -7,7 +7,7 @@ export declare class PaymentTransaction {
     cashierId: Types.ObjectId;
     cashierName: string;
     branchId?: Types.ObjectId;
-    paymentMethod: 'cash' | 'card' | 'mpesa' | 'qr' | 'other';
+    paymentMethod: 'cash' | 'card' | 'mpesa' | 'qr' | 'stripe' | 'bank' | 'other';
     amount: number;
     status: 'completed' | 'pending' | 'failed';
     customerName?: string;
@@ -17,6 +17,10 @@ export declare class PaymentTransaction {
     mpesaTransactionId?: string;
     cardLastFour?: string;
     cardBrand?: string;
+    stripePaymentIntentId?: string;
+    stripeChargeId?: string;
+    stripeCustomerId?: string;
+    stripeReceiptUrl?: string;
     amountTendered?: number;
     change?: number;
     referenceNumber?: string;

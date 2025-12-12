@@ -11,6 +11,7 @@ import {
 } from '@/hooks/use-subscription';
 import { api } from '@/lib/api-client';
 import { refreshEvents } from '@/lib/refresh-events';
+import { StripePaymentModal } from '@/components/stripe-payment-form';
 import { 
   CreditCard, 
   Check, 
@@ -29,6 +30,7 @@ import {
   Smartphone,
   Copy,
   CheckCircle,
+  Building2,
 } from 'lucide-react';
 
 // Plan color themes - high contrast
@@ -64,8 +66,8 @@ export default function SubscriptionPage() {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [processing, setProcessing] = useState(false);
   
-  // Payment method: 'stk' or 'manual'
-  const [paymentMethod, setPaymentMethod] = useState<'stk' | 'manual'>('stk');
+  // Payment method: 'stk', 'manual', or 'stripe'
+  const [paymentMethod, setPaymentMethod] = useState<'stk' | 'manual' | 'stripe'>('stk');
   const [manualInstructions, setManualInstructions] = useState<{
     phoneNumber?: string;
     amount?: number;
@@ -78,7 +80,11 @@ export default function SubscriptionPage() {
   
   // Upgrade payment step: 'confirm' or 'payment'
   const [upgradeStep, setUpgradeStep] = useState<'confirm' | 'payment'>('confirm');
-  const [upgradePaymentMethod, setUpgradePaymentMethod] = useState<'stk' | 'manual'>('stk');
+  const [upgradePaymentMethod, setUpgradePaymentMethod] = useState<'stk' | 'manual' | 'stripe'>('stk');
+  
+  // Stripe payment state
+  const [stripeClientSecret, setStripeClientSecret] = useState<string | null>(null);
+  const [stripePublishableKey, setStripePublishableKey] = useState<string>('');
   const [upgradePhoneNumber, setUpgradePhoneNumber] = useState('');
   const [upgradeReceiptNumber, setUpgradeReceiptNumber] = useState('');
   const [upgradeCopied, setUpgradeCopied] = useState(false);
@@ -205,40 +211,35 @@ export default function SubscriptionPage() {
     
     setProcessing(true);
     try {
-      // First create the plan change which generates an invoice
-      await changePlan(selectedPlan.code, billingCycle);
+      // Create a pending upgrade payment intent WITHOUT changing the plan yet
+      // The plan will only be changed after payment is confirmed via webhook
+      const upgradeAmount = getUpgradePrice();
       
-      // Wait a moment for the invoice to be created, then fetch pending invoices
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Create a temporary invoice for the upgrade payment
+      const paymentResult = await api.post<{
+        success: boolean;
+        message: string;
+        checkoutRequestId?: string;
+        error?: string;
+      }>('/subscriptions/payments/mpesa/initiate-upgrade', {
+        phoneNumber: upgradePhoneNumber,
+        planCode: selectedPlan.code,
+        billingCycle,
+        amount: upgradeAmount,
+      });
       
-      // Fetch fresh billing data to get the new invoice
-      const invoices = await api.get<Invoice[]>('/subscriptions/billing/history', { limit: 5 });
-      const freshPendingInvoices = (invoices || []).filter((inv: Invoice) => inv.status === 'pending');
-      
-      if (freshPendingInvoices.length > 0) {
-        const upgradeInvoice = freshPendingInvoices[0];
-        const paymentResult = await initiatePayment(upgradeInvoice.id, upgradePhoneNumber);
-        
-        if (paymentResult.success) {
-          setUpgradeSuccess(true);
-          // Emit refresh event to update all subscription-related components
-          refreshEvents.emit('payment:completed', { type: 'stk_push' });
-          // Refresh both subscription and billing data
-          await Promise.all([refetchSubscription(), refetchBilling()]);
-        } else {
-          alert(paymentResult.message || 'Failed to initiate payment');
-        }
+      if (paymentResult.success) {
+        // Show success message - plan will be upgraded after payment confirmation
+        alert('M-Pesa payment prompt sent to your phone. Complete the payment to upgrade your plan.');
+        // Close modal but don't mark as success yet - wait for payment confirmation
+        closeUpgradeModal();
+        // Refresh billing data to show pending payment
+        await refetchBilling();
       } else {
-        // Plan change successful, no payment needed (e.g., downgrade)
-        setUpgradeSuccess(true);
-        // Refresh subscription data
-        await refetchSubscription();
+        alert(paymentResult.message || paymentResult.error || 'Failed to initiate payment');
       }
-      
-      // Refresh billing data
-      refetchBilling();
     } catch (error: any) {
-      alert(error.message);
+      alert(error.message || 'Failed to initiate M-Pesa payment');
     } finally {
       setProcessing(false);
     }
@@ -256,42 +257,29 @@ export default function SubscriptionPage() {
     
     setProcessing(true);
     try {
-      // First create the plan change
-      await changePlan(selectedPlan.code, billingCycle);
+      // Confirm manual payment for upgrade WITHOUT changing plan first
+      // The backend will verify the receipt and upgrade the plan if valid
+      const result = await api.post<{
+        success: boolean;
+        message: string;
+      }>('/subscriptions/payments/manual/confirm-upgrade', {
+        mpesaReceiptNumber: upgradeReceiptNumber,
+        planCode: selectedPlan.code,
+        billingCycle,
+        amount: getUpgradePrice(),
+      });
       
-      // Wait a moment for the invoice to be created
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Fetch fresh billing data to get the new invoice
-      const invoices = await api.get<Invoice[]>('/subscriptions/billing/history', { limit: 5 });
-      const freshPendingInvoices = (invoices || []).filter((inv: Invoice) => inv.status === 'pending');
-      
-      // Confirm manual payment for the upgrade invoice
-      if (freshPendingInvoices.length > 0) {
-        const upgradeInvoice = freshPendingInvoices[0];
-        const result = await confirmManualPayment(
-          upgradeInvoice.id,
-          upgradeReceiptNumber,
-          getUpgradePrice()
-        );
-        
-        if (result.success) {
-          setUpgradeSuccess(true);
-          // Emit refresh event to update all subscription-related components
-          refreshEvents.emit('payment:completed', { type: 'manual' });
-        } else {
-          alert(result.message || 'Failed to confirm payment');
-        }
-      } else {
-        // No payment needed (e.g., downgrade)
+      if (result.success) {
         setUpgradeSuccess(true);
-        refreshEvents.emit('subscription:updated', {});
+        // Emit refresh event to update all subscription-related components
+        refreshEvents.emit('payment:completed', { type: 'manual' });
+        // Refresh both subscription and billing data
+        await Promise.all([refetchSubscription(), refetchBilling()]);
+      } else {
+        alert(result.message || 'Failed to confirm payment');
       }
-      
-      // Refresh both subscription and billing data
-      await Promise.all([refetchSubscription(), refetchBilling()]);
     } catch (error: any) {
-      alert(error.message);
+      alert(error.message || 'Failed to confirm manual payment');
     } finally {
       setProcessing(false);
     }
@@ -923,7 +911,18 @@ export default function SubscriptionPage() {
                     }`}
                   >
                     <Smartphone className="h-4 w-4" />
-                    STK Push
+                    M-Pesa
+                  </button>
+                  <button
+                    onClick={() => setUpgradePaymentMethod('stripe')}
+                    className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium flex items-center justify-center gap-2 ${
+                      upgradePaymentMethod === 'stripe'
+                        ? 'bg-blue-100 text-blue-700 border-2 border-blue-500'
+                        : 'bg-gray-100 text-gray-600 border-2 border-transparent hover:bg-gray-200'
+                    }`}
+                  >
+                    <Building2 className="h-4 w-4" />
+                    Card/Bank
                   </button>
                   <button
                     onClick={() => setUpgradePaymentMethod('manual')}
@@ -934,7 +933,7 @@ export default function SubscriptionPage() {
                     }`}
                   >
                     <Phone className="h-4 w-4" />
-                    Send Money
+                    Manual
                   </button>
                 </div>
 
@@ -975,6 +974,76 @@ export default function SubscriptionPage() {
                         </>
                       )}
                     </button>
+                  </div>
+                ) : upgradePaymentMethod === 'stripe' ? (
+                  /* Stripe Card/Bank Method */
+                  <div>
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                      <h4 className="font-semibold text-blue-800 mb-2">Pay with Card or Bank</h4>
+                      <p className="text-sm text-blue-700">
+                        Secure payment powered by Stripe. Supports Visa, Mastercard, and bank transfers.
+                      </p>
+                    </div>
+                    
+                    <div className="text-center py-6">
+                      <p className="text-gray-600 mb-4">
+                        Amount: <strong className="text-xl">KES {getUpgradePrice().toLocaleString()}</strong>
+                      </p>
+                      <button
+                        onClick={async () => {
+                          setProcessing(true);
+                          try {
+                            // Get Stripe config
+                            const configRes = await api.get<{ publishableKey: string; isConfigured: boolean }>('/stripe/config');
+                            if (!configRes?.isConfigured || !configRes.publishableKey) {
+                              alert('Stripe payments are not configured. Please use M-Pesa.');
+                              return;
+                            }
+                            setStripePublishableKey(configRes.publishableKey);
+                            
+                            // Create Stripe payment intent for the upgrade amount
+                            // DO NOT change plan yet - only after successful payment
+                            if (selectedPlan) {
+                              const upgradeAmount = getUpgradePrice();
+                              
+                              // Create payment intent directly without changing plan
+                              const paymentRes = await api.post<{ success: boolean; clientSecret: string; paymentIntentId: string }>('/stripe/subscription/create-payment', {
+                                invoiceId: `pending-upgrade-${Date.now()}`, // Temporary ID for pending upgrade
+                                invoiceNumber: `UPGRADE-${selectedPlan.code.toUpperCase()}-${Date.now()}`,
+                                amount: upgradeAmount * 100, // Convert to cents
+                                currency: 'kes',
+                                description: `Subscription upgrade to ${selectedPlan.name} (${billingCycle})`,
+                              });
+                              
+                              if (paymentRes?.success && paymentRes.clientSecret) {
+                                setStripeClientSecret(paymentRes.clientSecret);
+                              } else {
+                                alert('Failed to create payment. Please try again.');
+                              }
+                            }
+                          } catch (error: any) {
+                            alert(error.message || 'Failed to initialize payment');
+                          } finally {
+                            setProcessing(false);
+                          }
+                        }}
+                        disabled={processing}
+                        className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium flex items-center justify-center gap-2"
+                      >
+                        {processing ? (
+                          <Loader2 className="h-5 w-5 animate-spin" />
+                        ) : (
+                          <>
+                            <CreditCard className="h-5 w-5" />
+                            Pay with Card/Bank
+                          </>
+                        )}
+                      </button>
+                    </div>
+                    
+                    <p className="text-xs text-center text-gray-500 mt-4">
+                      🔒 Secured by Stripe. Your payment info is encrypted.
+                    </p>
                   </div>
                 ) : (
                   /* Manual Send Money Method */
@@ -1251,6 +1320,45 @@ export default function SubscriptionPage() {
           </div>
         </div>
       )}
+
+      {/* Stripe Payment Modal */}
+      <StripePaymentModal
+        isOpen={!!stripeClientSecret}
+        clientSecret={stripeClientSecret}
+        amount={selectedPlan ? getUpgradePrice() * 100 : selectedInvoiceAmount * 100}
+        currency="kes"
+        publishableKey={stripePublishableKey}
+        title="Complete Payment"
+        description={selectedPlan ? `Upgrade to ${selectedPlan.name}` : 'Subscription Payment'}
+        onSuccess={async (paymentIntentId) => {
+          setStripeClientSecret(null);
+          
+          // NOW change the plan after successful payment
+          if (selectedPlan) {
+            try {
+              await changePlan(selectedPlan.code, billingCycle);
+              setUpgradeSuccess(true);
+              refreshEvents.emit('payment:completed', { type: 'stripe', paymentIntentId });
+              await Promise.all([refetchSubscription(), refetchBilling()]);
+            } catch (error: any) {
+              // Payment succeeded but plan change failed - this is a critical error
+              alert(`Payment successful but plan change failed: ${error.message}. Please contact support.`);
+              await Promise.all([refetchSubscription(), refetchBilling()]);
+            }
+          } else {
+            // Regular invoice payment (not upgrade)
+            setUpgradeSuccess(true);
+            refreshEvents.emit('payment:completed', { type: 'stripe', paymentIntentId });
+            await Promise.all([refetchSubscription(), refetchBilling()]);
+          }
+        }}
+        onClose={() => {
+          setStripeClientSecret(null);
+        }}
+        onError={(error) => {
+          alert(`Payment failed: ${error}`);
+        }}
+      />
     </div>
   );
 }

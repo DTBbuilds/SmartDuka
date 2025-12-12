@@ -43,6 +43,7 @@ const audit_module_1 = require("./audit/audit.module");
 const health_module_1 = require("./health/health.module");
 const subscriptions_module_1 = require("./subscriptions/subscriptions.module");
 const notifications_module_1 = require("./notifications/notifications.module");
+const stripe_module_1 = require("./stripe/stripe.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -100,6 +101,7 @@ exports.AppModule = AppModule = __decorate([
             audit_module_1.AuditModule,
             subscriptions_module_1.SubscriptionsModule,
             notifications_module_1.NotificationsModule,
+            stripe_module_1.StripeModule.forRootAsync(),
         ],
         controllers: [app_controller_1.AppController],
         providers: [

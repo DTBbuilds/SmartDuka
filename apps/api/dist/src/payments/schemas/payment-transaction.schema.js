@@ -29,6 +29,10 @@ let PaymentTransaction = class PaymentTransaction {
     mpesaTransactionId;
     cardLastFour;
     cardBrand;
+    stripePaymentIntentId;
+    stripeChargeId;
+    stripeCustomerId;
+    stripeReceiptUrl;
     amountTendered;
     change;
     referenceNumber;
@@ -65,7 +69,7 @@ __decorate([
     __metadata("design:type", mongoose_2.Types.ObjectId)
 ], PaymentTransaction.prototype, "branchId", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ required: true, enum: ['cash', 'card', 'mpesa', 'qr', 'other'], default: 'cash' }),
+    (0, mongoose_1.Prop)({ required: true, enum: ['cash', 'card', 'mpesa', 'qr', 'stripe', 'bank', 'other'], default: 'cash' }),
     __metadata("design:type", String)
 ], PaymentTransaction.prototype, "paymentMethod", void 0);
 __decorate([
@@ -104,6 +108,22 @@ __decorate([
     (0, mongoose_1.Prop)({ required: false }),
     __metadata("design:type", String)
 ], PaymentTransaction.prototype, "cardBrand", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false }),
+    __metadata("design:type", String)
+], PaymentTransaction.prototype, "stripePaymentIntentId", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false }),
+    __metadata("design:type", String)
+], PaymentTransaction.prototype, "stripeChargeId", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false }),
+    __metadata("design:type", String)
+], PaymentTransaction.prototype, "stripeCustomerId", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false }),
+    __metadata("design:type", String)
+], PaymentTransaction.prototype, "stripeReceiptUrl", void 0);
 __decorate([
     (0, mongoose_1.Prop)({ required: false }),
     __metadata("design:type", Number)

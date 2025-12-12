@@ -78,7 +78,7 @@ export class SubscriptionInvoice {
 
   // Payment details
   @Prop({ required: false })
-  paymentMethod?: string; // 'mpesa', 'card', 'bank'
+  paymentMethod?: string; // 'mpesa', 'card', 'bank', 'stripe'
 
   @Prop({ required: false })
   paymentReference?: string; // M-Pesa receipt number
@@ -154,6 +154,19 @@ export class SubscriptionInvoice {
     failed?: boolean;
     failedAt?: Date;
     failureReason?: string;
+  };
+
+  // Stripe payment tracking
+  @Prop({ type: Object, required: false })
+  stripePayment?: {
+    paymentIntentId?: string;
+    chargeId?: string;
+    customerId?: string;
+    receiptUrl?: string;
+    amount?: number;
+    currency?: string;
+    status?: string;
+    completedAt?: Date;
   };
 
   // Timestamps
