@@ -5,6 +5,7 @@ node_modules
 .env.local
 .env.*.local
 *.local.env
+.env.example
 
 
 # Turbo
@@ -12,6 +13,7 @@ node_modules
 
 # Build outputs
 dist
+apps/api/dist
 
 # Test files
 test-mongo.js
