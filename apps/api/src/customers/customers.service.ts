@@ -4,23 +4,75 @@ import { Model, Types } from 'mongoose';
 import { Customer, CustomerDocument } from './schemas/customer.schema';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
+import { PaginatedResponse, createPaginatedResponse } from '../common/dto/pagination.dto';
+import { CacheService, CACHE_TTL } from '../common/services/cache.service';
 
 @Injectable()
 export class CustomersService {
   constructor(
     @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>,
+    private readonly cacheService: CacheService,
   ) {}
 
-  async create(dto: CreateCustomerDto): Promise<Customer> {
-    const customer = new this.customerModel(dto);
-    return customer.save();
+  async create(shopId: string, dto: CreateCustomerDto): Promise<Customer> {
+    const customer = new this.customerModel({
+      ...dto,
+      shopId: new Types.ObjectId(shopId),
+    });
+    const saved = await customer.save();
+    // Invalidate cache for this shop's customers
+    this.cacheService.deletePattern(`shop:${shopId}:customers:*`);
+    return saved;
   }
 
+  /**
+   * @deprecated Use findAllPaginated instead for better performance
+   */
   async findAll(shopId: string): Promise<Customer[]> {
     return this.customerModel
       .find({ shopId: new Types.ObjectId(shopId) })
       .sort({ createdAt: -1 })
+      .limit(100) // Add safety limit
       .exec();
+  }
+
+  /**
+   * Get customers with pagination and optional search
+   */
+  async findAllPaginated(
+    shopId: string,
+    page: number = 1,
+    limit: number = 20,
+    search?: string,
+    segment?: string,
+  ): Promise<PaginatedResponse<Customer>> {
+    const query: any = { shopId: new Types.ObjectId(shopId) };
+
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { phone: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+      ];
+    }
+
+    if (segment) {
+      query.segment = segment;
+    }
+
+    const skip = (page - 1) * limit;
+
+    const [data, total] = await Promise.all([
+      this.customerModel
+        .find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .exec(),
+      this.customerModel.countDocuments(query),
+    ]);
+
+    return createPaginatedResponse(data, total, page, limit);
   }
 
   async findById(id: string): Promise<Customer | null> {

@@ -20,6 +20,7 @@ export default function Home() {
     // Mark as redirected to prevent multiple redirects
     setRedirected(true);
 
+    // Redirect immediately based on auth state
     if (!isAuthenticated) {
       router.push('/login');
       return;
@@ -38,6 +39,6 @@ export default function Home() {
     }
   }, [user, loading, isAuthenticated, router, redirected]);
 
-  // Always show loading screen
-  return <LoadingScreen />;
+  // Show simple loading screen during redirect
+  return <LoadingScreen title="SmartDuka" description="Redirecting..." />;
 }

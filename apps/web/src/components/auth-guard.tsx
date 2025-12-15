@@ -7,7 +7,7 @@ import { LoadingScreen } from './loading-screen';
 
 interface AuthGuardProps {
   children: React.ReactNode;
-  requiredRole?: 'admin' | 'cashier';
+  requiredRole?: 'admin' | 'cashier' | 'super_admin';
   fallbackRoute?: string;
 }
 

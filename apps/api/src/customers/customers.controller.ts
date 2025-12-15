@@ -23,12 +23,32 @@ export class CustomersController {
   constructor(private readonly customersService: CustomersService) {}
 
   @Post()
-  async create(@Body() dto: CreateCustomerDto) {
-    return this.customersService.create(dto);
+  async create(
+    @Body() dto: CreateCustomerDto,
+    @CurrentUser() user: Record<string, any>,
+  ) {
+    return this.customersService.create(user.shopId, dto);
   }
 
   @Get()
-  async findAll(@CurrentUser() user: Record<string, any>) {
+  async findAll(
+    @CurrentUser() user: Record<string, any>,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+    @Query('segment') segment?: string,
+  ) {
+    // Use paginated version if page param is provided
+    if (page) {
+      return this.customersService.findAllPaginated(
+        user.shopId,
+        parseInt(page, 10) || 1,
+        parseInt(limit || '20', 10),
+        search || undefined,
+        segment || undefined,
+      );
+    }
+    // Fallback to legacy method for backward compatibility
     return this.customersService.findAll(user.shopId);
   }
 

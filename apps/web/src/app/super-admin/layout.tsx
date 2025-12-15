@@ -3,7 +3,7 @@
 import { SuperAdminGuard } from '@/components/super-admin-guard';
 import { useAuth } from '@/lib/auth-context';
 import { useRouter } from 'next/navigation';
-import { LayoutDashboard, ShoppingBag, MessageSquare, LogOut, Menu, Crown, Mail, Settings, Activity } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, MessageSquare, LogOut, Menu, Crown, Mail, Settings, Activity, Send, FileText } from 'lucide-react';
 import { useState } from 'react';
 
 export default function SuperAdminLayout({
@@ -62,6 +62,13 @@ export default function SuperAdminLayout({
               href="/super-admin/emails"
               open={sidebarOpen}
               onClick={() => router.push('/super-admin/emails')}
+            />
+            <NavItem
+              icon={<Send className="h-5 w-5" />}
+              label="Communications"
+              href="/super-admin/communications"
+              open={sidebarOpen}
+              onClick={() => router.push('/super-admin/communications')}
             />
             <NavItem
               icon={<MessageSquare className="h-5 w-5" />}

@@ -38,7 +38,7 @@ interface NavItem {
 const mobileNavItems: NavItem[] = [
   { name: 'Dashboard', href: '/', icon: Home },
   { name: 'POS', href: '/pos', icon: ShoppingCart },
-  { name: 'Products', href: '/admin', icon: Package },
+  { name: 'Products', href: '/admin/products', icon: Package },
   { name: 'Customers', href: '/customers', icon: Users },
   { name: 'Orders', href: '/orders', icon: Receipt },
   { name: 'Suppliers', href: '/suppliers', icon: Truck },

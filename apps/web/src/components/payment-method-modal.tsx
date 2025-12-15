@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Button,
   Dialog,
@@ -20,7 +20,12 @@ import {
   ArrowRight,
   Phone,
   Building2,
+  Loader2,
+  Shield,
 } from 'lucide-react';
+import { StripePaymentModal } from './stripe-payment-form';
+import { useAuth } from '@/lib/auth-context';
+import { config } from '@/lib/config';
 
 export interface PaymentOption {
   id: string;
@@ -111,16 +116,23 @@ export function PaymentMethodModal({
   onConfirm,
   onCancel,
 }: PaymentMethodModalProps) {
+  const { token } = useAuth();
   const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
   const [amountTendered, setAmountTendered] = useState<number>(0);
   const [phoneNumber, setPhoneNumber] = useState<string>(initialPhone || '');
   const [phoneError, setPhoneError] = useState<string>('');
-  const [step, setStep] = useState<'select' | 'cash-input' | 'mpesa-input'>('select');
+  const [step, setStep] = useState<'select' | 'cash-input' | 'mpesa-input' | 'card-input'>('select');
+  
+  // Stripe payment state
+  const [stripeClientSecret, setStripeClientSecret] = useState<string | null>(null);
+  const [stripePublishableKey, setStripePublishableKey] = useState<string>('');
+  const [isCreatingPaymentIntent, setIsCreatingPaymentIntent] = useState(false);
+  const [stripeError, setStripeError] = useState<string | null>(null);
 
   const formatCurrency = (value: number) =>
     `Ksh ${value.toLocaleString('en-KE', { minimumFractionDigits: 0 })}`;
 
-  const handleMethodSelect = (methodId: string) => {
+  const handleMethodSelect = async (methodId: string) => {
     setSelectedMethod(methodId);
     
     if (methodId === 'cash') {
@@ -131,11 +143,80 @@ export function PaymentMethodModal({
       // For M-Pesa, show phone input step
       setStep('mpesa-input');
       setPhoneError('');
+    } else if (methodId === 'stripe' || methodId === 'card') {
+      // For card/stripe, create payment intent and show card form
+      setStep('card-input');
+      setStripeError(null);
+      await createStripePaymentIntent();
     } else {
-      // For other methods, confirm immediately
+      // For other methods (QR, etc.), confirm immediately
       onConfirm(methodId);
       resetState();
     }
+  };
+
+  // Create Stripe payment intent
+  const createStripePaymentIntent = async () => {
+    setIsCreatingPaymentIntent(true);
+    setStripeError(null);
+    
+    try {
+      // First get the Stripe publishable key
+      const configRes = await fetch(`${config.apiUrl}/stripe/config`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      
+      if (!configRes.ok) {
+        throw new Error('Failed to get Stripe configuration');
+      }
+      
+      const stripeConfig = await configRes.json();
+      setStripePublishableKey(stripeConfig.publishableKey);
+      
+      // Create payment intent
+      const res = await fetch(`${config.apiUrl}/stripe/create-payment-intent`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          amount: Math.round(total * 100), // Convert to cents
+          currency: 'kes',
+          description: `POS Payment - ${itemCount} item(s)`,
+          metadata: {
+            customerName: customerName || 'Walk-in Customer',
+            itemCount: String(itemCount),
+          },
+        }),
+      });
+      
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}));
+        throw new Error(error.message || 'Failed to create payment intent');
+      }
+      
+      const { clientSecret } = await res.json();
+      setStripeClientSecret(clientSecret);
+    } catch (err: any) {
+      console.error('Stripe payment intent error:', err);
+      setStripeError(err.message || 'Failed to initialize card payment');
+    } finally {
+      setIsCreatingPaymentIntent(false);
+    }
+  };
+
+  // Handle successful Stripe payment
+  const handleStripeSuccess = (paymentIntentId: string) => {
+    onConfirm('card', undefined, undefined);
+    resetState();
+  };
+
+  // Handle Stripe payment error
+  const handleStripeError = (error: string) => {
+    setStripeError(error);
   };
 
   const handleMpesaConfirm = () => {
@@ -172,6 +253,8 @@ export function PaymentMethodModal({
     setPhoneNumber(initialPhone || '');
     setPhoneError('');
     setStep('select');
+    setStripeClientSecret(null);
+    setStripeError(null);
   };
 
   const handleClose = () => {
@@ -356,6 +439,71 @@ export function PaymentMethodModal({
                 Confirm Payment
               </Button>
             </div>
+          </>
+        ) : step === 'card-input' ? (
+          <>
+            {/* Card Payment Step */}
+            <DialogHeader className="px-4 pt-4 pb-2 border-b bg-blue-50 dark:bg-blue-950/30">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleBack}
+                  className="h-8 w-8 rounded-full flex items-center justify-center hover:bg-blue-100 dark:hover:bg-blue-900 transition-colors"
+                >
+                  <ArrowRight className="h-4 w-4 rotate-180" />
+                </button>
+                <div>
+                  <DialogTitle className="text-lg flex items-center gap-2">
+                    <CreditCard className="h-5 w-5 text-blue-600" />
+                    Card Payment
+                  </DialogTitle>
+                  <DialogDescription className="text-sm">
+                    Total: <span className="font-bold text-foreground">{formatCurrency(total)}</span>
+                  </DialogDescription>
+                </div>
+              </div>
+            </DialogHeader>
+
+            <div className="p-4 space-y-4">
+              {isCreatingPaymentIntent ? (
+                <div className="flex flex-col items-center justify-center py-8 space-y-4">
+                  <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                  <p className="text-sm text-muted-foreground">Preparing secure payment...</p>
+                </div>
+              ) : stripeError ? (
+                <div className="flex flex-col items-center justify-center py-6 space-y-4">
+                  <div className="p-3 rounded-lg bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 text-center">
+                    <p className="text-sm font-medium">{stripeError}</p>
+                  </div>
+                  <Button variant="outline" onClick={() => createStripePaymentIntent()}>
+                    Try Again
+                  </Button>
+                </div>
+              ) : (
+                <div className="text-center py-4">
+                  <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground mb-4">
+                    <Shield className="h-4 w-4 text-green-600" />
+                    <span>Secure payment powered by Stripe</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Click below to enter your card details
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Stripe Payment Modal */}
+            <StripePaymentModal
+              isOpen={!!stripeClientSecret && !isCreatingPaymentIntent}
+              clientSecret={stripeClientSecret}
+              amount={Math.round(total * 100)}
+              currency="kes"
+              publishableKey={stripePublishableKey}
+              title="Complete Card Payment"
+              description={customerName ? `Payment for ${customerName}` : undefined}
+              onSuccess={handleStripeSuccess}
+              onClose={handleBack}
+              onError={handleStripeError}
+            />
           </>
         ) : (
           <>

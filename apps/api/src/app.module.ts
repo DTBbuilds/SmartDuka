@@ -35,9 +35,12 @@ import { HealthModule } from './health/health.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { StripeModule } from './stripe/stripe.module';
+import { MessagingModule } from './messaging/messaging.module';
+import { CommonModule } from './common/common.module';
 
 @Module({
   imports: [
+    CommonModule,
     ConfigModule.forRoot({ 
       isGlobal: true,
       envFilePath: ['.env.local', '.env'],
@@ -91,6 +94,7 @@ import { StripeModule } from './stripe/stripe.module';
     SubscriptionsModule,
     NotificationsModule,
     StripeModule.forRootAsync(),
+    MessagingModule,
   ],
   controllers: [AppController],
   providers: [

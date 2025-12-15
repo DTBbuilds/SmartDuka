@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { 
@@ -16,7 +17,9 @@ import {
   CreditCard,
   BarChart3,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Inbox,
+  ArrowRight
 } from 'lucide-react';
 
 const faqs = [
@@ -81,6 +84,8 @@ function FAQItem({ question, answer }: { question: string; answer: string }) {
 }
 
 export default function HelpPage() {
+  const router = useRouter();
+  
   return (
     <div className="container mx-auto py-8 px-4 max-w-5xl">
       <div className="flex items-center gap-3 mb-8">
@@ -90,6 +95,37 @@ export default function HelpPage() {
           <p className="text-muted-foreground">Find answers and get support</p>
         </div>
       </div>
+
+      {/* Direct Support Chat */}
+      <section className="mb-10">
+        <Card className="border-primary/40 bg-primary/5">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-lg bg-primary/10">
+                  <Inbox className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <CardTitle>Need Direct Support?</CardTitle>
+                  <CardDescription>
+                    Chat directly with our support team for personalized help
+                  </CardDescription>
+                </div>
+              </div>
+              <Button onClick={() => router.push('/inbox')} className="gap-2">
+                Open Inbox
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              Start a conversation with SmartDuka support for billing questions, technical issues, 
+              feature requests, or any other inquiries. Our team typically responds within 24 hours.
+            </p>
+          </CardContent>
+        </Card>
+      </section>
 
       {/* Quick Links */}
       <section className="mb-10">

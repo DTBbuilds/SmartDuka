@@ -46,11 +46,13 @@ export function AdminNavigation({ activeTab = 'products', className }: AdminNavi
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Navigation items ordered by usage frequency (most common first)
+  // All items now have explicit href for proper navigation
   const navItems: NavItem[] = [
     {
       id: 'products',
       label: 'Products',
       icon: <Package className="h-4 w-4" />,
+      href: '/admin/products',
       isActive: activeTab === 'products',
     },
     {
@@ -71,12 +73,14 @@ export function AdminNavigation({ activeTab = 'products', className }: AdminNavi
       id: 'categories',
       label: 'Categories',
       icon: <Grid3x3 className="h-4 w-4" />,
+      href: '/admin/categories',
       isActive: activeTab === 'categories',
     },
     {
       id: 'branches',
       label: 'Branches',
       icon: <MapPin className="h-4 w-4" />,
+      href: '/admin/branches',
       isActive: activeTab === 'branches',
     },
   ];
@@ -103,7 +107,7 @@ export function AdminNavigation({ activeTab = 'products', className }: AdminNavi
             "relative gap-2 transition-all duration-200",
             item.isActive 
               ? "bg-primary text-primary-foreground shadow-sm" 
-              : "hover:bg-background/80"
+              : "text-muted-foreground hover:bg-primary/10 hover:text-primary"
           )}
         >
           {item.icon}
@@ -122,7 +126,7 @@ export function AdminNavigation({ activeTab = 'products', className }: AdminNavi
           variant="ghost"
           size="sm"
           onClick={() => router.push('/admin/analytics/sales')}
-          className="gap-2 text-muted-foreground hover:text-foreground"
+          className="gap-2 text-muted-foreground hover:bg-primary/10 hover:text-primary"
         >
           <BarChart3 className="h-4 w-4" />
           <span className="hidden lg:inline">Analytics</span>
@@ -131,7 +135,7 @@ export function AdminNavigation({ activeTab = 'products', className }: AdminNavi
           variant="ghost"
           size="sm"
           onClick={() => router.push('/settings')}
-          className="gap-2 text-muted-foreground hover:text-foreground"
+          className="gap-2 text-muted-foreground hover:bg-primary/10 hover:text-primary"
         >
           <Settings className="h-4 w-4" />
           <span className="hidden lg:inline">Settings</span>
@@ -226,26 +230,25 @@ export function AdminNavigation({ activeTab = 'products', className }: AdminNavi
       <div className="fixed bottom-0 left-0 right-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-t">
         <div className="grid grid-cols-5 gap-1 p-2">
           {navItems.slice(0, 5).map((item) => (
-            <Button
+            <button
               key={item.id}
-              variant="ghost"
-              size="sm"
+              type="button"
               onClick={() => handleNavClick(item)}
               className={cn(
-                "h-14 flex-col gap-1 relative transition-all duration-200",
+                "h-14 flex flex-col items-center justify-center gap-1 relative transition-all duration-200 rounded-lg",
                 item.isActive 
                   ? "text-primary bg-primary/10" 
-                  : "text-muted-foreground hover:text-foreground"
+                  : "text-muted-foreground active:bg-primary/10 active:text-primary"
               )}
             >
               {item.icon}
-              <span className="text-xs">{item.label}</span>
+              <span className="text-xs font-medium">{item.label}</span>
               {item.badge && (
                 <Badge variant="destructive" className="absolute -top-1 -right-1 h-4 w-4 p-0 text-xs">
                   {item.badge}
                 </Badge>
               )}
-            </Button>
+            </button>
           ))}
         </div>
       </div>

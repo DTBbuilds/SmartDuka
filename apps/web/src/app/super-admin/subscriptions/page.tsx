@@ -197,7 +197,7 @@ export default function SuperAdminSubscriptionsPage() {
       {stats && (
         <div className="bg-white rounded-xl border p-5">
           <h3 className="font-semibold mb-4">Plan Distribution</h3>
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {Object.entries(stats.planBreakdown).map(([plan, count]) => (
               <div key={plan} className="text-center">
                 <div className="text-2xl font-bold">{count}</div>

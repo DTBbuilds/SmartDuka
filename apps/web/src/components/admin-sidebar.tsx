@@ -20,11 +20,11 @@ import {
   PanelLeftClose,
   PanelLeft,
   Search,
-  HelpCircle,
   Boxes,
   Receipt,
   FlaskConical,
   Crown,
+  Inbox,
 } from 'lucide-react';
 import { Button } from '@smartduka/ui';
 import { useAuth } from '@/lib/auth-context';
@@ -32,6 +32,7 @@ import { useBranch } from '@/lib/branch-context';
 import { cn } from '@smartduka/ui';
 import { ThemeToggle } from './theme-toggle';
 import { BranchSelector } from './branch-selector';
+import { useInboxUnreadCount } from './inbox-notification-badge';
 
 interface NavItem {
   name: string;
@@ -57,7 +58,7 @@ const adminNavSections: NavSection[] = [
   {
     title: 'Inventory',
     items: [
-      { name: 'Products', href: '/admin', icon: Package },
+      { name: 'Products', href: '/admin/products', icon: Package },
       { name: 'Categories', href: '/admin/categories', icon: Boxes },
       { name: 'Stock Adjustments', href: '/stock/adjustments', icon: Grid3x3 },
     ],
@@ -91,15 +92,16 @@ const adminNavSections: NavSection[] = [
 
 // Bottom navigation items
 const bottomNavItems: NavItem[] = [
+  { name: 'Inbox', href: '/inbox', icon: Inbox },
   { name: 'Subscription', href: '/admin/subscription', icon: Crown },
   { name: 'Settings', href: '/settings', icon: Settings },
-  { name: 'Help', href: '/help', icon: HelpCircle },
 ];
 
 export function AdminSidebar() {
   const pathname = usePathname();
   const { user, logout, isDemoMode, shop } = useAuth();
   const { branches, currentBranch } = useBranch();
+  const { unreadCount: inboxUnreadCount } = useInboxUnreadCount();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
 
@@ -271,12 +273,14 @@ export function AdminSidebar() {
           {bottomNavItems.map((item) => {
             const Icon = item.icon;
             const active = isActive(item.href);
+            const isInbox = item.name === 'Inbox';
+            const badgeCount = isInbox ? inboxUnreadCount : 0;
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                  'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors relative',
                   active
                     ? 'bg-primary text-primary-foreground'
                     : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
@@ -284,8 +288,22 @@ export function AdminSidebar() {
                 )}
                 title={!showExpanded ? item.name : undefined}
               >
-                <Icon className="h-4 w-4 flex-shrink-0" />
-                {showExpanded && <span className="truncate">{item.name}</span>}
+                <div className="relative">
+                  <Icon className="h-4 w-4 flex-shrink-0" />
+                  {badgeCount > 0 && !showExpanded && (
+                    <span className="absolute -top-1 -right-1 h-2 w-2 bg-destructive rounded-full" />
+                  )}
+                </div>
+                {showExpanded && (
+                  <>
+                    <span className="truncate flex-1">{item.name}</span>
+                    {badgeCount > 0 && (
+                      <span className="ml-auto bg-destructive text-destructive-foreground text-xs px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
+                        {badgeCount > 99 ? '99+' : badgeCount}
+                      </span>
+                    )}
+                  </>
+                )}
               </Link>
             );
           })}

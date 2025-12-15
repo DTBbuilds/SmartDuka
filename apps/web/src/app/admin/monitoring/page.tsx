@@ -211,7 +211,7 @@ function AdminMonitoringContent() {
                   </CardHeader>
                   <CardContent className="space-y-3">
                     {/* Stats */}
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                       <div className="text-center p-2 rounded-lg bg-muted">
                         <p className="text-xs text-muted-foreground">Today's Sales</p>
                         <p className="font-bold text-sm">{formatCurrency(metric.todaySales)}</p>

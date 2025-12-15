@@ -7,6 +7,8 @@ import { CheckoutDto } from './dto/checkout.dto';
 import { InventoryService } from '../inventory/inventory.service';
 import { ActivityService } from '../activity/activity.service';
 import { PaymentTransactionService } from '../payments/services/payment-transaction.service';
+import { PaginatedResponse, createPaginatedResponse } from '../common/dto/pagination.dto';
+import { CacheService, CACHE_TTL } from '../common/services/cache.service';
 
 @Injectable()
 export class SalesService {
@@ -15,6 +17,7 @@ export class SalesService {
     private readonly inventoryService: InventoryService,
     private readonly activityService: ActivityService,
     private readonly paymentTransactionService: PaymentTransactionService,
+    private readonly cacheService: CacheService,
   ) {}
 
   /**
@@ -262,6 +265,69 @@ export class SalesService {
       .sort({ createdAt: -1 })
       .limit(Math.min(limit, 200))
       .exec();
+  }
+
+  /**
+   * List orders with pagination and filters
+   */
+  async listOrdersPaginated(
+    shopId: string,
+    options: {
+      page?: number;
+      limit?: number;
+      status?: string;
+      paymentStatus?: string;
+      dateFrom?: Date;
+      dateTo?: Date;
+      branchId?: string;
+      search?: string;
+    } = {},
+  ): Promise<PaginatedResponse<OrderDocument>> {
+    const {
+      page = 1,
+      limit = 20,
+      status,
+      paymentStatus,
+      dateFrom,
+      dateTo,
+      branchId,
+      search,
+    } = options;
+
+    const query: any = { shopId: new Types.ObjectId(shopId) };
+
+    if (status) query.status = status;
+    if (paymentStatus) query.paymentStatus = paymentStatus;
+    if (branchId) query.branchId = new Types.ObjectId(branchId);
+
+    if (dateFrom || dateTo) {
+      query.createdAt = {};
+      if (dateFrom) query.createdAt.$gte = dateFrom;
+      if (dateTo) query.createdAt.$lte = dateTo;
+    }
+
+    if (search) {
+      query.$or = [
+        { orderNumber: { $regex: search, $options: 'i' } },
+        { customerName: { $regex: search, $options: 'i' } },
+        { customerPhone: { $regex: search, $options: 'i' } },
+      ];
+    }
+
+    const skip = (page - 1) * Math.min(limit, 100);
+    const actualLimit = Math.min(limit, 100);
+
+    const [data, total] = await Promise.all([
+      this.orderModel
+        .find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(actualLimit)
+        .exec(),
+      this.orderModel.countDocuments(query),
+    ]);
+
+    return createPaginatedResponse(data, total, page, actualLimit);
   }
 
   // PHASE 3: Branch-specific queries

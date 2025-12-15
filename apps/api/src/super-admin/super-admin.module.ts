@@ -17,6 +17,8 @@ import { SystemAuditService } from './services/system-audit.service';
 import { EmailLogService } from './services/email-log.service';
 import { SystemManagementService } from './services/system-management.service';
 import { SystemConfigService } from './services/system-config.service';
+import { SuperAdminCommunicationsService } from './services/super-admin-communications.service';
+import { SuperAdminCommunicationsController } from './super-admin-communications.controller';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
@@ -45,8 +47,9 @@ import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
     EmailLogService,
     SystemManagementService,
     SystemConfigService,
+    SuperAdminCommunicationsService,
   ],
-  controllers: [SuperAdminController, SystemManagementController],
+  controllers: [SuperAdminController, SystemManagementController, SuperAdminCommunicationsController],
   exports: [
     SuperAdminService,
     ShopAuditLogService,
@@ -54,6 +57,7 @@ import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
     EmailLogService,
     SystemManagementService,
     SystemConfigService,
+    SuperAdminCommunicationsService,
   ],
 })
 export class SuperAdminModule {}

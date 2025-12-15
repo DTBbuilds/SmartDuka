@@ -12,6 +12,8 @@ import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { CategorySuggestionService } from './services/category-suggestion.service';
 import { SubscriptionGuardService } from '../subscriptions/subscription-guard.service';
+import { PaginatedResponse, createPaginatedResponse } from '../common/dto/pagination.dto';
+import { CacheService, CACHE_TTL } from '../common/services/cache.service';
 
 @Injectable()
 export class InventoryService implements OnModuleInit {
@@ -25,6 +27,7 @@ export class InventoryService implements OnModuleInit {
     private readonly categorySuggestionService: CategorySuggestionService,
     @Inject(forwardRef(() => SubscriptionGuardService))
     private readonly subscriptionGuard: SubscriptionGuardService,
+    private readonly cacheService: CacheService,
   ) {}
 
   /**
@@ -182,6 +185,86 @@ export class InventoryService implements OnModuleInit {
       .sort({ updatedAt: -1 })
       .limit(Math.min(q.limit ?? 50, 200))
       .exec();
+  }
+
+  /**
+   * List products with pagination support
+   * More efficient for large product catalogs
+   */
+  async listProductsPaginated(
+    shopId: string,
+    q: QueryProductsDto,
+  ): Promise<PaginatedResponse<ProductDocument>> {
+    const filter: FilterQuery<ProductDocument> = {
+      shopId: new Types.ObjectId(shopId),
+    };
+
+    if (q.q) {
+      const searchTerm = q.q.trim();
+      const isBarcodeLike = /^\d{8,14}$/.test(searchTerm);
+      const isSkuLike = /^[A-Za-z0-9-_]{3,20}$/.test(searchTerm) && !isBarcodeLike;
+
+      if (isBarcodeLike) {
+        filter.$or = [
+          { barcode: searchTerm },
+          { sku: { $regex: searchTerm, $options: 'i' } },
+          { name: { $regex: searchTerm, $options: 'i' } },
+        ];
+      } else if (isSkuLike && searchTerm.length <= 20) {
+        filter.$or = [
+          { sku: { $regex: `^${searchTerm}`, $options: 'i' } },
+          { barcode: { $regex: searchTerm, $options: 'i' } },
+          { name: { $regex: searchTerm, $options: 'i' } },
+        ];
+      } else {
+        filter.$or = [
+          { name: { $regex: searchTerm, $options: 'i' } },
+          { sku: { $regex: searchTerm, $options: 'i' } },
+          { barcode: { $regex: searchTerm, $options: 'i' } },
+          { description: { $regex: searchTerm, $options: 'i' } },
+        ];
+      }
+    }
+
+    if (q.categoryId) {
+      filter.categoryId = new Types.ObjectId(q.categoryId);
+    }
+    if (q.status) {
+      filter.status = q.status;
+    }
+
+    const page = q.page ?? 1;
+    const limit = Math.min(q.limit ?? 20, 100);
+    const skip = (page - 1) * limit;
+
+    // Build sort object
+    const sortField = q.sortBy || 'updatedAt';
+    const sortOrder = q.sortOrder === 'asc' ? 1 : -1;
+    const sort: Record<string, 1 | -1> = { [sortField]: sortOrder };
+
+    const [data, total] = await Promise.all([
+      this.productModel
+        .find(filter)
+        .sort(sort)
+        .skip(skip)
+        .limit(limit)
+        .exec(),
+      this.productModel.countDocuments(filter),
+    ]);
+
+    return createPaginatedResponse(data, total, page, limit);
+  }
+
+  /**
+   * Get product count for a shop (cached)
+   */
+  async getProductCount(shopId: string): Promise<number> {
+    const cacheKey = CacheService.shopKey(shopId, 'products', 'count');
+    return this.cacheService.getOrSet(
+      cacheKey,
+      () => this.productModel.countDocuments({ shopId: new Types.ObjectId(shopId) }),
+      CACHE_TTL.STATS,
+    );
   }
 
   /**

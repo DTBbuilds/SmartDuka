@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { LoadingScreen } from "./loading-screen";
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const [loadingMessage, setLoadingMessage] = useState("Checking authentication...");
 
   useEffect(() => {
     if (!loading && !user && pathname !== "/login" && pathname !== "/onboarding") {
@@ -15,14 +17,31 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     }
   }, [user, loading, router, pathname]);
 
+  // Update loading message based on time
+  useEffect(() => {
+    if (!loading) return;
+
+    const messages = [
+      { delay: 0, message: "Checking authentication..." },
+      { delay: 3000, message: "Verifying your session..." },
+      { delay: 6000, message: "Loading your workspace..." },
+      { delay: 10000, message: "This is taking longer than usual..." },
+      { delay: 15000, message: "Still working on it, please wait..." },
+    ];
+
+    const timeouts = messages.map(({ delay, message }) =>
+      setTimeout(() => setLoadingMessage(message), delay)
+    );
+
+    return () => timeouts.forEach(clearTimeout);
+  }, [loading]);
+
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto mb-4" />
-          <p className="text-muted-foreground">Loading...</p>
-        </div>
-      </div>
+      <LoadingScreen 
+        title="SmartDuka" 
+        description={loadingMessage}
+      />
     );
   }
 

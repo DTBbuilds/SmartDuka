@@ -10,6 +10,8 @@ import {
   TableRow,
   Button,
   Input,
+  Card,
+  CardContent,
 } from "@smartduka/ui";
 import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 
@@ -18,6 +20,8 @@ export interface Column<T> {
   header: string;
   render?: (item: T) => React.ReactNode;
   sortable?: boolean;
+  hideOnMobile?: boolean;
+  primary?: boolean; // Show prominently on mobile card
 }
 
 interface DataTableProps<T> {
@@ -28,6 +32,7 @@ interface DataTableProps<T> {
   onRowClick?: (item: T) => void;
   emptyMessage?: string;
   pageSize?: number;
+  mobileCardRender?: (item: T, columns: Column<T>[]) => React.ReactNode;
 }
 
 export function DataTable<T extends Record<string, any>>({
@@ -38,6 +43,7 @@ export function DataTable<T extends Record<string, any>>({
   onRowClick,
   emptyMessage = "No data available",
   pageSize = 10,
+  mobileCardRender,
 }: DataTableProps<T>) {
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -97,7 +103,48 @@ export function DataTable<T extends Record<string, any>>({
         </div>
       )}
 
-      <div className="rounded-md border">
+      {/* Mobile Card View */}
+      <div className="block md:hidden space-y-3">
+        {paginatedData.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            {emptyMessage}
+          </div>
+        ) : (
+          paginatedData.map((item, index) => (
+            <Card
+              key={index}
+              className={onRowClick ? "cursor-pointer hover:bg-muted/50" : ""}
+              onClick={() => onRowClick?.(item)}
+            >
+              <CardContent className="p-4">
+                {mobileCardRender ? (
+                  mobileCardRender(item, columns)
+                ) : (
+                  <div className="space-y-2">
+                    {columns.filter(col => !col.hideOnMobile).slice(0, 4).map((column) => (
+                      <div key={column.key} className={column.primary ? "mb-2" : "flex justify-between text-sm"}>
+                        {column.primary ? (
+                          <div className="font-medium">
+                            {column.render ? column.render(item) : item[column.key]}
+                          </div>
+                        ) : (
+                          <>
+                            <span className="text-muted-foreground">{column.header}</span>
+                            <span>{column.render ? column.render(item) : item[column.key]}</span>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ))
+        )}
+      </div>
+
+      {/* Desktop Table View */}
+      <div className="hidden md:block rounded-md border overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
@@ -149,8 +196,8 @@ export function DataTable<T extends Record<string, any>>({
       </div>
 
       {totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+          <p className="text-sm text-muted-foreground text-center sm:text-left">
             Showing {startIndex + 1} to {Math.min(startIndex + pageSize, sortedData.length)} of{" "}
             {sortedData.length} results
           </p>
@@ -162,10 +209,10 @@ export function DataTable<T extends Record<string, any>>({
               disabled={currentPage === 1}
             >
               <ChevronLeft className="h-4 w-4" />
-              Previous
+              <span className="hidden sm:inline">Previous</span>
             </Button>
             <span className="text-sm">
-              Page {currentPage} of {totalPages}
+              {currentPage} / {totalPages}
             </span>
             <Button
               variant="outline"
@@ -173,7 +220,7 @@ export function DataTable<T extends Record<string, any>>({
               onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}
             >
-              Next
+              <span className="hidden sm:inline">Next</span>
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
