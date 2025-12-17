@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth-context";
 import { Button, Card, CardContent, CardHeader, CardTitle, Input, Label, Textarea } from "@smartduka/ui";
 import { ArrowLeft, Package } from "lucide-react";
 import { TableSkeleton } from "@/components/shared/loading-skeleton";
+import { CategorySelectWithCreate } from "@/components/category-select-with-create";
 
 interface Product {
   _id: string;
@@ -25,6 +26,7 @@ interface Product {
 interface Category {
   _id: string;
   name: string;
+  slug: string;
 }
 
 export default function EditProductPage() {
@@ -218,19 +220,16 @@ export default function EditProductPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="category">Category</Label>
-                <select
-                  id="category"
+                <CategorySelectWithCreate
+                  categories={categories}
                   value={formData.categoryId}
-                  onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                >
-                  <option value="">No category</option>
-                  {categories.map((cat) => (
-                    <option key={cat._id} value={cat._id}>
-                      {cat.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(categoryId) => setFormData({ ...formData, categoryId })}
+                  onCategoryCreated={(newCategory) => {
+                    setCategories((prev) => [...prev, newCategory]);
+                  }}
+                  token={token || ''}
+                  placeholder="Select or create category"
+                />
               </div>
             </div>
 

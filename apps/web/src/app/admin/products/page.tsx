@@ -260,6 +260,7 @@ function ProductsContent() {
             <CardContent>
               <QuickAddProductForm
                 categories={categories}
+                token={token || ''}
                 onSubmit={async (product: any) => {
                   if (!token) return;
                   try {
@@ -279,6 +280,10 @@ function ProductsContent() {
                   } catch (err: any) {
                     throw new Error(err?.message || 'Failed to create product');
                   }
+                }}
+                onCategoryCreated={(newCategory) => {
+                  setCategories((prev) => [...prev, newCategory]);
+                  toast({ type: 'success', title: 'Category created', message: `${newCategory.name} added` });
                 }}
                 isLoading={loading}
               />

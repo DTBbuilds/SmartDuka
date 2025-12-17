@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label } from '@smartduka/ui';
-import { Plus } from 'lucide-react';
+import { Plus, FolderPlus } from 'lucide-react';
+import { CategorySelectWithCreate } from './category-select-with-create';
 
 interface Category {
   _id: string;
@@ -20,10 +21,12 @@ interface QuickAddProductFormProps {
     stock: number;
     categoryId: string;
   }) => Promise<void>;
+  onCategoryCreated?: (category: Category) => void;
+  token: string;
   isLoading?: boolean;
 }
 
-export function QuickAddProductForm({ categories, onSubmit, isLoading = false }: QuickAddProductFormProps) {
+export function QuickAddProductForm({ categories, onSubmit, onCategoryCreated, token, isLoading = false }: QuickAddProductFormProps) {
   const [formData, setFormData] = useState({
     name: '',
     sku: '',
@@ -192,21 +195,21 @@ export function QuickAddProductForm({ categories, onSubmit, isLoading = false }:
               <Label htmlFor="product-category" className="text-sm font-medium">
                 Category
               </Label>
-              <select
-                id="product-category"
+              <CategorySelectWithCreate
+                categories={categories}
                 value={formData.categoryId}
-                onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
+                onChange={(categoryId) => setFormData({ ...formData, categoryId })}
+                onCategoryCreated={onCategoryCreated}
+                token={token}
                 disabled={isSubmitting || isLoading}
-                aria-label="Select category"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary dark:border-gray-600 dark:bg-gray-950"
-              >
-                <option value="">Select category</option>
-                {categories.map((cat) => (
-                  <option key={cat._id} value={cat._id}>
-                    {cat.name}
-                  </option>
-                ))}
-              </select>
+                placeholder={categories.length === 0 ? 'Create your first category' : 'Select or create category'}
+              />
+              {categories.length === 0 && (
+                <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                  <FolderPlus className="h-3 w-3" />
+                  Tip: Create a category to organize your products
+                </p>
+              )}
             </div>
           </div>
 
