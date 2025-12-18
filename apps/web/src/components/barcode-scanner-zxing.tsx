@@ -10,8 +10,9 @@ import {
   DialogTitle,
   Input,
 } from "@smartduka/ui";
-import { X, Camera, AlertCircle, CheckCircle, Zap } from "lucide-react";
+import { X, Camera, AlertCircle, CheckCircle, Zap, Settings, RefreshCw } from "lucide-react";
 import { playSuccessBeep, playErrorBeep } from "@/lib/audio-utils";
+import { useCameraPermission, getCameraPermissionInstructions } from "@/hooks/use-camera-permission";
 
 interface BarcodeScannerZXingProps {
   isOpen: boolean;
@@ -48,6 +49,9 @@ export function BarcodeScannerZXing({
   onClose,
   onScan,
 }: BarcodeScannerZXingProps) {
+  // Camera permission hook
+  const cameraPermission = useCameraPermission();
+  
   // Refs
   const videoRef = useRef<HTMLVideoElement>(null);
   const codeReaderRef = useRef<any>(null);
@@ -65,6 +69,7 @@ export function BarcodeScannerZXing({
   const [cameraDevices, setCameraDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [showPermissionRequest, setShowPermissionRequest] = useState(false);
 
   /**
    * Initialize ZXing-JS CodeReader
@@ -418,43 +423,135 @@ export function BarcodeScannerZXing({
               className="relative w-full bg-black rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700"
               style={{ minHeight: "300px" }}
             >
-              <video
-                ref={videoRef}
-                className="w-full h-auto aspect-[4/3] sm:aspect-video object-cover"
-                playsInline
-                autoPlay
-                muted
-                style={{ display: "block", width: "100%" }}
-              />
-
-              {scanStatus === "ready" && (
-                <>
-                  {/* Green scanning box */}
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div
-                      className="w-48 h-32 sm:w-56 sm:h-40 border-3 border-green-500 rounded-md shadow-lg"
-                      style={{
-                        boxShadow:
-                          "0 0 0 9999px rgba(0, 0, 0, 0.4), 0 0 15px rgba(34, 197, 94, 0.6)",
-                        borderWidth: "3px",
-                      }}
-                    />
+              {/* Permission Request UI */}
+              {(cameraPermission.isDenied || cameraPermission.isPrompt) && scanStatus === "error" ? (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900 p-6 text-center">
+                  <div className="h-16 w-16 rounded-full bg-orange-500/20 flex items-center justify-center mb-4">
+                    <Camera className="h-8 w-8 text-orange-500" />
                   </div>
-
-                  {/* Status indicator */}
-                  <div className="absolute top-2 left-2 right-2 bg-green-500/90 text-white text-xs px-2 py-1 rounded text-center font-medium">
-                    ✓ Scanner ready - Point at barcode
-                  </div>
-                </>
-              )}
-
-              {scanStatus === "initializing" && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/60">
-                  <div className="text-white text-sm flex items-center gap-2">
-                    <Zap className="h-4 w-4 animate-pulse" />
-                    <span>Starting camera...</span>
-                  </div>
+                  <h3 className="text-white font-semibold text-lg mb-2">
+                    {cameraPermission.isDenied ? 'Camera Access Denied' : 'Camera Permission Required'}
+                  </h3>
+                  <p className="text-gray-300 text-sm mb-4 max-w-xs">
+                    {cameraPermission.isDenied 
+                      ? 'Please enable camera access in your browser settings to scan barcodes.'
+                      : 'Allow camera access to scan barcodes with your device camera.'}
+                  </p>
+                  
+                  {cameraPermission.isDenied ? (
+                    <div className="space-y-3 w-full max-w-xs">
+                      <div className="bg-gray-800 rounded-lg p-3 text-left">
+                        <p className="text-xs text-gray-400 mb-1">How to enable:</p>
+                        <p className="text-xs text-gray-300">{getCameraPermissionInstructions()}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1 text-white border-gray-600"
+                          onClick={() => switchMode("hardware")}
+                        >
+                          Use Hardware Scanner
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="flex-1"
+                          onClick={async () => {
+                            const granted = await cameraPermission.requestPermission();
+                            if (granted) {
+                              initZXing();
+                            }
+                          }}
+                        >
+                          <RefreshCw className="h-3 w-3 mr-1" />
+                          Retry
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-3 w-full max-w-xs">
+                      <Button
+                        className="w-full"
+                        onClick={async () => {
+                          const granted = await cameraPermission.requestPermission();
+                          if (granted) {
+                            initZXing();
+                          }
+                        }}
+                      >
+                        <Camera className="h-4 w-4 mr-2" />
+                        Allow Camera Access
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full text-gray-300 border-gray-600"
+                        onClick={() => switchMode("hardware")}
+                      >
+                        Use Hardware Scanner Instead
+                      </Button>
+                    </div>
+                  )}
                 </div>
+              ) : (
+                <>
+                  <video
+                    ref={videoRef}
+                    className="w-full h-auto aspect-[4/3] sm:aspect-video object-cover"
+                    playsInline
+                    autoPlay
+                    muted
+                    style={{ display: "block", width: "100%" }}
+                  />
+
+                  {scanStatus === "ready" && (
+                    <>
+                      {/* Green scanning box */}
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div
+                          className="w-48 h-32 sm:w-56 sm:h-40 border-3 border-green-500 rounded-md shadow-lg"
+                          style={{
+                            boxShadow:
+                              "0 0 0 9999px rgba(0, 0, 0, 0.4), 0 0 15px rgba(34, 197, 94, 0.6)",
+                            borderWidth: "3px",
+                          }}
+                        />
+                      </div>
+
+                      {/* Status indicator */}
+                      <div className="absolute top-2 left-2 right-2 bg-green-500/90 text-white text-xs px-2 py-1 rounded text-center font-medium">
+                        ✓ Scanner ready - Point at barcode
+                      </div>
+                      
+                      {/* Camera switch button if multiple cameras */}
+                      {cameraDevices.length > 1 && (
+                        <button
+                          onClick={() => {
+                            const currentIndex = cameraDevices.findIndex(d => d.deviceId === selectedDeviceId);
+                            const nextIndex = (currentIndex + 1) % cameraDevices.length;
+                            setSelectedDeviceId(cameraDevices[nextIndex].deviceId);
+                            // Reinitialize with new camera
+                            cleanupZXing();
+                            setTimeout(() => initZXing(), 100);
+                          }}
+                          className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded flex items-center gap-1 hover:bg-black/80"
+                        >
+                          <RefreshCw className="h-3 w-3" />
+                          Switch Camera
+                        </button>
+                      )}
+                    </>
+                  )}
+
+                  {scanStatus === "initializing" && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/60">
+                      <div className="text-white text-sm flex items-center gap-2">
+                        <Zap className="h-4 w-4 animate-pulse" />
+                        <span>Starting camera...</span>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}

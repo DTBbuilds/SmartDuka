@@ -54,21 +54,21 @@ export class PaymentConfig {
   // TENANT ASSOCIATION
   // ============================================
   
-  @Prop({ required: true, type: Types.ObjectId, ref: 'Shop', index: true })
+  @Prop({ required: true, type: Types.ObjectId, ref: 'Shop' })
   shopId: Types.ObjectId;
 
   /**
    * Optional branch-level override
    * If null, this is a shop-level config
    */
-  @Prop({ required: false, type: Types.ObjectId, ref: 'Branch', index: true })
+  @Prop({ required: false, type: Types.ObjectId, ref: 'Branch' })
   branchId?: Types.ObjectId;
 
   // ============================================
   // PROVIDER CONFIGURATION
   // ============================================
 
-  @Prop({ required: true, enum: PaymentProvider, index: true })
+  @Prop({ required: true, enum: PaymentProvider })
   provider: PaymentProvider;
 
   @Prop({ required: true, enum: ConfigEnvironment, default: ConfigEnvironment.SANDBOX })
@@ -87,7 +87,7 @@ export class PaymentConfig {
    * - Airtel: Merchant ID
    * - Bank: Account number
    */
-  @Prop({ required: true, trim: true, index: true })
+  @Prop({ required: true, trim: true })
   shortCode: string;
 
   /**
@@ -152,7 +152,7 @@ export class PaymentConfig {
   // STATUS & PRIORITY
   // ============================================
 
-  @Prop({ required: true, enum: ConfigStatus, default: ConfigStatus.DRAFT, index: true })
+  @Prop({ required: true, enum: ConfigStatus, default: ConfigStatus.DRAFT })
   status: ConfigStatus;
 
   /**
@@ -165,7 +165,7 @@ export class PaymentConfig {
   /**
    * Whether this config is currently active for payments
    */
-  @Prop({ required: true, default: false, index: true })
+  @Prop({ required: true, default: false })
   isActive: boolean;
 
   /**

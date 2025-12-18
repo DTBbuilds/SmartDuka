@@ -5,10 +5,10 @@ export type ActivityDocument = Activity & Document;
 
 @Schema({ timestamps: true })
 export class Activity {
-  @Prop({ required: true, type: Types.ObjectId, ref: 'Shop', index: true })
+  @Prop({ required: true, type: Types.ObjectId, ref: 'Shop' })
   shopId: Types.ObjectId;
 
-  @Prop({ required: true, type: Types.ObjectId, ref: 'User', index: true })
+  @Prop({ required: true, type: Types.ObjectId, ref: 'User' })
   userId: Types.ObjectId;
 
   @Prop({ required: true, trim: true })
@@ -66,7 +66,7 @@ export class Activity {
   @Prop({ default: null })
   userAgent?: string;
 
-  @Prop({ default: Date.now, index: true })
+  @Prop({ default: Date.now })
   timestamp: Date;
 }
 

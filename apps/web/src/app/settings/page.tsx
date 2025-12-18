@@ -4,8 +4,8 @@ import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { config } from "@/lib/config";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, Tabs, TabsContent, TabsList, TabsTrigger, Input, Label, Button, Textarea } from "@smartduka/ui";
-import { Store, User, Lock, Settings as SettingsIcon, ShieldAlert, CreditCard, Crown, TrendingUp, Users, Package, Receipt, AlertCircle, Check, Clock, X, Phone, Loader2, Smartphone } from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, Tabs, TabsContent, TabsList, TabsTrigger, Input, Label, Button, Textarea, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@smartduka/ui";
+import { Store, User, Lock, Settings as SettingsIcon, ShieldAlert, CreditCard, Crown, TrendingUp, Users, Package, Receipt, AlertCircle, Check, Clock, X, Phone, Loader2, Smartphone, ChevronRight, Menu } from "lucide-react";
 import { TableSkeleton } from "@/components/shared/loading-skeleton";
 import { useSubscription, useSubscriptionPlans, useBillingHistory, type BillingCycle, type SubscriptionPlan } from "@/hooks/use-subscription";
 import { MpesaSettings } from "@/components/settings/mpesa-settings";
@@ -18,6 +18,16 @@ export default function SettingsPage() {
   
   // Get initial tab from URL query parameter
   const initialTab = searchParams.get('tab') || 'shop';
+  const [activeTab, setActiveTab] = useState(initialTab);
+  
+  // Settings navigation items
+  const settingsNavItems = [
+    { id: 'shop', label: 'Shop Settings', icon: Store, description: 'Business information' },
+    { id: 'mpesa', label: 'M-Pesa', icon: Smartphone, description: 'Payment configuration' },
+    { id: 'subscription', label: 'Subscription', icon: Crown, description: 'Plan & billing' },
+    { id: 'profile', label: 'Profile', icon: User, description: 'Personal information' },
+    { id: 'security', label: 'Security', icon: Lock, description: 'Password & access' },
+  ];
   
   // Role-based access control - only admin can access settings
   const isAdmin = user?.role === 'admin';
@@ -233,28 +243,91 @@ export default function SettingsPage() {
         </div>
       )}
 
-      <Tabs defaultValue={initialTab} className="space-y-6">
-        <TabsList className="flex-wrap">
-          <TabsTrigger value="shop" className="flex items-center gap-2">
-            <Store className="h-4 w-4" />
-            Shop Settings
-          </TabsTrigger>
-          <TabsTrigger value="mpesa" className="flex items-center gap-2">
-            <Smartphone className="h-4 w-4" />
-            M-Pesa
-          </TabsTrigger>
-          <TabsTrigger value="subscription" className="flex items-center gap-2">
-            <Crown className="h-4 w-4" />
-            Subscription
-          </TabsTrigger>
-          <TabsTrigger value="profile" className="flex items-center gap-2">
-            <User className="h-4 w-4" />
-            Profile
-          </TabsTrigger>
-          <TabsTrigger value="security" className="flex items-center gap-2">
-            <Lock className="h-4 w-4" />
-            Security
-          </TabsTrigger>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        {/* Mobile Navigation - Dropdown + Cards */}
+        <div className="md:hidden space-y-4">
+          {/* Mobile Dropdown Selector */}
+          <Select value={activeTab} onValueChange={setActiveTab}>
+            <SelectTrigger className="w-full h-14 text-base">
+              <SelectValue>
+                {(() => {
+                  const item = settingsNavItems.find(i => i.id === activeTab);
+                  if (!item) return 'Select setting';
+                  const Icon = item.icon;
+                  return (
+                    <div className="flex items-center gap-3">
+                      <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                        <Icon className="h-4 w-4 text-primary" />
+                      </div>
+                      <div className="text-left">
+                        <p className="font-medium">{item.label}</p>
+                        <p className="text-xs text-muted-foreground">{item.description}</p>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {settingsNavItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <SelectItem key={item.id} value={item.id} className="py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                        <Icon className="h-4 w-4 text-primary" />
+                      </div>
+                      <div>
+                        <p className="font-medium">{item.label}</p>
+                        <p className="text-xs text-muted-foreground">{item.description}</p>
+                      </div>
+                    </div>
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
+
+          {/* Mobile Quick Navigation Cards */}
+          <div className="grid grid-cols-5 gap-2">
+            {settingsNavItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveTab(item.id)}
+                  className={`flex flex-col items-center justify-center p-2 rounded-lg border transition-all ${
+                    isActive 
+                      ? 'bg-primary text-primary-foreground border-primary shadow-sm' 
+                      : 'bg-card border-border hover:bg-muted/50'
+                  }`}
+                >
+                  <Icon className={`h-5 w-5 ${isActive ? '' : 'text-muted-foreground'}`} />
+                  <span className={`text-[10px] mt-1 font-medium truncate w-full text-center ${isActive ? '' : 'text-muted-foreground'}`}>
+                    {item.label.split(' ')[0]}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Desktop Navigation - Horizontal Tabs */}
+        <TabsList className="hidden md:flex flex-wrap h-auto p-1 bg-muted/50">
+          {settingsNavItems.map((item) => {
+            const Icon = item.icon;
+            return (
+              <TabsTrigger 
+                key={item.id} 
+                value={item.id} 
+                className="flex items-center gap-2 px-4 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-sm"
+              >
+                <Icon className="h-4 w-4" />
+                <span>{item.label}</span>
+              </TabsTrigger>
+            );
+          })}
         </TabsList>
 
         <TabsContent value="shop">

@@ -2,6 +2,7 @@ import { Injectable, BadRequestException, InternalServerErrorException } from '@
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { PaymentTransaction, PaymentTransactionDocument } from '../schemas/payment-transaction.schema';
+import { MpesaTransaction, MpesaTransactionDocument } from '../schemas/mpesa-transaction.schema';
 
 export interface CreatePaymentTransactionDto {
   shopId: string;
@@ -45,6 +46,8 @@ export class PaymentTransactionService {
   constructor(
     @InjectModel(PaymentTransaction.name)
     private readonly paymentTransactionModel: Model<PaymentTransactionDocument>,
+    @InjectModel(MpesaTransaction.name)
+    private readonly mpesaTransactionModel: Model<MpesaTransactionDocument>,
   ) {}
 
   async createTransaction(dto: CreatePaymentTransactionDto): Promise<PaymentTransactionDocument> {
@@ -409,19 +412,82 @@ export class PaymentTransactionService {
       };
     });
 
-    // Recent transactions
-    const recentTransactions = monthTransactions.slice(0, 10).map(t => ({
+    // Get M-Pesa transactions for the month (includes failed/expired)
+    const mpesaQuery: any = {
+      shopId: new Types.ObjectId(shopId),
+      createdAt: { $gte: monthAgo },
+    };
+    if (branchId) {
+      mpesaQuery.branchId = new Types.ObjectId(branchId);
+    }
+
+    const mpesaTransactions = await this.mpesaTransactionModel
+      .find(mpesaQuery)
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .exec();
+
+    // Map M-Pesa status to display status
+    const mapMpesaStatus = (status: string): 'completed' | 'pending' | 'failed' => {
+      switch (status) {
+        case 'completed': return 'completed';
+        case 'pending': return 'pending';
+        case 'failed':
+        case 'expired':
+        case 'cancelled':
+          return 'failed';
+        default: return 'pending';
+      }
+    };
+
+    // Combine payment transactions with M-Pesa transactions for recent list
+    // This ensures we show failed M-Pesa attempts, not just successful payments
+    const mpesaRecentTransactions = mpesaTransactions.slice(0, 10).map(t => ({
       id: t._id.toString(),
       amount: t.amount || 0,
-      method: t.paymentMethod || 'cash',
-      status: t.status,
-      reference: t.mpesaReceiptNumber || t.referenceNumber || `TXN-${t._id.toString().slice(-8).toUpperCase()}`,
+      method: 'mpesa',
+      status: mapMpesaStatus(t.status),
+      reference: t.mpesaReceiptNumber || `TXN-${t._id.toString().slice(-8).toUpperCase()}`,
       timestamp: t.createdAt,
-      orderNumber: t.orderNumber,
+      orderNumber: t.orderNumber || `STK-${t._id.toString().slice(-8).toUpperCase()}`,
+      mpesaStatus: t.status, // Include actual M-Pesa status for debugging
+      errorCategory: t.errorCategory,
+      lastError: t.lastError,
     }));
 
-    // Failed transactions
-    const failedTransactions = monthTransactions
+    // Get non-M-Pesa recent transactions
+    const nonMpesaRecentTransactions = monthTransactions
+      .filter(t => t.paymentMethod !== 'mpesa')
+      .slice(0, 10)
+      .map(t => ({
+        id: t._id.toString(),
+        amount: t.amount || 0,
+        method: t.paymentMethod || 'cash',
+        status: t.status as 'completed' | 'pending' | 'failed',
+        reference: t.referenceNumber || `TXN-${t._id.toString().slice(-8).toUpperCase()}`,
+        timestamp: t.createdAt,
+        orderNumber: t.orderNumber,
+      }));
+
+    // Merge and sort by timestamp
+    const recentTransactions = [...mpesaRecentTransactions, ...nonMpesaRecentTransactions]
+      .sort((a, b) => new Date(b.timestamp!).getTime() - new Date(a.timestamp!).getTime())
+      .slice(0, 10);
+
+    // Failed transactions - include M-Pesa failures
+    const mpesaFailedTransactions = mpesaTransactions
+      .filter(t => t.status === 'failed' || t.status === 'expired')
+      .slice(0, 5)
+      .map(t => ({
+        id: t._id.toString(),
+        amount: t.amount || 0,
+        method: 'mpesa',
+        reason: t.lastError || t.mpesaResultDesc || 'M-Pesa transaction failed',
+        timestamp: t.createdAt,
+        errorCategory: t.errorCategory,
+      }));
+
+    const paymentFailedTransactions = monthTransactions
       .filter(t => t.status === 'failed')
       .slice(0, 5)
       .map(t => ({
@@ -431,6 +497,10 @@ export class PaymentTransactionService {
         reason: t.notes || 'Transaction failed',
         timestamp: t.createdAt,
       }));
+
+    const failedTransactions = [...mpesaFailedTransactions, ...paymentFailedTransactions]
+      .sort((a, b) => new Date(b.timestamp!).getTime() - new Date(a.timestamp!).getTime())
+      .slice(0, 10);
 
     // Branch breakdown (for shop-level analytics showing per-branch stats)
     const branchMap = new Map<string, { count: number; total: number; branchId: string }>();

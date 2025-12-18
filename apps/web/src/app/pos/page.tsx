@@ -76,7 +76,8 @@ import { POSProductsListView } from "@/components/pos-products-list-view";
 import { POSMobileCartSheet } from "@/components/pos-mobile-cart-sheet";
 import { ReceiptsHistoryModal, type StoredReceipt } from "@/components/receipts-history-modal";
 import { PaymentMethodModal } from "@/components/payment-method-modal";
-import { MpesaPaymentFlow } from "@/components/mpesa-payment-flow";
+import { MpesaPaymentFlowEnhanced } from "@/components/mpesa-payment-flow-enhanced";
+import { KeyboardShortcutsHelp } from "@/components/keyboard-shortcuts-help";
 
 type Product = {
   _id: string;
@@ -114,6 +115,7 @@ type PendingOrderRow = {
 
 const paymentOptions = [
   { id: "mpesa", label: "M-Pesa STK", icon: Smartphone },
+  { id: "send_money", label: "Send Money", icon: Smartphone },
   { id: "cash", label: "Cash", icon: HandCoins },
   { id: "card", label: "Card", icon: CreditCard },
   { id: "qr", label: "Pay by QR", icon: QrCode },
@@ -177,25 +179,36 @@ function POSContent() {
   const itemDiscount = useItemDiscount();
   const stockSync = useStockSync(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000', token);
 
+  // State for keyboard shortcuts help
+  const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
+  const [selectedCartIndex, setSelectedCartIndex] = useState<number>(-1);
+
   // Setup keyboard shortcuts
   useKeyboardShortcuts([
+    // Core checkout operations
     {
       ...POS_SHORTCUTS.CHECKOUT,
       callback: () => {
         if (cartItems.length > 0 && !isCheckingOut) {
-          // Trigger checkout
-          const checkoutBtn = document.querySelector('[aria-label="Complete checkout"]') as HTMLButtonElement;
-          checkoutBtn?.click();
+          handleCheckout();
         }
       },
     },
     {
       ...POS_SHORTCUTS.CLEAR_CART,
       callback: () => {
-        setCartItems([]);
-        setCustomerName("");
-        setOrderNotes("");
-        toast({ type: 'info', title: 'Cart cleared', message: 'All items removed from cart' });
+        if (showPaymentMethodModal || showMpesaFlow || showPaymentConfirmation) {
+          // Cancel current modal
+          setShowPaymentMethodModal(false);
+          setShowMpesaFlow(false);
+          setShowPaymentConfirmation(false);
+        } else if (cartItems.length > 0) {
+          setCartItems([]);
+          setCustomerName("");
+          setOrderNotes("");
+          setSelectedCartIndex(-1);
+          toast({ type: 'info', title: 'Cart cleared', message: 'All items removed from cart' });
+        }
       },
     },
     {
@@ -210,6 +223,152 @@ function POSContent() {
         if (pendingCount > 0) {
           const syncBtn = document.querySelector('[aria-label="Sync pending orders"]') as HTMLButtonElement;
           syncBtn?.click();
+        }
+      },
+    },
+    // Payment method shortcuts
+    {
+      ...POS_SHORTCUTS.PAY_CASH,
+      callback: () => {
+        if (cartItems.length > 0 && !isCheckingOut) {
+          setSelectedPaymentMethod('cash');
+          setShowPaymentMethodModal(true);
+        }
+      },
+    },
+    {
+      ...POS_SHORTCUTS.PAY_MPESA,
+      callback: () => {
+        if (cartItems.length > 0 && !isCheckingOut) {
+          setSelectedPaymentMethod('mpesa');
+          setShowPaymentMethodModal(true);
+        }
+      },
+    },
+    {
+      ...POS_SHORTCUTS.PAY_SEND_MONEY,
+      callback: () => {
+        if (cartItems.length > 0 && !isCheckingOut) {
+          setSelectedPaymentMethod('send_money');
+          setShowPaymentMethodModal(true);
+        }
+      },
+    },
+    {
+      ...POS_SHORTCUTS.PAY_CARD,
+      callback: () => {
+        if (cartItems.length > 0 && !isCheckingOut) {
+          setSelectedPaymentMethod('card');
+          setShowPaymentMethodModal(true);
+        }
+      },
+    },
+    // Scanner shortcut
+    {
+      ...POS_SHORTCUTS.SCANNER,
+      callback: () => {
+        setIsScannerOpen(true);
+      },
+    },
+    // Receipts history
+    {
+      ...POS_SHORTCUTS.RECEIPTS,
+      callback: () => {
+        setIsReceiptsHistoryOpen(true);
+      },
+    },
+    // New sale (same as clear)
+    {
+      ...POS_SHORTCUTS.NEW_SALE,
+      callback: () => {
+        setCartItems([]);
+        setCustomerName("");
+        setOrderNotes("");
+        setSelectedCartIndex(-1);
+        searchInputRef.current?.focus();
+        toast({ type: 'info', title: 'New sale', message: 'Ready for new transaction' });
+      },
+    },
+    // Print last receipt
+    {
+      ...POS_SHORTCUTS.PRINT_LAST,
+      callback: () => {
+        if (lastReceipt) {
+          setShowReceiptPreview(true);
+        } else {
+          toast({ type: 'info', title: 'No receipt', message: 'Complete a sale first' });
+        }
+      },
+    },
+    // Show shortcuts help
+    {
+      key: '?',
+      shiftKey: true,
+      callback: () => {
+        setShowShortcutsHelp(true);
+      },
+    },
+    // Cart navigation with arrow keys
+    {
+      key: 'ArrowUp',
+      callback: () => {
+        if (cartItems.length > 0) {
+          setSelectedCartIndex((prev) => Math.max(0, prev - 1));
+        }
+      },
+    },
+    {
+      key: 'ArrowDown',
+      callback: () => {
+        if (cartItems.length > 0) {
+          setSelectedCartIndex((prev) => Math.min(cartItems.length - 1, prev + 1));
+        }
+      },
+    },
+    // Quantity adjustment for selected item
+    {
+      key: '+',
+      callback: () => {
+        if (selectedCartIndex >= 0 && selectedCartIndex < cartItems.length) {
+          const item = cartItems[selectedCartIndex];
+          const product = products.find(p => p._id === item.productId);
+          const availableStock = (product?.stock ?? 0) - item.quantity;
+          if (availableStock > 0) {
+            setCartItems((prev) =>
+              prev.map((ci, idx) =>
+                idx === selectedCartIndex ? { ...ci, quantity: ci.quantity + 1 } : ci
+              )
+            );
+          }
+        }
+      },
+    },
+    {
+      key: '-',
+      callback: () => {
+        if (selectedCartIndex >= 0 && selectedCartIndex < cartItems.length) {
+          const item = cartItems[selectedCartIndex];
+          if (item.quantity > 1) {
+            setCartItems((prev) =>
+              prev.map((ci, idx) =>
+                idx === selectedCartIndex ? { ...ci, quantity: ci.quantity - 1 } : ci
+              )
+            );
+          } else {
+            // Remove item if quantity would be 0
+            setCartItems((prev) => prev.filter((_, idx) => idx !== selectedCartIndex));
+            setSelectedCartIndex((prev) => Math.max(0, prev - 1));
+          }
+        }
+      },
+    },
+    {
+      key: 'Delete',
+      callback: () => {
+        if (selectedCartIndex >= 0 && selectedCartIndex < cartItems.length) {
+          setCartItems((prev) => prev.filter((_, idx) => idx !== selectedCartIndex));
+          setSelectedCartIndex((prev) => Math.max(0, prev - 1));
+          toast({ type: 'info', title: 'Item removed', message: 'Item removed from cart' });
         }
       },
     },
@@ -621,11 +780,25 @@ function POSContent() {
   };
 
   // Called when user selects a payment method from the modal
-  const handlePaymentMethodConfirm = async (paymentMethod: string, cashAmountTendered?: number, phoneNumber?: string) => {
+  const handlePaymentMethodConfirm = async (paymentMethod: string, cashAmountTendered?: number, referenceOrPhone?: string) => {
     setSelectedPaymentMethod(paymentMethod);
     setShowPaymentMethodModal(false);
     
-    if (paymentMethod === 'mpesa' && phoneNumber) {
+    if (paymentMethod === 'send_money') {
+      // For Send Money, proceed directly to checkout with the reference
+      if (cashAmountTendered !== undefined) {
+        setAmountTendered(cashAmountTendered);
+      }
+      // Store the M-Pesa reference if provided (passed as referenceOrPhone)
+      if (referenceOrPhone) {
+        setOrderNotes((prev) => prev ? `${prev}\nM-Pesa Ref: ${referenceOrPhone}` : `M-Pesa Ref: ${referenceOrPhone}`);
+      }
+      // Proceed to payment confirmation
+      setIsCheckoutMode(true);
+      setCheckoutStep(1);
+      setShowPaymentConfirmation(true);
+    } else if (paymentMethod === 'mpesa' && referenceOrPhone) {
+      const phoneNumber = referenceOrPhone;
       // For M-Pesa, create a pending order first, then show M-Pesa flow
       try {
         setIsCheckingOut(true);
@@ -668,12 +841,17 @@ function POSContent() {
           body: JSON.stringify(payload),
         });
         
-        if (!res.ok) {
-          const detail = await res.json().catch(() => undefined);
-          throw new Error(detail?.message ?? `Failed to create order (${res.status})`);
+        const responseText = await res.text();
+        let order;
+        try {
+          order = responseText ? JSON.parse(responseText) : {};
+        } catch {
+          order = {};
         }
         
-        const order = await res.json();
+        if (!res.ok) {
+          throw new Error(order?.message ?? `Failed to create order (${res.status})`);
+        }
         setPendingOrderId(order._id || order.id);
         setMpesaPhoneNumber(phoneNumber);
         setShowMpesaFlow(true);
@@ -838,8 +1016,15 @@ function POSContent() {
         body: JSON.stringify(payload),
       });
 
+      const responseText = await res.text();
+      let order;
+      try {
+        order = responseText ? JSON.parse(responseText) : {};
+      } catch {
+        order = {};
+      }
+
       if (!res.ok) {
-        const detail = await res.json().catch(() => undefined);
         if (res.status >= 500 && typeof window !== "undefined" && shopId) {
           // Save offline with shopId for multi-tenant isolation
           await addPendingOrder(shopId, {
@@ -853,10 +1038,8 @@ function POSContent() {
           refreshPendingCount();
           return;
         }
-        throw new Error(detail?.message ?? `Checkout failed (${res.status})`);
+        throw new Error(order?.message ?? `Checkout failed (${res.status})`);
       }
-
-      const order = await res.json();
       setCheckoutStep(3);
       setFeedbackType('success');
       setFeedbackMessage('Payment processed successfully!');
@@ -1596,7 +1779,7 @@ function POSContent() {
       />
 
       {/* M-Pesa Payment Flow Modal */}
-      <MpesaPaymentFlow
+      <MpesaPaymentFlowEnhanced
         isOpen={showMpesaFlow}
         orderId={pendingOrderId || ''}
         amount={total}
@@ -1608,6 +1791,12 @@ function POSContent() {
           setShowMpesaFlow(false);
           setShowPaymentMethodModal(true);
         }}
+      />
+
+      {/* Keyboard Shortcuts Help Modal */}
+      <KeyboardShortcutsHelp
+        isOpen={showShortcutsHelp}
+        onClose={() => setShowShortcutsHelp(false)}
       />
 
       {/* Mobile Cart Sheet */}

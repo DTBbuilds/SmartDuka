@@ -45,7 +45,7 @@ export class MpesaTransaction {
   // MULTI-TENANT ISOLATION
   // ============================================
   
-  @Prop({ required: true, type: Types.ObjectId, ref: 'Shop', index: true })
+  @Prop({ required: true, type: Types.ObjectId, ref: 'Shop' })
   shopId: Types.ObjectId;
 
   @Prop({ required: false, type: Types.ObjectId, ref: 'Branch' })
@@ -69,7 +69,7 @@ export class MpesaTransaction {
    * Unique idempotency key to prevent duplicate transactions
    * Format: {shopId}-{orderId}-{timestamp}
    */
-  @Prop({ required: true, unique: true, index: true })
+  @Prop({ required: true, unique: true })
   idempotencyKey: string;
 
   // ============================================
@@ -80,7 +80,7 @@ export class MpesaTransaction {
    * Checkout Request ID from M-Pesa STK Push response
    * Used to query transaction status
    */
-  @Prop({ required: false, index: true })
+  @Prop({ required: false })
   checkoutRequestId?: string;
 
   /**
@@ -93,7 +93,7 @@ export class MpesaTransaction {
    * M-Pesa Receipt Number (confirmation code)
    * Only populated on successful payment
    */
-  @Prop({ required: false, index: true })
+  @Prop({ required: false })
   mpesaReceiptNumber?: string;
 
   /**
@@ -142,7 +142,6 @@ export class MpesaTransaction {
     required: true,
     enum: MpesaTransactionStatus,
     default: MpesaTransactionStatus.CREATED,
-    index: true,
   })
   status: MpesaTransactionStatus;
 
@@ -181,7 +180,7 @@ export class MpesaTransaction {
   /**
    * When the transaction expires (5 minutes from creation)
    */
-  @Prop({ required: true, index: true })
+  @Prop({ required: true })
   expiresAt: Date;
 
   /**
@@ -326,26 +325,26 @@ export const MpesaTransactionSchema = SchemaFactory.createForClass(MpesaTransact
 // ============================================
 // INDEXES FOR PERFORMANCE
 // ============================================
+// Note: Single-field indexes are defined in @Prop decorators above.
+// Only compound indexes are defined here to avoid duplicates.
 
-// Compound index for shop + status queries
+// Compound index for shop + status queries (for filtering by shop and status)
 MpesaTransactionSchema.index({ shopId: 1, status: 1 });
 
-// Compound index for shop + date range queries
+// Compound index for shop + date range queries (for analytics)
 MpesaTransactionSchema.index({ shopId: 1, createdAt: -1 });
 
-// Index for finding pending transactions to expire
+// Compound index for finding pending transactions to expire
 MpesaTransactionSchema.index({ status: 1, expiresAt: 1 });
 
 // Index for order lookup
 MpesaTransactionSchema.index({ orderId: 1 });
 
-// Note: The following indexes are already defined in @Prop decorators:
-// - shopId (index: true in @Prop)
-// - checkoutRequestId (index: true in @Prop)
-// - mpesaReceiptNumber (index: true in @Prop)
-// - idempotencyKey (unique: true, index: true in @Prop)
-// - status (index: true in @Prop)
-// - expiresAt (index: true in @Prop)
+// Index for callback lookup by checkoutRequestId
+MpesaTransactionSchema.index({ checkoutRequestId: 1 });
+
+// Index for receipt number lookup
+MpesaTransactionSchema.index({ mpesaReceiptNumber: 1 });
 
 // ============================================
 // VIRTUAL FIELDS

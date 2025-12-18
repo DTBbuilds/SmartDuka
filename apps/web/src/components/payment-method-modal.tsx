@@ -22,6 +22,7 @@ import {
   Building2,
   Loader2,
   Shield,
+  Send,
 } from 'lucide-react';
 import { StripePaymentModal } from './stripe-payment-form';
 import { useAuth } from '@/lib/auth-context';
@@ -35,13 +36,20 @@ export interface PaymentOption {
   primary?: boolean;
 }
 
-// Default payment options with M-Pesa and Cash prioritized
+// Default payment options with M-Pesa, Send Money, and Cash prioritized
 export const defaultPaymentOptions: PaymentOption[] = [
   {
     id: 'mpesa',
     label: 'M-Pesa',
     icon: Smartphone,
-    description: 'Mobile money payment',
+    description: 'STK Push payment',
+    primary: true,
+  },
+  {
+    id: 'send_money',
+    label: 'Send Money',
+    icon: Send,
+    description: 'Direct M-Pesa transfer',
     primary: true,
   },
   {
@@ -56,7 +64,6 @@ export const defaultPaymentOptions: PaymentOption[] = [
     label: 'Card/Bank',
     icon: Building2,
     description: 'Stripe card & bank payments',
-    primary: true,
   },
   {
     id: 'card',
@@ -121,7 +128,9 @@ export function PaymentMethodModal({
   const [amountTendered, setAmountTendered] = useState<number>(0);
   const [phoneNumber, setPhoneNumber] = useState<string>(initialPhone || '');
   const [phoneError, setPhoneError] = useState<string>('');
-  const [step, setStep] = useState<'select' | 'cash-input' | 'mpesa-input' | 'card-input'>('select');
+  const [step, setStep] = useState<'select' | 'cash-input' | 'mpesa-input' | 'card-input' | 'send-money-input'>('select');
+  const [sendMoneyReference, setSendMoneyReference] = useState<string>('');
+  const [sendMoneyConfirmed, setSendMoneyConfirmed] = useState<boolean>(false);
   
   // Stripe payment state
   const [stripeClientSecret, setStripeClientSecret] = useState<string | null>(null);
@@ -143,6 +152,11 @@ export function PaymentMethodModal({
       // For M-Pesa, show phone input step
       setStep('mpesa-input');
       setPhoneError('');
+    } else if (methodId === 'send_money') {
+      // For Send Money, show confirmation step
+      setStep('send-money-input');
+      setSendMoneyReference('');
+      setSendMoneyConfirmed(false);
     } else if (methodId === 'stripe' || methodId === 'card') {
       // For card/stripe, create payment intent and show card form
       setStep('card-input');
@@ -240,6 +254,15 @@ export function PaymentMethodModal({
     }
   };
 
+  const handleSendMoneyConfirm = () => {
+    if (!sendMoneyConfirmed) {
+      return;
+    }
+    // Pass send_money as payment method with optional reference
+    onConfirm('send_money', total, sendMoneyReference || undefined);
+    resetState();
+  };
+
   const handleBack = () => {
     setStep('select');
     setSelectedMethod(null);
@@ -255,6 +278,8 @@ export function PaymentMethodModal({
     setStep('select');
     setStripeClientSecret(null);
     setStripeError(null);
+    setSendMoneyReference('');
+    setSendMoneyConfirmed(false);
   };
 
   const handleClose = () => {
@@ -504,6 +529,90 @@ export function PaymentMethodModal({
               onClose={handleBack}
               onError={handleStripeError}
             />
+          </>
+        ) : step === 'send-money-input' ? (
+          <>
+            {/* Send Money Confirmation Step */}
+            <DialogHeader className="px-4 pt-4 pb-2 border-b bg-orange-50 dark:bg-orange-950/30">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleBack}
+                  className="h-8 w-8 rounded-full flex items-center justify-center hover:bg-orange-100 dark:hover:bg-orange-900 transition-colors"
+                >
+                  <ArrowRight className="h-4 w-4 rotate-180" />
+                </button>
+                <div>
+                  <DialogTitle className="text-lg flex items-center gap-2">
+                    <Send className="h-5 w-5 text-orange-600" />
+                    Send Money Payment
+                  </DialogTitle>
+                  <DialogDescription className="text-sm">
+                    Total: <span className="font-bold text-foreground">{formatCurrency(total)}</span>
+                  </DialogDescription>
+                </div>
+              </div>
+            </DialogHeader>
+
+            <div className="p-4 space-y-4">
+              {/* Instructions */}
+              <div className="p-4 rounded-lg bg-orange-100 dark:bg-orange-900/50 border border-orange-200 dark:border-orange-800">
+                <p className="text-sm font-medium text-orange-800 dark:text-orange-200 mb-2">
+                  Customer sends money directly via M-Pesa
+                </p>
+                <ol className="text-xs text-orange-700 dark:text-orange-300 space-y-1 list-decimal list-inside">
+                  <li>Customer opens M-Pesa on their phone</li>
+                  <li>Selects &quot;Send Money&quot; option</li>
+                  <li>Enters shop&apos;s phone number</li>
+                  <li>Enters amount: <strong>{formatCurrency(total)}</strong></li>
+                  <li>Confirms with M-Pesa PIN</li>
+                </ol>
+              </div>
+
+              {/* M-Pesa Transaction Code (Optional) */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium flex items-center gap-2">
+                  <Phone className="h-4 w-4" />
+                  M-Pesa Transaction Code (Optional)
+                </label>
+                <Input
+                  type="text"
+                  placeholder="e.g., SLK7XXXXXX"
+                  value={sendMoneyReference}
+                  onChange={(e) => setSendMoneyReference(e.target.value.toUpperCase())}
+                  className="text-lg font-mono h-12 text-center uppercase"
+                  maxLength={15}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Enter the M-Pesa confirmation code from customer&apos;s message for records
+                </p>
+              </div>
+
+              {/* Confirmation Checkbox */}
+              <label className="flex items-start gap-3 p-3 rounded-lg border border-border hover:bg-muted/50 cursor-pointer transition-colors">
+                <input
+                  type="checkbox"
+                  checked={sendMoneyConfirmed}
+                  onChange={(e) => setSendMoneyConfirmed(e.target.checked)}
+                  className="mt-0.5 h-5 w-5 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+                />
+                <div>
+                  <p className="text-sm font-medium">I confirm payment received</p>
+                  <p className="text-xs text-muted-foreground">
+                    Check this after verifying the M-Pesa message or transaction
+                  </p>
+                </div>
+              </label>
+
+              {/* Confirm Button */}
+              <Button
+                className="w-full h-12 text-base font-semibold bg-orange-600 hover:bg-orange-700"
+                onClick={handleSendMoneyConfirm}
+                disabled={!sendMoneyConfirmed}
+              >
+                <Check className="h-5 w-5 mr-2" />
+                Complete Sale
+              </Button>
+            </div>
           </>
         ) : (
           <>

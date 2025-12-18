@@ -349,15 +349,22 @@ export function generateEmailReceipt(receipt: ReceiptData): { subject: string; b
  * Print receipt with proper thermal printer formatting
  */
 export function printReceipt(receipt: ReceiptData, width: ReceiptWidth = 32): void {
-  const receiptText = generateReceiptText(receipt, width);
-  const printWindow = window.open("", "", "height=600,width=400");
-  
-  if (printWindow) {
+  try {
+    const receiptText = generateReceiptText(receipt, width);
+    const printWindow = window.open("", "_blank", "height=600,width=400");
+    
+    if (!printWindow) {
+      console.error('Failed to open print window. Please allow popups for this site.');
+      alert('Unable to open print window. Please allow popups and try again.');
+      return;
+    }
+
     // Calculate font size based on width (smaller for 58mm printers)
     const fontSize = width <= 32 ? '11px' : '12px';
     const paperWidth = width <= 32 ? '58mm' : '80mm';
     
     printWindow.document.write(`
+      <!DOCTYPE html>
       <html>
         <head>
           <title>Receipt #${receipt.orderNumber}</title>
@@ -396,7 +403,31 @@ export function printReceipt(receipt: ReceiptData, width: ReceiptWidth = 32): vo
       </html>
     `);
     printWindow.document.close();
-    printWindow.print();
+    
+    // Wait for content to load before printing
+    printWindow.onload = () => {
+      try {
+        printWindow.focus();
+        printWindow.print();
+      } catch (printError) {
+        console.error('Print error:', printError);
+      }
+    };
+    
+    // Fallback: try printing after a short delay if onload doesn't fire
+    setTimeout(() => {
+      try {
+        if (printWindow && !printWindow.closed) {
+          printWindow.focus();
+          printWindow.print();
+        }
+      } catch (printError) {
+        console.error('Print fallback error:', printError);
+      }
+    }, 500);
+  } catch (error) {
+    console.error('Receipt print error:', error);
+    alert('Failed to print receipt. Please try again.');
   }
 }
 
