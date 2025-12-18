@@ -21,6 +21,10 @@ import {
   RefreshCw,
   FolderTree,
   MoreVertical,
+  X,
+  ChevronRight,
+  Loader2,
+  Eye,
 } from "lucide-react";
 import { DataTable, Column } from "@/components/shared/data-table";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -43,6 +47,15 @@ interface CategoryFormData {
   parentId: string;
 }
 
+interface Product {
+  _id: string;
+  name: string;
+  sku?: string;
+  price: number;
+  stock?: number;
+  status: string;
+}
+
 export default function CategoriesPage() {
   const { token, user } = useAuth();
   const [categories, setCategories] = useState<Category[]>([]);
@@ -57,6 +70,9 @@ export default function CategoriesPage() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
+  const [categoryProducts, setCategoryProducts] = useState<Product[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
 
   // Check if user is admin
   if (user?.role !== "admin") {
@@ -119,6 +135,32 @@ export default function CategoriesPage() {
       parentId: category.parentId || "",
     });
     setShowModal(true);
+  };
+
+  const handleViewProducts = async (category: Category) => {
+    setSelectedCategory(category);
+    setLoadingProducts(true);
+    setCategoryProducts([]);
+    
+    try {
+      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+      const res = await fetch(`${base}/inventory/products?categoryId=${category._id}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!res.ok) {
+        throw new Error(`Failed to fetch products: ${res.status}`);
+      }
+
+      const data = await res.json();
+      setCategoryProducts(Array.isArray(data) ? data : data.products || []);
+    } catch (err: any) {
+      console.error("Error fetching category products:", err);
+    } finally {
+      setLoadingProducts(false);
+    }
   };
 
   const handleDeleteCategory = async (category: Category) => {
@@ -204,12 +246,18 @@ export default function CategoriesPage() {
       key: "name",
       header: "Category Name",
       render: (category) => (
-        <div className="flex items-center gap-3">
+        <div 
+          className="flex items-center gap-3 cursor-pointer hover:bg-accent/50 -m-2 p-2 rounded-lg transition-colors"
+          onClick={() => handleViewProducts(category)}
+        >
           <div className="p-2 bg-primary/10 rounded-lg">
             <Boxes className="h-4 w-4 text-primary" />
           </div>
-          <div>
-            <div className="font-medium">{category.name}</div>
+          <div className="flex-1 min-w-0">
+            <div className="font-medium flex items-center gap-1">
+              {category.name}
+              <ChevronRight className="h-3 w-3 text-muted-foreground" />
+            </div>
             {category.description && (
               <div className="text-xs text-muted-foreground truncate max-w-[200px]">
                 {category.description}
@@ -238,10 +286,14 @@ export default function CategoriesPage() {
       key: "productCount",
       header: "Products",
       render: (category) => (
-        <div className="flex items-center gap-1">
+        <button
+          onClick={() => handleViewProducts(category)}
+          className="flex items-center gap-1 px-2 py-1 rounded-md hover:bg-accent transition-colors"
+        >
           <Package className="h-4 w-4 text-muted-foreground" />
-          <span>{category.productCount ?? 0}</span>
-        </div>
+          <span className="font-medium">{category.productCount ?? 0}</span>
+          <Eye className="h-3 w-3 text-muted-foreground ml-1" />
+        </button>
       ),
       sortable: true,
     },
@@ -495,6 +547,102 @@ export default function CategoriesPage() {
                   </Button>
                 </div>
               </form>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Products Panel for Selected Category */}
+      {selectedCategory && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setSelectedCategory(null)}
+          />
+          <Card className="relative z-10 w-full max-w-2xl mx-4 max-h-[80vh] flex flex-col">
+            <CardHeader className="flex-shrink-0 border-b">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-primary/10 rounded-lg">
+                    <Boxes className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-lg">{selectedCategory.name}</CardTitle>
+                    <p className="text-sm text-muted-foreground">
+                      {categoryProducts.length} product{categoryProducts.length !== 1 ? 's' : ''} in this category
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setSelectedCategory(null)}
+                  className="h-8 w-8"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="flex-1 overflow-auto p-0">
+              {loadingProducts ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  <span className="ml-2 text-muted-foreground">Loading products...</span>
+                </div>
+              ) : categoryProducts.length === 0 ? (
+                <div className="text-center py-12">
+                  <Package className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
+                  <p className="text-muted-foreground">No products in this category</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-4"
+                    onClick={() => {
+                      setSelectedCategory(null);
+                      window.location.href = '/admin/products';
+                    }}
+                  >
+                    Add Products
+                  </Button>
+                </div>
+              ) : (
+                <div className="divide-y">
+                  {categoryProducts.map((product) => (
+                    <div
+                      key={product._id}
+                      className="flex items-center justify-between p-4 hover:bg-accent/50 transition-colors cursor-pointer"
+                      onClick={() => window.location.href = `/inventory/${product._id}`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="p-2 bg-muted rounded-lg flex-shrink-0">
+                          <Package className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-medium truncate">{product.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            SKU: {product.sku || 'N/A'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4 flex-shrink-0">
+                        <div className="text-right">
+                          <p className="font-semibold">Ksh {product.price.toLocaleString()}</p>
+                          <Badge 
+                            variant={
+                              (product.stock ?? 0) > 10 ? 'default' : 
+                              (product.stock ?? 0) > 0 ? 'secondary' : 'destructive'
+                            }
+                            className="text-xs"
+                          >
+                            Stock: {product.stock ?? 0}
+                          </Badge>
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

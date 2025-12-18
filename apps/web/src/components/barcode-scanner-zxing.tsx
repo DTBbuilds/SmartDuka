@@ -298,16 +298,38 @@ export function BarcodeScannerZXing({
 
   /**
    * Initialize camera when dialog opens in camera mode
+   * On mobile, proactively request permission first
    */
   useEffect(() => {
     if (isOpen && scanMode === "camera") {
-      initZXing();
+      // Check if we need to request permission first (mobile-friendly approach)
+      const initCamera = async () => {
+        // If permission is not yet granted, request it first
+        if (cameraPermission.isPrompt || cameraPermission.isChecking) {
+          setMessage("📷 Requesting camera access...");
+          setScanStatus("initializing");
+          const granted = await cameraPermission.requestPermission();
+          if (granted) {
+            initZXing();
+          } else {
+            setScanStatus("error");
+            setError("Camera permission required to scan barcodes. Please allow camera access.");
+          }
+        } else if (cameraPermission.isGranted) {
+          initZXing();
+        } else if (cameraPermission.isDenied) {
+          setScanStatus("error");
+          setError("Camera permission denied. Please enable camera access in your browser settings.");
+        }
+      };
+      
+      initCamera();
     }
 
     return () => {
       cleanupZXing();
     };
-  }, [isOpen, scanMode, initZXing, cleanupZXing]);
+  }, [isOpen, scanMode, cameraPermission.isPrompt, cameraPermission.isGranted, cameraPermission.isDenied, cameraPermission.isChecking, initZXing, cleanupZXing]);
 
   /**
    * Focus manual input when in manual mode

@@ -48,6 +48,10 @@ import {
   Building2,
   Activity,
   Loader2,
+  Key,
+  ChevronLeft,
+  ChevronRight,
+  RefreshCw,
 } from 'lucide-react';
 
 interface Cashier {
@@ -85,8 +89,16 @@ export default function CashiersPage() {
   const [filterBranch, setFilterBranch] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+  
   // Dialog states
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isPinDialogOpen, setIsPinDialogOpen] = useState(false);
+  const [selectedCashierForPin, setSelectedCashierForPin] = useState<Cashier | null>(null);
+  const [newPin, setNewPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
   const [editingCashier, setEditingCashier] = useState<Cashier | null>(null);
   const [formData, setFormData] = useState({
     name: '',
@@ -95,6 +107,7 @@ export default function CashiersPage() {
     password: '',
     branchId: 'none',
   });
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
@@ -270,6 +283,7 @@ export default function CashiersPage() {
       return;
     }
 
+    setActionLoading(cashierId);
     try {
       const res = await fetch(`${apiUrl}/users/${cashierId}`, {
         method: 'DELETE',
@@ -286,6 +300,54 @@ export default function CashiersPage() {
     } catch (err) {
       console.error('Failed to delete cashier:', err);
       setError('Failed to delete cashier');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleChangePinClick = (cashier: Cashier) => {
+    setSelectedCashierForPin(cashier);
+    setNewPin('');
+    setConfirmPin('');
+    setIsPinDialogOpen(true);
+  };
+
+  const handleChangePinSubmit = async () => {
+    if (!selectedCashierForPin) return;
+    
+    if (newPin.length < 4) {
+      setError('PIN must be at least 4 digits');
+      return;
+    }
+    if (newPin !== confirmPin) {
+      setError('PINs do not match');
+      return;
+    }
+
+    setActionLoading(selectedCashierForPin._id);
+    try {
+      const res = await fetch(`${apiUrl}/users/${selectedCashierForPin._id}/pin`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ pin: newPin }),
+      });
+
+      if (res.ok) {
+        setSuccess('PIN changed successfully');
+        setIsPinDialogOpen(false);
+        setTimeout(() => setSuccess(null), 3000);
+      } else {
+        const data = await res.json();
+        setError(data.message || 'Failed to change PIN');
+      }
+    } catch (err) {
+      console.error('Failed to change PIN:', err);
+      setError('Failed to change PIN');
+    } finally {
+      setActionLoading(null);
     }
   };
 
@@ -325,31 +387,74 @@ export default function CashiersPage() {
     return matchesSearch && matchesBranch && matchesStatus;
   });
 
+  // Pagination
+  const totalPages = Math.ceil(filteredCashiers.length / itemsPerPage);
+  const paginatedCashiers = filteredCashiers.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, filterBranch, filterStatus]);
+
   // Stats
   const activeCashiers = cashiers.filter((c) => c.status === 'active').length;
   const totalSalesToday = cashiers.reduce((sum, c) => sum + (c.todaySales || 0), 0);
 
   return (
-    <div className="space-y-6">
-      {/* Admin Navigation */}
-      <AdminNavigation activeTab="cashiers" />
+    <div className="space-y-4 md:space-y-6 px-4 md:px-6 pb-6">
+      {/* Admin Navigation - Hidden on mobile for this page */}
+      <div className="hidden md:block">
+        <AdminNavigation activeTab="cashiers" />
+      </div>
 
-      {/* Header */}
-      <AdminHeader
-        title="Cashier Management"
-        subtitle={`Manage cashiers${currentBranch ? ` for ${currentBranch.name}` : ' across all branches'}`}
-        icon={<Users className="h-6 w-6 text-primary" />}
-        badge={activeCashiers > 0 ? `${activeCashiers} active` : undefined}
-        showSearch={true}
-        searchValue={searchQuery}
-        onSearchChange={setSearchQuery}
-        actions={
-          <Button onClick={handleAddCashier} className="gap-2">
-            <Plus className="h-4 w-4" />
-            Add Cashier
-          </Button>
-        }
-      />
+      {/* Mobile Header with Add Button */}
+      <div className="md:hidden">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h1 className="text-xl font-bold">Cashiers</h1>
+            <p className="text-sm text-muted-foreground">
+              {activeCashiers} active of {cashiers.length}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={fetchCashiers}
+              disabled={isLoading}
+              className="h-10 w-10"
+            >
+              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+            </Button>
+            <Button onClick={handleAddCashier} size="lg" className="h-10 px-4 gap-2">
+              <Plus className="h-5 w-5" />
+              <span>Add</span>
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Desktop Header */}
+      <div className="hidden md:block">
+        <AdminHeader
+          title="Cashier Management"
+          subtitle={`Manage cashiers${currentBranch ? ` for ${currentBranch.name}` : ' across all branches'}`}
+          icon={<Users className="h-6 w-6 text-primary" />}
+          badge={activeCashiers > 0 ? `${activeCashiers} active` : undefined}
+          showSearch={true}
+          searchValue={searchQuery}
+          onSearchChange={setSearchQuery}
+          actions={
+            <Button onClick={handleAddCashier} className="gap-2">
+              <Plus className="h-4 w-4" />
+              Add Cashier
+            </Button>
+          }
+        />
+      </div>
 
       {/* Alerts */}
       {error && (
@@ -365,87 +470,89 @@ export default function CashiersPage() {
         </Alert>
       )}
 
-      {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Cashiers</CardTitle>
+      {/* Stats Cards - Horizontal scroll on mobile */}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
+        <Card className="p-3 md:p-0">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 p-0 md:p-6 md:pb-2">
+            <CardTitle className="text-xs md:text-sm font-medium">Total</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{cashiers.length}</div>
+          <CardContent className="p-0 pt-1 md:p-6 md:pt-0">
+            <div className="text-xl md:text-2xl font-bold">{cashiers.length}</div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active</CardTitle>
+        <Card className="p-3 md:p-0">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 p-0 md:p-6 md:pb-2">
+            <CardTitle className="text-xs md:text-sm font-medium">Active</CardTitle>
             <UserCheck className="h-4 w-4 text-green-600" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">{activeCashiers}</div>
+          <CardContent className="p-0 pt-1 md:p-6 md:pt-0">
+            <div className="text-xl md:text-2xl font-bold text-green-600">{activeCashiers}</div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Today's Sales</CardTitle>
+        <Card className="p-3 md:p-0">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 p-0 md:p-6 md:pb-2">
+            <CardTitle className="text-xs md:text-sm font-medium">Sales Today</CardTitle>
             <Activity className="h-4 w-4 text-blue-600" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(totalSalesToday)}</div>
+          <CardContent className="p-0 pt-1 md:p-6 md:pt-0">
+            <div className="text-lg md:text-2xl font-bold">{formatCurrency(totalSalesToday)}</div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Branches</CardTitle>
+        <Card className="p-3 md:p-0">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 p-0 md:p-6 md:pb-2">
+            <CardTitle className="text-xs md:text-sm font-medium">Branches</CardTitle>
             <Building2 className="h-4 w-4 text-purple-600" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{branches.length}</div>
+          <CardContent className="p-0 pt-1 md:p-6 md:pt-0">
+            <div className="text-xl md:text-2xl font-bold">{branches.length}</div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Filters */}
+      {/* Filters - Compact on mobile */}
       <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-col md:flex-row gap-4">
+        <CardContent className="p-3 md:pt-6 md:p-6">
+          <div className="flex flex-col gap-3 md:flex-row md:gap-4">
             <div className="flex-1">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search by name or email..."
+                  placeholder="Search cashiers..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
+                  className="pl-10 h-10"
                 />
               </div>
             </div>
-            <Select value={filterBranch} onValueChange={setFilterBranch}>
-              <SelectTrigger className="w-full md:w-48">
-                <SelectValue placeholder="Filter by branch" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Branches</SelectItem>
-                {branches.map((branch) => (
-                  <SelectItem key={branch._id} value={branch._id}>
-                    {branch.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger className="w-full md:w-36">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="disabled">Disabled</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="flex gap-2">
+              <Select value={filterBranch} onValueChange={setFilterBranch}>
+                <SelectTrigger className="flex-1 md:w-40 h-10">
+                  <SelectValue placeholder="Branch" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Branches</SelectItem>
+                  {branches.map((branch) => (
+                    <SelectItem key={branch._id} value={branch._id}>
+                      {branch.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={filterStatus} onValueChange={setFilterStatus}>
+                <SelectTrigger className="flex-1 md:w-32 h-10">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="disabled">Disabled</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -483,62 +590,125 @@ export default function CashiersPage() {
             <>
               {/* Mobile Card View */}
               <div className="block md:hidden space-y-3">
-                {filteredCashiers.map((cashier) => (
-                  <div key={cashier._id} className="border rounded-lg p-4 space-y-3">
+                {paginatedCashiers.map((cashier) => (
+                  <div 
+                    key={cashier._id} 
+                    className={`border rounded-lg p-4 space-y-3 transition-all active:scale-[0.98] ${
+                      actionLoading === cashier._id ? 'opacity-50' : ''
+                    }`}
+                  >
                     <div className="flex items-start justify-between">
-                      <div>
+                      <div 
+                        className="flex-1 cursor-pointer"
+                        onClick={() => router.push(`/admin/cashiers/${cashier._id}`)}
+                      >
                         <p className="font-medium">{cashier.name}</p>
-                        <p className="text-sm text-muted-foreground">{cashier.email}</p>
+                        <p className="text-sm text-muted-foreground truncate max-w-[180px]">{cashier.email}</p>
                       </div>
                       <div className="flex items-center gap-2">
                         {getStatusBadge(cashier.status)}
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                              <MoreVertical className="h-4 w-4" />
+                            <Button variant="ghost" size="icon" className="h-10 w-10 -mr-2">
+                              <MoreVertical className="h-5 w-5" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => router.push(`/admin/cashiers/${cashier._id}`)}>
-                              <Eye className="h-4 w-4 mr-2" />
+                          <DropdownMenuContent align="end" className="w-48">
+                            <DropdownMenuItem 
+                              onClick={() => router.push(`/admin/cashiers/${cashier._id}`)}
+                              className="py-3"
+                            >
+                              <Eye className="h-4 w-4 mr-3" />
                               View Details
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleEditCashier(cashier)}>
-                              <Edit2 className="h-4 w-4 mr-2" />
+                            <DropdownMenuItem 
+                              onClick={() => handleEditCashier(cashier)}
+                              className="py-3"
+                            >
+                              <Edit2 className="h-4 w-4 mr-3" />
                               Edit
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleToggleStatus(cashier)}>
+                            <DropdownMenuItem 
+                              onClick={() => handleChangePinClick(cashier)}
+                              className="py-3"
+                            >
+                              <Key className="h-4 w-4 mr-3" />
+                              Change PIN
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={() => handleToggleStatus(cashier)}
+                              className="py-3"
+                            >
                               {cashier.status === 'active' ? (
                                 <>
-                                  <UserX className="h-4 w-4 mr-2" />
+                                  <UserX className="h-4 w-4 mr-3" />
                                   Disable
                                 </>
                               ) : (
                                 <>
-                                  <UserCheck className="h-4 w-4 mr-2" />
+                                  <UserCheck className="h-4 w-4 mr-3" />
                                   Enable
                                 </>
                               )}
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => handleDeleteCashier(cashier._id)}
-                              className="text-red-600"
+                              className="text-red-600 py-3"
                             >
-                              <Trash2 className="h-4 w-4 mr-2" />
+                              <Trash2 className="h-4 w-4 mr-3" />
                               Delete
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-2 text-sm">
+                    {/* Quick action buttons for mobile */}
+                    <div className="flex gap-2 pt-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 h-9"
+                        onClick={() => router.push(`/admin/cashiers/${cashier._id}`)}
+                      >
+                        <Eye className="h-4 w-4 mr-1" />
+                        View
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 h-9"
+                        onClick={() => handleEditCashier(cashier)}
+                      >
+                        <Edit2 className="h-4 w-4 mr-1" />
+                        Edit
+                      </Button>
+                      <Button
+                        variant={cashier.status === 'active' ? 'outline' : 'default'}
+                        size="sm"
+                        className="flex-1 h-9"
+                        onClick={() => handleToggleStatus(cashier)}
+                      >
+                        {cashier.status === 'active' ? (
+                          <>
+                            <UserX className="h-4 w-4 mr-1" />
+                            Disable
+                          </>
+                        ) : (
+                          <>
+                            <UserCheck className="h-4 w-4 mr-1" />
+                            Enable
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-sm border-t pt-3">
                       <div>
-                        <p className="text-muted-foreground">Branch</p>
-                        <p>{cashier.branchName || branches.find(b => b._id === cashier.branchId)?.name || '-'}</p>
+                        <p className="text-muted-foreground text-xs">Branch</p>
+                        <p className="font-medium">{cashier.branchName || branches.find(b => b._id === cashier.branchId)?.name || '-'}</p>
                       </div>
                       <div>
-                        <p className="text-muted-foreground">Today's Sales</p>
-                        <p className="font-medium">{formatCurrency(cashier.todaySales || 0)}</p>
+                        <p className="text-muted-foreground text-xs">Today's Sales</p>
+                        <p className="font-medium text-green-600">{formatCurrency(cashier.todaySales || 0)}</p>
                       </div>
                     </div>
                   </div>
@@ -560,8 +730,8 @@ export default function CashiersPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredCashiers.map((cashier) => (
-                      <TableRow key={cashier._id}>
+                    {paginatedCashiers.map((cashier) => (
+                      <TableRow key={cashier._id} className={actionLoading === cashier._id ? 'opacity-50' : ''}>
                         <TableCell className="font-medium">{cashier.name}</TableCell>
                         <TableCell>{cashier.email}</TableCell>
                         <TableCell>
@@ -585,6 +755,10 @@ export default function CashiersPage() {
                               <DropdownMenuItem onClick={() => handleEditCashier(cashier)}>
                                 <Edit2 className="h-4 w-4 mr-2" />
                                 Edit
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleChangePinClick(cashier)}>
+                                <Key className="h-4 w-4 mr-2" />
+                                Change PIN
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => handleToggleStatus(cashier)}>
                                 {cashier.status === 'active' ? (
@@ -614,6 +788,62 @@ export default function CashiersPage() {
                   </TableBody>
                 </Table>
               </div>
+
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between pt-4 border-t mt-4">
+                  <p className="text-sm text-muted-foreground">
+                    Showing {(currentPage - 1) * itemsPerPage + 1} to{' '}
+                    {Math.min(currentPage * itemsPerPage, filteredCashiers.length)} of{' '}
+                    {filteredCashiers.length} cashiers
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      <span className="hidden sm:inline ml-1">Previous</span>
+                    </Button>
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                        let pageNum: number;
+                        if (totalPages <= 5) {
+                          pageNum = i + 1;
+                        } else if (currentPage <= 3) {
+                          pageNum = i + 1;
+                        } else if (currentPage >= totalPages - 2) {
+                          pageNum = totalPages - 4 + i;
+                        } else {
+                          pageNum = currentPage - 2 + i;
+                        }
+                        return (
+                          <Button
+                            key={pageNum}
+                            variant={currentPage === pageNum ? 'default' : 'outline'}
+                            size="sm"
+                            className="w-8 h-8 p-0"
+                            onClick={() => setCurrentPage(pageNum)}
+                          >
+                            {pageNum}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                    >
+                      <span className="hidden sm:inline mr-1">Next</span>
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </CardContent>
@@ -698,6 +928,72 @@ export default function CashiersPage() {
             </Button>
             <Button onClick={handleSubmit}>
               {editingCashier ? 'Update' : 'Create'} Cashier
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Change PIN Dialog */}
+      <Dialog open={isPinDialogOpen} onOpenChange={setIsPinDialogOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Key className="h-5 w-5" />
+              Change PIN
+            </DialogTitle>
+            <DialogDescription>
+              Set a new PIN for {selectedCashierForPin?.name}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="newPin">New PIN *</Label>
+              <Input
+                id="newPin"
+                type="password"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={6}
+                value={newPin}
+                onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ''))}
+                placeholder="Enter 4-6 digit PIN"
+                className="text-center text-lg tracking-widest"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirmPin">Confirm PIN *</Label>
+              <Input
+                id="confirmPin"
+                type="password"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={6}
+                value={confirmPin}
+                onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ''))}
+                placeholder="Confirm PIN"
+                className="text-center text-lg tracking-widest"
+              />
+            </div>
+            {newPin && confirmPin && newPin !== confirmPin && (
+              <p className="text-sm text-red-500">PINs do not match</p>
+            )}
+          </div>
+          <div className="flex gap-3 justify-end">
+            <Button variant="outline" onClick={() => setIsPinDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleChangePinSubmit}
+              disabled={!newPin || newPin.length < 4 || newPin !== confirmPin || actionLoading === selectedCashierForPin?._id}
+            >
+              {actionLoading === selectedCashierForPin?._id ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                'Change PIN'
+              )}
             </Button>
           </div>
         </DialogContent>

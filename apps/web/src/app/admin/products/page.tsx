@@ -11,7 +11,7 @@ import {
   CardTitle,
   Input,
 } from '@smartduka/ui';
-import { Plus, Trash2, Edit2, Download, Upload, Eye, Search, ChevronDown, ChevronUp, Package } from 'lucide-react';
+import { Plus, Trash2, Edit2, Download, Upload, Eye, Search, ChevronDown, ChevronUp, Package, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
@@ -54,6 +54,9 @@ function ProductsContent() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 20;
 
   useEffect(() => {
     loadData();
@@ -98,6 +101,7 @@ function ProductsContent() {
   const handleDeleteProduct = async (id: string) => {
     if (!token) return;
     if (!confirm('Are you sure you want to delete this product?')) return;
+    setActionLoading(id);
     try {
       const base = config.apiUrl;
       const res = await fetch(`${base}/inventory/products/${id}`, {
@@ -109,6 +113,8 @@ function ProductsContent() {
       loadData();
     } catch (err: any) {
       toast({ type: 'error', title: 'Delete failed', message: err?.message });
+    } finally {
+      setActionLoading(null);
     }
   };
 
@@ -403,14 +409,53 @@ function ProductsContent() {
                       </Badge>
                     </div>
                     <div className="col-span-1 md:col-span-2 flex gap-1">
-                      <Button size="sm" variant="ghost" title="View details" onClick={() => router.push(`/inventory/${product._id}`)}>
-                        <Eye className="h-4 w-4" />
+                      <Button 
+                        size="sm" 
+                        variant="ghost" 
+                        title="View details" 
+                        onClick={() => {
+                          setActionLoading(product._id + '-view');
+                          router.push(`/inventory/${product._id}`);
+                        }}
+                        disabled={actionLoading?.startsWith(product._id)}
+                        className="h-9 w-9 p-0 hover:bg-blue-100 hover:text-blue-600 dark:hover:bg-blue-900/30 transition-all active:scale-95"
+                      >
+                        {actionLoading === product._id + '-view' ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
                       </Button>
-                      <Button size="sm" variant="ghost" title="Edit product" onClick={() => router.push(`/inventory/${product._id}/edit`)}>
-                        <Edit2 className="h-4 w-4" />
+                      <Button 
+                        size="sm" 
+                        variant="ghost" 
+                        title="Edit product" 
+                        onClick={() => {
+                          setActionLoading(product._id + '-edit');
+                          router.push(`/inventory/${product._id}/edit`);
+                        }}
+                        disabled={actionLoading?.startsWith(product._id)}
+                        className="h-9 w-9 p-0 hover:bg-amber-100 hover:text-amber-600 dark:hover:bg-amber-900/30 transition-all active:scale-95"
+                      >
+                        {actionLoading === product._id + '-edit' ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Edit2 className="h-4 w-4" />
+                        )}
                       </Button>
-                      <Button size="sm" variant="ghost" title="Delete product" onClick={() => handleDeleteProduct(product._id)}>
-                        <Trash2 className="h-4 w-4 text-red-600" />
+                      <Button 
+                        size="sm" 
+                        variant="ghost" 
+                        title="Delete product" 
+                        onClick={() => handleDeleteProduct(product._id)}
+                        disabled={actionLoading?.startsWith(product._id)}
+                        className="h-9 w-9 p-0 hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-900/30 transition-all active:scale-95"
+                      >
+                        {actionLoading === product._id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4 text-red-600" />
+                        )}
                       </Button>
                     </div>
                   </div>

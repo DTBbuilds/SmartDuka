@@ -397,6 +397,41 @@ function POSContent() {
     setCurrentTime(new Date().toLocaleString("en-KE"));
   }, []);
 
+  // Get shopId from user context for multi-tenant isolation (moved up for receipts persistence)
+  const shopId = user?.shopId || (shop as any)?._id || shop?.id || '';
+
+  // Load receipts history from localStorage on mount
+  useEffect(() => {
+    if (typeof window === 'undefined' || !shopId) return;
+    try {
+      const stored = localStorage.getItem(`receipts-history-${shopId}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        // Only keep receipts from the last 7 days
+        const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+        const recentReceipts = parsed.filter((r: StoredReceipt) => {
+          const receiptDate = new Date(r.date).getTime();
+          return receiptDate > sevenDaysAgo;
+        });
+        setReceiptsHistory(recentReceipts);
+      }
+    } catch (err) {
+      console.error('Failed to load receipts history:', err);
+    }
+  }, [shopId]);
+
+  // Save receipts history to localStorage when it changes
+  useEffect(() => {
+    if (typeof window === 'undefined' || !shopId || receiptsHistory.length === 0) return;
+    try {
+      // Keep only the last 50 receipts to avoid localStorage limits
+      const toStore = receiptsHistory.slice(0, 50);
+      localStorage.setItem(`receipts-history-${shopId}`, JSON.stringify(toStore));
+    } catch (err) {
+      console.error('Failed to save receipts history:', err);
+    }
+  }, [receiptsHistory, shopId]);
+
   const categoryTabs = useMemo(
     () => [
       { id: "all", label: "All" },
@@ -404,9 +439,6 @@ function POSContent() {
     ],
     [categories],
   );
-
-  // Get shopId from user context for multi-tenant isolation
-  const shopId = user?.shopId || (shop as any)?._id || shop?.id || '';
 
   const refreshPendingCount = useCallback(async () => {
     if (typeof window === "undefined" || !shopId) return;

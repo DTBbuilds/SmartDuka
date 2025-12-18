@@ -156,88 +156,88 @@ export default function PaymentsAnalyticsPage() {
   }
 
   return (
-    <div className="container py-8">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => router.back()}>
+    <div className="container py-4 md:py-8 px-4 md:px-6">
+      {/* Header - Mobile optimized */}
+      <div className="flex flex-col gap-4 mb-6 md:mb-8">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={() => router.back()} className="h-9 w-9">
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
-            <h1 className="text-3xl font-bold">Payments Analytics</h1>
-            <p className="text-muted-foreground">Transaction tracking and payment insights</p>
+            <h1 className="text-xl md:text-3xl font-bold">Payments Analytics</h1>
+            <p className="text-sm text-muted-foreground hidden md:block">Transaction tracking and payment insights</p>
           </div>
         </div>
-        <Button onClick={() => router.push('/payments')}>
+        <Button onClick={() => router.push('/payments')} size="sm" className="w-full md:w-auto md:self-end">
           View All Transactions
         </Button>
       </div>
 
       {stats && (
         <>
-          {/* Key Metrics */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          {/* Key Metrics - Compact on mobile */}
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4 mb-6 md:mb-8">
             <Card className="bg-gradient-to-br from-green-500/10 to-green-600/5 border-green-500/20">
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Today's Payments</p>
-                    <p className="text-2xl font-bold text-green-700 dark:text-green-400">
-                      Ksh {stats.todayTotal.toLocaleString()}
+              <CardContent className="p-3 md:pt-6 md:p-6">
+                <div className="flex items-start justify-between">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs md:text-sm text-muted-foreground">Today</p>
+                    <p className="text-lg md:text-2xl font-bold text-green-700 dark:text-green-400 truncate">
+                      Ksh {(stats.todayTotal / 1000).toFixed(0)}K
                     </p>
-                    <p className="text-xs text-muted-foreground">{stats.todayTransactions} transactions</p>
+                    <p className="text-xs text-muted-foreground">{stats.todayTransactions} txns</p>
                   </div>
-                  <div className="p-3 rounded-full bg-green-500/20">
-                    <DollarSign className="h-6 w-6 text-green-600" />
+                  <div className="p-2 md:p-3 rounded-full bg-green-500/20 flex-shrink-0">
+                    <DollarSign className="h-4 w-4 md:h-6 md:w-6 text-green-600" />
                   </div>
                 </div>
               </CardContent>
             </Card>
 
             <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">This Month</p>
-                    <p className="text-2xl font-bold">
-                      Ksh {(stats.monthTotal / 1000000).toFixed(2)}M
+              <CardContent className="p-3 md:pt-6 md:p-6">
+                <div className="flex items-start justify-between">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs md:text-sm text-muted-foreground">Month</p>
+                    <p className="text-lg md:text-2xl font-bold truncate">
+                      Ksh {(stats.monthTotal / 1000000).toFixed(1)}M
                     </p>
-                    <p className="text-xs text-muted-foreground">{stats.monthTransactions} transactions</p>
+                    <p className="text-xs text-muted-foreground">{stats.monthTransactions} txns</p>
                   </div>
-                  <div className="p-3 rounded-full bg-blue-500/10">
-                    <TrendingUp className="h-6 w-6 text-blue-600" />
+                  <div className="p-2 md:p-3 rounded-full bg-blue-500/10 flex-shrink-0">
+                    <TrendingUp className="h-4 w-4 md:h-6 md:w-6 text-blue-600" />
                   </div>
                 </div>
               </CardContent>
             </Card>
 
             <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Success Rate</p>
-                    <p className="text-2xl font-bold text-green-600">{stats.successRate}%</p>
+              <CardContent className="p-3 md:pt-6 md:p-6">
+                <div className="flex items-start justify-between">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs md:text-sm text-muted-foreground">Success</p>
+                    <p className="text-lg md:text-2xl font-bold text-green-600">{stats.successRate}%</p>
                     <p className="text-xs text-muted-foreground">All time</p>
                   </div>
-                  <div className="p-3 rounded-full bg-green-500/10">
-                    <CheckCircle className="h-6 w-6 text-green-600" />
+                  <div className="p-2 md:p-3 rounded-full bg-green-500/10 flex-shrink-0">
+                    <CheckCircle className="h-4 w-4 md:h-6 md:w-6 text-green-600" />
                   </div>
                 </div>
               </CardContent>
             </Card>
 
             <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Avg Transaction</p>
-                    <p className="text-2xl font-bold">
-                      Ksh {stats.averageTransactionValue.toLocaleString()}
+              <CardContent className="p-3 md:pt-6 md:p-6">
+                <div className="flex items-start justify-between">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs md:text-sm text-muted-foreground">Avg Txn</p>
+                    <p className="text-lg md:text-2xl font-bold truncate">
+                      Ksh {(stats.averageTransactionValue / 1000).toFixed(1)}K
                     </p>
                     <p className="text-xs text-muted-foreground">Per order</p>
                   </div>
-                  <div className="p-3 rounded-full bg-purple-500/10">
-                    <Percent className="h-6 w-6 text-purple-600" />
+                  <div className="p-2 md:p-3 rounded-full bg-purple-500/10 flex-shrink-0">
+                    <Percent className="h-4 w-4 md:h-6 md:w-6 text-purple-600" />
                   </div>
                 </div>
               </CardContent>
@@ -245,15 +245,15 @@ export default function PaymentsAnalyticsPage() {
           </div>
 
           {/* Charts Row */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 mb-6 md:mb-8">
             {/* Payment Trend */}
             <Card className="lg:col-span-2">
-              <CardHeader>
-                <CardTitle>Payment Trend (Last 14 Days)</CardTitle>
-                <CardDescription>Daily transaction volume</CardDescription>
+              <CardHeader className="p-4 md:p-6">
+                <CardTitle className="text-base md:text-lg">Payment Trend</CardTitle>
+                <CardDescription className="text-xs md:text-sm">Last 14 days</CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="h-48 flex items-end gap-1">
+              <CardContent className="p-4 md:p-6 pt-0 md:pt-0">
+                <div className="h-36 md:h-48 flex items-end gap-0.5 md:gap-1">
                   {stats.dailyTrend.map((day, i) => {
                     const maxTotal = Math.max(...stats.dailyTrend.map(d => d.total));
                     const height = (day.total / maxTotal) * 100;
@@ -276,12 +276,12 @@ export default function PaymentsAnalyticsPage() {
 
             {/* Payment Methods */}
             <Card>
-              <CardHeader>
-                <CardTitle>Payment Methods</CardTitle>
-                <CardDescription>This month's breakdown</CardDescription>
+              <CardHeader className="p-4 md:p-6">
+                <CardTitle className="text-base md:text-lg">Payment Methods</CardTitle>
+                <CardDescription className="text-xs md:text-sm">This month</CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
+              <CardContent className="p-4 md:p-6 pt-0 md:pt-0">
+                <div className="space-y-3 md:space-y-4">
                   {stats.methodBreakdown.map((method, i) => (
                     <div key={i} className="space-y-2">
                       <div className="flex items-center justify-between">
@@ -312,43 +312,43 @@ export default function PaymentsAnalyticsPage() {
           </div>
 
           {/* Transactions */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
             {/* Recent Transactions */}
             <Card className="lg:col-span-2">
-              <CardHeader>
-                <CardTitle>Recent Transactions</CardTitle>
-                <CardDescription>Latest payment activity</CardDescription>
+              <CardHeader className="p-4 md:p-6">
+                <CardTitle className="text-base md:text-lg">Recent Transactions</CardTitle>
+                <CardDescription className="text-xs md:text-sm">Latest activity</CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {stats.recentTransactions.map((txn) => (
+              <CardContent className="p-4 md:p-6 pt-0 md:pt-0">
+                <div className="space-y-2 md:space-y-3">
+                  {stats.recentTransactions.slice(0, 5).map((txn) => (
                     <div
                       key={txn.id}
-                      className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent transition-colors cursor-pointer"
+                      className="flex items-center justify-between p-2 md:p-3 border rounded-lg hover:bg-accent transition-colors cursor-pointer active:scale-[0.99]"
                       onClick={() => router.push(`/orders?search=${txn.orderNumber}`)}
                     >
-                      <div className="flex items-center gap-3">
-                        {getMethodIcon(txn.method)}
-                        <div>
-                          <p className="font-medium">{txn.orderNumber}</p>
-                          <p className="text-xs text-muted-foreground">
-                            Ref: {txn.reference}
+                      <div className="flex items-center gap-2 md:gap-3 min-w-0">
+                        <div className="hidden md:block">{getMethodIcon(txn.method)}</div>
+                        <div className="min-w-0">
+                          <p className="font-medium text-sm md:text-base truncate">{txn.orderNumber}</p>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {txn.reference?.slice(0, 12) || 'N/A'}
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">
                         <div className="text-right">
-                          <p className="font-semibold">Ksh {txn.amount.toLocaleString()}</p>
+                          <p className="font-semibold text-sm md:text-base">Ksh {(txn.amount / 1000).toFixed(1)}K</p>
                           <p className="text-xs text-muted-foreground">
-                            {new Date(txn.timestamp).toLocaleTimeString()}
+                            {new Date(txn.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </p>
                         </div>
-                        <div className="flex items-center gap-1">
+                        <div className="hidden sm:flex items-center gap-1">
                           {getStatusIcon(txn.status)}
                           <Badge variant={
                             txn.status === 'completed' ? 'default' :
                             txn.status === 'pending' ? 'secondary' : 'destructive'
-                          }>
+                          } className="text-xs">
                             {txn.status}
                           </Badge>
                         </div>
@@ -361,14 +361,14 @@ export default function PaymentsAnalyticsPage() {
 
             {/* Failed Transactions */}
             <Card className={stats.failedTransactions.length > 0 ? 'border-red-500/40' : ''}>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <AlertTriangle className="h-5 w-5 text-red-600" />
-                  Failed Transactions
+              <CardHeader className="p-4 md:p-6">
+                <CardTitle className="flex items-center gap-2 text-base md:text-lg">
+                  <AlertTriangle className="h-4 w-4 md:h-5 md:w-5 text-red-600" />
+                  Failed
                 </CardTitle>
-                <CardDescription>Requires attention</CardDescription>
+                <CardDescription className="text-xs md:text-sm">Needs attention</CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-4 md:p-6 pt-0 md:pt-0">
                 {stats.failedTransactions.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
                     <CheckCircle className="h-12 w-12 mx-auto mb-2 text-green-500" />

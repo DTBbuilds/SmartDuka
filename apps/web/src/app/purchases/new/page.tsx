@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { Button, Card, CardContent, CardHeader, CardTitle, Input, Label, Textarea } from "@smartduka/ui";
-import { Plus, Trash2, ArrowLeft } from "lucide-react";
+import { Plus, Trash2, ArrowLeft, UserPlus, Loader2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 interface Supplier {
   _id: string;
@@ -40,6 +41,11 @@ export default function NewPurchasePage() {
   const [lineItems, setLineItems] = useState<LineItem[]>([
     { productId: "", productName: "", quantity: 1, unitCost: 0 },
   ]);
+  
+  // Quick add supplier
+  const [showAddSupplier, setShowAddSupplier] = useState(false);
+  const [newSupplierName, setNewSupplierName] = useState("");
+  const [addingSupplier, setAddingSupplier] = useState(false);
 
   useEffect(() => {
     fetchSuppliers();
@@ -58,6 +64,38 @@ export default function NewPurchasePage() {
       }
     } catch (error) {
       console.error("Failed to fetch suppliers:", error);
+    }
+  };
+
+  const handleQuickAddSupplier = async () => {
+    if (!newSupplierName.trim()) return;
+    
+    setAddingSupplier(true);
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+      const res = await fetch(`${apiUrl}/suppliers`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ name: newSupplierName.trim(), status: "active" }),
+      });
+      
+      if (res.ok) {
+        const newSupplier = await res.json();
+        setSuppliers([...suppliers, newSupplier]);
+        setFormData({ ...formData, supplierId: newSupplier._id });
+        setShowAddSupplier(false);
+        setNewSupplierName("");
+      } else {
+        alert("Failed to create supplier");
+      }
+    } catch (error) {
+      console.error("Failed to create supplier:", error);
+      alert("Failed to create supplier");
+    } finally {
+      setAddingSupplier(false);
     }
   };
 
@@ -156,14 +194,14 @@ export default function NewPurchasePage() {
   };
 
   return (
-    <div className="container py-8">
-      <div className="mb-8">
-        <Button variant="ghost" onClick={() => router.back()} className="mb-4">
+    <div className="container py-4 md:py-8 px-4 md:px-6">
+      <div className="mb-6 md:mb-8">
+        <Button variant="ghost" onClick={() => router.back()} className="mb-2 md:mb-4 -ml-2">
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back
         </Button>
-        <h1 className="text-3xl font-bold">New Purchase Order</h1>
-        <p className="text-muted-foreground">Create a new purchase order for restocking</p>
+        <h1 className="text-xl md:text-3xl font-bold">New Purchase Order</h1>
+        <p className="text-sm text-muted-foreground">Create a new purchase order for restocking</p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -177,20 +215,44 @@ export default function NewPurchasePage() {
                 <Label htmlFor="supplier">
                   Supplier <span className="text-destructive">*</span>
                 </Label>
-                <select
-                  id="supplier"
-                  value={formData.supplierId}
-                  onChange={(e) => setFormData({ ...formData, supplierId: e.target.value })}
-                  required
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                >
-                  <option value="">Select supplier</option>
-                  {suppliers.map((supplier) => (
-                    <option key={supplier._id} value={supplier._id}>
-                      {supplier.name}
-                    </option>
-                  ))}
-                </select>
+                <div className="flex gap-2">
+                  <select
+                    id="supplier"
+                    value={formData.supplierId}
+                    onChange={(e) => setFormData({ ...formData, supplierId: e.target.value })}
+                    required
+                    className="flex h-10 flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  >
+                    <option value="">Select supplier</option>
+                    {suppliers.map((supplier) => (
+                      <option key={supplier._id} value={supplier._id}>
+                        {supplier.name}
+                      </option>
+                    ))}
+                  </select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setShowAddSupplier(true)}
+                    title="Add new supplier"
+                    className="flex-shrink-0"
+                  >
+                    <UserPlus className="h-4 w-4" />
+                  </Button>
+                </div>
+                {suppliers.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    No suppliers found.{" "}
+                    <button
+                      type="button"
+                      className="text-primary underline"
+                      onClick={() => setShowAddSupplier(true)}
+                    >
+                      Add one now
+                    </button>
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -232,68 +294,131 @@ export default function NewPurchasePage() {
           <CardContent>
             <div className="space-y-4">
               {lineItems.map((item, index) => (
-                <div key={index} className="flex gap-4 items-end">
-                  <div className="flex-1 space-y-2">
-                    <Label>Product</Label>
-                    <select
-                      value={item.productId}
-                      onChange={(e) => updateLineItem(index, "productId", e.target.value)}
-                      required
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                    >
-                      <option value="">Select product</option>
-                      {products.map((product) => (
-                        <option key={product._id} value={product._id}>
-                          {product.name} ({product.sku})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="w-32 space-y-2">
-                    <Label>Quantity</Label>
-                    <Input
-                      type="number"
-                      min="1"
-                      value={item.quantity}
-                      onChange={(e) =>
-                        updateLineItem(index, "quantity", parseInt(e.target.value) || 0)
-                      }
-                      required
-                    />
-                  </div>
-
-                  <div className="w-32 space-y-2">
-                    <Label>Unit Cost</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={item.unitCost}
-                      onChange={(e) =>
-                        updateLineItem(index, "unitCost", parseFloat(e.target.value) || 0)
-                      }
-                      required
-                    />
-                  </div>
-
-                  <div className="w-32 space-y-2">
-                    <Label>Total</Label>
-                    <div className="flex h-10 items-center rounded-md border border-input bg-muted px-3 text-sm">
-                      {(item.quantity * item.unitCost).toFixed(2)}
+                <div key={index} className="border rounded-lg p-3 md:p-4 space-y-3 md:space-y-0">
+                  {/* Mobile: Stacked layout */}
+                  <div className="md:hidden space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-muted-foreground">Item {index + 1}</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeLineItem(index)}
+                        disabled={lineItems.length === 1}
+                        className="h-8 w-8 p-0"
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs">Product</Label>
+                      <select
+                        value={item.productId}
+                        onChange={(e) => updateLineItem(index, "productId", e.target.value)}
+                        required
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      >
+                        <option value="">Select product</option>
+                        {products.map((product) => (
+                          <option key={product._id} value={product._id}>
+                            {product.name} ({product.sku})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Qty</Label>
+                        <Input
+                          type="number"
+                          min="1"
+                          value={item.quantity}
+                          onChange={(e) => updateLineItem(index, "quantity", parseInt(e.target.value) || 0)}
+                          required
+                          className="h-10"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Cost</Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={item.unitCost}
+                          onChange={(e) => updateLineItem(index, "unitCost", parseFloat(e.target.value) || 0)}
+                          required
+                          className="h-10"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Total</Label>
+                        <div className="flex h-10 items-center justify-center rounded-md border bg-muted px-2 text-sm font-medium">
+                          {(item.quantity * item.unitCost).toLocaleString()}
+                        </div>
+                      </div>
                     </div>
                   </div>
 
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => removeLineItem(index)}
-                    disabled={lineItems.length === 1}
-                    aria-label="Remove item"
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
+                  {/* Desktop: Row layout */}
+                  <div className="hidden md:flex gap-4 items-end">
+                    <div className="flex-1 space-y-2">
+                      <Label>Product</Label>
+                      <select
+                        value={item.productId}
+                        onChange={(e) => updateLineItem(index, "productId", e.target.value)}
+                        required
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      >
+                        <option value="">Select product</option>
+                        {products.map((product) => (
+                          <option key={product._id} value={product._id}>
+                            {product.name} ({product.sku})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="w-28 space-y-2">
+                      <Label>Quantity</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        value={item.quantity}
+                        onChange={(e) => updateLineItem(index, "quantity", parseInt(e.target.value) || 0)}
+                        required
+                      />
+                    </div>
+
+                    <div className="w-28 space-y-2">
+                      <Label>Unit Cost</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={item.unitCost}
+                        onChange={(e) => updateLineItem(index, "unitCost", parseFloat(e.target.value) || 0)}
+                        required
+                      />
+                    </div>
+
+                    <div className="w-28 space-y-2">
+                      <Label>Total</Label>
+                      <div className="flex h-10 items-center rounded-md border border-input bg-muted px-3 text-sm">
+                        {(item.quantity * item.unitCost).toLocaleString()}
+                      </div>
+                    </div>
+
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeLineItem(index)}
+                      disabled={lineItems.length === 1}
+                      aria-label="Remove item"
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -307,15 +432,54 @@ export default function NewPurchasePage() {
           </CardContent>
         </Card>
 
-        <div className="flex gap-4">
-          <Button type="button" variant="outline" onClick={() => router.back()}>
+        <div className="flex gap-3 md:gap-4">
+          <Button type="button" variant="outline" onClick={() => router.back()} className="flex-1 md:flex-none">
             Cancel
           </Button>
-          <Button type="submit" disabled={isLoading}>
-            {isLoading ? "Creating..." : "Create Purchase Order"}
+          <Button type="submit" disabled={isLoading} className="flex-1 md:flex-none">
+            {isLoading ? "Creating..." : "Create Order"}
           </Button>
         </div>
       </form>
+
+      {/* Quick Add Supplier Dialog */}
+      <Dialog open={showAddSupplier} onOpenChange={setShowAddSupplier}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Add New Supplier</DialogTitle>
+            <DialogDescription>
+              Quickly add a new supplier to use in this purchase order
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="supplierName">Supplier Name *</Label>
+              <Input
+                id="supplierName"
+                value={newSupplierName}
+                onChange={(e) => setNewSupplierName(e.target.value)}
+                placeholder="e.g., ABC Distributors"
+                onKeyDown={(e) => e.key === "Enter" && handleQuickAddSupplier()}
+              />
+            </div>
+          </div>
+          <div className="flex gap-3 justify-end">
+            <Button variant="outline" onClick={() => setShowAddSupplier(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleQuickAddSupplier} disabled={!newSupplierName.trim() || addingSupplier}>
+              {addingSupplier ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Adding...
+                </>
+              ) : (
+                "Add Supplier"
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -25,6 +25,8 @@ import {
   Clock,
   XCircle,
   AlertTriangle,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { DataTable, Column } from "@/components/shared/data-table";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -74,6 +76,8 @@ export default function PaymentsPage() {
   const [methodFilter, setMethodFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [dateFilter, setDateFilter] = useState<string>("today");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 20;
 
   // Check if user is admin
   if (user?.role !== "admin") {
@@ -273,6 +277,18 @@ export default function PaymentsPage() {
     );
   });
 
+  // Pagination
+  const totalPages = Math.ceil(filteredPayments.length / itemsPerPage);
+  const paginatedPayments = filteredPayments.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter, methodFilter, dateFilter]);
+
   const columns: Column<Payment>[] = [
     {
       key: "createdAt",
@@ -354,30 +370,30 @@ export default function PaymentsPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+    <div className="p-4 md:p-6 space-y-4 md:space-y-6">
+      {/* Header - Mobile optimized */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Payments</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-xl md:text-2xl font-bold">Payments</h1>
+          <p className="text-sm text-muted-foreground hidden md:block">
             Track and manage all payment transactions
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => { fetchPayments(); fetchStats(); }}>
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh
+          <Button variant="outline" size="sm" onClick={() => { fetchPayments(); fetchStats(); }} className="flex-shrink-0">
+            <RefreshCw className="h-4 w-4 md:mr-2" />
+            <span className="hidden md:inline">Refresh</span>
           </Button>
-          <Button variant="outline" size="sm" onClick={handleExport}>
-            <Download className="h-4 w-4 mr-2" />
-            Export CSV
+          <Button variant="outline" size="sm" onClick={handleExport} className="flex-shrink-0">
+            <Download className="h-4 w-4 md:mr-2" />
+            <span className="hidden md:inline">Export</span>
           </Button>
         </div>
       </div>
 
-      {/* Stats Cards */}
+      {/* Stats Cards - Compact on mobile */}
       {stats && (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-6 md:gap-4">
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
@@ -459,60 +475,54 @@ export default function PaymentsPage() {
         </div>
       )}
 
-      {/* Filters */}
+      {/* Filters - Stacked on mobile */}
       <Card>
-        <CardContent className="p-4">
-          <div className="flex flex-wrap gap-4">
+        <CardContent className="p-3 md:p-4">
+          <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:gap-4">
             {/* Search */}
-            <div className="flex-1 min-w-[200px]">
+            <div className="flex-1 min-w-0 md:min-w-[200px]">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search by order, customer, receipt..."
+                  placeholder="Search..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9"
+                  className="pl-9 h-10"
                 />
               </div>
             </div>
 
-            {/* Date Filter */}
-            <div className="flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-muted-foreground" />
+            {/* Filters row */}
+            <div className="flex gap-2 overflow-x-auto">
+              {/* Date Filter */}
               <select
                 value={dateFilter}
                 onChange={(e) => setDateFilter(e.target.value)}
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm flex-shrink-0"
               >
                 <option value="all">All Time</option>
                 <option value="today">Today</option>
-                <option value="week">This Week</option>
-                <option value="month">This Month</option>
+                <option value="week">Week</option>
+                <option value="month">Month</option>
               </select>
-            </div>
 
-            {/* Status Filter */}
-            <div className="flex items-center gap-2">
-              <Filter className="h-4 w-4 text-muted-foreground" />
+              {/* Status Filter */}
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm flex-shrink-0"
               >
                 <option value="all">All Status</option>
                 <option value="completed">Completed</option>
                 <option value="pending">Pending</option>
                 <option value="failed">Failed</option>
               </select>
-            </div>
 
-            {/* Method Filter */}
-            <div className="flex items-center gap-2">
-              <CreditCard className="h-4 w-4 text-muted-foreground" />
+              {/* Method Filter */}
               <select
                 value={methodFilter}
                 onChange={(e) => setMethodFilter(e.target.value)}
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm flex-shrink-0"
               >
                 <option value="all">All Methods</option>
                 <option value="mpesa">M-Pesa</option>
@@ -540,11 +550,67 @@ export default function PaymentsPage() {
         <Card>
           <CardContent className="p-0">
             <DataTable
-              data={filteredPayments}
+              data={paginatedPayments}
               columns={columns}
               searchable={false}
               emptyMessage="No payments found"
             />
+            
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 border-t">
+                <p className="text-sm text-muted-foreground">
+                  Showing {(currentPage - 1) * itemsPerPage + 1} to{' '}
+                  {Math.min(currentPage * itemsPerPage, filteredPayments.length)} of{' '}
+                  {filteredPayments.length} payments
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    <span className="hidden sm:inline ml-1">Prev</span>
+                  </Button>
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      let pageNum: number;
+                      if (totalPages <= 5) {
+                        pageNum = i + 1;
+                      } else if (currentPage <= 3) {
+                        pageNum = i + 1;
+                      } else if (currentPage >= totalPages - 2) {
+                        pageNum = totalPages - 4 + i;
+                      } else {
+                        pageNum = currentPage - 2 + i;
+                      }
+                      return (
+                        <Button
+                          key={pageNum}
+                          variant={currentPage === pageNum ? 'default' : 'outline'}
+                          size="sm"
+                          className="w-8 h-8 p-0"
+                          onClick={() => setCurrentPage(pageNum)}
+                        >
+                          {pageNum}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                  >
+                    <span className="hidden sm:inline mr-1">Next</span>
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

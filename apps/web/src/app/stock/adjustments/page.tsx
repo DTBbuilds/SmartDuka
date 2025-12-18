@@ -284,71 +284,74 @@ export default function StockAdjustmentsPage() {
     { key: "reference", header: "Ref #", render: (adj) => <span className="text-sm font-mono">{adj.reference || "—"}</span> },
   ];
 
-  if (isLoading) return <div className="p-6"><TableSkeleton /></div>;
+  if (isLoading) return <div className="p-4 md:p-6"><TableSkeleton /></div>;
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+    <div className="p-4 md:p-6 space-y-4 md:space-y-6">
+      {/* Header - Mobile optimized */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Stock Adjustments</h1>
-          <p className="text-muted-foreground">Track and manage inventory adjustments</p>
+          <h1 className="text-xl md:text-2xl font-bold">Stock Adjustments</h1>
+          <p className="text-sm text-muted-foreground hidden md:block">Track and manage inventory adjustments</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => { fetchAdjustments(); fetchSummary(); }}>
-            <RefreshCw className="h-4 w-4 mr-2" />Refresh
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          <Button variant="outline" size="sm" onClick={() => { fetchAdjustments(); fetchSummary(); }} className="flex-shrink-0">
+            <RefreshCw className="h-4 w-4 md:mr-2" />
+            <span className="hidden md:inline">Refresh</span>
           </Button>
-          <Button variant="outline" size="sm" onClick={handleExport}>
-            <Download className="h-4 w-4 mr-2" />Export
+          <Button variant="outline" size="sm" onClick={handleExport} className="flex-shrink-0">
+            <Download className="h-4 w-4 md:mr-2" />
+            <span className="hidden md:inline">Export</span>
           </Button>
-          <Button size="sm" onClick={handleAdd}>
-            <Plus className="h-4 w-4 mr-2" />New Adjustment
+          <Button size="sm" onClick={handleAdd} className="flex-shrink-0">
+            <Plus className="h-4 w-4 mr-1 md:mr-2" />
+            <span>New</span>
           </Button>
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-4">
+      {/* Stats - Compact grid on mobile */}
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-4">
         <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 rounded-lg"><FileText className="h-5 w-5 text-blue-600" /></div>
+          <CardContent className="p-3 md:p-4">
+            <div className="flex items-center gap-2 md:gap-3">
+              <div className="p-1.5 md:p-2 bg-blue-100 rounded-lg"><FileText className="h-4 w-4 md:h-5 md:w-5 text-blue-600" /></div>
               <div>
-                <p className="text-sm text-muted-foreground">Total Adjustments</p>
-                <p className="text-2xl font-bold">{summary?.totalAdjustments || adjustments.length}</p>
+                <p className="text-xs md:text-sm text-muted-foreground">Total</p>
+                <p className="text-lg md:text-2xl font-bold">{summary?.totalAdjustments || adjustments.length}</p>
               </div>
             </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 rounded-lg"><TrendingUp className="h-5 w-5 text-green-600" /></div>
+          <CardContent className="p-3 md:p-4">
+            <div className="flex items-center gap-2 md:gap-3">
+              <div className="p-1.5 md:p-2 bg-green-100 rounded-lg"><TrendingUp className="h-4 w-4 md:h-5 md:w-5 text-green-600" /></div>
               <div>
-                <p className="text-sm text-muted-foreground">Stock Added</p>
-                <p className="text-2xl font-bold text-green-600">+{adjustments.filter(a => a.delta > 0).reduce((s, a) => s + a.delta, 0)}</p>
+                <p className="text-xs md:text-sm text-muted-foreground">Added</p>
+                <p className="text-lg md:text-2xl font-bold text-green-600">+{adjustments.filter(a => a.delta > 0).reduce((s, a) => s + a.delta, 0)}</p>
               </div>
             </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-red-100 rounded-lg"><TrendingDown className="h-5 w-5 text-red-600" /></div>
+          <CardContent className="p-3 md:p-4">
+            <div className="flex items-center gap-2 md:gap-3">
+              <div className="p-1.5 md:p-2 bg-red-100 rounded-lg"><TrendingDown className="h-4 w-4 md:h-5 md:w-5 text-red-600" /></div>
               <div>
-                <p className="text-sm text-muted-foreground">Stock Removed</p>
-                <p className="text-2xl font-bold text-red-600">{adjustments.filter(a => a.delta < 0).reduce((s, a) => s + a.delta, 0)}</p>
+                <p className="text-xs md:text-sm text-muted-foreground">Removed</p>
+                <p className="text-lg md:text-2xl font-bold text-red-600">{adjustments.filter(a => a.delta < 0).reduce((s, a) => s + a.delta, 0)}</p>
               </div>
             </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-purple-100 rounded-lg"><ArrowUpDown className="h-5 w-5 text-purple-600" /></div>
+          <CardContent className="p-3 md:p-4">
+            <div className="flex items-center gap-2 md:gap-3">
+              <div className="p-1.5 md:p-2 bg-purple-100 rounded-lg"><ArrowUpDown className="h-4 w-4 md:h-5 md:w-5 text-purple-600" /></div>
               <div>
-                <p className="text-sm text-muted-foreground">Net Change</p>
-                <p className={`text-2xl font-bold ${(summary?.netAdjustment || 0) >= 0 ? "text-green-600" : "text-red-600"}`}>
+                <p className="text-xs md:text-sm text-muted-foreground">Net</p>
+                <p className={`text-lg md:text-2xl font-bold ${(summary?.netAdjustment || 0) >= 0 ? "text-green-600" : "text-red-600"}`}>
                   {(summary?.netAdjustment || 0) >= 0 ? "+" : ""}{summary?.netAdjustment || 0}
                 </p>
               </div>
@@ -357,41 +360,48 @@ export default function StockAdjustmentsPage() {
         </Card>
       </div>
 
-      {/* Filters */}
+      {/* Filters - Stacked on mobile */}
       <Card>
-        <CardContent className="p-4">
-          <div className="flex flex-wrap gap-4">
-            <div className="flex-1 min-w-[200px]">
+        <CardContent className="p-3 md:p-4">
+          <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:gap-4">
+            <div className="flex-1 min-w-0 md:min-w-[200px]">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input placeholder="Search products..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9" />
+                <Input placeholder="Search products..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9 h-10" />
               </div>
             </div>
-            <select value={reasonFilter} onChange={(e) => setReasonFilter(e.target.value)} className="h-9 rounded-md border px-3 text-sm">
-              <option value="all">All Reasons</option>
-              {REASONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-            </select>
-            <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="h-9 rounded-md border px-3 text-sm">
-              <option value="all">All Types</option>
-              <option value="increase">Increases Only</option>
-              <option value="decrease">Decreases Only</option>
-            </select>
+            <div className="flex gap-2">
+              <select value={reasonFilter} onChange={(e) => setReasonFilter(e.target.value)} className="flex-1 h-10 rounded-md border px-3 text-sm bg-background">
+                <option value="all">All Reasons</option>
+                {REASONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+              </select>
+              <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="flex-1 h-10 rounded-md border px-3 text-sm bg-background">
+                <option value="all">All Types</option>
+                <option value="increase">Increases</option>
+                <option value="decrease">Decreases</option>
+              </select>
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Low Stock Alert */}
+      {/* Low Stock Alert - Scrollable on mobile */}
       {products.filter(p => p.stock <= (p.lowStockThreshold ?? 10)).length > 0 && (
         <Card className="border-orange-200 bg-orange-50 dark:bg-orange-900/10">
-          <CardContent className="p-4">
+          <CardContent className="p-3 md:p-4">
             <div className="flex items-center gap-2 mb-2">
-              <AlertTriangle className="h-5 w-5 text-orange-600" />
-              <span className="font-semibold text-orange-800 dark:text-orange-400">Low Stock Products</span>
+              <AlertTriangle className="h-4 w-4 md:h-5 md:w-5 text-orange-600" />
+              <span className="text-sm md:text-base font-semibold text-orange-800 dark:text-orange-400">Low Stock</span>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
               {products.filter(p => p.stock <= (p.lowStockThreshold ?? 10)).slice(0, 5).map(p => (
-                <Badge key={p._id} variant="outline" className="cursor-pointer hover:bg-orange-100" onClick={() => { setFormData({ ...formData, productId: p._id, adjustmentType: "increase", reason: "received" }); setIsModalOpen(true); }}>
-                  {p.name}: {p.stock} left
+                <Badge 
+                  key={p._id} 
+                  variant="outline" 
+                  className="cursor-pointer hover:bg-orange-100 whitespace-nowrap flex-shrink-0 py-1.5 px-3" 
+                  onClick={() => { setFormData({ ...formData, productId: p._id, adjustmentType: "increase", reason: "received" }); setIsModalOpen(true); }}
+                >
+                  {p.name}: {p.stock}
                 </Badge>
               ))}
             </div>
