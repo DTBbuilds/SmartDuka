@@ -66,8 +66,10 @@ export default function EditProductPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
+      
       if (res.ok) {
-        const data = await res.json();
         setProduct(data);
         setFormData({
           name: data.name || "",
@@ -97,9 +99,11 @@ export default function EditProductPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
+      const catText = await res.text();
+      const catData = catText ? JSON.parse(catText) : [];
+      
       if (res.ok) {
-        const data = await res.json();
-        setCategories(data);
+        setCategories(catData);
       }
     } catch (error) {
       console.error("Failed to fetch categories:", error);
@@ -131,7 +135,8 @@ export default function EditProductPage() {
       if (res.ok) {
         router.push("/admin");
       } else {
-        const errorData = await res.json().catch(() => ({}));
+        const errText = await res.text();
+        const errorData = errText ? JSON.parse(errText) : {};
         const errorMessage = errorData.message || errorData.error || "Failed to update product";
         throw new Error(Array.isArray(errorMessage) ? errorMessage.join(", ") : errorMessage);
       }

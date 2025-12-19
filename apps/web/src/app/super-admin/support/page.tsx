@@ -42,8 +42,10 @@ export default function SupportTickets() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
+      
       if (res.ok) {
-        const data = await res.json();
         setTickets(data.tickets || []);
       } else {
         toast({ type: 'error', title: 'Failed', message: 'Could not load tickets' });

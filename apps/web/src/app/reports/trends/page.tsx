@@ -67,8 +67,10 @@ export default function TrendsPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
+      
       if (res.ok) {
-        const data = await res.json();
         setTrendsData(data);
       }
     } catch (error) {

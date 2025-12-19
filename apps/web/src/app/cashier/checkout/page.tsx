@@ -42,8 +42,10 @@ export default function CheckoutPage() {
         }),
       });
 
+      const text = await res.text();
+      const order = text ? JSON.parse(text) : {};
+      
       if (res.ok) {
-        const order = await res.json();
         window.location.href = `/cashier/receipt/${order._id}`;
       }
     } catch (error) {

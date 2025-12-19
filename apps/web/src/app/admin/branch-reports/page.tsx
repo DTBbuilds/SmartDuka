@@ -67,8 +67,10 @@ export default function BranchReportsPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : [];
+      
       if (res.ok) {
-        const data = await res.json();
         setBranches(Array.isArray(data) ? data : []);
         if (data.length > 0) {
           setSelectedBranch(data[0]._id);

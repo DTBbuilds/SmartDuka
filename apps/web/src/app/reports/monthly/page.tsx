@@ -57,8 +57,10 @@ export default function MonthlySalesPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
+      
       if (res.ok) {
-        const data = await res.json();
         setSalesData(data);
       }
     } catch (error) {

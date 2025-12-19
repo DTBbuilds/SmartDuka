@@ -58,8 +58,10 @@ export default function ShopDetailsPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
+      
       if (res.ok) {
-        const data = await res.json();
         setShop(data);
       } else if (res.status === 404) {
         toast({ type: 'error', title: 'Not Found', message: 'Shop not found' });

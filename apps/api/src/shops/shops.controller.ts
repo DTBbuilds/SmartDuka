@@ -25,7 +25,23 @@ export class ShopsController {
   @UseGuards(JwtAuthGuard)
   @Get('my-shop')
   async getMyShop(@CurrentUser() user: Record<string, any>) {
+    // Use shopId from JWT payload - works for all users (admin, cashier, etc.)
+    if (user.shopId) {
+      return this.shopsService.findById(user.shopId);
+    }
+    // Fallback to findByOwner for legacy tokens or shop owners
     return this.shopsService.findByOwner(user.sub);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Put('my-shop')
+  async updateMyShop(@Body() dto: any, @CurrentUser() user: Record<string, any>) {
+    // Use shopId from JWT payload
+    if (!user.shopId) {
+      throw new ForbiddenException('No shop associated with this user');
+    }
+    return this.shopsService.update(user.shopId, dto);
   }
 
   @UseGuards(JwtAuthGuard)

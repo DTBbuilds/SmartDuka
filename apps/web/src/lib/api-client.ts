@@ -94,7 +94,9 @@ async function request<T = unknown>(
     return {} as T;
   }
   
-  const data = await response.json().catch(() => ({}));
+  // Safely parse JSON - handle empty responses
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : {};
   
   if (!response.ok) {
     // Handle 401 Unauthorized - redirect to login
@@ -179,7 +181,9 @@ export const api = {
       ...options,
     });
     
-    const data = await response.json().catch(() => ({}));
+    // Safely parse JSON - handle empty responses
+    const text = await response.text();
+    const data = text ? JSON.parse(text) : {};
     
     if (!response.ok) {
       throw {

@@ -35,12 +35,14 @@ function ShiftStartContent() {
         }),
       });
 
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
+      
       if (!res.ok) {
-        const data = await res.json().catch(() => ({ message: 'Failed to start shift' }));
         throw new Error(data.message || 'Failed to start shift');
       }
 
-      const shift = await res.json();
+      const shift = data;
 
       // Store shift in localStorage
       localStorage.setItem('smartduka:shift', JSON.stringify(shift));

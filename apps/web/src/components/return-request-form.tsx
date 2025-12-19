@@ -129,9 +129,11 @@ export function ReturnRequestForm({ order, onSuccess }: ReturnRequestFormProps) 
         }),
       });
 
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
+      
       if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message || "Failed to create return request");
+        throw new Error(data.message || "Failed to create return request");
       }
 
       toast({

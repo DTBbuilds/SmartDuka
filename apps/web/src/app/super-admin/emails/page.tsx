@@ -172,9 +172,11 @@ export default function SuperAdminEmailsPage() {
     const res = await fetch(`${apiUrl}/admin/emails/stats`, {
       headers: { Authorization: `Bearer ${token}` },
     });
+    const statsText = await res.text();
+    const statsData = statsText ? JSON.parse(statsText) : {};
+    
     if (res.ok) {
-      const data = await res.json();
-      setStats(data.summary || data);
+      setStats(statsData.summary || statsData);
     }
   };
 
@@ -182,9 +184,11 @@ export default function SuperAdminEmailsPage() {
     const res = await fetch(`${apiUrl}/admin/emails/config/status`, {
       headers: { Authorization: `Bearer ${token}` },
     });
+    const smtpText = await res.text();
+    const smtpData = smtpText ? JSON.parse(smtpText) : {};
+    
     if (res.ok) {
-      const data = await res.json();
-      setSmtpStatus(data);
+      setSmtpStatus(smtpData);
     }
   };
 
@@ -199,9 +203,11 @@ export default function SuperAdminEmailsPage() {
     const res = await fetch(`${apiUrl}/admin/emails/logs?${params}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
+    const logsText = await res.text();
+    const logsData = logsText ? JSON.parse(logsText) : {};
+    
     if (res.ok) {
-      const data = await res.json();
-      setEmails(data.logs || data);
+      setEmails(logsData.logs || logsData);
     }
   };
 
@@ -209,9 +215,11 @@ export default function SuperAdminEmailsPage() {
     const res = await fetch(`${apiUrl}/admin/emails/logs?limit=10`, {
       headers: { Authorization: `Bearer ${token}` },
     });
+    const recentText = await res.text();
+    const recentData = recentText ? JSON.parse(recentText) : {};
+    
     if (res.ok) {
-      const data = await res.json();
-      setEmails(data.logs || data);
+      setEmails(recentData.logs || recentData);
     }
   };
 
@@ -219,9 +227,11 @@ export default function SuperAdminEmailsPage() {
     const res = await fetch(`${apiUrl}/admin/emails/templates`, {
       headers: { Authorization: `Bearer ${token}` },
     });
+    const templatesText = await res.text();
+    const templatesData = templatesText ? JSON.parse(templatesText) : [];
+    
     if (res.ok) {
-      const data = await res.json();
-      setTemplates(data);
+      setTemplates(templatesData);
     }
   };
 
@@ -280,9 +290,11 @@ export default function SuperAdminEmailsPage() {
         body: JSON.stringify({}),
       });
       
+      const previewText = await res.text();
+      const previewData = previewText ? JSON.parse(previewText) : {};
+      
       if (res.ok) {
-        const data = await res.json();
-        setPreviewTemplate({ ...template, ...data });
+        setPreviewTemplate({ ...template, ...previewData });
       }
     } catch (err: any) {
       alert(err.message || 'Failed to preview template');

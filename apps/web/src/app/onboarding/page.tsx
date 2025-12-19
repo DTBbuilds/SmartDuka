@@ -108,7 +108,8 @@ export default function OnboardingPage() {
         });
 
         if (!res.ok) {
-          const errorData = await res.json().catch(() => ({ message: "Failed to update shop" }));
+          const errText = await res.text();
+          const errorData = errText ? JSON.parse(errText) : { message: "Failed to update shop" };
           throw new Error(errorData.message || "Failed to update shop");
         }
       }

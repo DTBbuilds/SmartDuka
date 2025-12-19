@@ -78,8 +78,10 @@ export default function OrdersAnalyticsPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
       
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
+      
       if (res.ok) {
-        const data = await res.json();
         setStats(data);
       } else {
         console.error('Failed to load orders analytics:', res.status);

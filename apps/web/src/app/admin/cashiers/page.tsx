@@ -130,8 +130,10 @@ export default function CashiersPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
+      
       if (res.ok) {
-        const data = await res.json();
         const cashierList = Array.isArray(data) ? data : (data.data || data.users || []);
         setCashiers(cashierList);
       } else {
@@ -151,9 +153,11 @@ export default function CashiersPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
+      const brText = await res.text();
+      const brData = brText ? JSON.parse(brText) : {};
+      
       if (res.ok) {
-        const data = await res.json();
-        const branchList = Array.isArray(data) ? data : (data.data || []);
+        const branchList = Array.isArray(brData) ? brData : (brData.data || []);
         setBranches(branchList);
       }
     } catch (err) {
@@ -243,7 +247,8 @@ export default function CashiersPage() {
         setError(null);
         setTimeout(() => setSuccess(null), 3000);
       } else {
-        const errorData = await res.json();
+        const errText = await res.text();
+        const errorData = errText ? JSON.parse(errText) : {};
         setError(errorData.message || 'Failed to save cashier');
       }
     } catch (err) {
@@ -340,7 +345,8 @@ export default function CashiersPage() {
         setIsPinDialogOpen(false);
         setTimeout(() => setSuccess(null), 3000);
       } else {
-        const data = await res.json();
+        const pinErrText = await res.text();
+        const data = pinErrText ? JSON.parse(pinErrText) : {};
         setError(data.message || 'Failed to change PIN');
       }
     } catch (err) {

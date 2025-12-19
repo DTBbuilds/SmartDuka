@@ -72,9 +72,11 @@ export default function AuditLogsPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
+      const brText = await res.text();
+      const brData = brText ? JSON.parse(brText) : [];
+      
       if (res.ok) {
-        const data = await res.json();
-        setBranches(Array.isArray(data) ? data : []);
+        setBranches(Array.isArray(brData) ? brData : []);
       }
     } catch (error) {
       console.error('Failed to fetch branches:', error);
@@ -99,8 +101,10 @@ export default function AuditLogsPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
+      const logsText = await res.text();
+      const data = logsText ? JSON.parse(logsText) : {};
+      
       if (res.ok) {
-        const data = await res.json();
         setLogs(Array.isArray(data.logs) ? data.logs : []);
         setTotalPages(Math.ceil((data.total || 0) / limit));
       } else {

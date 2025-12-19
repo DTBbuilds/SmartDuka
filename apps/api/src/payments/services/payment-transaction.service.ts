@@ -11,7 +11,7 @@ export interface CreatePaymentTransactionDto {
   cashierId: string;
   cashierName: string;
   branchId?: string;
-  paymentMethod: 'cash' | 'card' | 'mpesa' | 'other';
+  paymentMethod: 'cash' | 'card' | 'mpesa' | 'send_money' | 'qr' | 'stripe' | 'bank' | 'other';
   amount: number;
   status?: 'completed' | 'pending' | 'failed';
   customerName?: string;
@@ -37,6 +37,10 @@ export interface PaymentStatsDto {
     cash: { count: number; amount: number };
     card: { count: number; amount: number };
     mpesa: { count: number; amount: number };
+    send_money: { count: number; amount: number };
+    qr: { count: number; amount: number };
+    stripe: { count: number; amount: number };
+    bank: { count: number; amount: number };
     other: { count: number; amount: number };
   };
 }
@@ -177,6 +181,10 @@ export class PaymentTransactionService {
         cash: { count: 0, amount: 0 },
         card: { count: 0, amount: 0 },
         mpesa: { count: 0, amount: 0 },
+        send_money: { count: 0, amount: 0 },
+        qr: { count: 0, amount: 0 },
+        stripe: { count: 0, amount: 0 },
+        bank: { count: 0, amount: 0 },
         other: { count: 0, amount: 0 },
       };
 
@@ -378,9 +386,9 @@ export class PaymentTransactionService {
       ? Math.round(monthTotal / completedCount) 
       : 0;
 
-    // Method breakdown
+    // Method breakdown - use TODAY's transactions for consistency with summary stats
     const methodMap = new Map<string, { count: number; total: number }>();
-    monthTransactions.filter(t => t.status === 'completed').forEach(t => {
+    todayTransactions.filter(t => t.status === 'completed').forEach(t => {
       const method = t.paymentMethod || 'cash';
       const existing = methodMap.get(method) || { count: 0, total: 0 };
       existing.count += 1;
@@ -388,12 +396,12 @@ export class PaymentTransactionService {
       methodMap.set(method, existing);
     });
 
-    const totalCompleted = completedCount;
+    const todayCompletedCount = todayTransactions.filter(t => t.status === 'completed').length;
     const methodBreakdown = Array.from(methodMap.entries()).map(([method, data]) => ({
       method: method === 'mpesa' ? 'M-Pesa' : method.charAt(0).toUpperCase() + method.slice(1),
       count: data.count,
       total: data.total,
-      percentage: totalCompleted > 0 ? Math.round((data.count / totalCompleted) * 1000) / 10 : 0,
+      percentage: todayCompletedCount > 0 ? Math.round((data.count / todayCompletedCount) * 1000) / 10 : 0,
     }));
 
     // Daily trend for last 14 days
@@ -502,9 +510,9 @@ export class PaymentTransactionService {
       .sort((a, b) => new Date(b.timestamp!).getTime() - new Date(a.timestamp!).getTime())
       .slice(0, 10);
 
-    // Branch breakdown (for shop-level analytics showing per-branch stats)
+    // Branch breakdown (for shop-level analytics showing per-branch stats) - use TODAY's data
     const branchMap = new Map<string, { count: number; total: number; branchId: string }>();
-    monthTransactions.filter(t => t.status === 'completed').forEach(t => {
+    todayTransactions.filter(t => t.status === 'completed').forEach(t => {
       const bId = t.branchId?.toString() || 'main';
       const existing = branchMap.get(bId) || { count: 0, total: 0, branchId: bId };
       existing.count += 1;
@@ -516,7 +524,7 @@ export class PaymentTransactionService {
       branchId: bId,
       count: data.count,
       total: data.total,
-      percentage: totalCompleted > 0 ? Math.round((data.count / totalCompleted) * 1000) / 10 : 0,
+      percentage: todayCompletedCount > 0 ? Math.round((data.count / todayCompletedCount) * 1000) / 10 : 0,
     }));
 
     return {

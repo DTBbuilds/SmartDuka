@@ -70,7 +70,8 @@ export default function ReconciliationPage() {
       });
 
       if (!res.ok) throw new Error("Failed to load reconciliations");
-      const data = await res.json();
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : [];
       setReconciliations(data);
     } catch (err: any) {
       toast({
@@ -93,7 +94,8 @@ export default function ReconciliationPage() {
       });
 
       if (!res.ok) throw new Error("Failed to load stats");
-      const data = await res.json();
+      const statsText = await res.text();
+      const data = statsText ? JSON.parse(statsText) : {};
       setStats(data);
     } catch (err: any) {
       console.error("Failed to load stats", err);

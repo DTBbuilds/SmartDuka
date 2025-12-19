@@ -100,11 +100,13 @@ export function usePaginatedData<T>({
         signal: abortControllerRef.current.signal,
       });
 
+      // Safely parse JSON - handle empty responses
+      const text = await response.text();
+      const result = text ? JSON.parse(text) : {};
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-
-      const result = await response.json();
       
       // Handle both paginated and non-paginated responses
       if (result.data && result.meta) {
@@ -236,11 +238,13 @@ export function useInfiniteData<T>({
         },
       });
 
+      // Safely parse JSON - handle empty responses
+      const text = await response.text();
+      const result = text ? JSON.parse(text) : {};
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-
-      const result = await response.json();
       
       if (result.data && result.meta) {
         if (append) {

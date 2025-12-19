@@ -32,8 +32,10 @@ export default function DashboardPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
+      
       if (res.ok) {
-        const data = await res.json();
         setStats(data);
       }
     } catch (error) {

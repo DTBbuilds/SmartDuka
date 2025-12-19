@@ -57,7 +57,8 @@ export function CategoryManagement({ token }: CategoryManagementProps) {
       });
 
       if (!res.ok) throw new Error(`Failed (${res.status})`);
-      const data = await res.json();
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : [];
       setCategories(Array.isArray(data) ? data : []);
     } catch (err: any) {
       toast({ type: 'error', title: 'Load failed', message: err?.message });
@@ -107,9 +108,11 @@ export function CategoryManagement({ token }: CategoryManagementProps) {
         body: JSON.stringify(formData),
       });
 
+      const saveText = await res.text();
+      const saveData = saveText ? JSON.parse(saveText) : {};
+      
       if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message || `Failed (${res.status})`);
+        throw new Error(saveData.message || `Failed (${res.status})`);
       }
 
       toast({
@@ -156,9 +159,11 @@ export function CategoryManagement({ token }: CategoryManagementProps) {
         headers: { Authorization: `Bearer ${token}` },
       });
 
+      const delText = await res.text();
+      const delData = delText ? JSON.parse(delText) : {};
+      
       if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message || `Failed (${res.status})`);
+        throw new Error(delData.message || `Failed (${res.status})`);
       }
 
       toast({ type: 'success', title: 'Category deleted' });

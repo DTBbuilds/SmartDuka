@@ -39,8 +39,10 @@ export function BranchesShortcuts() {
       const headers = { Authorization: `Bearer ${token}` };
 
       const res = await fetch(`${base}/branches`, { headers });
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
+      
       if (res.ok) {
-        const data = await res.json();
         const branchList = Array.isArray(data) ? data : data.data || [];
         setBranches(branchList);
 

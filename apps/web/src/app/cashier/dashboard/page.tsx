@@ -110,8 +110,10 @@ function CashierDashboardContent() {
               headers: { Authorization: `Bearer ${token}` },
             });
             
+            const salesText = await salesRes.text();
+            const salesData = salesText ? JSON.parse(salesText) : {};
+            
             if (salesRes.ok) {
-              const salesData = await salesRes.json();
               setShift(prev => prev ? {
                 ...prev,
                 totalSales: salesData.totalSales,
@@ -160,7 +162,8 @@ function CashierDashboardContent() {
         return;
       }
 
-      const data = await res.json();
+      const statsText = await res.text();
+      const data = statsText ? JSON.parse(statsText) : {};
 
       // Format recent orders for display
       const formattedTransactions: Transaction[] = (data.recentOrders || []).map((order: any) => ({

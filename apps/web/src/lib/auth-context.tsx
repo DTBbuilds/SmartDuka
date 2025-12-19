@@ -111,11 +111,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         shopId,
       }),
     });
+    const text = await res.text();
+    const data = text ? JSON.parse(text) : {};
     if (!res.ok) {
-      const error = await res.json().catch(() => ({ message: 'Login failed' }));
-      throw new Error(error.message || 'Login failed');
+      throw new Error(data.message || 'Login failed');
     }
-    const data = await res.json();
     const { token: authToken, user: userData, shop: shopData } = data;
     
     if (!authToken) throw new Error('No token received');
@@ -160,12 +160,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       body: JSON.stringify({ shop: normalizedShop, admin: adminPayload }),
     });
     
+    const text = await res.text();
+    const data = text ? JSON.parse(text) : {};
     if (!res.ok) {
-      const error = await res.json().catch(() => ({ message: 'Registration failed' }));
-      throw new Error(error.message || 'Registration failed');
+      throw new Error(data.message || 'Registration failed');
     }
-    
-    const data = await res.json();
     const { token: authToken, user: userData, shop: shopInfo } = data;
     
     if (!authToken) throw new Error('No token received');
@@ -253,12 +252,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       body: JSON.stringify({ pin, shopId }),
     });
 
+    const text = await res.text();
+    const data = text ? JSON.parse(text) : {};
     if (!res.ok) {
-      const error = await res.json().catch(() => ({ message: 'Login failed' }));
-      throw new Error(error.message || 'Invalid PIN or Shop ID');
+      throw new Error(data.message || 'Invalid PIN or Shop ID');
     }
-
-    const data = await res.json();
     const { token: authToken, user: userData, shop: shopInfo } = data;
 
     if (!authToken) throw new Error('No token received');
@@ -295,12 +293,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       body: JSON.stringify({ googleProfile, shop: shopData }),
     });
 
+    const text = await res.text();
+    const data = text ? JSON.parse(text) : {};
     if (!res.ok) {
-      const error = await res.json().catch(() => ({ message: 'Registration failed' }));
-      throw new Error(error.message || 'Registration failed');
+      throw new Error(data.message || 'Registration failed');
     }
-
-    const data = await res.json();
     const { token: authToken, user: userData, shop: shopInfo } = data;
 
     if (!authToken) throw new Error('No token received');
@@ -340,7 +337,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
       if (res.ok) {
-        const updatedShop = await res.json();
+        const text = await res.text();
+        if (!text) return shop; // Return current shop if empty response
+        const updatedShop = JSON.parse(text);
         const newShop: Shop = {
           id: updatedShop._id || updatedShop.id,
           name: updatedShop.name,

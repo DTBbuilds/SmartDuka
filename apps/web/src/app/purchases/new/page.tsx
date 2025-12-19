@@ -58,8 +58,10 @@ export default function NewPurchasePage() {
       const res = await fetch(`${apiUrl}/suppliers/active`, {
         headers: { Authorization: `Bearer ${token}` },
       });
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : [];
+      
       if (res.ok) {
-        const data = await res.json();
         setSuppliers(data);
       }
     } catch (error) {
@@ -82,8 +84,10 @@ export default function NewPurchasePage() {
         body: JSON.stringify({ name: newSupplierName.trim(), status: "active" }),
       });
       
+      const supplierText = await res.text();
+      const newSupplier = supplierText ? JSON.parse(supplierText) : {};
+      
       if (res.ok) {
-        const newSupplier = await res.json();
         setSuppliers([...suppliers, newSupplier]);
         setFormData({ ...formData, supplierId: newSupplier._id });
         setShowAddSupplier(false);
@@ -105,8 +109,10 @@ export default function NewPurchasePage() {
       const res = await fetch(`${apiUrl}/inventory/products`, {
         headers: { Authorization: `Bearer ${token}` },
       });
+      const prodText = await res.text();
+      const data = prodText ? JSON.parse(prodText) : [];
+      
       if (res.ok) {
-        const data = await res.json();
         setProducts(data);
       }
     } catch (error) {

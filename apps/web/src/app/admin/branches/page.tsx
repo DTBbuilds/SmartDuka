@@ -53,8 +53,10 @@ export default function BranchesPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
+      
       if (res.ok) {
-        const data = await res.json();
         // Handle both array response and {success, data} response format
         const branchList = Array.isArray(data) ? data : (data.data || []);
         setBranches(branchList);
@@ -115,7 +117,8 @@ export default function BranchesPage() {
         setError(null);
         setTimeout(() => setSuccess(null), 3000);
       } else {
-        const errorData = await res.json();
+        const errText = await res.text();
+        const errorData = errText ? JSON.parse(errText) : {};
         setError(errorData.message || 'Failed to save branch');
       }
     } catch (error) {

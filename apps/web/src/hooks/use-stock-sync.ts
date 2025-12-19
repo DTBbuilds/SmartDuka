@@ -21,7 +21,9 @@ export function useStockSync(apiUrl: string, token: string | null) {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error(`Failed (${res.status})`);
-      const products = await res.json();
+      // Safely parse JSON - handle empty responses
+      const text = await res.text();
+      const products = text ? JSON.parse(text) : [];
       
       const newStockData = new Map<string, StockUpdate>();
       products.forEach((product: any) => {

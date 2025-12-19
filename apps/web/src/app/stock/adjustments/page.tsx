@@ -119,7 +119,10 @@ export default function StockAdjustmentsPage() {
       const res = await fetch(`${base}/stock/adjustments`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (res.ok) setAdjustments(await res.json());
+      if (res.ok) {
+        const text = await res.text();
+        setAdjustments(text ? JSON.parse(text) : []);
+      }
     } catch (e) {
       console.error("Failed to fetch adjustments:", e);
     } finally {
@@ -134,7 +137,10 @@ export default function StockAdjustmentsPage() {
       const res = await fetch(`${base}/inventory/products?limit=200`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (res.ok) setProducts(await res.json());
+      if (res.ok) {
+        const text = await res.text();
+        setProducts(text ? JSON.parse(text) : []);
+      }
     } catch (e) {
       console.error("Failed to fetch products:", e);
     }
@@ -147,7 +153,10 @@ export default function StockAdjustmentsPage() {
       const res = await fetch(`${base}/stock/adjustments/summary`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (res.ok) setSummary(await res.json());
+      if (res.ok) {
+        const text = await res.text();
+        setSummary(text ? JSON.parse(text) : null);
+      }
     } catch (e) {
       console.error("Failed to fetch summary:", e);
     }
@@ -192,7 +201,8 @@ export default function StockAdjustmentsPage() {
         await Promise.all([fetchAdjustments(), fetchProducts(), fetchSummary()]);
         setIsModalOpen(false);
       } else {
-        const err = await res.json().catch(() => ({}));
+        const errText = await res.text();
+        const err = errText ? JSON.parse(errText) : {};
         throw new Error(err.message || "Failed to create adjustment");
       }
     } catch (e: any) {

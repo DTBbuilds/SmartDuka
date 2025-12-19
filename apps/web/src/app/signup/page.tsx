@@ -75,8 +75,10 @@ export default function SignupPage() {
         }),
       });
 
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
+      
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
         throw new Error(data.message || "Registration failed");
       }
 

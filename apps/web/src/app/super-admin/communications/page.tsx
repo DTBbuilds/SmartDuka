@@ -144,9 +144,11 @@ export default function SuperAdminCommunicationsPage() {
       const res = await fetch(`${apiUrl}/super-admin/communications/shops`, {
         headers: { Authorization: `Bearer ${token}` },
       });
+      const shopsText = await res.text();
+      const shopsData = shopsText ? JSON.parse(shopsText) : [];
+      
       if (res.ok) {
-        const data = await res.json();
-        setShops(data);
+        setShops(shopsData);
       }
     } catch (err: any) {
       console.error('Failed to load shops:', err);
@@ -167,9 +169,11 @@ export default function SuperAdminCommunicationsPage() {
       const res = await fetch(`${apiUrl}/super-admin/communications/invoices?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
+      const invText = await res.text();
+      const invData = invText ? JSON.parse(invText) : {};
+      
       if (res.ok) {
-        const data = await res.json();
-        setInvoices(data.invoices || []);
+        setInvoices(invData.invoices || []);
       }
     } catch (err: any) {
       console.error('Failed to load invoices:', err);
@@ -221,7 +225,8 @@ export default function SuperAdminCommunicationsPage() {
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
+      const emailText = await res.text();
+      const data = emailText ? JSON.parse(emailText) : {};
 
       if (res.ok && data.success) {
         setSuccess(`Email sent successfully! Sent: ${data.sent}, Failed: ${data.failed}`);
@@ -296,7 +301,8 @@ export default function SuperAdminCommunicationsPage() {
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
+      const createText = await res.text();
+      const data = createText ? JSON.parse(createText) : {};
 
       if (res.ok) {
         setSuccess(`Invoice ${data.invoiceNumber} created successfully!`);
@@ -332,11 +338,13 @@ export default function SuperAdminCommunicationsPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
+      const resendText = await res.text();
+      const resendData = resendText ? JSON.parse(resendText) : {};
+      
       if (res.ok) {
         setSuccess('Invoice email sent successfully!');
       } else {
-        const data = await res.json();
-        setError(data.message || 'Failed to send invoice email');
+        setError(resendData.message || 'Failed to send invoice email');
       }
     } catch (err: any) {
       setError(err.message || 'Failed to send invoice email');

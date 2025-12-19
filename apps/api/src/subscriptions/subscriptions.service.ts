@@ -13,6 +13,8 @@ import { Subscription, SubscriptionDocument, SubscriptionStatus, BillingCycle } 
 import { SubscriptionPlan, SubscriptionPlanDocument } from './schemas/subscription-plan.schema';
 import { SubscriptionInvoice, SubscriptionInvoiceDocument, InvoiceStatus, InvoiceType } from './schemas/subscription-invoice.schema';
 import { Shop, ShopDocument } from '../shops/schemas/shop.schema';
+import { Product, ProductDocument } from '../inventory/schemas/product.schema';
+import { User, UserDocument } from '../users/schemas/user.schema';
 import {
   CreateSubscriptionDto,
   ChangePlanDto,
@@ -44,6 +46,10 @@ export class SubscriptionsService {
     private readonly invoiceModel: Model<SubscriptionInvoiceDocument>,
     @InjectModel(Shop.name)
     private readonly shopModel: Model<ShopDocument>,
+    @InjectModel(Product.name)
+    private readonly productModel: Model<ProductDocument>,
+    @InjectModel(User.name)
+    private readonly userModel: Model<UserDocument>,
     private readonly configService: ConfigService,
   ) {}
 
@@ -90,6 +96,34 @@ export class SubscriptionsService {
 
     const plans = [
       {
+        code: 'trial',
+        name: 'Trial',
+        description: 'Free plan with limited features to get started',
+        monthlyPrice: 0,
+        annualPrice: 0,
+        setupPrice: 0,
+        maxShops: 1,
+        maxEmployees: 1,
+        maxProducts: 25,
+        features: [
+          'Basic POS System',
+          'Limited Inventory (25 products)',
+          'Basic Sales Reports',
+          'Email Support',
+        ],
+        setupIncludes: {
+          siteSurvey: false,
+          stocktake: false,
+          setup: false,
+          training: false,
+          support: true,
+          freeMonths: 0,
+          optional: false,
+        },
+        displayOrder: 0,
+        colorTheme: 'gray',
+      },
+      {
         code: 'starter',
         name: 'Starter',
         description: 'Perfect for small shops just getting started',
@@ -98,7 +132,7 @@ export class SubscriptionsService {
         setupPrice: SETUP_FEE,
         maxShops: 1,
         maxEmployees: 2,
-        maxProducts: 500,
+        maxProducts: 250,
         features: [
           'POS System',
           'Inventory Management',
@@ -128,7 +162,7 @@ export class SubscriptionsService {
         setupPrice: SETUP_FEE,
         maxShops: 2,
         maxEmployees: 5,
-        maxProducts: 1000,
+        maxProducts: 750,
         features: [
           'Everything in Starter',
           'Multi-Branch Support',
@@ -221,6 +255,81 @@ export class SubscriptionsService {
   }
 
   /**
+   * Ensure trial plan exists (for existing databases)
+   */
+  async ensureTrialPlanExists(): Promise<void> {
+    const trialPlan = await this.planModel.findOne({ code: 'trial' });
+    if (!trialPlan) {
+      await this.planModel.create({
+        code: 'trial',
+        name: 'Trial',
+        description: 'Free plan with limited features to get started',
+        monthlyPrice: 0,
+        annualPrice: 0,
+        setupPrice: 0,
+        maxShops: 1,
+        maxEmployees: 1,
+        maxProducts: 25,
+        features: [
+          'Basic POS System',
+          'Limited Inventory (25 products)',
+          'Basic Sales Reports',
+          'Email Support',
+        ],
+        setupIncludes: {
+          siteSurvey: false,
+          stocktake: false,
+          setup: false,
+          training: false,
+          support: true,
+          freeMonths: 0,
+          optional: false,
+        },
+        displayOrder: 0,
+        colorTheme: 'gray',
+        status: 'active',
+      });
+      this.logger.log('Trial plan created');
+    }
+  }
+
+  /**
+   * Get trial plan
+   */
+  async getTrialPlan(): Promise<SubscriptionPlanDocument | null> {
+    return this.planModel.findOne({ code: 'trial', status: 'active' });
+  }
+
+  /**
+   * Update plan product limits
+   * Trial: 25, Starter: 250, Basic: 750
+   */
+  async updatePlanProductLimits(): Promise<{ updated: number; message: string }> {
+    const updates = [
+      { code: 'trial', maxProducts: 25 },
+      { code: 'starter', maxProducts: 250 },
+      { code: 'basic', maxProducts: 750 },
+    ];
+
+    let updatedCount = 0;
+    for (const update of updates) {
+      const result = await this.planModel.updateOne(
+        { code: update.code },
+        { $set: { maxProducts: update.maxProducts } },
+      );
+      if (result.modifiedCount > 0) {
+        updatedCount++;
+        this.logger.log(`Updated ${update.code} plan: maxProducts = ${update.maxProducts}`);
+      }
+    }
+
+    return {
+      updated: updatedCount,
+      message: `Updated product limits: Trial=25, Starter=250, Basic=750`,
+    };
+  }
+
+  /**
    * Update all subscription plans with new setup pricing
    * Setup fee: KES 3,000 (optional) - includes 1 month training & support
    */
@@ -273,7 +382,15 @@ export class SubscriptionsService {
       throw new NotFoundException('Subscription plan not found');
     }
 
-    return this.mapSubscriptionToResponse(subscription, plan);
+    // Fetch real-time usage counts from database
+    const realTimeUsage = await this.getUsageCounts(shopId);
+
+    // Also update stored counts in background (don't await)
+    this.syncUsageCountsForShop(shopId).catch(err => 
+      this.logger.error(`Background sync failed for shop ${shopId}:`, err)
+    );
+
+    return this.mapSubscriptionToResponse(subscription, plan, realTimeUsage);
   }
 
   /**
@@ -388,6 +505,38 @@ export class SubscriptionsService {
     const newPlan = await this.planModel.findOne({ code: dto.newPlanCode, status: 'active' });
     if (!newPlan) {
       throw new NotFoundException(`Plan '${dto.newPlanCode}' not found`);
+    }
+
+    // Get current usage counts
+    const currentUsage = await this.getUsageCounts(shopId);
+
+    // Check if downgrading would exceed new plan limits
+    const limitWarnings: string[] = [];
+    
+    if (currentUsage.products > newPlan.maxProducts) {
+      limitWarnings.push(
+        `You have ${currentUsage.products} products but ${newPlan.name} plan only supports ${newPlan.maxProducts}. ` +
+        `Please remove ${currentUsage.products - newPlan.maxProducts} products first or some features may be restricted.`
+      );
+    }
+    
+    if (currentUsage.employees > newPlan.maxEmployees) {
+      limitWarnings.push(
+        `You have ${currentUsage.employees} employees but ${newPlan.name} plan only supports ${newPlan.maxEmployees}. ` +
+        `Please remove ${currentUsage.employees - newPlan.maxEmployees} employees first.`
+      );
+    }
+    
+    if (currentUsage.shops > newPlan.maxShops) {
+      limitWarnings.push(
+        `You have ${currentUsage.shops} shops but ${newPlan.name} plan only supports ${newPlan.maxShops}. ` +
+        `Please remove ${currentUsage.shops - newPlan.maxShops} shops first.`
+      );
+    }
+
+    // Log warnings but allow the change (user was warned in frontend)
+    if (limitWarnings.length > 0) {
+      this.logger.warn(`Plan change for shop ${shopId} exceeds limits: ${limitWarnings.join(' | ')}`);
     }
 
     const oldPlanCode = subscription.planCode;
@@ -1016,12 +1165,20 @@ export class SubscriptionsService {
   private mapSubscriptionToResponse(
     subscription: SubscriptionDocument,
     plan: SubscriptionPlanDocument,
+    realTimeUsage?: { products: number; employees: number; shops: number },
   ): SubscriptionResponseDto {
     const now = new Date();
     const daysRemaining = Math.max(
       0,
       Math.ceil((subscription.currentPeriodEnd.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)),
     );
+
+    // Use real-time usage if provided, otherwise fall back to stored counts
+    const usage = realTimeUsage || {
+      products: subscription.currentProductCount,
+      employees: subscription.currentEmployeeCount,
+      shops: subscription.currentShopCount,
+    };
 
     return {
       id: subscription._id.toString(),
@@ -1040,9 +1197,9 @@ export class SubscriptionsService {
       trialEndDate: subscription.trialEndDate,
       autoRenew: subscription.autoRenew,
       usage: {
-        shops: { current: subscription.currentShopCount, limit: plan.maxShops },
-        employees: { current: subscription.currentEmployeeCount, limit: plan.maxEmployees },
-        products: { current: subscription.currentProductCount, limit: plan.maxProducts },
+        shops: { current: usage.shops, limit: plan.maxShops },
+        employees: { current: usage.employees, limit: plan.maxEmployees },
+        products: { current: usage.products, limit: plan.maxProducts },
       },
       features: plan.features,
     };
@@ -1259,20 +1416,69 @@ export class SubscriptionsService {
 
     for (const subscription of subscriptions) {
       try {
-        // Count actual resources for this shop
-        // Note: These counts would come from the respective services
-        // For now, we'll just log that sync was attempted
-        this.logger.log(`Syncing usage counts for shop ${subscription.shopId}`);
-        
-        // In a full implementation, you would:
-        // 1. Count branches from branches collection
-        // 2. Count employees from users collection
-        // 3. Count products from products collection
-        // 4. Update subscription with actual counts
+        await this.syncUsageCountsForShop(subscription.shopId.toString());
       } catch (error) {
         this.logger.error(`Failed to sync counts for subscription ${subscription._id}:`, error);
       }
     }
+  }
+
+  /**
+   * Sync usage counts for a specific shop's subscription
+   */
+  async syncUsageCountsForShop(shopId: string): Promise<void> {
+    const subscription = await this.subscriptionModel.findOne({
+      shopId: new Types.ObjectId(shopId),
+    });
+
+    if (!subscription) {
+      return;
+    }
+
+    try {
+      // Count actual resources for this shop
+      const [productCount, employeeCount, shopCount] = await Promise.all([
+        // Count products for this shop
+        this.productModel.countDocuments({ shopId: new Types.ObjectId(shopId) }),
+        // Count employees (users with role 'employee' or 'cashier' for this shop)
+        this.userModel.countDocuments({ 
+          shopId: new Types.ObjectId(shopId),
+          role: { $in: ['employee', 'cashier', 'manager'] },
+        }),
+        // Count shops/branches (for now, just 1 per subscription - could expand to branches)
+        1, // Each subscription is for one shop, branches would be counted separately
+      ]);
+
+      // Update subscription with actual counts
+      subscription.currentProductCount = productCount;
+      subscription.currentEmployeeCount = employeeCount;
+      subscription.currentShopCount = shopCount;
+      await subscription.save();
+
+      this.logger.log(`Synced usage counts for shop ${shopId}: products=${productCount}, employees=${employeeCount}, shops=${shopCount}`);
+    } catch (error) {
+      this.logger.error(`Failed to sync usage counts for shop ${shopId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get current usage counts for a shop (real-time from database)
+   */
+  async getUsageCounts(shopId: string): Promise<{ products: number; employees: number; shops: number }> {
+    const [productCount, employeeCount] = await Promise.all([
+      this.productModel.countDocuments({ shopId: new Types.ObjectId(shopId) }),
+      this.userModel.countDocuments({ 
+        shopId: new Types.ObjectId(shopId),
+        role: { $in: ['employee', 'cashier', 'manager'] },
+      }),
+    ]);
+
+    return {
+      products: productCount,
+      employees: employeeCount,
+      shops: 1, // Each subscription is for one shop
+    };
   }
 
   /**

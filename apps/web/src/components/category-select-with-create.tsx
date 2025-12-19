@@ -104,12 +104,12 @@ export function CategorySelectWithCreate({
         body: JSON.stringify({ name: trimmedName }),
       });
 
+      const text = await res.text();
+      const newCategory = text ? JSON.parse(text) : {};
+      
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.message || `Failed to create category (${res.status})`);
+        throw new Error(newCategory.message || `Failed to create category (${res.status})`);
       }
-
-      const newCategory = await res.json();
       
       // Notify parent of new category
       if (onCategoryCreated) {
@@ -152,12 +152,12 @@ export function CategorySelectWithCreate({
         body: JSON.stringify({ name: trimmedName }),
       });
 
+      const quickText = await res.text();
+      const newCategory = quickText ? JSON.parse(quickText) : {};
+      
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.message || `Failed to create category (${res.status})`);
+        throw new Error(newCategory.message || `Failed to create category (${res.status})`);
       }
-
-      const newCategory = await res.json();
       
       if (onCategoryCreated) {
         onCategoryCreated(newCategory);

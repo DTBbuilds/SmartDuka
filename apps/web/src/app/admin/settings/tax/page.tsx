@@ -60,7 +60,8 @@ export default function TaxSettingsPage() {
 
       if (!res.ok) throw new Error('Failed to load settings');
 
-      const data = await res.json();
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
       setSettings(data);
     } catch (err: any) {
       toast({

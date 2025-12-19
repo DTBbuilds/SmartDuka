@@ -83,8 +83,10 @@ export function BranchPerformanceReport() {
       const res = await fetch(`${base}/branches`, {
         headers: { Authorization: `Bearer ${token}` },
       });
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
+      
       if (res.ok) {
-        const data = await res.json();
         const branchList = Array.isArray(data) ? data : data.data || [];
         setBranches(branchList);
         if (branchList.length > 0) {
@@ -106,9 +108,11 @@ export function BranchPerformanceReport() {
         `${base}/reports/branch/${selectedBranch}/performance?period=${dateRange}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
+      const perfText = await res.text();
+      const perfData = perfText ? JSON.parse(perfText) : {};
+      
       if (res.ok) {
-        const data = await res.json();
-        setPerformance(data);
+        setPerformance(perfData);
       } else {
         toast({ type: 'error', title: 'Error', message: 'Failed to load performance data' });
       }

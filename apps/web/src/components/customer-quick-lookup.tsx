@@ -57,7 +57,8 @@ export function CustomerQuickLookup({
         );
 
         if (!res.ok) throw new Error("Search failed");
-        const data = await res.json();
+        const text = await res.text();
+        const data = text ? JSON.parse(text) : [];
         setResults(data);
       } catch (err: any) {
         toast({

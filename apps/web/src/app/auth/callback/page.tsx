@@ -81,8 +81,10 @@ function AuthCallbackContent() {
         },
       });
 
+      const text = await res.text();
+      const shop = text ? JSON.parse(text) : {};
+      
       if (res.ok) {
-        const shop = await res.json();
         window.localStorage.setItem('smartduka:shop', JSON.stringify(shop));
       }
 

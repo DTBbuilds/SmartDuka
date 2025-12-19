@@ -526,7 +526,8 @@ function POSContent() {
         });
         
         if (res.ok) {
-          const shift = await res.json();
+          const text = await res.text();
+          const shift = text ? JSON.parse(text) : null;
           setCurrentShift(shift);
           if (shift) {
             setShiftStartTime(new Date(shift.startTime));
@@ -587,7 +588,8 @@ function POSContent() {
         }
         const res = await fetch(`${base}/inventory/categories`, { signal: controller.signal, headers });
         if (!res.ok) throw new Error(`Failed to load categories (${res.status})`);
-        const data = await res.json();
+        const text = await res.text();
+        const data = text ? JSON.parse(text) : [];
         setCategories(Array.isArray(data) ? data : []);
       } catch (e: any) {
         // Ignore abort errors (normal during cleanup)
@@ -619,7 +621,8 @@ function POSContent() {
         }
         const res = await fetch(url, { signal: controller.signal, headers });
         if (!res.ok) throw new Error(`Failed to load products (${res.status})`);
-        const data = await res.json();
+        const prodText = await res.text();
+        const data = prodText ? JSON.parse(prodText) : [];
         const normalized = (Array.isArray(data) ? data : []).map((product: any) => ({
           _id: product._id ?? product.id,
           name: product.name,
@@ -672,7 +675,8 @@ function POSContent() {
           },
         });
         if (res.ok) {
-          const data = await res.json();
+          const settingsText = await res.text();
+          const data = settingsText ? JSON.parse(settingsText) : {};
           setShopSettings(data);
         }
       } catch (err) {
@@ -776,7 +780,8 @@ function POSContent() {
       });
       
       if (res.ok) {
-        const data = await res.json();
+        const barcodeText = await res.text();
+        const data = barcodeText ? JSON.parse(barcodeText) : {};
         if (data.found && data.product) {
           handleAddToCart(data.product);
           toast({ type: 'success', title: 'Added to cart', message: data.product.name });

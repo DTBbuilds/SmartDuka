@@ -117,7 +117,8 @@ export default function StaffAssignmentPage() {
         setError(null);
         setTimeout(() => setSuccess(null), 3000);
       } else {
-        const errorData = await res.json();
+        const errText = await res.text();
+        const errorData = errText ? JSON.parse(errText) : {};
         setError(errorData.message || 'Failed to assign staff');
       }
     } catch (error) {

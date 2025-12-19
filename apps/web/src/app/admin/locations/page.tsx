@@ -76,7 +76,8 @@ export default function LocationsPage() {
       });
 
       if (!res.ok) throw new Error("Failed to load locations");
-      const data = await res.json();
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : [];
       setLocations(data);
     } catch (err: any) {
       toast({

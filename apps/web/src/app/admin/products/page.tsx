@@ -136,7 +136,8 @@ function ProductsContent() {
         body: JSON.stringify({ products: importedProducts, options }),
       });
       if (!res.ok) throw new Error(`Failed (${res.status})`);
-      const result = await res.json();
+      const text = await res.text();
+      const result = text ? JSON.parse(text) : {};
       
       let message = `Imported ${result.imported} products`;
       if (result.updated > 0) message += `, updated ${result.updated}`;

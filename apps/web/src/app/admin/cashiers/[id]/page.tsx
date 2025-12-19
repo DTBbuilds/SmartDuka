@@ -190,8 +190,10 @@ function CashierDetailContent() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
+      const pinText = await res.text();
+      const data = pinText ? JSON.parse(pinText) : {};
+      
       if (res.ok) {
-        const data = await res.json();
         setNewPin(data.pin);
         toast({ type: 'success', title: 'PIN Reset', message: 'New PIN generated successfully' });
       } else {

@@ -82,6 +82,19 @@ export class SalesController {
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
+  @Get('profit/analytics')
+  async getProfitAnalytics(
+    @Query('range') range: string = 'month',
+    @CurrentUser() user: any,
+  ) {
+    if (!user?.shopId) {
+      throw new BadRequestException('Shop ID not found in authentication token.');
+    }
+    return this.salesService.getProfitAnalytics(user.shopId, range);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   @Get('orders/:id')
   findOrder(@Param('id') id: string, @CurrentUser() user: any) {
     return this.salesService.findOrderById(user.shopId, id);

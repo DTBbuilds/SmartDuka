@@ -19,6 +19,9 @@ export class OrderItem {
 
   @Prop({ required: true, min: 0 })
   lineTotal: number;
+
+  @Prop({ default: 0, min: 0 })
+  cost?: number;
 }
 
 export const OrderItemSchema = SchemaFactory.createForClass(OrderItem);

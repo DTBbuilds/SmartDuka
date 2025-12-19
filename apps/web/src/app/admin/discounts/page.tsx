@@ -63,7 +63,8 @@ export default function DiscountsPage() {
       });
 
       if (!res.ok) throw new Error("Failed to load discounts");
-      const data = await res.json();
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : [];
       setDiscounts(data);
     } catch (err: any) {
       toast({

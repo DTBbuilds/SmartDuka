@@ -134,6 +134,9 @@ export function BranchStockSharing() {
         }),
       });
 
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
+      
       if (res.ok) {
         toast({ type: 'success', title: 'Success', message: 'Stock transfer created successfully' });
         setFromBranch('');
@@ -142,8 +145,7 @@ export function BranchStockSharing() {
         setQuantity(1);
         loadInitialData();
       } else {
-        const error = await res.json();
-        toast({ type: 'error', title: 'Error', message: error.message || 'Failed to create transfer' });
+        toast({ type: 'error', title: 'Error', message: data.message || 'Failed to create transfer' });
       }
     } catch (err: any) {
       toast({ type: 'error', title: 'Error', message: err?.message });
@@ -160,11 +162,14 @@ export function BranchStockSharing() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
+      const approveText = await res.text();
+      const approveData = approveText ? JSON.parse(approveText) : {};
+      
       if (res.ok) {
         toast({ type: 'success', title: 'Success', message: 'Transfer approved' });
         loadInitialData();
       } else {
-        toast({ type: 'error', title: 'Error', message: 'Failed to approve transfer' });
+        toast({ type: 'error', title: 'Error', message: approveData.message || 'Failed to approve transfer' });
       }
     } catch (err: any) {
       toast({ type: 'error', title: 'Error', message: err?.message });
@@ -179,11 +184,14 @@ export function BranchStockSharing() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
+      const rejectText = await res.text();
+      const rejectData = rejectText ? JSON.parse(rejectText) : {};
+      
       if (res.ok) {
         toast({ type: 'success', title: 'Success', message: 'Transfer rejected' });
         loadInitialData();
       } else {
-        toast({ type: 'error', title: 'Error', message: 'Failed to reject transfer' });
+        toast({ type: 'error', title: 'Error', message: rejectData.message || 'Failed to reject transfer' });
       }
     } catch (err: any) {
       toast({ type: 'error', title: 'Error', message: err?.message });

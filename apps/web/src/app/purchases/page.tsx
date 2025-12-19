@@ -62,8 +62,10 @@ export default function PurchasesPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : [];
+      
       if (res.ok) {
-        const data = await res.json();
         setPurchases(data);
       }
     } catch (error) {

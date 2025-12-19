@@ -188,7 +188,8 @@ export default function BranchSettingsPage() {
         throw new Error('Branch not found');
       }
 
-      const data = await res.json();
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
       const branchData = data.data || data;
       setBranch(branchData);
 
@@ -283,9 +284,11 @@ export default function BranchSettingsPage() {
         body: JSON.stringify(payload),
       });
 
+      const genText = await res.text();
+      const genData = genText ? JSON.parse(genText) : {};
+      
       if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || 'Failed to save settings');
+        throw new Error(genData.message || 'Failed to save settings');
       }
 
       setSuccess('General settings saved successfully');
@@ -325,9 +328,11 @@ export default function BranchSettingsPage() {
         body: JSON.stringify(payload),
       });
 
+      const locText = await res.text();
+      const locData = locText ? JSON.parse(locText) : {};
+      
       if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || 'Failed to save settings');
+        throw new Error(locData.message || 'Failed to save settings');
       }
 
       setSuccess('Location settings saved successfully');
@@ -365,9 +370,11 @@ export default function BranchSettingsPage() {
         body: JSON.stringify(payload),
       });
 
+      const conText = await res.text();
+      const conData = conText ? JSON.parse(conText) : {};
+      
       if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || 'Failed to save settings');
+        throw new Error(conData.message || 'Failed to save settings');
       }
 
       setSuccess('Contact settings saved successfully');
@@ -409,9 +416,11 @@ export default function BranchSettingsPage() {
         body: JSON.stringify(payload),
       });
 
+      const opsText = await res.text();
+      const opsData = opsText ? JSON.parse(opsText) : {};
+      
       if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || 'Failed to save settings');
+        throw new Error(opsData.message || 'Failed to save settings');
       }
 
       setSuccess('Operations settings saved successfully');
@@ -456,9 +465,11 @@ export default function BranchSettingsPage() {
         body: JSON.stringify(payload),
       });
 
+      const payText = await res.text();
+      const payData = payText ? JSON.parse(payText) : {};
+      
       if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || 'Failed to save payment settings');
+        throw new Error(payData.message || 'Failed to save payment settings');
       }
 
       setSuccess('Payment settings saved successfully');

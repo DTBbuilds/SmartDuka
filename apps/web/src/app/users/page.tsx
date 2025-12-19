@@ -62,8 +62,10 @@ export default function UsersPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : [];
+      
       if (res.ok) {
-        const data = await res.json();
         setUsers(Array.isArray(data) ? data : []);
       }
     } catch (error) {
@@ -132,8 +134,9 @@ export default function UsersPage() {
         await fetchUsers();
         setIsModalOpen(false);
       } else {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.message || "Failed to save user");
+        const errText = await res.text();
+        const errData = errText ? JSON.parse(errText) : {};
+        throw new Error(errData.message || "Failed to save user");
       }
     } catch (error: any) {
       console.error("Failed to save user:", error);

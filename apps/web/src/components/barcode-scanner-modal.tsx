@@ -66,12 +66,14 @@ export function BarcodeScannerModal({
         body: JSON.stringify({ barcode }),
       });
 
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
+      
       if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message || "Product not found");
+        throw new Error(data.message || "Product not found");
       }
 
-      const product = await res.json();
+      const product = data;
 
       onProductScanned({
         barcode,

@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { SubscriptionsService } from './subscriptions.service';
 import { SubscriptionMigrationService } from './subscription-migration.service';
+import { ActivityLogService } from './services/activity-log.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -36,6 +37,7 @@ export class SubscriptionsController {
   constructor(
     private readonly subscriptionsService: SubscriptionsService,
     private readonly migrationService: SubscriptionMigrationService,
+    private readonly activityLogService: ActivityLogService,
   ) {}
 
   // ============================================
@@ -194,6 +196,30 @@ export class SubscriptionsController {
       resource,
       increment ? parseInt(increment) : 1,
     );
+  }
+
+  /**
+   * Get activity history for the authenticated shop
+   */
+  @UseGuards(JwtAuthGuard)
+  @Get('activity-history')
+  async getActivityHistory(
+    @CurrentUser() user: JwtPayload,
+    @Query('limit') limit: number = 50,
+    @Query('skip') skip: number = 0,
+  ): Promise<any[]> {
+    return this.activityLogService.getActivityHistory(user.shopId, limit, skip);
+  }
+
+  /**
+   * Get activity summary for the authenticated shop
+   */
+  @UseGuards(JwtAuthGuard)
+  @Get('activity-summary')
+  async getActivitySummary(
+    @CurrentUser() user: JwtPayload,
+  ): Promise<any> {
+    return this.activityLogService.getActivitySummary(user.shopId);
   }
 
   // ============================================

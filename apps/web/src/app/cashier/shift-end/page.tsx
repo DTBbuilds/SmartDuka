@@ -41,7 +41,8 @@ function ShiftEndContent() {
 
       if (!res.ok) throw new Error('Failed to load shift');
 
-      const data = await res.json();
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : null;
       setShift(data);
 
       if (!data) {

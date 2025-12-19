@@ -207,12 +207,14 @@ export function PaymentMethodModal({
         }),
       });
       
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
+      
       if (!res.ok) {
-        const error = await res.json().catch(() => ({}));
-        throw new Error(error.message || 'Failed to create payment intent');
+        throw new Error(data.message || 'Failed to create payment intent');
       }
       
-      const { clientSecret } = await res.json();
+      const { clientSecret } = data;
       setStripeClientSecret(clientSecret);
     } catch (err: any) {
       console.error('Stripe payment intent error:', err);

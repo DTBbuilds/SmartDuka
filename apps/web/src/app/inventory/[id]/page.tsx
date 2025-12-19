@@ -90,8 +90,10 @@ export default function ProductDetailsPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
+      
       if (res.ok) {
-        const data = await res.json();
         setProduct(data);
       } else {
         toast({ type: "error", title: "Failed to load product" });
@@ -111,9 +113,11 @@ export default function ProductDetailsPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
+      const movText = await res.text();
+      const movData = movText ? JSON.parse(movText) : [];
+      
       if (res.ok) {
-        const data = await res.json();
-        setStockMovements(Array.isArray(data) ? data : []);
+        setStockMovements(Array.isArray(movData) ? movData : []);
       }
     } catch (error) {
       console.error("Failed to fetch stock movements:", error);

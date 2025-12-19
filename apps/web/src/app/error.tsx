@@ -65,8 +65,12 @@ export default function Error({
         {/* Help Text */}
         <p className="mt-8 text-sm text-muted-foreground">
           If this problem persists, please{' '}
-          <Link href="/support" className="text-primary hover:underline">
+          <Link href="/support" className="text-primary hover:underline font-medium">
             contact our support team
+          </Link>
+          {' '}or use our{' '}
+          <Link href="/inbox" className="text-primary hover:underline font-medium">
+            in-app messaging
           </Link>
         </p>
       </div>

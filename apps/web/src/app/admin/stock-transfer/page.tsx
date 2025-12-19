@@ -72,7 +72,8 @@ export default function StockTransferPage() {
       });
 
       if (!res.ok) throw new Error("Failed to load transfers");
-      const data = await res.json();
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : [];
       setTransfers(data);
     } catch (err: any) {
       toast({

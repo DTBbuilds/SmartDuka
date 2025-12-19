@@ -143,8 +143,10 @@ export default function PaymentsPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : [];
+      
       if (res.ok) {
-        const data = await res.json();
         setPayments(Array.isArray(data) ? data : []);
       }
     } catch (error) {
@@ -171,8 +173,10 @@ export default function PaymentsPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
+      const statsText = await res.text();
+      const data = statsText ? JSON.parse(statsText) : {};
+      
       if (res.ok) {
-        const data = await res.json();
         setStats(data);
       }
     } catch (error) {

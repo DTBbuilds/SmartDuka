@@ -63,8 +63,10 @@ export default function SuperAdminDashboard() {
         cache: 'no-store',
       });
 
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
+      
       if (res.ok) {
-        const data = await res.json();
         setStats(data);
       } else if (res.status === 401) {
         toast({ type: 'error', title: 'Unauthorized', message: 'Your session has expired' });

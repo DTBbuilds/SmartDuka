@@ -73,12 +73,14 @@ export function useFetch<T = any>() {
         },
       });
 
+      // Safely parse JSON - handle empty responses
+      const text = await response.text();
+      const data = text ? JSON.parse(text) : {};
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `Request failed: ${response.status}`);
+        throw new Error(data.message || `Request failed: ${response.status}`);
       }
 
-      const data = await response.json();
       return data;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'An error occurred';

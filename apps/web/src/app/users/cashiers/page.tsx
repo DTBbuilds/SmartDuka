@@ -79,7 +79,8 @@ function CashiersContent() {
 
       if (!res.ok) throw new Error("Failed to fetch cashiers");
 
-      const data = await res.json();
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : [];
       setCashiers(data);
     } catch (err: any) {
       setError(err.message || "Failed to load cashiers");
@@ -114,12 +115,14 @@ function CashiersContent() {
         }),
       });
 
+      const createText = await res.text();
+      const createData = createText ? JSON.parse(createText) : {};
+      
       if (!res.ok) {
-        const errorData = await res.json().catch(() => ({ message: "Failed to create cashier" }));
-        throw new Error(errorData.message || "Failed to create cashier");
+        throw new Error(createData.message || "Failed to create cashier");
       }
 
-      const { user: newCashier, pin } = await res.json();
+      const { user: newCashier, pin } = createData;
 
       setGeneratedPin(pin);
       setGeneratedCashierName(newCashier.name);
@@ -149,7 +152,9 @@ function CashiersContent() {
 
       if (!res.ok) throw new Error("Failed to reset PIN");
 
-      const { pin } = await res.json();
+      const resetText = await res.text();
+      const resetData = resetText ? JSON.parse(resetText) : {};
+      const { pin } = resetData;
 
       setGeneratedPin(pin);
       setGeneratedCashierName(cashierName);

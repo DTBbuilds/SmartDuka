@@ -25,6 +25,7 @@ import {
   FlaskConical,
   Crown,
   Inbox,
+  Target,
 } from 'lucide-react';
 import { Button } from '@smartduka/ui';
 import { useAuth } from '@/lib/auth-context';
@@ -83,6 +84,7 @@ const adminNavSections: NavSection[] = [
     items: [
       { name: 'Overview', href: '/admin/analytics', icon: BarChart3 },
       { name: 'Sales', href: '/admin/analytics/sales', icon: TrendingUp },
+      { name: 'Profit', href: '/admin/analytics/profit', icon: Target },
       { name: 'Orders', href: '/admin/analytics/orders', icon: Receipt },
       { name: 'Inventory', href: '/admin/analytics/inventory', icon: Package },
       { name: 'Payments', href: '/admin/analytics/payments', icon: CreditCard },

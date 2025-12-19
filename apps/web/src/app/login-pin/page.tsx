@@ -44,12 +44,14 @@ export default function LoginPinPage() {
         body: JSON.stringify({ pin, shopId }),
       });
 
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
+      
       if (!res.ok) {
-        const data = await res.json().catch(() => ({ message: 'Login failed' }));
         throw new Error(data.message || 'Invalid PIN or Shop ID');
       }
 
-      const { token, user, shop } = await res.json();
+      const { token, user, shop } = data;
 
       localStorage.setItem('smartduka:token', token);
       localStorage.setItem('smartduka:user', JSON.stringify(user));

@@ -53,6 +53,12 @@ export class EmailService {
       port,
       secure: port === 465,
       auth: { user, pass },
+      connectionTimeout: 10000, // 10 seconds
+      greetingTimeout: 10000,
+      socketTimeout: 30000,
+      pool: true, // Use connection pooling
+      maxConnections: 5,
+      maxMessages: 100,
     });
 
     // Verify connection

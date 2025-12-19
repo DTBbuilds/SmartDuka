@@ -46,7 +46,8 @@ export function CategoryImportExport({ token, isOpen, onClose, onImportComplete 
         });
 
         if (!res.ok) throw new Error('Failed to load categories');
-        const data = await res.json();
+        const text = await res.text();
+        const data = text ? JSON.parse(text) : [];
         setCategories(Array.isArray(data) ? data : []);
         if (data.length > 0) {
           setSelectedCategoryId(data[0]._id);

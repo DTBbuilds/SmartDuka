@@ -53,7 +53,8 @@ function ReportsContent() {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error(`Failed (${res.status})`);
-      const data = await res.json();
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
       setSales(data);
     } catch (err: any) {
       toast({ type: 'error', title: 'Load failed', message: err?.message });

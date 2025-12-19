@@ -87,27 +87,32 @@ function AdminDashboardContent() {
       ]);
 
       if (productsRes.ok) {
-        const data = await productsRes.json();
+        const text = await productsRes.text();
+        const data = text ? JSON.parse(text) : [];
         setProductsCount(Array.isArray(data) ? data.length : 0);
       }
 
       if (categoriesRes.ok) {
-        const data = await categoriesRes.json();
+        const text = await categoriesRes.text();
+        const data = text ? JSON.parse(text) : [];
         setCategoriesCount(Array.isArray(data) ? data.length : 0);
       }
 
       if (lowStockRes.ok) {
-        const data = await lowStockRes.json();
+        const text = await lowStockRes.text();
+        const data = text ? JSON.parse(text) : [];
         setLowStockProducts(Array.isArray(data) ? data : []);
       }
 
       if (salesStatsRes.ok) {
-        const data = await salesStatsRes.json();
+        const text = await salesStatsRes.text();
+        const data = text ? JSON.parse(text) : null;
         setSalesStats(data);
       }
 
       if (mpesaStatusRes.ok) {
-        const data = await mpesaStatusRes.json();
+        const text = await mpesaStatusRes.text();
+        const data = text ? JSON.parse(text) : null;
         setMpesaStatus(data);
       }
     } catch (err: any) {

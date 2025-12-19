@@ -82,7 +82,8 @@ export default function ReceiptsPage() {
       });
 
       if (!res.ok) throw new Error("Failed to load templates");
-      const data = await res.json();
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : [];
       setTemplates(data);
     } catch (err: any) {
       toast({

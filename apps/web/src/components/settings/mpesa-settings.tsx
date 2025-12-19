@@ -76,8 +76,10 @@ export function MpesaSettings({ token, onMessage }: MpesaSettingsProps) {
         headers: { Authorization: `Bearer ${token}` },
       });
 
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
+      
       if (res.ok) {
-        const data = await res.json();
         setMpesaConfig(data);
         setFormData({
           type: data.type || 'paybill',
@@ -133,7 +135,8 @@ export function MpesaSettings({ token, onMessage }: MpesaSettingsProps) {
         // Refresh config
         await fetchMpesaConfig();
       } else {
-        const error = await res.json().catch(() => ({}));
+        const errorText = await res.text();
+        const error = errorText ? JSON.parse(errorText) : {};
         throw new Error(error.message || "Failed to save M-Pesa configuration");
       }
     } catch (error: any) {
@@ -151,7 +154,8 @@ export function MpesaSettings({ token, onMessage }: MpesaSettingsProps) {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      const data = await res.json();
+      const verifyText = await res.text();
+      const data = verifyText ? JSON.parse(verifyText) : {};
       
       if (data.success) {
         onMessage({ type: "success", text: "M-Pesa credentials verified successfully!" });

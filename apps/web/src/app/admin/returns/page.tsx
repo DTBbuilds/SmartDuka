@@ -73,7 +73,8 @@ export default function ReturnsPage() {
       });
 
       if (!res.ok) throw new Error("Failed to load returns");
-      const data = await res.json();
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : [];
       setReturns(data);
     } catch (err: any) {
       toast({
@@ -104,7 +105,8 @@ export default function ReturnsPage() {
 
       if (!res.ok) throw new Error("Failed to approve return");
 
-      const updated = await res.json();
+      const approveText = await res.text();
+      const updated = approveText ? JSON.parse(approveText) : {};
       setReturns(returns.map((r) => (r._id === returnId ? updated : r)));
       setSelectedReturn(null);
       setApprovalNotes("");
@@ -143,7 +145,8 @@ export default function ReturnsPage() {
 
       if (!res.ok) throw new Error("Failed to reject return");
 
-      const updated = await res.json();
+      const rejectText = await res.text();
+      const updated = rejectText ? JSON.parse(rejectText) : {};
       setReturns(returns.map((r) => (r._id === returnId ? updated : r)));
       setSelectedReturn(null);
       setApprovalNotes("");

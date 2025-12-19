@@ -58,13 +58,15 @@ export function useBranchData<T>({
         headers: { Authorization: `Bearer ${token}` },
       });
 
+      // Safely parse JSON - handle empty responses
+      const text = await res.text();
+      const responseData = text ? JSON.parse(text) : {};
+      
       if (res.ok) {
-        const responseData = await res.json();
         const transformedData = transform ? transform(responseData) : responseData;
         setData(transformedData);
       } else {
-        const errorData = await res.json().catch(() => ({}));
-        setError(errorData.message || `Failed to fetch data: ${res.status}`);
+        setError(responseData.message || `Failed to fetch data: ${res.status}`);
         setData(defaultValue ?? null);
       }
     } catch (err: any) {

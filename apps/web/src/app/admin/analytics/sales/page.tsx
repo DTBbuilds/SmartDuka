@@ -67,7 +67,8 @@ export default function SalesAnalyticsPage() {
       });
       
       if (res.ok) {
-        const data = await res.json();
+        const text = await res.text();
+        const data = text ? JSON.parse(text) : null;
         setSalesData(data);
       } else {
         console.error('Failed to load sales analytics:', res.status);
@@ -245,24 +246,37 @@ export default function SalesAnalyticsPage() {
                 <CardDescription className="text-xs md:text-sm">Last 14 days</CardDescription>
               </CardHeader>
               <CardContent className="p-4 md:p-6 pt-0 md:pt-0">
-                <div className="h-40 md:h-64 flex items-end gap-0.5 md:gap-1">
-                  {salesData.dailyTrend.slice(-14).map((day, i) => {
-                    const maxRevenue = Math.max(...salesData.dailyTrend.map(d => d.revenue));
-                    const height = (day.revenue / maxRevenue) * 100;
-                    return (
-                      <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                        <div
-                          className="w-full bg-gradient-to-t from-primary to-primary/60 rounded-t hover:from-primary/80 transition-colors cursor-pointer"
-                          style={{ height: `${height}%` }}
-                          title={`${day.date}: Ksh ${day.revenue.toLocaleString()}`}
-                        />
-                        <span className="text-[10px] text-muted-foreground rotate-45 origin-left">
-                          {new Date(day.date).getDate()}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
+                {salesData.dailyTrend.length === 0 || salesData.dailyTrend.every(d => d.revenue === 0) ? (
+                  <div className="h-40 md:h-64 flex items-center justify-center text-muted-foreground">
+                    <div className="text-center">
+                      <TrendingUp className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">No revenue data for this period</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="h-40 md:h-64 flex items-end gap-0.5 md:gap-1">
+                    {salesData.dailyTrend.slice(-14).map((day, i) => {
+                      const maxRevenue = Math.max(...salesData.dailyTrend.map(d => d.revenue), 1);
+                      const height = Math.max((day.revenue / maxRevenue) * 100, day.revenue > 0 ? 5 : 0);
+                      return (
+                        <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                          <div
+                            className={`w-full rounded-t hover:opacity-80 transition-colors cursor-pointer ${
+                              day.revenue > 0 
+                                ? 'bg-gradient-to-t from-primary to-primary/60' 
+                                : 'bg-muted/50'
+                            }`}
+                            style={{ height: `${height || 2}%`, minHeight: '2px' }}
+                            title={`${day.date}: Ksh ${day.revenue.toLocaleString()} (${day.orders} orders)`}
+                          />
+                          <span className="text-[10px] text-muted-foreground rotate-45 origin-left">
+                            {new Date(day.date).getDate()}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -273,24 +287,37 @@ export default function SalesAnalyticsPage() {
                 <CardDescription className="text-xs md:text-sm">Sales by hour</CardDescription>
               </CardHeader>
               <CardContent className="p-4 md:p-6 pt-0 md:pt-0">
-                <div className="h-40 md:h-64 flex items-end gap-0.5 md:gap-1">
-                  {salesData.hourlyBreakdown.map((hour, i) => {
-                    const maxRevenue = Math.max(...salesData.hourlyBreakdown.map(h => h.revenue));
-                    const height = (hour.revenue / maxRevenue) * 100;
-                    return (
-                      <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                        <div
-                          className="w-full bg-gradient-to-t from-blue-500 to-blue-400 rounded-t hover:from-blue-400 transition-colors cursor-pointer"
-                          style={{ height: `${height}%` }}
-                          title={`${hour.hour}:00 - Ksh ${hour.revenue.toLocaleString()} (${hour.orders} orders)`}
-                        />
-                        <span className="text-[10px] text-muted-foreground">
-                          {hour.hour}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
+                {salesData.hourlyBreakdown.length === 0 || salesData.hourlyBreakdown.every(h => h.revenue === 0) ? (
+                  <div className="h-40 md:h-64 flex items-center justify-center text-muted-foreground">
+                    <div className="text-center">
+                      <Clock className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">No sales data for today yet</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="h-40 md:h-64 flex items-end gap-0.5 md:gap-1">
+                    {salesData.hourlyBreakdown.map((hour, i) => {
+                      const maxRevenue = Math.max(...salesData.hourlyBreakdown.map(h => h.revenue), 1);
+                      const height = Math.max((hour.revenue / maxRevenue) * 100, hour.revenue > 0 ? 5 : 0);
+                      return (
+                        <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                          <div
+                            className={`w-full rounded-t hover:opacity-80 transition-colors cursor-pointer ${
+                              hour.revenue > 0 
+                                ? 'bg-gradient-to-t from-blue-500 to-blue-400' 
+                                : 'bg-muted/50'
+                            }`}
+                            style={{ height: `${height || 2}%`, minHeight: '2px' }}
+                            title={`${hour.hour}:00 - Ksh ${hour.revenue.toLocaleString()} (${hour.orders} orders)`}
+                          />
+                          <span className="text-[10px] text-muted-foreground">
+                            {hour.hour}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

@@ -34,8 +34,10 @@ export default function CustomersPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : [];
+      
       if (res.ok) {
-        const data = await res.json();
         setCustomers(Array.isArray(data) ? data : []);
       }
     } catch (error) {

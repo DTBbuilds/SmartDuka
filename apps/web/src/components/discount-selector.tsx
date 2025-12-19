@@ -47,7 +47,8 @@ export function DiscountSelector({
         });
 
         if (!res.ok) throw new Error("Failed to fetch discounts");
-        const data = await res.json();
+        const text = await res.text();
+        const data = text ? JSON.parse(text) : [];
         setDiscounts(data);
       } catch (err: any) {
         toast({
@@ -117,12 +118,12 @@ export function DiscountSelector({
         }),
       });
 
+      const applyText = await res.text();
+      const result = applyText ? JSON.parse(applyText) : {};
+      
       if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message || "Failed to apply discount");
+        throw new Error(result.message || "Failed to apply discount");
       }
-
-      const result = await res.json();
       onApplyDiscount(discount._id, result.discountAmount);
       setOpen(false);
 

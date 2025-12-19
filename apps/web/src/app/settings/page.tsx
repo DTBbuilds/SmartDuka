@@ -184,7 +184,8 @@ export default function SettingsPage() {
         setMessage({ type: "success", text: "Password changed successfully!" });
         setPasswordData({ currentPassword: "", newPassword: "", confirmPassword: "" });
       } else {
-        const data = await res.json().catch(() => ({}));
+        const errText = await res.text();
+        const data = errText ? JSON.parse(errText) : {};
         throw new Error(data.message || "Failed to change password");
       }
     } catch (error: any) {

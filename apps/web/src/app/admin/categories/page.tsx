@@ -107,7 +107,8 @@ export default function CategoriesPage() {
         throw new Error(`Failed to fetch categories: ${res.status}`);
       }
 
-      const data = await res.json();
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : [];
       setCategories(Array.isArray(data) ? data : []);
     } catch (err: any) {
       console.error("Error fetching categories:", err);
@@ -154,7 +155,8 @@ export default function CategoriesPage() {
         throw new Error(`Failed to fetch products: ${res.status}`);
       }
 
-      const data = await res.json();
+      const prodText = await res.text();
+      const data = prodText ? JSON.parse(prodText) : [];
       setCategoryProducts(Array.isArray(data) ? data : data.products || []);
     } catch (err: any) {
       console.error("Error fetching category products:", err);
@@ -177,9 +179,11 @@ export default function CategoriesPage() {
         },
       });
 
+      const delText = await res.text();
+      const delData = delText ? JSON.parse(delText) : {};
+      
       if (!res.ok) {
-        const error = await res.json().catch(() => ({}));
-        throw new Error(error.message || "Failed to delete category");
+        throw new Error(delData.message || "Failed to delete category");
       }
 
       fetchCategories();
@@ -217,9 +221,11 @@ export default function CategoriesPage() {
         }),
       });
 
+      const saveText = await res.text();
+      const saveData = saveText ? JSON.parse(saveText) : {};
+      
       if (!res.ok) {
-        const error = await res.json().catch(() => ({}));
-        throw new Error(error.message || "Failed to save category");
+        throw new Error(saveData.message || "Failed to save category");
       }
 
       setShowModal(false);

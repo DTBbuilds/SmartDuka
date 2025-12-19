@@ -67,7 +67,8 @@ export function PaymentManagement() {
 
       if (!res.ok) throw new Error('Failed to fetch transactions');
 
-      const data = await res.json();
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : [];
       setTransactions(Array.isArray(data) ? data : []);
     } catch (err: any) {
       setError(err.message || 'Failed to load transactions');
@@ -85,7 +86,8 @@ export function PaymentManagement() {
 
       if (!res.ok) throw new Error('Failed to fetch stats');
 
-      const data = await res.json();
+      const statsText = await res.text();
+      const data = statsText ? JSON.parse(statsText) : {};
       setStats(data);
     } catch (err: any) {
       console.error('Failed to load stats:', err);

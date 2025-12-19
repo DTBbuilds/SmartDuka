@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { 
   useSubscription, 
   useSubscriptionPlans, 
@@ -31,17 +31,39 @@ import {
   Copy,
   CheckCircle,
   Building2,
+  Settings,
+  RefreshCw,
+  Zap,
+  Shield,
+  Info,
+  ChevronDown,
+  ChevronRight,
+  Sparkles,
+  Bell,
+  CreditCard as CardIcon,
+  History,
+  HelpCircle,
+  ExternalLink,
+  BarChart3,
+  Percent,
 } from 'lucide-react';
 
 // Plan color themes - high contrast
+// Default plan color for fallback
+const defaultPlanColor = { bg: 'bg-white', border: 'border-gray-300', badge: 'bg-gray-600', iconBg: 'bg-gray-100', iconColor: 'text-gray-700', headerGradient: 'from-gray-600 to-gray-700' };
 const planColors: Record<string, { bg: string; border: string; badge: string; iconBg: string; iconColor: string; headerGradient: string }> = {
   blue: { bg: 'bg-white', border: 'border-blue-300', badge: 'bg-blue-600', iconBg: 'bg-blue-100', iconColor: 'text-blue-700', headerGradient: 'from-blue-600 to-blue-700' },
   green: { bg: 'bg-white', border: 'border-emerald-300', badge: 'bg-emerald-600', iconBg: 'bg-emerald-100', iconColor: 'text-emerald-700', headerGradient: 'from-emerald-600 to-emerald-700' },
   purple: { bg: 'bg-white', border: 'border-violet-300', badge: 'bg-violet-600', iconBg: 'bg-violet-100', iconColor: 'text-violet-700', headerGradient: 'from-violet-600 to-violet-700' },
   gold: { bg: 'bg-amber-50', border: 'border-amber-400', badge: 'bg-amber-600', iconBg: 'bg-amber-200', iconColor: 'text-amber-800', headerGradient: 'from-amber-500 to-orange-600' },
+  gray: { bg: 'bg-gray-50', border: 'border-gray-300', badge: 'bg-gray-500', iconBg: 'bg-gray-100', iconColor: 'text-gray-700', headerGradient: 'from-gray-500 to-gray-600' },
 };
 
-// Status colors - high contrast
+// Helper to get plan color with fallback
+const getPlanColor = (theme: string | undefined) => planColors[theme || 'blue'] || defaultPlanColor;
+
+// Status colors - high contrast with default fallback
+const defaultStatusColor = { bg: 'bg-gray-100', text: 'text-gray-900', border: 'border-gray-300', icon: <Clock className="h-4 w-4" /> };
 const statusColors: Record<string, { bg: string; text: string; border: string; icon: React.ReactNode }> = {
   pending_payment: { bg: 'bg-orange-100', text: 'text-orange-900', border: 'border-orange-300', icon: <CreditCard className="h-4 w-4" /> },
   trial: { bg: 'bg-blue-100', text: 'text-blue-900', border: 'border-blue-300', icon: <Clock className="h-4 w-4" /> },
@@ -52,12 +74,28 @@ const statusColors: Record<string, { bg: string; text: string; border: string; i
   expired: { bg: 'bg-gray-200', text: 'text-gray-900', border: 'border-gray-400', icon: <Clock className="h-4 w-4" /> },
 };
 
+// Helper to get status color with fallback
+const getStatusColor = (status: string) => statusColors[status] || defaultStatusColor;
+
 export default function SubscriptionPage() {
   const { subscription, loading: subLoading, changePlan, cancelSubscription, reactivateSubscription, refetch: refetchSubscription } = useSubscription();
   const { plans, loading: plansLoading } = useSubscriptionPlans();
   const { invoices, pendingInvoices, loading: billingLoading, initiatePayment, getManualPaymentInstructions, confirmManualPayment, validateReceipt, checkPaymentStatus, refetch: refetchBilling } = useBillingHistory();
   
+  // Refs for scrolling
+  const plansRef = useRef<HTMLDivElement>(null);
+  
   const [billingCycle, setBillingCycle] = useState<BillingCycle>('monthly');
+  
+  // UI state for expanded sections
+  const [showSubscriptionDetails, setShowSubscriptionDetails] = useState(false);
+  const [showQuickActions, setShowQuickActions] = useState(true);
+  const [autoRenewal, setAutoRenewal] = useState(true);
+  
+  // Scroll to plans section
+  const scrollToPlans = () => {
+    plansRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null);
@@ -295,10 +333,17 @@ export default function SubscriptionPage() {
 
   return (
     <div className="space-y-6 p-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Subscription & Billing</h1>
-        <p className="text-gray-600 mt-1">Manage your SmartDuka subscription and billing</p>
+      {/* Header - High Contrast */}
+      <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-xl p-6 text-white shadow-lg">
+        <div className="flex items-center gap-3">
+          <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm">
+            <CreditCard className="h-7 w-7 text-white" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold">Subscription & Billing</h1>
+            <p className="text-blue-100 mt-1">Manage your SmartDuka subscription, plans, and payment history</p>
+          </div>
+        </div>
       </div>
 
       {/* Subscription Status Alerts */}
@@ -397,111 +442,301 @@ export default function SubscriptionPage() {
         </div>
       )}
 
-      {/* Current Subscription Card */}
+      {/* Current Subscription Card - Enhanced */}
       {subscription && (
-        <div className="bg-white rounded-xl shadow-sm border p-6">
-          <div className="flex items-start justify-between">
-            <div>
-              <div className="flex items-center gap-3">
-                <h2 className="text-xl font-semibold">{subscription.planName} Plan</h2>
-                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${statusColors[subscription.status]?.bg} ${statusColors[subscription.status]?.text} ${statusColors[subscription.status]?.border}`}>
-                  {statusColors[subscription.status]?.icon}
-                  {subscription.status.replace('_', ' ').toUpperCase()}
-                </span>
+        <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+          {/* Header with gradient based on plan */}
+          <div className={`bg-gradient-to-r ${getPlanColor(subscription.planCode === 'trial' ? 'gray' : 'blue').headerGradient} px-6 py-4`}>
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="flex items-center gap-3">
+                  <h2 className="text-xl font-bold text-white">{subscription.planName} Plan</h2>
+                  <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-white/20 text-white backdrop-blur-sm`}>
+                    {getStatusColor(subscription.status).icon}
+                    {subscription.status.replace('_', ' ').toUpperCase()}
+                  </span>
+                </div>
+                <p className="text-white/80 mt-1">
+                  {subscription.planCode === 'trial' ? (
+                    <span className="flex items-center gap-1">
+                      <Sparkles className="h-4 w-4" />
+                      Free Forever (Limited Features)
+                    </span>
+                  ) : (
+                    <>
+                      {subscription.billingCycle === 'annual' ? 'Annual' : 'Monthly'} billing • 
+                      KES {subscription.currentPrice.toLocaleString()}/{subscription.billingCycle === 'annual' ? 'year' : 'month'}
+                    </>
+                  )}
+                </p>
               </div>
-              <p className="text-gray-600 mt-1">
-                {subscription.billingCycle === 'annual' ? 'Annual' : 'Monthly'} billing • 
-                KES {subscription.currentPrice.toLocaleString()}/{subscription.billingCycle === 'annual' ? 'year' : 'month'}
-              </p>
-            </div>
-            <div className="text-right">
-              <p className="text-sm text-gray-500">Current Period Ends</p>
-              <p className="font-semibold">{new Date(subscription.currentPeriodEnd).toLocaleDateString()}</p>
-              <p className="text-sm text-blue-600">{subscription.daysRemaining} days remaining</p>
-            </div>
-          </div>
-
-          {/* Usage Stats */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6">
-            <div className="bg-gray-50 rounded-lg p-4">
-              <div className="flex items-center gap-2 text-gray-600 mb-2">
-                <Store className="h-4 w-4" />
-                <span className="text-sm">Shops/Branches</span>
-              </div>
-              <div className="flex items-end gap-2">
-                <span className="text-2xl font-bold">{subscription.usage.shops.current}</span>
-                <span className="text-gray-500 text-sm">/ {subscription.usage.shops.limit}</span>
-              </div>
-              <div className="mt-2 h-2 bg-gray-200 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-blue-500 rounded-full"
-                  style={{ width: `${(subscription.usage.shops.current / subscription.usage.shops.limit) * 100}%` }}
-                />
-              </div>
-            </div>
-
-            <div className="bg-gray-50 rounded-lg p-4">
-              <div className="flex items-center gap-2 text-gray-600 mb-2">
-                <Users className="h-4 w-4" />
-                <span className="text-sm">Employees</span>
-              </div>
-              <div className="flex items-end gap-2">
-                <span className="text-2xl font-bold">{subscription.usage.employees.current}</span>
-                <span className="text-gray-500 text-sm">/ {subscription.usage.employees.limit}</span>
-              </div>
-              <div className="mt-2 h-2 bg-gray-200 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-green-500 rounded-full"
-                  style={{ width: `${(subscription.usage.employees.current / subscription.usage.employees.limit) * 100}%` }}
-                />
-              </div>
-            </div>
-
-            <div className="bg-gray-50 rounded-lg p-4">
-              <div className="flex items-center gap-2 text-gray-600 mb-2">
-                <Package className="h-4 w-4" />
-                <span className="text-sm">Products</span>
-              </div>
-              <div className="flex items-end gap-2">
-                <span className="text-2xl font-bold">{subscription.usage.products.current}</span>
-                <span className="text-gray-500 text-sm">/ {subscription.usage.products.limit}</span>
-              </div>
-              <div className="mt-2 h-2 bg-gray-200 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-purple-500 rounded-full"
-                  style={{ width: `${(subscription.usage.products.current / subscription.usage.products.limit) * 100}%` }}
-                />
+              <div className="text-right text-white">
+                <p className="text-sm text-white/70">Current Period Ends</p>
+                <p className="font-semibold">{new Date(subscription.currentPeriodEnd).toLocaleDateString('en-KE', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                <p className="text-sm text-white/80 flex items-center justify-end gap-1">
+                  <Clock className="h-3 w-3" />
+                  {subscription.daysRemaining} days remaining
+                </p>
               </div>
             </div>
           </div>
 
-          {/* Actions */}
-          <div className="flex gap-3 mt-6">
+          <div className="p-6">
+            {/* Quick Stats Row */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              <div className="text-center p-3 bg-blue-50 rounded-lg">
+                <Store className="h-5 w-5 text-blue-600 mx-auto mb-1" />
+                <p className="text-2xl font-bold text-blue-700">{subscription.usage.shops.current}/{subscription.usage.shops.limit}</p>
+                <p className="text-xs text-blue-600">Shops</p>
+              </div>
+              <div className="text-center p-3 bg-green-50 rounded-lg">
+                <Users className="h-5 w-5 text-green-600 mx-auto mb-1" />
+                <p className="text-2xl font-bold text-green-700">{subscription.usage.employees.current}/{subscription.usage.employees.limit}</p>
+                <p className="text-xs text-green-600">Employees</p>
+              </div>
+              <div className="text-center p-3 bg-purple-50 rounded-lg">
+                <Package className="h-5 w-5 text-purple-600 mx-auto mb-1" />
+                <p className="text-2xl font-bold text-purple-700">{subscription.usage.products.current}/{subscription.usage.products.limit}</p>
+                <p className="text-xs text-purple-600">Products</p>
+              </div>
+              <div className="text-center p-3 bg-amber-50 rounded-lg">
+                <BarChart3 className="h-5 w-5 text-amber-600 mx-auto mb-1" />
+                <p className="text-2xl font-bold text-amber-700">{invoices.filter(i => i.status === 'paid').length}</p>
+                <p className="text-xs text-amber-600">Payments Made</p>
+              </div>
+            </div>
+
+            {/* Usage Progress Bars */}
+            <div className="space-y-3 mb-6">
+              <div>
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="text-gray-600 flex items-center gap-1"><Store className="h-3 w-3" /> Shops/Branches</span>
+                  <span className="font-medium">{Math.round((subscription.usage.shops.current / subscription.usage.shops.limit) * 100)}%</span>
+                </div>
+                <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                  <div 
+                    className={`h-full rounded-full transition-all ${subscription.usage.shops.current / subscription.usage.shops.limit > 0.9 ? 'bg-red-500' : 'bg-blue-500'}`}
+                    style={{ width: `${Math.min((subscription.usage.shops.current / subscription.usage.shops.limit) * 100, 100)}%` }}
+                  />
+                </div>
+              </div>
+              <div>
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="text-gray-600 flex items-center gap-1"><Users className="h-3 w-3" /> Employees</span>
+                  <span className="font-medium">{Math.round((subscription.usage.employees.current / subscription.usage.employees.limit) * 100)}%</span>
+                </div>
+                <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                  <div 
+                    className={`h-full rounded-full transition-all ${subscription.usage.employees.current / subscription.usage.employees.limit > 0.9 ? 'bg-red-500' : 'bg-green-500'}`}
+                    style={{ width: `${Math.min((subscription.usage.employees.current / subscription.usage.employees.limit) * 100, 100)}%` }}
+                  />
+                </div>
+              </div>
+              <div>
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="text-gray-600 flex items-center gap-1"><Package className="h-3 w-3" /> Products</span>
+                  <span className="font-medium">{Math.round((subscription.usage.products.current / subscription.usage.products.limit) * 100)}%</span>
+                </div>
+                <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                  <div 
+                    className={`h-full rounded-full transition-all ${subscription.usage.products.current / subscription.usage.products.limit > 0.9 ? 'bg-red-500' : 'bg-purple-500'}`}
+                    style={{ width: `${Math.min((subscription.usage.products.current / subscription.usage.products.limit) * 100, 100)}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Expandable Subscription Details */}
             <button
-              onClick={() => setShowUpgradeModal(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              onClick={() => setShowSubscriptionDetails(!showSubscriptionDetails)}
+              className="w-full flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors mb-4"
             >
-              <TrendingUp className="h-4 w-4" />
-              Upgrade Plan
+              <span className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <Info className="h-4 w-4" />
+                Subscription Details
+              </span>
+              {showSubscriptionDetails ? <ChevronDown className="h-4 w-4 text-gray-500" /> : <ChevronRight className="h-4 w-4 text-gray-500" />}
             </button>
-            {subscription.status === 'cancelled' || subscription.status === 'expired' ? (
+
+            {showSubscriptionDetails && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4 space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="flex items-center justify-between bg-white rounded p-2">
+                    <span className="text-sm font-semibold text-gray-800">Plan Code</span>
+                    <span className="font-mono text-sm font-bold bg-blue-100 text-blue-900 px-2 py-0.5 rounded">{subscription.planCode}</span>
+                  </div>
+                  <div className="flex items-center justify-between bg-white rounded p-2">
+                    <span className="text-sm font-semibold text-gray-800">Billing Cycle</span>
+                    <span className="font-bold text-sm text-gray-900">{subscription.billingCycle === 'annual' ? 'Annual' : 'Monthly'}</span>
+                  </div>
+                  <div className="flex items-center justify-between bg-white rounded p-2">
+                    <span className="text-sm font-semibold text-gray-800">Current Price</span>
+                    <span className="font-bold text-sm text-gray-900">
+                      {subscription.planCode === 'trial' ? 'FREE' : `KES ${subscription.currentPrice.toLocaleString()}`}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between bg-white rounded p-2">
+                    <span className="text-sm font-semibold text-gray-800">Period Start</span>
+                    <span className="font-bold text-sm text-gray-900">{new Date(subscription.currentPeriodStart).toLocaleDateString('en-KE', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                  </div>
+                  <div className="flex items-center justify-between bg-white rounded p-2">
+                    <span className="text-sm font-semibold text-gray-800">Period End</span>
+                    <span className="font-bold text-sm text-gray-900">{new Date(subscription.currentPeriodEnd).toLocaleDateString('en-KE', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                  </div>
+                  <div className="flex items-center justify-between bg-white rounded p-2">
+                    <span className="text-sm font-semibold text-gray-800">Days Remaining</span>
+                    <span className={`font-bold text-sm ${subscription.daysRemaining <= 7 ? 'text-red-700' : 'text-green-700'}`}>
+                      {subscription.daysRemaining} days
+                    </span>
+                  </div>
+                </div>
+
+                {/* Auto-Renewal Toggle */}
+                {subscription.planCode !== 'trial' && (
+                  <div className="border-t pt-3 mt-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <RefreshCw className="h-4 w-4 text-gray-600" />
+                        <div>
+                          <p className="text-sm font-medium text-gray-700">Auto-Renewal</p>
+                          <p className="text-xs text-gray-500">Automatically renew when period ends</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setAutoRenewal(!autoRenewal)}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${autoRenewal ? 'bg-blue-600' : 'bg-gray-300'}`}
+                      >
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${autoRenewal ? 'translate-x-6' : 'translate-x-1'}`} />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Quick Actions */}
+            <div className="border-t pt-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                  <Zap className="h-4 w-4 text-amber-500" />
+                  Quick Actions
+                </h3>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <button
+                  onClick={scrollToPlans}
+                  className="flex flex-col items-center gap-1 p-3 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors group"
+                >
+                  <TrendingUp className="h-5 w-5 text-blue-600 group-hover:scale-110 transition-transform" />
+                  <span className="text-xs font-medium text-blue-700">Upgrade</span>
+                </button>
+                <button
+                  onClick={() => refetchBilling()}
+                  className="flex flex-col items-center gap-1 p-3 bg-green-50 hover:bg-green-100 rounded-lg transition-colors group"
+                >
+                  <History className="h-5 w-5 text-green-600 group-hover:scale-110 transition-transform" />
+                  <span className="text-xs font-medium text-green-700">Billing</span>
+                </button>
+                <button
+                  onClick={() => setShowSubscriptionDetails(true)}
+                  className="flex flex-col items-center gap-1 p-3 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors group"
+                >
+                  <Settings className="h-5 w-5 text-purple-600 group-hover:scale-110 transition-transform" />
+                  <span className="text-xs font-medium text-purple-700">Settings</span>
+                </button>
+                <button
+                  onClick={() => window.open('mailto:support@smartduka.co.ke?subject=Subscription Support', '_blank')}
+                  className="flex flex-col items-center gap-1 p-3 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors group"
+                >
+                  <HelpCircle className="h-5 w-5 text-amber-600 group-hover:scale-110 transition-transform" />
+                  <span className="text-xs font-medium text-amber-700">Support</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Primary Actions */}
+            <div className="flex flex-wrap gap-3 mt-6 pt-4 border-t">
               <button
-                onClick={() => reactivateSubscription()}
-                className="flex items-center gap-2 px-4 py-2 border border-green-600 text-green-600 rounded-lg hover:bg-green-50 transition-colors"
+                onClick={scrollToPlans}
+                className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-sm"
               >
-                Reactivate Subscription
+                <TrendingUp className="h-4 w-4" />
+                {subscription.planCode === 'trial' ? 'Upgrade from Trial' : 'Change Plan'}
               </button>
-            ) : (
+              {subscription.status === 'cancelled' || subscription.status === 'expired' ? (
+                <button
+                  onClick={() => reactivateSubscription()}
+                  className="flex items-center gap-2 px-5 py-2.5 border-2 border-green-600 text-green-600 rounded-lg hover:bg-green-50 transition-colors font-medium"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Reactivate Subscription
+                </button>
+              ) : subscription.planCode !== 'trial' ? (
+                <button
+                  onClick={() => {
+                    if (confirm('Are you sure you want to cancel your subscription? You will be downgraded to the free Trial plan.')) {
+                      cancelSubscription('User requested cancellation');
+                    }
+                  }}
+                  className="flex items-center gap-2 px-5 py-2.5 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                  Cancel Subscription
+                </button>
+              ) : null}
               <button
-                onClick={() => {
-                  if (confirm('Are you sure you want to cancel your subscription?')) {
-                    cancelSubscription('User requested cancellation');
-                  }
-                }}
-                className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                onClick={() => refetchSubscription()}
+                className="flex items-center gap-2 px-4 py-2.5 text-gray-600 hover:text-gray-800 transition-colors"
               >
-                Cancel Subscription
+                <RefreshCw className="h-4 w-4" />
+                Refresh
               </button>
+            </div>
+
+            {/* Upgrade Prompt for Trial Users */}
+            {subscription.planCode === 'trial' && (
+              <div className="mt-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    <Sparkles className="h-5 w-5 text-blue-600" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-semibold text-blue-900">Unlock Full Features</h4>
+                    <p className="text-sm text-blue-700 mt-1">
+                      You&apos;re on the free Trial plan with limited features. Upgrade to get more shops, employees, products, and premium features!
+                    </p>
+                    <button
+                      onClick={scrollToPlans}
+                      className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-800"
+                    >
+                      View upgrade options <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Near Limit Warning */}
+            {(subscription.usage.shops.current / subscription.usage.shops.limit > 0.8 ||
+              subscription.usage.employees.current / subscription.usage.employees.limit > 0.8 ||
+              subscription.usage.products.current / subscription.usage.products.limit > 0.8) && (
+              <div className="mt-4 p-4 bg-amber-50 rounded-lg border border-amber-200">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <h4 className="font-semibold text-amber-900">Approaching Usage Limits</h4>
+                    <p className="text-sm text-amber-700 mt-1">
+                      You&apos;re using over 80% of your plan limits. Consider upgrading to avoid interruptions.
+                    </p>
+                    <button
+                      onClick={scrollToPlans}
+                      className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-amber-700 hover:text-amber-900"
+                    >
+                      Upgrade now <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
             )}
           </div>
         </div>
@@ -681,10 +916,19 @@ export default function SubscriptionPage() {
       </div>
 
       {/* Available Plans */}
-      <div className="bg-white rounded-xl shadow-sm border p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-lg font-semibold">Available Plans</h2>
-          <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
+      <div ref={plansRef} className="bg-white rounded-xl shadow-sm border p-6 scroll-mt-6">
+        <div className="mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-amber-500" />
+                Choose Your Plan
+              </h2>
+              <p className="text-sm text-gray-600 mt-1">
+                Select the plan that best fits your business needs. Upgrade or downgrade anytime.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
             <button
               onClick={() => setBillingCycle('monthly')}
               className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
@@ -701,12 +945,13 @@ export default function SubscriptionPage() {
             >
               Annual (Save 17%)
             </button>
+            </div>
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
           {plans.map((plan) => {
-            const colors = planColors[plan.colorTheme || 'blue'];
+            const colors = getPlanColor(plan.colorTheme);
             const isCurrentPlan = subscription?.planCode === plan.code;
             const price = billingCycle === 'annual' ? plan.annualPrice : plan.monthlyPrice;
 
@@ -736,15 +981,28 @@ export default function SubscriptionPage() {
 
                 {/* Price */}
                 <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-b from-gray-50 to-white">
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-sm font-semibold text-gray-600">KES</span>
-                    <span className="text-3xl font-extrabold text-gray-900">{price.toLocaleString()}</span>
-                    <span className="text-gray-600 font-medium">/{billingCycle === 'annual' ? 'yr' : 'mo'}</span>
-                  </div>
-                  {billingCycle === 'annual' && (
-                    <p className="text-sm text-emerald-600 font-semibold mt-1">
-                      Save KES {plan.annualSavings.toLocaleString()}/year
-                    </p>
+                  {plan.code === 'trial' ? (
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-3xl font-extrabold text-gray-900">FREE</span>
+                        <Sparkles className="h-5 w-5 text-amber-500" />
+                      </div>
+                      <p className="text-sm text-gray-600 mt-1">Forever (Limited Features)</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-sm font-semibold text-gray-600">KES</span>
+                        <span className="text-3xl font-extrabold text-gray-900">{price.toLocaleString()}</span>
+                        <span className="text-gray-600 font-medium">/{billingCycle === 'annual' ? 'yr' : 'mo'}</span>
+                      </div>
+                      {billingCycle === 'annual' && plan.annualSavings > 0 && (
+                        <p className="text-sm text-emerald-600 font-semibold mt-1 flex items-center gap-1">
+                          <Percent className="h-3 w-3" />
+                          Save KES {plan.annualSavings.toLocaleString()}/year
+                        </p>
+                      )}
+                    </>
                   )}
                 </div>
 
@@ -760,7 +1018,7 @@ export default function SubscriptionPage() {
                     <div className={`p-2 ${colors.iconBg} rounded-lg`}>
                       <Users className={`h-4 w-4 ${colors.iconColor}`} />
                     </div>
-                    <span className="font-semibold text-gray-900">{plan.maxEmployees} Employees</span>
+                    <span className="font-semibold text-gray-900">{plan.maxEmployees} Employee{plan.maxEmployees > 1 ? 's' : ''}</span>
                   </div>
                   <div className="flex items-center gap-3">
                     <div className={`p-2 ${colors.iconBg} rounded-lg`}>
@@ -770,34 +1028,55 @@ export default function SubscriptionPage() {
                   </div>
                 </div>
 
-                {/* Setup Info */}
-                <div className="px-5 py-3 bg-gray-50 border-t border-gray-100">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-bold text-gray-900">Setup: KES {plan.setupPrice.toLocaleString()}</p>
-                    {plan.setupIncludes.optional && (
-                      <span className="text-xs font-medium text-gray-500 bg-gray-200 px-2 py-0.5 rounded">Optional</span>
-                    )}
+                {/* Setup Info - Hide for trial plan */}
+                {plan.code !== 'trial' && (
+                  <div className="px-5 py-3 bg-gray-50 border-t border-gray-100">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-bold text-gray-900">Setup: KES {plan.setupPrice.toLocaleString()}</p>
+                      {plan.setupIncludes?.optional && (
+                        <span className="text-xs font-medium text-gray-500 bg-gray-200 px-2 py-0.5 rounded">Optional</span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-600 mt-1">
+                      Training & Support for <span className="text-emerald-600 font-semibold">{plan.setupIncludes?.freeMonths || 1} month</span>
+                    </p>
                   </div>
-                  <p className="text-xs text-gray-600 mt-1">
-                    Training & Support for <span className="text-emerald-600 font-semibold">{plan.setupIncludes.freeMonths} month</span>
-                  </p>
-                </div>
+                )}
 
                 {/* CTA */}
-                <div className="px-5 pb-5">
+                <div className="px-5 pb-5 pt-3">
                   <button
                     onClick={() => {
-                      setSelectedPlan(plan);
-                      setShowUpgradeModal(true);
+                      if (plan.code === 'trial') {
+                        // Trial plan doesn't need payment - just select it
+                        setSelectedPlan(plan);
+                        setShowUpgradeModal(true);
+                      } else {
+                        setSelectedPlan(plan);
+                        setShowUpgradeModal(true);
+                      }
                     }}
                     disabled={isCurrentPlan}
                     className={`w-full py-2.5 rounded-lg font-bold transition-all shadow-sm ${
                       isCurrentPlan
                         ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                        : plan.code === 'trial'
+                        ? 'bg-gray-600 text-white hover:bg-gray-700 hover:shadow-md'
                         : 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-md'
                     }`}
                   >
-                    {isCurrentPlan ? 'Current Plan' : 'Select Plan'}
+                    {isCurrentPlan ? (
+                      <span className="flex items-center justify-center gap-1">
+                        <Check className="h-4 w-4" />
+                        Current Plan
+                      </span>
+                    ) : plan.code === 'trial' ? (
+                      'Start Free'
+                    ) : subscription?.planCode === 'trial' ? (
+                      'Upgrade Now'
+                    ) : (
+                      'Select Plan'
+                    )}
                   </button>
                 </div>
               </div>
@@ -849,6 +1128,41 @@ export default function SubscriptionPage() {
             ) : upgradeStep === 'confirm' ? (
               /* Step 1: Confirm Plan Details */
               <div className="p-4">
+                {/* Warning if downgrading and exceeding limits */}
+                {subscription && selectedPlan.maxProducts < subscription.usage.products.current && (
+                  <div className="bg-red-50 border-2 border-red-300 rounded-lg p-4 mb-4">
+                    <div className="flex items-start gap-3">
+                      <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <h4 className="font-bold text-red-800">Product Limit Exceeded</h4>
+                        <p className="text-sm text-red-700 mt-1">
+                          You currently have <strong>{subscription.usage.products.current}</strong> products, 
+                          but the <strong>{selectedPlan.name}</strong> plan only supports <strong>{selectedPlan.maxProducts}</strong> products.
+                        </p>
+                        <p className="text-sm text-red-600 mt-2">
+                          You will need to remove <strong>{subscription.usage.products.current - selectedPlan.maxProducts}</strong> products 
+                          before switching to this plan, or some features may be restricted.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {subscription && selectedPlan.maxEmployees < subscription.usage.employees.current && (
+                  <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-4 mb-4">
+                    <div className="flex items-start gap-3">
+                      <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <h4 className="font-bold text-amber-800">Employee Limit Exceeded</h4>
+                        <p className="text-sm text-amber-700 mt-1">
+                          You currently have <strong>{subscription.usage.employees.current}</strong> employees, 
+                          but the <strong>{selectedPlan.name}</strong> plan only supports <strong>{selectedPlan.maxEmployees}</strong> employees.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
                   <h4 className="font-semibold text-blue-800 mb-2">What you&apos;ll get:</h4>
                   <ul className="space-y-2 text-sm text-blue-700">
@@ -858,7 +1172,7 @@ export default function SubscriptionPage() {
                     </li>
                     <li className="flex items-center gap-2">
                       <Users className="h-4 w-4" />
-                      <span>Up to {selectedPlan.maxEmployees} Employees</span>
+                      <span>Up to {selectedPlan.maxEmployees} Employee{selectedPlan.maxEmployees > 1 ? 's' : ''}</span>
                     </li>
                     <li className="flex items-center gap-2">
                       <Package className="h-4 w-4" />
@@ -884,17 +1198,36 @@ export default function SubscriptionPage() {
                 <div className="flex gap-3 mt-6">
                   <button
                     onClick={closeUpgradeModal}
-                    className="flex-1 py-2.5 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
+                    className="flex-1 py-2.5 border-2 border-red-500 text-red-600 rounded-lg hover:bg-red-50 font-bold transition-colors"
                   >
                     Cancel
                   </button>
-                  <button
-                    onClick={() => setUpgradeStep('payment')}
-                    className="flex-1 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium flex items-center justify-center gap-2"
-                  >
-                    <CreditCard className="h-4 w-4" />
-                    Proceed to Pay
-                  </button>
+                  {/* For trial plan (free), no payment needed */}
+                  {selectedPlan.code === 'trial' ? (
+                    <button
+                      onClick={async () => {
+                        if (subscription && subscription.usage.products.current > selectedPlan.maxProducts) {
+                          if (!confirm(`Warning: You have ${subscription.usage.products.current} products but the Trial plan only supports ${selectedPlan.maxProducts}. Some products may become inaccessible. Continue?`)) {
+                            return;
+                          }
+                        }
+                        await handleUpgrade(selectedPlan);
+                      }}
+                      disabled={processing}
+                      className="flex-1 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 font-bold flex items-center justify-center gap-2 transition-colors"
+                    >
+                      {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                      Switch to Free Plan
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setUpgradeStep('payment')}
+                      className="flex-1 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold flex items-center justify-center gap-2 transition-colors"
+                    >
+                      <CreditCard className="h-4 w-4" />
+                      Proceed to Pay
+                    </button>
+                  )}
                 </div>
               </div>
             ) : (
@@ -1127,12 +1460,20 @@ export default function SubscriptionPage() {
                   </div>
                 )}
 
-                <button
-                  onClick={() => setUpgradeStep('confirm')}
-                  className="w-full mt-3 py-2 text-gray-600 hover:text-gray-800 text-sm flex items-center justify-center gap-1"
-                >
-                  ← Back to Plan Details
-                </button>
+                <div className="flex gap-3 mt-4">
+                  <button
+                    onClick={closeUpgradeModal}
+                    className="flex-1 py-2.5 border-2 border-red-500 text-red-600 rounded-lg hover:bg-red-50 font-bold transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => setUpgradeStep('confirm')}
+                    className="flex-1 py-2.5 border-2 border-gray-400 text-gray-700 rounded-lg hover:bg-gray-100 font-bold transition-colors flex items-center justify-center gap-1"
+                  >
+                    ← Back
+                  </button>
+                </div>
               </div>
             )}
           </div>

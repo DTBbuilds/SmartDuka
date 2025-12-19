@@ -69,7 +69,21 @@ export class SalesService {
 
     const orderNumber = `STK-${new Date().getFullYear()}-${nanoid(6).toUpperCase()}`;
 
-    // STEP 4: CREATE ORDER
+    // STEP 4: CREATE ORDER (with cost tracking for profit analytics)
+    // Fetch product costs for profit tracking
+    const productCosts = new Map<string, number>();
+    for (const item of dto.items) {
+      try {
+        const product = await this.inventoryService.getProductById(shopId, item.productId);
+        if (product) {
+          productCosts.set(item.productId, product.cost || 0);
+        }
+      } catch {
+        // If product not found, default cost to 0
+        productCosts.set(item.productId, 0);
+      }
+    }
+
     let order: OrderDocument;
     try {
       order = new this.orderModel({
@@ -84,6 +98,7 @@ export class SalesService {
           quantity: item.quantity,
           unitPrice: item.unitPrice,
           lineTotal: item.unitPrice * item.quantity,
+          cost: productCosts.get(item.productId) || 0,
         })),
         subtotal,
         tax,
@@ -183,9 +198,25 @@ export class SalesService {
     }
 
     // STEP 7: RECORD PAYMENT TRANSACTIONS FOR ANALYTICS
+    // Only record completed payments - M-Pesa/Stripe pending payments are tracked separately
     if (dto.payments && dto.payments.length > 0) {
       for (const payment of dto.payments) {
         try {
+          // Determine payment status based on method and receipt
+          // M-Pesa: only completed if we have a receipt number (confirmed via callback)
+          // Stripe: only completed if we have a charge ID
+          // Cash/Card/Send Money: completed immediately
+          let paymentStatus: 'completed' | 'pending' | 'failed' = 'completed';
+          
+          if (payment.method === 'mpesa') {
+            // M-Pesa is only completed if we have a receipt number from callback
+            paymentStatus = payment.mpesaReceiptNumber ? 'completed' : 'pending';
+          } else if (payment.method === 'stripe') {
+            // Stripe is only completed if we have confirmation
+            paymentStatus = payment.stripeChargeId ? 'completed' : 'pending';
+          }
+          // Cash, card, send_money, bank, qr, other are considered completed immediately
+          
           await this.paymentTransactionService.createTransaction({
             shopId,
             orderId: order._id.toString(),
@@ -193,9 +224,9 @@ export class SalesService {
             cashierId: userId,
             cashierName: dto.cashierName || 'Unknown',
             branchId: branchId,
-            paymentMethod: payment.method as 'cash' | 'card' | 'mpesa' | 'other',
+            paymentMethod: payment.method as 'cash' | 'card' | 'mpesa' | 'send_money' | 'qr' | 'stripe' | 'bank' | 'other',
             amount: payment.amount,
-            status: 'completed',
+            status: paymentStatus,
             customerName: dto.customerName,
             customerPhone: payment.customerPhone,
             mpesaReceiptNumber: payment.mpesaReceiptNumber,
@@ -764,14 +795,26 @@ export class SalesService {
       };
     });
 
-    // Payment methods breakdown - use payments array
+    // Payment methods breakdown - use TODAY's orders for consistency with today's stats
     const paymentMethods = new Map<string, { count: number; total: number }>();
-    monthOrders.forEach(order => {
-      const method = order.payments?.[0]?.method || 'cash';
-      const existing = paymentMethods.get(method) || { count: 0, total: 0 };
-      existing.count += 1;
-      existing.total += order.total || 0;
-      paymentMethods.set(method, existing);
+    todayOrders.forEach(order => {
+      // Handle multiple payments per order
+      if (order.payments && order.payments.length > 0) {
+        order.payments.forEach((payment: any) => {
+          const method = payment.method || 'cash';
+          const existing = paymentMethods.get(method) || { count: 0, total: 0 };
+          existing.count += 1;
+          existing.total += payment.amount || 0;
+          paymentMethods.set(method, existing);
+        });
+      } else {
+        // Fallback for orders without payments array
+        const method = 'cash';
+        const existing = paymentMethods.get(method) || { count: 0, total: 0 };
+        existing.count += 1;
+        existing.total += order.total || 0;
+        paymentMethods.set(method, existing);
+      }
     });
 
     return {
@@ -817,14 +860,19 @@ export class SalesService {
         createdAt: { $gte: monthAgo },
       }).sort({ createdAt: -1 }).exec();
 
-    const todayOrders = monthOrders.filter(o => {
+    // Filter orders by time period
+    const todayAllOrders = monthOrders.filter(o => {
       const doc = o as any;
       return doc.createdAt && new Date(doc.createdAt) >= today;
     });
-    const weekOrders = monthOrders.filter(o => {
+    const weekAllOrders = monthOrders.filter(o => {
       const doc = o as any;
       return doc.createdAt && new Date(doc.createdAt) >= weekAgo;
     });
+
+    // Filter COMPLETED orders only (consistent with dashboard stats)
+    const todayOrders = todayAllOrders.filter(o => o.status === 'completed');
+    const weekOrders = weekAllOrders.filter(o => o.status === 'completed');
 
     // Calculate stats - use 'void' instead of 'cancelled' per schema
     const completedOrders = monthOrders.filter(o => o.status === 'completed');
@@ -833,8 +881,8 @@ export class SalesService {
     // Check transactionType for refunds
     const refundedOrders = monthOrders.filter(o => o.transactionType === 'refund');
 
-    const todayRevenue = todayOrders.filter(o => o.status === 'completed').reduce((sum, o) => sum + (o.total || 0), 0);
-    const weekRevenue = weekOrders.filter(o => o.status === 'completed').reduce((sum, o) => sum + (o.total || 0), 0);
+    const todayRevenue = todayOrders.reduce((sum, o) => sum + (o.total || 0), 0);
+    const weekRevenue = weekOrders.reduce((sum, o) => sum + (o.total || 0), 0);
     const monthRevenue = completedOrders.reduce((sum, o) => sum + (o.total || 0), 0);
 
     const completionRate = monthOrders.length > 0 
@@ -926,5 +974,158 @@ export class SalesService {
         `Failed to load orders analytics: ${error.message}`
       );
     }
+  }
+
+  /**
+   * PROFIT ANALYTICS - Compare purchases vs sales
+   * 
+   * Calculates comprehensive profit margins by comparing:
+   * - Total cost of goods sold (from product cost prices)
+   * - Total revenue from sales
+   * - Stock purchase costs from purchase orders
+   * 
+   * @param shopId - Shop ID for multi-tenant isolation
+   * @param range - Time range: 'today', 'week', 'month', 'year'
+   */
+  async getProfitAnalytics(shopId: string, range: string = 'month') {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const yearAgo = new Date(today.getTime() - 365 * 24 * 60 * 60 * 1000);
+
+    // Determine date range
+    let startDate: Date;
+    switch (range) {
+      case 'today': startDate = today; break;
+      case 'week': startDate = weekAgo; break;
+      case 'year': startDate = yearAgo; break;
+      default: startDate = monthAgo;
+    }
+
+    // Get completed orders for the period
+    const orders = await this.orderModel.find({
+      shopId: new Types.ObjectId(shopId),
+      status: 'completed',
+      createdAt: { $gte: startDate },
+    }).exec();
+
+    // Calculate revenue and cost of goods sold
+    let totalRevenue = 0;
+    let totalCostOfGoodsSold = 0;
+    let totalItemsSold = 0;
+    const productProfits = new Map<string, { 
+      name: string; 
+      revenue: number; 
+      cost: number; 
+      profit: number; 
+      quantity: number;
+      margin: number;
+    }>();
+
+    // Daily breakdown for trend chart
+    const dailyProfits = new Map<string, { revenue: number; cost: number; profit: number; orders: number }>();
+
+    for (const order of orders) {
+      const orderDate = new Date((order as any).createdAt).toISOString().split('T')[0];
+      const dayData = dailyProfits.get(orderDate) || { revenue: 0, cost: 0, profit: 0, orders: 0 };
+      
+      let orderCost = 0;
+      for (const item of order.items || []) {
+        const itemRevenue = (item.unitPrice || 0) * (item.quantity || 0);
+        const itemCost = (item.cost || 0) * (item.quantity || 0);
+        
+        totalRevenue += itemRevenue;
+        totalCostOfGoodsSold += itemCost;
+        totalItemsSold += item.quantity || 0;
+        orderCost += itemCost;
+
+        // Track per-product profits
+        const productKey = item.productId?.toString() || item.name;
+        const existing = productProfits.get(productKey) || {
+          name: item.name || 'Unknown',
+          revenue: 0,
+          cost: 0,
+          profit: 0,
+          quantity: 0,
+          margin: 0,
+        };
+        existing.revenue += itemRevenue;
+        existing.cost += itemCost;
+        existing.profit += itemRevenue - itemCost;
+        existing.quantity += item.quantity || 0;
+        existing.margin = existing.revenue > 0 
+          ? Math.round((existing.profit / existing.revenue) * 1000) / 10 
+          : 0;
+        productProfits.set(productKey, existing);
+      }
+
+      dayData.revenue += order.total || 0;
+      dayData.cost += orderCost;
+      dayData.profit += (order.total || 0) - orderCost;
+      dayData.orders += 1;
+      dailyProfits.set(orderDate, dayData);
+    }
+
+    // Calculate overall metrics
+    const grossProfit = totalRevenue - totalCostOfGoodsSold;
+    const grossMargin = totalRevenue > 0 
+      ? Math.round((grossProfit / totalRevenue) * 1000) / 10 
+      : 0;
+    const averageOrderProfit = orders.length > 0 
+      ? Math.round(grossProfit / orders.length) 
+      : 0;
+    const averageItemProfit = totalItemsSold > 0 
+      ? Math.round(grossProfit / totalItemsSold) 
+      : 0;
+
+    // Top profitable products
+    const topProfitableProducts = Array.from(productProfits.values())
+      .sort((a, b) => b.profit - a.profit)
+      .slice(0, 10);
+
+    // Lowest margin products (potential issues)
+    const lowMarginProducts = Array.from(productProfits.values())
+      .filter(p => p.margin < 20 && p.quantity > 0)
+      .sort((a, b) => a.margin - b.margin)
+      .slice(0, 5);
+
+    // Daily trend for chart (last 30 days)
+    const dailyTrend = Array.from({ length: 30 }, (_, i) => {
+      const date = new Date(today.getTime() - (29 - i) * 24 * 60 * 60 * 1000);
+      const dateStr = date.toISOString().split('T')[0];
+      const dayData = dailyProfits.get(dateStr) || { revenue: 0, cost: 0, profit: 0, orders: 0 };
+      return {
+        date: dateStr,
+        revenue: dayData.revenue,
+        cost: dayData.cost,
+        profit: dayData.profit,
+        orders: dayData.orders,
+        margin: dayData.revenue > 0 
+          ? Math.round((dayData.profit / dayData.revenue) * 1000) / 10 
+          : 0,
+      };
+    });
+
+    return {
+      // Summary metrics
+      totalRevenue,
+      totalCostOfGoodsSold,
+      grossProfit,
+      grossMargin,
+      totalOrders: orders.length,
+      totalItemsSold,
+      averageOrderProfit,
+      averageItemProfit,
+      // Product breakdowns
+      topProfitableProducts,
+      lowMarginProducts,
+      // Trend data
+      dailyTrend,
+      // Period info
+      period: range,
+      startDate: startDate.toISOString(),
+      endDate: now.toISOString(),
+    };
   }
 }

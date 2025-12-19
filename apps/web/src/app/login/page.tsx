@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ShoppingCart, AlertCircle, Lock, Store, BarChart3, Users, Shield, Sparkles, ArrowRight, Clock } from 'lucide-react';
+import { ShoppingCart, AlertCircle, Lock, Store, BarChart3, Users, Shield, Sparkles, ArrowRight, Clock, Smartphone, CreditCard, Zap, CheckCircle, TrendingUp, Package, Receipt, Wifi } from 'lucide-react';
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@smartduka/ui';
 import { useAuth } from '@/lib/auth-context';
 import { config } from '@/lib/config';
@@ -22,6 +22,7 @@ export default function LoginPage() {
   const [superAdminError, setSuperAdminError] = useState('');
   const [superAdminLoading, setSuperAdminLoading] = useState(false);
   const [sessionExpired, setSessionExpired] = useState(false);
+  const [activeFeature, setActiveFeature] = useState(0);
 
   const { login, loginWithPin, loginWithGoogle, enterDemoMode } = useAuth();
   const router = useRouter();
@@ -39,13 +40,23 @@ export default function LoginPage() {
     }
   }, [googleError, expired]);
 
+  // Auto-rotate features in hero section
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActiveFeature((prev) => (prev + 1) % 4);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, []);
+
   const fetchShops = async () => {
     try {
       setLoadingShops(true);
       const base = config.apiUrl;
       const res = await fetch(`${base}/shops`);
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : [];
+      
       if (res.ok) {
-        const data = await res.json();
         setShops(Array.isArray(data) ? data : []);
       }
     } catch (err) {
@@ -131,57 +142,246 @@ export default function LoginPage() {
 
   return (
     <div className="h-screen bg-background flex overflow-hidden">
-      {/* Left Panel - Branding (Dark themed) */}
+      {/* Left Panel - Enhanced Interactive Hero */}
       <div className="hidden lg:flex lg:w-1/2 xl:w-3/5 bg-slate-900 p-8 flex-col justify-between relative overflow-hidden">
-        {/* Background Pattern */}
-        <div className="absolute inset-0 opacity-20">
-          <div className="absolute top-20 left-20 w-72 h-72 bg-primary rounded-full blur-3xl" />
-          <div className="absolute bottom-20 right-20 w-96 h-96 bg-orange-600 rounded-full blur-3xl" />
+        {/* Animated Background Pattern */}
+        <div className="absolute inset-0">
+          <div className="absolute top-20 left-20 w-72 h-72 bg-primary/30 rounded-full blur-3xl animate-pulse" />
+          <div className="absolute bottom-20 right-20 w-96 h-96 bg-orange-600/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-green-500/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }} />
+          {/* Grid Pattern */}
+          <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:50px_50px]" />
         </div>
         
+        {/* Header */}
         <div className="relative z-10">
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-primary/20 rounded-xl">
-              <ShoppingCart className="h-8 w-8 text-primary" />
+            <div className="p-3 bg-gradient-to-br from-primary to-orange-500 rounded-xl shadow-lg shadow-primary/30">
+              <ShoppingCart className="h-8 w-8 text-white" />
             </div>
-            <span className="text-3xl font-bold text-white">SmartDuka</span>
+            <div>
+              <span className="text-3xl font-bold text-white">SmartDuka</span>
+              <p className="text-xs text-slate-400">Point of Sale & Inventory</p>
+            </div>
           </div>
         </div>
         
-        <div className="relative z-10 space-y-8">
+        {/* Main Content */}
+        <div className="relative z-10 space-y-4">
           <div>
-            <h1 className="text-4xl xl:text-5xl font-bold text-white leading-tight">
-              Manage Your Business<br />
-              <span className="text-primary">Smarter & Faster</span>
+            <h1 className="text-2xl xl:text-3xl font-bold text-white leading-tight">
+              Manage Your Business
+              <span className="bg-gradient-to-r from-primary via-green-400 to-orange-400 bg-clip-text text-transparent"> Smarter & Faster</span>
             </h1>
-            <p className="mt-4 text-lg text-slate-300 max-w-md">
-              Complete POS solution for Kenyan retailers. Track sales, manage inventory, and grow your business.
+            <p className="mt-1.5 text-sm text-slate-300 max-w-md leading-relaxed">
+              Complete POS for Kenyan retailers. M-Pesa payments, sales tracking, inventory management.
             </p>
           </div>
-          
-          {/* Feature highlights */}
-          <div className="grid grid-cols-2 gap-4 max-w-lg">
-            <div className="flex items-center gap-3 bg-white/10 rounded-lg p-3">
-              <Store className="h-5 w-5 text-primary" />
-              <span className="text-sm text-white">Multi-branch Support</span>
+
+          {/* Interactive Feature Showcase */}
+          <div className="space-y-2.5">
+            {/* Feature Tabs */}
+            <div className="flex gap-1.5">
+              {[
+                { icon: Smartphone, label: 'Payments' },
+                { icon: Package, label: 'Inventory' },
+                { icon: BarChart3, label: 'Analytics' },
+                { icon: Users, label: 'Team' },
+              ].map((tab, index) => (
+                <button
+                  key={index}
+                  onClick={() => setActiveFeature(index)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-300 ${
+                    activeFeature === index
+                      ? 'bg-primary text-white shadow-lg shadow-primary/30'
+                      : 'bg-white/10 text-slate-300 hover:bg-white/20'
+                  }`}
+                >
+                  <tab.icon className="h-3.5 w-3.5" />
+                  <span className="hidden xl:inline">{tab.label}</span>
+                </button>
+              ))}
             </div>
-            <div className="flex items-center gap-3 bg-white/10 rounded-lg p-3">
-              <BarChart3 className="h-5 w-5 text-primary" />
-              <span className="text-sm text-white">Real-time Analytics</span>
+
+            {/* Feature Content Cards */}
+            <div className="relative h-48 overflow-hidden">
+              {/* Payment Methods Feature */}
+              <div className={`absolute inset-0 transition-all duration-500 ${activeFeature === 0 ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-8 pointer-events-none'}`}>
+                <div className="bg-gradient-to-br from-green-900/50 to-emerald-900/30 backdrop-blur-sm rounded-lg p-4 border border-green-500/20 h-full flex flex-col">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="p-2 bg-green-500/20 rounded-lg">
+                      <Smartphone className="h-5 w-5 text-green-400" />
+                    </div>
+                    <h3 className="text-base font-bold text-white">Accept Multiple Payments</h3>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2.5 flex-1">
+                    <div className="flex items-center gap-2 bg-white/10 rounded-lg p-2.5">
+                      <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <span className="text-white text-xs font-bold">M</span>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-white text-xs font-medium leading-tight">M-Pesa STK</p>
+                        <p className="text-slate-400 text-[10px]">Instant push</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 bg-white/10 rounded-lg p-2.5">
+                      <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <Smartphone className="h-4 w-4 text-white" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-white text-xs font-medium leading-tight">Send Money</p>
+                        <p className="text-slate-400 text-[10px]">Manual confirm</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 bg-white/10 rounded-lg p-2.5">
+                      <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <CreditCard className="h-4 w-4 text-white" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-white text-xs font-medium leading-tight">Card/Stripe</p>
+                        <p className="text-slate-400 text-[10px]">Visa, Mastercard</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 bg-white/10 rounded-lg p-2.5">
+                      <div className="w-8 h-8 bg-slate-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <Receipt className="h-4 w-4 text-white" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-white text-xs font-medium leading-tight">Cash</p>
+                        <p className="text-slate-400 text-[10px]">With change calc</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Inventory Feature */}
+              <div className={`absolute inset-0 transition-all duration-500 ${activeFeature === 1 ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-8 pointer-events-none'}`}>
+                <div className="bg-gradient-to-br from-purple-900/50 to-indigo-900/30 backdrop-blur-sm rounded-lg p-4 border border-purple-500/20 h-full flex flex-col">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="p-2 bg-purple-500/20 rounded-lg">
+                      <Package className="h-5 w-5 text-purple-400" />
+                    </div>
+                    <h3 className="text-base font-bold text-white">Smart Inventory</h3>
+                  </div>
+                  <div className="space-y-2 flex-1">
+                    <div className="flex items-center gap-2.5 bg-white/10 rounded-lg p-2.5">
+                      <CheckCircle className="h-4 w-4 text-green-400 flex-shrink-0" />
+                      <span className="text-white text-xs">Barcode scanning (camera & hardware)</span>
+                    </div>
+                    <div className="flex items-center gap-2.5 bg-white/10 rounded-lg p-2.5">
+                      <CheckCircle className="h-4 w-4 text-green-400 flex-shrink-0" />
+                      <span className="text-white text-xs">Low stock alerts & auto-reorder</span>
+                    </div>
+                    <div className="flex items-center gap-2.5 bg-white/10 rounded-lg p-2.5">
+                      <CheckCircle className="h-4 w-4 text-green-400 flex-shrink-0" />
+                      <span className="text-white text-xs">Bulk import from CSV/Excel</span>
+                    </div>
+                    <div className="flex items-center gap-2.5 bg-white/10 rounded-lg p-2.5">
+                      <CheckCircle className="h-4 w-4 text-green-400 flex-shrink-0" />
+                      <span className="text-white text-xs">Multi-branch stock sync</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Analytics Feature */}
+              <div className={`absolute inset-0 transition-all duration-500 ${activeFeature === 2 ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-8 pointer-events-none'}`}>
+                <div className="bg-gradient-to-br from-blue-900/50 to-cyan-900/30 backdrop-blur-sm rounded-lg p-4 border border-blue-500/20 h-full flex flex-col">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="p-2 bg-blue-500/20 rounded-lg">
+                      <BarChart3 className="h-5 w-5 text-blue-400" />
+                    </div>
+                    <h3 className="text-base font-bold text-white">Real-time Analytics</h3>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2.5 flex-1">
+                    <div className="bg-white/10 rounded-lg p-3 text-center flex flex-col items-center justify-center">
+                      <TrendingUp className="h-5 w-5 text-green-400 mb-1" />
+                      <p className="text-white text-xs font-medium">Sales Trends</p>
+                      <p className="text-slate-400 text-[10px]">Daily/Weekly/Monthly</p>
+                    </div>
+                    <div className="bg-white/10 rounded-lg p-3 text-center flex flex-col items-center justify-center">
+                      <Package className="h-5 w-5 text-purple-400 mb-1" />
+                      <p className="text-white text-xs font-medium">Top Products</p>
+                      <p className="text-slate-400 text-[10px]">Best sellers</p>
+                    </div>
+                    <div className="bg-white/10 rounded-lg p-3 text-center flex flex-col items-center justify-center">
+                      <Receipt className="h-5 w-5 text-orange-400 mb-1" />
+                      <p className="text-white text-xs font-medium">Profit Reports</p>
+                      <p className="text-slate-400 text-[10px]">Margins & costs</p>
+                    </div>
+                    <div className="bg-white/10 rounded-lg p-3 text-center flex flex-col items-center justify-center">
+                      <Zap className="h-5 w-5 text-yellow-400 mb-1" />
+                      <p className="text-white text-xs font-medium">Live Dashboard</p>
+                      <p className="text-slate-400 text-[10px]">Real-time updates</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Team Feature */}
+              <div className={`absolute inset-0 transition-all duration-500 ${activeFeature === 3 ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-8 pointer-events-none'}`}>
+                <div className="bg-gradient-to-br from-amber-900/50 to-orange-900/30 backdrop-blur-sm rounded-lg p-4 border border-amber-500/20 h-full flex flex-col">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="p-2 bg-amber-500/20 rounded-lg">
+                      <Users className="h-5 w-5 text-amber-400" />
+                    </div>
+                    <h3 className="text-base font-bold text-white">Team Management</h3>
+                  </div>
+                  <div className="space-y-2 flex-1">
+                    <div className="flex items-center gap-2.5 bg-white/10 rounded-lg p-2.5">
+                      <Shield className="h-4 w-4 text-blue-400 flex-shrink-0" />
+                      <span className="text-white text-xs">Role-based access (Admin, Manager, Cashier)</span>
+                    </div>
+                    <div className="flex items-center gap-2.5 bg-white/10 rounded-lg p-2.5">
+                      <Lock className="h-4 w-4 text-green-400 flex-shrink-0" />
+                      <span className="text-white text-xs">Quick PIN login for cashiers</span>
+                    </div>
+                    <div className="flex items-center gap-2.5 bg-white/10 rounded-lg p-2.5">
+                      <BarChart3 className="h-4 w-4 text-purple-400 flex-shrink-0" />
+                      <span className="text-white text-xs">Employee performance tracking</span>
+                    </div>
+                    <div className="flex items-center gap-2.5 bg-white/10 rounded-lg p-2.5">
+                      <Clock className="h-4 w-4 text-orange-400 flex-shrink-0" />
+                      <span className="text-white text-xs">Shift management & activity logs</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="flex items-center gap-3 bg-white/10 rounded-lg p-3">
-              <Users className="h-5 w-5 text-primary" />
-              <span className="text-sm text-white">Team Management</span>
-            </div>
-            <div className="flex items-center gap-3 bg-white/10 rounded-lg p-3">
-              <Shield className="h-5 w-5 text-primary" />
-              <span className="text-sm text-white">Secure & Reliable</span>
+
+            {/* Progress Dots */}
+            <div className="flex justify-center gap-1.5">
+              {[0, 1, 2, 3].map((index) => (
+                <button
+                  key={index}
+                  onClick={() => setActiveFeature(index)}
+                  className={`rounded-full transition-all duration-300 ${
+                    activeFeature === index ? 'w-6 h-1.5 bg-primary' : 'w-1.5 h-1.5 bg-white/30 hover:bg-white/50'
+                  }`}
+                />
+              ))}
             </div>
           </div>
+
         </div>
         
-        <div className="relative z-10 text-slate-500 text-sm">
-          © 2024 SmartDuka. Built for Kenyan businesses.
+        {/* Footer */}
+        <div className="relative z-10 flex items-center justify-between text-xs">
+          <div className="text-slate-500">
+            © 2024 SmartDuka
+          </div>
+          {/* Stats */}
+          <div className="flex items-center gap-4 text-slate-400">
+            <div className="flex items-center gap-1">
+              <Store className="h-3 w-3" />
+              <span className="hidden sm:inline">500+ Shops</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <Wifi className="h-3 w-3 text-green-400" />
+              <span className="hidden sm:inline">99.9% Uptime</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -294,6 +494,37 @@ export default function LoginPage() {
             <p className="mt-4 text-center text-xs text-muted-foreground">
               New here? <a href="/register-shop" className="text-primary hover:underline font-medium">Start free trial →</a>
             </p>
+
+            {/* Mobile Feature Highlights - Only visible on mobile */}
+            <div className="mt-6 lg:hidden">
+              <div className="border-t border-border pt-4">
+                <p className="text-xs text-muted-foreground text-center mb-3">Why SmartDuka?</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="flex items-center gap-2 p-2 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                    <div className="w-6 h-6 bg-green-500 rounded flex items-center justify-center flex-shrink-0">
+                      <span className="text-white text-[8px] font-bold">M</span>
+                    </div>
+                    <span className="text-xs text-foreground font-medium">M-Pesa STK</span>
+                  </div>
+                  <div className="flex items-center gap-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                    <CreditCard className="h-4 w-4 text-blue-500 flex-shrink-0" />
+                    <span className="text-xs text-foreground font-medium">Card Payments</span>
+                  </div>
+                  <div className="flex items-center gap-2 p-2 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+                    <Package className="h-4 w-4 text-purple-500 flex-shrink-0" />
+                    <span className="text-xs text-foreground font-medium">Inventory</span>
+                  </div>
+                  <div className="flex items-center gap-2 p-2 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
+                    <BarChart3 className="h-4 w-4 text-orange-500 flex-shrink-0" />
+                    <span className="text-xs text-foreground font-medium">Analytics</span>
+                  </div>
+                </div>
+                <p className="text-[10px] text-muted-foreground text-center mt-3 flex items-center justify-center gap-1">
+                  <CheckCircle className="h-3 w-3 text-green-500" />
+                  Free trial • No credit card required
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -346,6 +577,7 @@ export default function LoginPage() {
           </Card>
         )}
       </div>
+
     </div>
   );
 }

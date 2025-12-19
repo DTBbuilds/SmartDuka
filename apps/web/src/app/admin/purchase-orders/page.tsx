@@ -37,8 +37,10 @@ export default function PurchaseOrdersPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : [];
+      
       if (res.ok) {
-        const data = await res.json();
         setOrders(Array.isArray(data) ? data : []);
       } else {
         setError('Failed to fetch purchase orders');

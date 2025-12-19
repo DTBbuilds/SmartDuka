@@ -74,6 +74,15 @@ export class CheckoutPaymentDto {
   @IsString()
   cardBrand?: string;
 
+  // Stripe specific fields
+  @IsOptional()
+  @IsString()
+  stripeChargeId?: string;
+
+  @IsOptional()
+  @IsString()
+  stripePaymentIntentId?: string;
+
   @IsOptional()
   @IsString()
   notes?: string;

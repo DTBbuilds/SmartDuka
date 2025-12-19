@@ -87,20 +87,8 @@ export default function OrdersPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
 
-  // Check if user is admin
-  if (user?.role !== "admin") {
-    return (
-      <div className="container py-8">
-        <div className="text-center">
-          <Receipt className="mx-auto h-12 w-12 text-muted-foreground" />
-          <h2 className="mt-4 text-xl font-semibold">Access Denied</h2>
-          <p className="mt-2 text-muted-foreground">
-            You need admin privileges to access order management
-          </p>
-        </div>
-      </div>
-    );
-  }
+  // Check if user is admin - moved after all hooks
+  const isAdmin = user?.role === "admin";
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -115,7 +103,8 @@ export default function OrdersPage() {
       });
 
       if (res.ok) {
-        const data = await res.json();
+        const text = await res.text();
+        const data = text ? JSON.parse(text) : [];
         const ordersData = Array.isArray(data) ? data : [];
         setOrders(ordersData);
         
@@ -143,10 +132,30 @@ export default function OrdersPage() {
   }, [token, currentBranch]);
 
   useEffect(() => {
-    if (token) {
+    if (token && isAdmin) {
       fetchOrders();
     }
-  }, [token, currentBranch, fetchOrders]);
+  }, [token, currentBranch, fetchOrders, isAdmin]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter, paymentFilter, dateFilter]);
+
+  // Access denied for non-admins
+  if (!isAdmin) {
+    return (
+      <div className="container py-8">
+        <div className="text-center">
+          <Receipt className="mx-auto h-12 w-12 text-muted-foreground" />
+          <h2 className="mt-4 text-xl font-semibold">Access Denied</h2>
+          <p className="mt-2 text-muted-foreground">
+            You need admin privileges to access order management
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   // Filter orders based on search and filters
   const filteredOrders = orders.filter((order) => {
@@ -311,11 +320,6 @@ export default function OrdersPage() {
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
   );
-
-  // Reset page when filters change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery, statusFilter, paymentFilter, dateFilter]);
 
   return (
     <div className="p-4 md:p-6 space-y-4 md:space-y-6">
