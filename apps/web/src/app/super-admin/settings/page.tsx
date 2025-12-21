@@ -158,19 +158,19 @@ export default function SuperAdminSettingsPage() {
   }
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <div className="flex items-center gap-3 mb-6">
+    <div className="p-4 md:p-6 max-w-6xl mx-auto">
+      <div className="flex items-center gap-3 mb-4 md:mb-6">
         <div className="p-2 rounded-lg bg-primary/10">
           <Settings className="h-6 w-6 text-primary" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold">System Settings</h1>
-          <p className="text-muted-foreground">Manage system-wide payment configurations</p>
+          <h1 className="text-xl md:text-2xl font-bold">System Settings</h1>
+          <p className="text-sm md:text-base text-muted-foreground">Manage system-wide payment configurations</p>
         </div>
       </div>
 
       {message && (
-        <div className={`mb-6 p-4 rounded-lg flex items-center gap-3 ${
+        <div className={`mb-4 md:mb-6 p-3 md:p-4 rounded-lg flex items-center gap-3 ${
           message.type === 'success' 
             ? 'bg-green-50 text-green-800 border border-green-200' 
             : 'bg-red-50 text-red-800 border border-red-200'
@@ -191,7 +191,7 @@ export default function SuperAdminSettingsPage() {
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="mb-6">
+        <TabsList className="mb-4 md:mb-6 w-full md:w-auto">
           <TabsTrigger value="mpesa" className="flex items-center gap-2">
             <Smartphone className="h-4 w-4" />
             M-Pesa STK Push
@@ -203,7 +203,7 @@ export default function SuperAdminSettingsPage() {
         </TabsList>
 
         <TabsContent value="mpesa">
-          <div className="grid gap-6 md:grid-cols-2">
+          <div className="grid gap-4 md:gap-6 md:grid-cols-2">
             {/* Current Configuration Status */}
             <Card>
               <CardHeader>
@@ -334,7 +334,7 @@ export default function SuperAdminSettingsPage() {
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <Label>Environment</Label>
-                  <div className="flex gap-2">
+                  <div className="flex flex-col sm:flex-row gap-2">
                     <Button
                       type="button"
                       variant={mpesaForm.environment === 'sandbox' ? 'default' : 'outline'}
@@ -419,7 +419,7 @@ export default function SuperAdminSettingsPage() {
                   </p>
                 </div>
 
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2 text-sm">
                   <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
                   <div className="text-sm text-amber-800">
                     <strong>Important:</strong> These credentials are used for all subscription payments. 
@@ -445,7 +445,7 @@ export default function SuperAdminSettingsPage() {
         </TabsContent>
 
         <TabsContent value="stripe">
-          <Card>
+          <Card className="overflow-hidden">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <CreditCard className="h-5 w-5" />

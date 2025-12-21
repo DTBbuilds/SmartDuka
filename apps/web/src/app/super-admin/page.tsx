@@ -84,25 +84,27 @@ export default function SuperAdminDashboard() {
     <main className="bg-background min-h-screen">
       <ToastContainer toasts={toasts} onDismiss={dismiss} />
 
-      <div className="p-8">
+      <div className="p-4 md:p-8">
         {/* Header */}
-        <div className="mb-8 flex justify-between items-center">
-          <div>
-            <h1 className="text-4xl font-bold">Super Admin Dashboard</h1>
-            <p className="text-muted-foreground mt-2">Manage shops and monitor platform activity</p>
+        <div className="mb-6 md:mb-8">
+          <div className="flex justify-between items-start gap-4">
+            <div className="flex-1">
+              <h1 className="text-2xl md:text-4xl font-bold">Super Admin Dashboard</h1>
+              <p className="text-sm md:text-base text-muted-foreground mt-1 md:mt-2">Manage shops and monitor platform activity</p>
+            </div>
+            <button
+              onClick={loadStats}
+              disabled={loading}
+              className="flex items-center gap-2 px-3 md:px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 text-sm md:text-base flex-shrink-0"
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">Refresh</span>
+            </button>
           </div>
-          <button
-            onClick={loadStats}
-            disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50"
-          >
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
         </div>
 
         {/* Stats Grid - Clickable Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4 mb-6 md:mb-8">
           {/* Pending Shops */}
           <Card 
             onClick={() => navigateToShops('pending')}
@@ -121,8 +123,8 @@ export default function SuperAdminDashboard() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-yellow-600">{stats?.pending ?? 0}</div>
-              <p className="text-xs text-muted-foreground mt-1 group-hover:text-yellow-600 transition-colors">
+              <div className="text-2xl md:text-3xl font-bold text-yellow-600">{stats?.pending ?? 0}</div>
+              <p className="text-[10px] md:text-xs text-muted-foreground mt-1 group-hover:text-yellow-600 transition-colors">
                 Awaiting verification →
               </p>
             </CardContent>
@@ -146,7 +148,7 @@ export default function SuperAdminDashboard() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-green-600">{stats?.active ?? 0}</div>
+              <div className="text-2xl md:text-3xl font-bold text-green-600">{stats?.active ?? 0}</div>
               <p className="text-xs text-muted-foreground mt-1 group-hover:text-green-600 transition-colors">
                 Fully operational →
               </p>
@@ -171,7 +173,7 @@ export default function SuperAdminDashboard() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-red-600">{stats?.suspended ?? 0}</div>
+              <div className="text-2xl md:text-3xl font-bold text-red-600">{stats?.suspended ?? 0}</div>
               <p className="text-xs text-muted-foreground mt-1 group-hover:text-red-600 transition-colors">
                 Temporarily blocked →
               </p>
@@ -196,7 +198,7 @@ export default function SuperAdminDashboard() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-orange-600">{stats?.flagged ?? 0}</div>
+              <div className="text-2xl md:text-3xl font-bold text-orange-600">{stats?.flagged ?? 0}</div>
               <p className="text-xs text-muted-foreground mt-1 group-hover:text-orange-600 transition-colors">
                 Under review →
               </p>
@@ -221,7 +223,7 @@ export default function SuperAdminDashboard() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-primary">{stats?.total ?? 0}</div>
+              <div className="text-2xl md:text-3xl font-bold text-primary">{stats?.total ?? 0}</div>
               <p className="text-xs text-muted-foreground mt-1 group-hover:text-primary transition-colors">
                 View all shops →
               </p>
@@ -230,7 +232,7 @@ export default function SuperAdminDashboard() {
         </div>
 
         {/* Admin Actions & Quick Access */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
           
           {/* Quick Actions Panel */}
           <Card className="lg:col-span-2">
@@ -242,29 +244,29 @@ export default function SuperAdminDashboard() {
               <CardDescription>Common administrative tasks</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <button
                   onClick={() => router.push('/super-admin/shops')}
                   className="flex flex-col items-center gap-2 p-4 rounded-lg border hover:bg-muted hover:border-primary transition-all group"
                 >
-                  <Store className="h-6 w-6 text-muted-foreground group-hover:text-primary transition-colors" />
-                  <span className="text-sm font-medium">All Shops</span>
+                  <Store className="h-5 w-5 md:h-6 md:w-6 text-muted-foreground group-hover:text-primary transition-colors" />
+                  <span className="text-xs md:text-sm font-medium text-center">All Shops</span>
                 </button>
                 
                 <button
                   onClick={() => router.push('/super-admin/support')}
                   className="flex flex-col items-center gap-2 p-4 rounded-lg border hover:bg-muted hover:border-primary transition-all group"
                 >
-                  <Headphones className="h-6 w-6 text-muted-foreground group-hover:text-primary transition-colors" />
-                  <span className="text-sm font-medium">Support</span>
+                  <Headphones className="h-5 w-5 md:h-6 md:w-6 text-muted-foreground group-hover:text-primary transition-colors" />
+                  <span className="text-xs md:text-sm font-medium text-center">Support</span>
                 </button>
                 
                 <button
                   onClick={() => router.push('/super-admin/shops?status=pending')}
                   className="flex flex-col items-center gap-2 p-4 rounded-lg border hover:bg-muted hover:border-yellow-500 transition-all group relative"
                 >
-                  <Shield className="h-6 w-6 text-muted-foreground group-hover:text-yellow-500 transition-colors" />
-                  <span className="text-sm font-medium">Verify</span>
+                  <Shield className="h-5 w-5 md:h-6 md:w-6 text-muted-foreground group-hover:text-yellow-500 transition-colors" />
+                  <span className="text-xs md:text-sm font-medium text-center">Verify</span>
                   {(stats?.pending ?? 0) > 0 && (
                     <span className="absolute -top-1 -right-1 bg-yellow-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
                       {stats?.pending}
@@ -276,8 +278,8 @@ export default function SuperAdminDashboard() {
                   onClick={() => router.push('/super-admin/shops?status=flagged')}
                   className="flex flex-col items-center gap-2 p-4 rounded-lg border hover:bg-muted hover:border-orange-500 transition-all group relative"
                 >
-                  <AlertCircle className="h-6 w-6 text-muted-foreground group-hover:text-orange-500 transition-colors" />
-                  <span className="text-sm font-medium">Flagged</span>
+                  <AlertCircle className="h-5 w-5 md:h-6 md:w-6 text-muted-foreground group-hover:text-orange-500 transition-colors" />
+                  <span className="text-xs md:text-sm font-medium text-center">Flagged</span>
                   {(stats?.flagged ?? 0) > 0 && (
                     <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
                       {stats?.flagged}
@@ -330,7 +332,7 @@ export default function SuperAdminDashboard() {
         </div>
 
         {/* Platform Metrics & Recent Activity */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mt-4 md:mt-6">
           
           {/* Key Metrics */}
           <Card>

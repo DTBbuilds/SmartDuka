@@ -204,33 +204,33 @@ export default function ShopsManagement() {
     <main className="bg-background min-h-screen">
       <ToastContainer toasts={toasts} onDismiss={dismiss} />
 
-      <div className="p-8">
+      <div className="p-4 md:p-8">
         {/* Header */}
-        <div className="mb-8 flex justify-between items-center">
-          <div className="flex items-center gap-4">
+        <div className="mb-6 md:mb-8">
+          <div className="flex items-center gap-2 md:gap-4 mb-3 md:mb-0">
             <button
               onClick={() => router.push('/super-admin')}
-              className="flex items-center gap-2 px-3 py-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
+              className="flex items-center gap-1 md:gap-2 px-2 md:px-3 py-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors text-sm md:text-base"
             >
               <ArrowLeft className="h-4 w-4" />
-              Back
+              <span className="hidden sm:inline">Back</span>
             </button>
-            <div>
-              <h1 className="text-4xl font-bold flex items-center gap-3">
-                <Store className="h-8 w-8 text-primary" />
+            <div className="flex-1">
+              <h1 className="text-xl md:text-4xl font-bold flex items-center gap-2 md:gap-3">
+                <Store className="h-6 w-6 md:h-8 md:w-8 text-primary" />
                 Shops Management
               </h1>
-              <p className="text-muted-foreground mt-2">Manage and verify shops</p>
+              <p className="text-xs md:text-base text-muted-foreground mt-1 md:mt-2">Manage and verify shops</p>
             </div>
+            <button
+              onClick={loadShops}
+              disabled={loading}
+              className="flex items-center gap-2 px-3 md:px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 text-sm md:text-base flex-shrink-0"
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">Refresh</span>
+            </button>
           </div>
-          <button
-            onClick={loadShops}
-            disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50"
-          >
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
         </div>
 
         {/* Search */}
@@ -248,26 +248,26 @@ export default function ShopsManagement() {
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="all" className="flex items-center gap-2">
+          <TabsList className="grid w-full grid-cols-5 h-auto">
+            <TabsTrigger value="all" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-2 md:py-1.5">
               <Store className="h-4 w-4" />
-              All
+              <span className="text-xs md:text-sm">All</span>
             </TabsTrigger>
-            <TabsTrigger value="pending" className="flex items-center gap-2">
+            <TabsTrigger value="pending" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-2 md:py-1.5">
               <Clock className="h-4 w-4 text-yellow-500" />
-              Pending
+              <span className="text-xs md:text-sm">Pending</span>
             </TabsTrigger>
-            <TabsTrigger value="active" className="flex items-center gap-2">
+            <TabsTrigger value="active" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-2 md:py-1.5">
               <CheckCircle className="h-4 w-4 text-green-500" />
-              Active
+              <span className="text-xs md:text-sm">Active</span>
             </TabsTrigger>
-            <TabsTrigger value="suspended" className="flex items-center gap-2">
+            <TabsTrigger value="suspended" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-2 md:py-1.5">
               <XCircle className="h-4 w-4 text-red-500" />
-              Suspended
+              <span className="text-xs md:text-sm">Suspended</span>
             </TabsTrigger>
-            <TabsTrigger value="flagged" className="flex items-center gap-2">
+            <TabsTrigger value="flagged" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-2 md:py-1.5">
               <AlertCircle className="h-4 w-4 text-orange-500" />
-              Flagged
+              <span className="text-xs md:text-sm">Flagged</span>
             </TabsTrigger>
           </TabsList>
 
@@ -416,7 +416,7 @@ function ShopCard({
         </div>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+        <div className="grid grid-cols-2 gap-3 md:gap-4 mb-4">
           <div>
             <p className="text-xs text-muted-foreground">Business Type</p>
             <p className="font-medium">{shop.businessType || 'N/A'}</p>
@@ -442,7 +442,7 @@ function ShopCard({
           {onVerify && (
             <button
               onClick={onVerify}
-              className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700"
+              className="px-2 md:px-3 py-1 bg-green-600 text-white text-xs md:text-sm rounded hover:bg-green-700"
             >
               Verify
             </button>
@@ -450,7 +450,7 @@ function ShopCard({
           {onReject && (
             <button
               onClick={onReject}
-              className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700"
+              className="px-2 md:px-3 py-1 bg-red-600 text-white text-xs md:text-sm rounded hover:bg-red-700"
             >
               Reject
             </button>
@@ -458,7 +458,7 @@ function ShopCard({
           {onSuspend && (
             <button
               onClick={onSuspend}
-              className="px-3 py-1 bg-orange-600 text-white text-sm rounded hover:bg-orange-700"
+              className="px-2 md:px-3 py-1 bg-orange-600 text-white text-xs md:text-sm rounded hover:bg-orange-700"
             >
               Suspend
             </button>
@@ -466,14 +466,14 @@ function ShopCard({
           {onReactivate && (
             <button
               onClick={onReactivate}
-              className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+              className="px-2 md:px-3 py-1 bg-blue-600 text-white text-xs md:text-sm rounded hover:bg-blue-700"
             >
               Reactivate
             </button>
           )}
           <button
             onClick={() => window.location.href = `/super-admin/shops/${shop._id}`}
-            className="px-3 py-1 bg-slate-600 text-white text-sm rounded hover:bg-slate-700 flex items-center gap-1"
+            className="px-2 md:px-3 py-1 bg-slate-600 text-white text-xs md:text-sm rounded hover:bg-slate-700 flex items-center gap-1"
           >
             <Eye className="h-3 w-3" />
             View Details

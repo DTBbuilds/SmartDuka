@@ -180,16 +180,16 @@ export default function SuperAdminPaymentsPage() {
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="p-4 md:p-6 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 md:mb-6 gap-4">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-lg bg-primary/10">
-            <Activity className="h-6 w-6 text-primary" />
+            <Activity className="h-5 w-5 md:h-6 md:w-6 text-primary" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold">Payment Attempts</h1>
-            <p className="text-muted-foreground">Monitor all subscription payment attempts in real-time</p>
+            <h1 className="text-xl md:text-2xl font-bold">Payment Attempts</h1>
+            <p className="text-sm md:text-base text-muted-foreground">Monitor all subscription payment attempts in real-time</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -219,13 +219,13 @@ export default function SuperAdminPaymentsPage() {
 
       {/* Stats Cards */}
       {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-4 md:mb-6">
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">Total Attempts</p>
-                  <p className="text-2xl font-bold">{stats.total}</p>
+                  <p className="text-xs md:text-sm text-muted-foreground">Total Attempts</p>
+                  <p className="text-xl md:text-2xl font-bold">{stats.total}</p>
                 </div>
                 <div className="p-3 rounded-full bg-blue-100">
                   <Activity className="h-5 w-5 text-blue-600" />
@@ -238,8 +238,8 @@ export default function SuperAdminPaymentsPage() {
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">Success Rate</p>
-                  <p className="text-2xl font-bold">{stats.successRate.toFixed(1)}%</p>
+                  <p className="text-xs md:text-sm text-muted-foreground">Success Rate</p>
+                  <p className="text-xl md:text-2xl font-bold">{stats.successRate.toFixed(1)}%</p>
                 </div>
                 <div className="p-3 rounded-full bg-green-100">
                   <TrendingUp className="h-5 w-5 text-green-600" />
@@ -252,8 +252,8 @@ export default function SuperAdminPaymentsPage() {
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">Total Amount</p>
-                  <p className="text-2xl font-bold">{formatCurrency(stats.totalAmount)}</p>
+                  <p className="text-xs md:text-sm text-muted-foreground">Total Amount</p>
+                  <p className="text-xl md:text-2xl font-bold">{formatCurrency(stats.totalAmount)}</p>
                 </div>
                 <div className="p-3 rounded-full bg-purple-100">
                   <DollarSign className="h-5 w-5 text-purple-600" />
@@ -266,8 +266,8 @@ export default function SuperAdminPaymentsPage() {
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">Collected</p>
-                  <p className="text-2xl font-bold">{formatCurrency(stats.successAmount)}</p>
+                  <p className="text-xs md:text-sm text-muted-foreground">Collected</p>
+                  <p className="text-xl md:text-2xl font-bold">{formatCurrency(stats.successAmount)}</p>
                 </div>
                 <div className="p-3 rounded-full bg-emerald-100">
                   <CheckCircle className="h-5 w-5 text-emerald-600" />
@@ -280,7 +280,7 @@ export default function SuperAdminPaymentsPage() {
 
       {/* Status Breakdown */}
       {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-2 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 mb-4 md:mb-6">
           {Object.entries(stats.byStatus).map(([status, count]) => (
             <button
               key={status}
@@ -303,10 +303,10 @@ export default function SuperAdminPaymentsPage() {
       )}
 
       {/* Filters */}
-      <Card className="mb-6">
-        <CardContent className="pt-6">
-          <div className="flex flex-wrap gap-4">
-            <div className="flex-1 min-w-[200px]">
+      <Card className="mb-4 md:mb-6">
+        <CardContent className="pt-4 md:pt-6">
+          <div className="flex flex-col md:flex-row md:flex-wrap gap-3 md:gap-4">
+            <div className="flex-1 md:min-w-[200px]">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -364,14 +364,14 @@ export default function SuperAdminPaymentsPage() {
       </Card>
 
       {/* Payment Attempts Table */}
-      <Card>
+      <Card className="overflow-hidden">
         <CardHeader>
           <CardTitle>Recent Payment Attempts</CardTitle>
           <CardDescription>
             Showing {filteredAttempts.length} of {total} attempts
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0 md:p-6">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>

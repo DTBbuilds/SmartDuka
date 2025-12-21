@@ -121,33 +121,33 @@ export default function SuperAdminSubscriptionsPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 md:p-6 space-y-4 md:space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <Crown className="h-7 w-7 text-amber-500" />
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex-1">
+          <h1 className="text-xl md:text-2xl font-bold text-gray-900 flex items-center gap-2">
+            <Crown className="h-6 w-6 md:h-7 md:w-7 text-amber-500" />
             Subscription Management
           </h1>
-          <p className="text-gray-600 mt-1">Monitor and manage all shop subscriptions</p>
+          <p className="text-sm md:text-base text-gray-600 mt-1">Monitor and manage all shop subscriptions</p>
         </div>
         <button
           onClick={fetchData}
-          className="flex items-center gap-2 px-4 py-2 bg-white border rounded-lg hover:bg-gray-50"
+          className="flex items-center gap-2 px-3 md:px-4 py-2 bg-white border rounded-lg hover:bg-gray-50 text-sm md:text-base flex-shrink-0"
         >
           <RefreshCw className="h-4 w-4" />
-          Refresh
+          <span className="hidden sm:inline">Refresh</span>
         </button>
       </div>
 
       {/* Stats Cards */}
       {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
           <div className="bg-white rounded-xl border p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Total Shops</p>
-                <p className="text-2xl font-bold mt-1">{stats.totalShops}</p>
+                <p className="text-xs md:text-sm text-gray-500">Total Shops</p>
+                <p className="text-xl md:text-2xl font-bold mt-1">{stats.totalShops}</p>
               </div>
               <div className="p-3 bg-blue-100 rounded-lg">
                 <Store className="h-6 w-6 text-blue-600" />
@@ -158,8 +158,8 @@ export default function SuperAdminSubscriptionsPage() {
           <div className="bg-white rounded-xl border p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Active Subscriptions</p>
-                <p className="text-2xl font-bold mt-1 text-green-600">{stats.activeSubscriptions}</p>
+                <p className="text-xs md:text-sm text-gray-500">Active Subscriptions</p>
+                <p className="text-xl md:text-2xl font-bold mt-1 text-green-600">{stats.activeSubscriptions}</p>
               </div>
               <div className="p-3 bg-green-100 rounded-lg">
                 <Check className="h-6 w-6 text-green-600" />
@@ -170,8 +170,8 @@ export default function SuperAdminSubscriptionsPage() {
           <div className="bg-white rounded-xl border p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Trial Users</p>
-                <p className="text-2xl font-bold mt-1 text-blue-600">{stats.trialSubscriptions}</p>
+                <p className="text-xs md:text-sm text-gray-500">Trial Users</p>
+                <p className="text-xl md:text-2xl font-bold mt-1 text-blue-600">{stats.trialSubscriptions}</p>
               </div>
               <div className="p-3 bg-blue-100 rounded-lg">
                 <Clock className="h-6 w-6 text-blue-600" />
@@ -182,8 +182,8 @@ export default function SuperAdminSubscriptionsPage() {
           <div className="bg-white rounded-xl border p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Monthly Revenue</p>
-                <p className="text-2xl font-bold mt-1">KES {stats.monthlyRevenue.toLocaleString()}</p>
+                <p className="text-xs md:text-sm text-gray-500">Monthly Revenue</p>
+                <p className="text-xl md:text-2xl font-bold mt-1">KES {stats.monthlyRevenue.toLocaleString()}</p>
               </div>
               <div className="p-3 bg-amber-100 rounded-lg">
                 <DollarSign className="h-6 w-6 text-amber-600" />
@@ -197,7 +197,7 @@ export default function SuperAdminSubscriptionsPage() {
       {stats && (
         <div className="bg-white rounded-xl border p-5">
           <h3 className="font-semibold mb-4">Plan Distribution</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
             {Object.entries(stats.planBreakdown).map(([plan, count]) => (
               <div key={plan} className="text-center">
                 <div className="text-2xl font-bold">{count}</div>
@@ -220,9 +220,9 @@ export default function SuperAdminSubscriptionsPage() {
       )}
 
       {/* Filters */}
-      <div className="bg-white rounded-xl border p-4">
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="flex-1 min-w-[200px]">
+      <div className="bg-white rounded-xl border p-3 md:p-4">
+        <div className="flex flex-col md:flex-row md:flex-wrap items-stretch md:items-center gap-3 md:gap-4">
+          <div className="flex-1 md:min-w-[200px]">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <input

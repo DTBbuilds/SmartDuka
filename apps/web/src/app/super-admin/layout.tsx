@@ -1,9 +1,10 @@
 'use client';
 
 import { SuperAdminGuard } from '@/components/super-admin-guard';
+import { SuperAdminMobileNav } from '@/components/super-admin-mobile-nav';
 import { useAuth } from '@/lib/auth-context';
 import { useRouter } from 'next/navigation';
-import { LayoutDashboard, ShoppingBag, MessageSquare, LogOut, Menu, Crown, Mail, Settings, Activity, Send, FileText } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, MessageSquare, LogOut, Menu, Crown, Mail, Settings, Activity, Send, X } from 'lucide-react';
 import { useState } from 'react';
 
 export default function SuperAdminLayout({
@@ -23,11 +24,11 @@ export default function SuperAdminLayout({
   return (
     <SuperAdminGuard>
       <div className="flex h-screen bg-background">
-        {/* Sidebar */}
+        {/* Sidebar - Desktop only */}
         <aside
-          className={`${
+          className={`hidden md:flex ${
             sidebarOpen ? 'w-64' : 'w-20'
-          } bg-slate-900 text-white transition-all duration-300 flex flex-col`}
+          } bg-slate-900 text-white transition-all duration-300 flex-col`}
         >
           {/* Logo */}
           <div className="p-4 border-b border-slate-700 flex items-center justify-between">
@@ -113,9 +114,12 @@ export default function SuperAdminLayout({
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 overflow-auto">
+        <main className="flex-1 overflow-auto pb-20 md:pb-0">
           {children}
         </main>
+
+        {/* Mobile Bottom Navigation */}
+        <SuperAdminMobileNav />
       </div>
     </SuperAdminGuard>
   );

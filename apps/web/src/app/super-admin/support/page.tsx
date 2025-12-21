@@ -143,21 +143,23 @@ export default function SupportTickets() {
     <main className="bg-background min-h-screen">
       <ToastContainer toasts={toasts} onDismiss={dismiss} />
 
-      <div className="p-8">
+      <div className="p-4 md:p-8">
         {/* Header */}
-        <div className="mb-8 flex justify-between items-center">
-          <div>
-            <h1 className="text-4xl font-bold">Support Tickets</h1>
-            <p className="text-muted-foreground mt-2">Manage customer support requests</p>
+        <div className="mb-6 md:mb-8">
+          <div className="flex justify-between items-start gap-4">
+            <div className="flex-1">
+              <h1 className="text-2xl md:text-4xl font-bold">Support Tickets</h1>
+              <p className="text-sm md:text-base text-muted-foreground mt-1 md:mt-2">Manage customer support requests</p>
+            </div>
+            <button
+              onClick={loadTickets}
+              disabled={loading}
+              className="flex items-center gap-2 px-3 md:px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 text-sm md:text-base flex-shrink-0"
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">Refresh</span>
+            </button>
           </div>
-          <button
-            onClick={loadTickets}
-            disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50"
-          >
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
         </div>
 
         {/* Search */}
@@ -173,15 +175,15 @@ export default function SupportTickets() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
           {/* Tickets List */}
           <div className="lg:col-span-2">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-              <TabsList className="grid w-full grid-cols-4">
-                <TabsTrigger value="open">Open</TabsTrigger>
-                <TabsTrigger value="in-progress">In Progress</TabsTrigger>
-                <TabsTrigger value="resolved">Resolved</TabsTrigger>
-                <TabsTrigger value="closed">Closed</TabsTrigger>
+              <TabsList className="grid w-full grid-cols-4 h-auto">
+                <TabsTrigger value="open" className="text-xs md:text-sm py-2">Open</TabsTrigger>
+                <TabsTrigger value="in-progress" className="text-xs md:text-sm py-2">In Progress</TabsTrigger>
+                <TabsTrigger value="resolved" className="text-xs md:text-sm py-2">Resolved</TabsTrigger>
+                <TabsTrigger value="closed" className="text-xs md:text-sm py-2">Closed</TabsTrigger>
               </TabsList>
 
               {['open', 'in-progress', 'resolved', 'closed'].map((status) => (
@@ -234,9 +236,9 @@ export default function SupportTickets() {
           </div>
 
           {/* Ticket Details */}
-          <div>
+          <div className="lg:sticky lg:top-8">
             {selectedTicket ? (
-              <Card className="sticky top-8">
+              <Card>
                 <CardHeader>
                   <CardTitle className="text-lg">{selectedTicket.subject}</CardTitle>
                   <CardDescription>{selectedTicket.description}</CardDescription>
