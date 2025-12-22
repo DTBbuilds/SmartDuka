@@ -850,7 +850,7 @@ function POSContent() {
             quantity: item.quantity,
             unitPrice: item.unitPrice,
           })),
-          taxRate: shopSettings?.tax?.enabled ? shopSettings.tax.rate : 0.16,
+          taxRate: shopSettings?.tax?.enabled ? shopSettings.tax.rate : 0,
           payments: [
             {
               method: 'mpesa',
@@ -1033,7 +1033,7 @@ function POSContent() {
           quantity: item.quantity,
           unitPrice: item.unitPrice,
         })),
-        taxRate: shopSettings?.tax?.enabled ? shopSettings.tax.rate : 0.16,
+        taxRate: shopSettings?.tax?.enabled ? shopSettings.tax.rate : 0,
         payments: [paymentDetails],
         status: "completed" as const,
         isOffline: false,

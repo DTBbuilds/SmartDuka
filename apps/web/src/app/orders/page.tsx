@@ -28,6 +28,7 @@ import {
 import { DataTable, Column } from "@/components/shared/data-table";
 import { EmptyState } from "@/components/shared/empty-state";
 import { TableSkeleton } from "@/components/shared/loading-skeleton";
+import { OrderDetailsModal } from "@/components/order-details-modal";
 
 interface OrderItem {
   productId: string;
@@ -74,54 +75,139 @@ interface OrderStats {
   averageOrderValue: number;
 }
 
+interface PaginatedResponse {
+  data: Order[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
 export default function OrdersPage() {
   const { token, user } = useAuth();
   const { currentBranch } = useBranch();
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [paymentFilter, setPaymentFilter] = useState<string>("all");
   const [dateFilter, setDateFilter] = useState<string>("today");
   const [stats, setStats] = useState<OrderStats | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalOrders, setTotalOrders] = useState(0);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const itemsPerPage = 20;
 
   // Check if user is admin - moved after all hooks
   const isAdmin = user?.role === "admin";
 
+  // Debounce search query
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Build date range based on filter
+  const getDateRange = useCallback(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    switch (dateFilter) {
+      case "today": {
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        return { from: today.toISOString(), to: tomorrow.toISOString() };
+      }
+      case "week": {
+        const weekAgo = new Date(today);
+        weekAgo.setDate(weekAgo.getDate() - 7);
+        return { from: weekAgo.toISOString(), to: new Date().toISOString() };
+      }
+      case "month": {
+        const monthAgo = new Date(today);
+        monthAgo.setMonth(monthAgo.getMonth() - 1);
+        return { from: monthAgo.toISOString(), to: new Date().toISOString() };
+      }
+      default:
+        return {};
+    }
+  }, [dateFilter]);
+
   const fetchOrders = useCallback(async () => {
     try {
       setIsLoading(true);
       const base = config.apiUrl;
-      const branchParam = currentBranch ? `&branchId=${currentBranch._id}` : '';
       
-      let url = `${base}/sales/orders?limit=200${branchParam}`;
+      // Build query params for server-side filtering
+      const params = new URLSearchParams();
+      params.set('page', currentPage.toString());
+      params.set('limit', itemsPerPage.toString());
       
-      const res = await fetch(url, {
+      if (currentBranch) params.set('branchId', currentBranch._id);
+      if (statusFilter !== 'all') params.set('status', statusFilter);
+      if (paymentFilter !== 'all') params.set('paymentStatus', paymentFilter);
+      if (debouncedSearch) params.set('search', debouncedSearch);
+      
+      const dateRange = getDateRange();
+      if (dateRange.from) params.set('from', dateRange.from);
+      if (dateRange.to) params.set('to', dateRange.to);
+      
+      const res = await fetch(`${base}/sales/orders?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
       if (res.ok) {
         const text = await res.text();
-        const data = text ? JSON.parse(text) : [];
-        const ordersData = Array.isArray(data) ? data : [];
-        setOrders(ordersData);
+        const response = text ? JSON.parse(text) : { data: [], total: 0 };
         
-        // Calculate stats
-        const completed = ordersData.filter((o: Order) => o.status === "completed");
-        const pending = ordersData.filter((o: Order) => o.status === "pending");
-        const voided = ordersData.filter((o: Order) => o.status === "void");
-        const totalRevenue = completed.reduce((sum: number, o: Order) => sum + o.total, 0);
-        
-        setStats({
-          totalOrders: ordersData.length,
-          totalRevenue,
-          completedOrders: completed.length,
-          pendingOrders: pending.length,
-          voidOrders: voided.length,
-          averageOrderValue: completed.length > 0 ? totalRevenue / completed.length : 0,
-        });
+        // Handle both paginated response and array response (backward compatibility)
+        if (Array.isArray(response)) {
+          setOrders(response);
+          setTotalOrders(response.length);
+          setTotalPages(Math.ceil(response.length / itemsPerPage));
+          
+          // Calculate stats from array
+          const completed = response.filter((o: Order) => o.status === "completed");
+          const pending = response.filter((o: Order) => o.status === "pending");
+          const voided = response.filter((o: Order) => o.status === "void");
+          const totalRevenue = completed.reduce((sum: number, o: Order) => sum + o.total, 0);
+          
+          setStats({
+            totalOrders: response.length,
+            totalRevenue,
+            completedOrders: completed.length,
+            pendingOrders: pending.length,
+            voidOrders: voided.length,
+            averageOrderValue: completed.length > 0 ? totalRevenue / completed.length : 0,
+          });
+        } else {
+          // Paginated response
+          const paginatedData = response as PaginatedResponse;
+          setOrders(paginatedData.data || []);
+          setTotalOrders(paginatedData.total || 0);
+          setTotalPages(paginatedData.totalPages || 1);
+          
+          // Calculate stats from current page data
+          const ordersData = paginatedData.data || [];
+          const completed = ordersData.filter((o: Order) => o.status === "completed");
+          const pending = ordersData.filter((o: Order) => o.status === "pending");
+          const voided = ordersData.filter((o: Order) => o.status === "void");
+          const totalRevenue = completed.reduce((sum: number, o: Order) => sum + o.total, 0);
+          
+          setStats({
+            totalOrders: paginatedData.total || ordersData.length,
+            totalRevenue,
+            completedOrders: completed.length,
+            pendingOrders: pending.length,
+            voidOrders: voided.length,
+            averageOrderValue: completed.length > 0 ? totalRevenue / completed.length : 0,
+          });
+        }
       }
     } catch (error) {
       console.error("Failed to fetch orders:", error);
@@ -129,18 +215,18 @@ export default function OrdersPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [token, currentBranch]);
+  }, [token, currentBranch, currentPage, statusFilter, paymentFilter, debouncedSearch, getDateRange]);
 
   useEffect(() => {
     if (token && isAdmin) {
       fetchOrders();
     }
-  }, [token, currentBranch, fetchOrders, isAdmin]);
+  }, [token, fetchOrders, isAdmin]);
 
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, statusFilter, paymentFilter, dateFilter]);
+  }, [debouncedSearch, statusFilter, paymentFilter, dateFilter]);
 
   // Access denied for non-admins
   if (!isAdmin) {
@@ -157,51 +243,7 @@ export default function OrdersPage() {
     );
   }
 
-  // Filter orders based on search and filters
-  const filteredOrders = orders.filter((order) => {
-    // Search filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      const matchesSearch =
-        order.orderNumber.toLowerCase().includes(query) ||
-        order.customerName?.toLowerCase().includes(query) ||
-        order.cashierName?.toLowerCase().includes(query);
-      if (!matchesSearch) return false;
-    }
-
-    // Status filter
-    if (statusFilter !== "all" && order.status !== statusFilter) {
-      return false;
-    }
-
-    // Payment filter
-    if (paymentFilter !== "all" && order.paymentStatus !== paymentFilter) {
-      return false;
-    }
-
-    // Date filter
-    if (dateFilter !== "all") {
-      const orderDate = new Date(order.createdAt);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
-      if (dateFilter === "today") {
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        if (orderDate < today || orderDate >= tomorrow) return false;
-      } else if (dateFilter === "week") {
-        const weekAgo = new Date(today);
-        weekAgo.setDate(weekAgo.getDate() - 7);
-        if (orderDate < weekAgo) return false;
-      } else if (dateFilter === "month") {
-        const monthAgo = new Date(today);
-        monthAgo.setMonth(monthAgo.getMonth() - 1);
-        if (orderDate < monthAgo) return false;
-      }
-    }
-
-    return true;
-  });
+  // Server-side filtering is now used - orders are already filtered by the API
 
   const formatCurrency = (amount: number) => {
     return `KES ${amount.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -314,12 +356,7 @@ export default function OrdersPage() {
     );
   }
 
-  // Pagination
-  const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
-  const paginatedOrders = filteredOrders.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
+  // Server-side pagination - orders are already paginated by the API
 
   return (
     <div className="p-4 md:p-6 space-y-4 md:space-y-6">
@@ -471,7 +508,7 @@ export default function OrdersPage() {
       </Card>
 
       {/* Orders Table */}
-      {filteredOrders.length === 0 ? (
+      {orders.length === 0 ? (
         <EmptyState
           icon={Receipt}
           title="No orders found"
@@ -486,10 +523,14 @@ export default function OrdersPage() {
         <Card>
           <CardContent className="p-0">
             <DataTable
-              data={paginatedOrders}
+              data={orders}
               columns={columns}
               searchable={false}
               emptyMessage="No orders found"
+              onRowClick={(order) => {
+                setSelectedOrder(order);
+                setIsDetailsModalOpen(true);
+              }}
             />
             
             {/* Pagination Controls */}
@@ -497,8 +538,8 @@ export default function OrdersPage() {
               <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 border-t">
                 <p className="text-sm text-muted-foreground">
                   Showing {(currentPage - 1) * itemsPerPage + 1} to{' '}
-                  {Math.min(currentPage * itemsPerPage, filteredOrders.length)} of{' '}
-                  {filteredOrders.length} orders
+                  {Math.min(currentPage * itemsPerPage, totalOrders)} of{' '}
+                  {totalOrders} orders
                 </p>
                 <div className="flex items-center gap-2">
                   <Button
@@ -550,6 +591,16 @@ export default function OrdersPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Order Details Modal */}
+      <OrderDetailsModal
+        isOpen={isDetailsModalOpen}
+        onClose={() => {
+          setIsDetailsModalOpen(false);
+          setSelectedOrder(null);
+        }}
+        order={selectedOrder}
+      />
     </div>
   );
 }

@@ -66,7 +66,17 @@ export class SalesController {
   @Roles('admin')
   @Get('orders')
   listOrders(@Query() query: OrdersQueryDto, @CurrentUser() user: any) {
-    return this.salesService.listOrders(user.shopId, query.limit);
+    // Use paginated method for better performance
+    return this.salesService.listOrdersPaginated(user.shopId, {
+      page: query.page || 1,
+      limit: query.limit || 20,
+      status: query.status,
+      paymentStatus: query.paymentStatus,
+      dateFrom: query.from ? new Date(query.from) : undefined,
+      dateTo: query.to ? new Date(query.to) : undefined,
+      branchId: query.branchId,
+      search: query.search || query.q,
+    });
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

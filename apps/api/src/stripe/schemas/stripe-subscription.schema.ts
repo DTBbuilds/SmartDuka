@@ -105,7 +105,7 @@ export class StripeSubscription {
 export const StripeSubscriptionSchema = SchemaFactory.createForClass(StripeSubscription);
 
 // Indexes
-StripeSubscriptionSchema.index({ stripeSubscriptionId: 1 }, { unique: true });
+// Note: stripeSubscriptionId index is already created by unique: true in @Prop decorator
 StripeSubscriptionSchema.index({ stripeCustomerId: 1 });
 StripeSubscriptionSchema.index({ shopId: 1 });
 StripeSubscriptionSchema.index({ localSubscriptionId: 1 });

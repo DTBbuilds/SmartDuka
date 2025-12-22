@@ -70,7 +70,7 @@ export class StripeCustomer {
 export const StripeCustomerSchema = SchemaFactory.createForClass(StripeCustomer);
 
 // Indexes for efficient queries
-StripeCustomerSchema.index({ stripeCustomerId: 1 }, { unique: true });
+// Note: stripeCustomerId index is already created by unique: true in @Prop decorator
 StripeCustomerSchema.index({ shopId: 1 });
 StripeCustomerSchema.index({ userId: 1 });
 StripeCustomerSchema.index({ email: 1 });

@@ -464,7 +464,7 @@ function RegisterShopContent() {
               ) : (
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                   {plans.map((plan) => {
-                    const colors = planColors[plan.colorTheme || 'blue'];
+                    const colors = planColors[plan.colorTheme || 'blue'] || planColors['blue'];
                     // Compare by code since _id might not always be available
                     const isSelected = selectedPlan?.code === plan.code;
                     const price = billingCycle === 'monthly' ? plan.monthlyPrice : Math.round(plan.annualPrice / 12);

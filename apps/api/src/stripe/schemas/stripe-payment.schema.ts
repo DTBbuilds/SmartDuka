@@ -140,7 +140,7 @@ export class StripePayment {
 export const StripePaymentSchema = SchemaFactory.createForClass(StripePayment);
 
 // Indexes for efficient queries
-StripePaymentSchema.index({ stripePaymentIntentId: 1 }, { unique: true });
+// Note: stripePaymentIntentId index is already created by unique: true in @Prop decorator
 StripePaymentSchema.index({ stripeCustomerId: 1 });
 StripePaymentSchema.index({ shopId: 1 });
 StripePaymentSchema.index({ userId: 1 });

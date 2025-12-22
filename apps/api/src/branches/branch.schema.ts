@@ -297,8 +297,8 @@ export const BranchSchema = SchemaFactory.createForClass(Branch);
 // ============================================
 // INDEXES
 // ============================================
+// Note: shopId already has index from @Prop({ index: true })
 
-BranchSchema.index({ shopId: 1 });
 BranchSchema.index({ shopId: 1, code: 1 }, { unique: true });
 BranchSchema.index({ shopId: 1, status: 1 });
 BranchSchema.index({ createdBy: 1 });

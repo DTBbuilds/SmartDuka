@@ -45,7 +45,7 @@ export class StripeWebhookEvent {
 export const StripeWebhookEventSchema = SchemaFactory.createForClass(StripeWebhookEvent);
 
 // Indexes
-StripeWebhookEventSchema.index({ stripeEventId: 1 }, { unique: true });
+// Note: stripeEventId index is already created by unique: true in @Prop decorator
 StripeWebhookEventSchema.index({ type: 1 });
 StripeWebhookEventSchema.index({ processed: 1 });
 StripeWebhookEventSchema.index({ createdAt: -1 });

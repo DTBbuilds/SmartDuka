@@ -243,6 +243,9 @@ export class SalesService {
       }
     }
 
+    // Invalidate orders cache for this shop after creating new order
+    this.cacheService.deletePattern(`shop:${shopId}:orders:*`);
+
     return order;
   }
 
@@ -300,6 +303,7 @@ export class SalesService {
 
   /**
    * List orders with pagination and filters
+   * Includes caching for improved performance
    */
   async listOrdersPaginated(
     shopId: string,
@@ -325,40 +329,58 @@ export class SalesService {
       search,
     } = options;
 
-    const query: any = { shopId: new Types.ObjectId(shopId) };
+    // Generate cache key based on all filter parameters
+    const cacheKey = CacheService.paginatedKey(shopId, 'orders', page, limit, {
+      status,
+      paymentStatus,
+      dateFrom: dateFrom?.toISOString(),
+      dateTo: dateTo?.toISOString(),
+      branchId,
+      search,
+    });
 
-    if (status) query.status = status;
-    if (paymentStatus) query.paymentStatus = paymentStatus;
-    if (branchId) query.branchId = new Types.ObjectId(branchId);
+    // Try to get from cache first (30 second TTL for orders)
+    return this.cacheService.getOrSet(
+      cacheKey,
+      async () => {
+        const query: any = { shopId: new Types.ObjectId(shopId) };
 
-    if (dateFrom || dateTo) {
-      query.createdAt = {};
-      if (dateFrom) query.createdAt.$gte = dateFrom;
-      if (dateTo) query.createdAt.$lte = dateTo;
-    }
+        if (status) query.status = status;
+        if (paymentStatus) query.paymentStatus = paymentStatus;
+        if (branchId) query.branchId = new Types.ObjectId(branchId);
 
-    if (search) {
-      query.$or = [
-        { orderNumber: { $regex: search, $options: 'i' } },
-        { customerName: { $regex: search, $options: 'i' } },
-        { customerPhone: { $regex: search, $options: 'i' } },
-      ];
-    }
+        if (dateFrom || dateTo) {
+          query.createdAt = {};
+          if (dateFrom) query.createdAt.$gte = dateFrom;
+          if (dateTo) query.createdAt.$lte = dateTo;
+        }
 
-    const skip = (page - 1) * Math.min(limit, 100);
-    const actualLimit = Math.min(limit, 100);
+        if (search) {
+          query.$or = [
+            { orderNumber: { $regex: search, $options: 'i' } },
+            { customerName: { $regex: search, $options: 'i' } },
+            { customerPhone: { $regex: search, $options: 'i' } },
+          ];
+        }
 
-    const [data, total] = await Promise.all([
-      this.orderModel
-        .find(query)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(actualLimit)
-        .exec(),
-      this.orderModel.countDocuments(query),
-    ]);
+        const skip = (page - 1) * Math.min(limit, 100);
+        const actualLimit = Math.min(limit, 100);
 
-    return createPaginatedResponse(data, total, page, actualLimit);
+        const [data, total] = await Promise.all([
+          this.orderModel
+            .find(query)
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(actualLimit)
+            .lean()
+            .exec(),
+          this.orderModel.countDocuments(query),
+        ]);
+
+        return createPaginatedResponse(data as OrderDocument[], total, page, actualLimit);
+      },
+      CACHE_TTL.SHORT, // 30 seconds cache for orders
+    );
   }
 
   // PHASE 3: Branch-specific queries

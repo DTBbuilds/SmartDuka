@@ -29,7 +29,7 @@ export enum SystemConfigType {
  */
 @Schema({ timestamps: true, collection: 'system_configs' })
 export class SystemConfig {
-  @Prop({ required: true, enum: SystemConfigType, unique: true, index: true })
+  @Prop({ required: true, enum: SystemConfigType, unique: true })
   type: SystemConfigType;
 
   @Prop({ required: true, default: 'System Configuration' })
@@ -130,5 +130,5 @@ export class SystemConfig {
 export const SystemConfigSchema = SchemaFactory.createForClass(SystemConfig);
 
 // Indexes
-SystemConfigSchema.index({ type: 1 }, { unique: true });
+// Note: type index is already created by unique: true in @Prop decorator
 SystemConfigSchema.index({ isActive: 1 });

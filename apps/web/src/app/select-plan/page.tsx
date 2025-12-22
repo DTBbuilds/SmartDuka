@@ -218,7 +218,7 @@ export default function SelectPlanPage() {
         {/* Plans Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           {plans.map((plan) => {
-            const colors = planColors[plan.colorTheme || 'blue'];
+            const colors = planColors[plan.colorTheme || 'blue'] || planColors['blue'];
             const price = billingCycle === 'annual' ? plan.annualPrice : plan.monthlyPrice;
             const isSelected = selectedPlanCode === plan.code;
             const isPopular = plan.badge === 'Popular';
