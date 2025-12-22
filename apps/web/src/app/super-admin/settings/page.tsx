@@ -32,6 +32,8 @@ import {
   Save,
   TestTube,
   AlertTriangle,
+  Receipt,
+  Percent,
 } from 'lucide-react';
 
 interface MpesaConfig {
@@ -46,6 +48,13 @@ interface MpesaConfig {
   lastTestedAt?: string;
   lastTestResult?: string;
   lastTestError?: string;
+}
+
+interface VatConfig {
+  enabled: boolean;
+  rate: number;
+  name: string;
+  description: string;
 }
 
 export default function SuperAdminSettingsPage() {
@@ -69,8 +78,18 @@ export default function SuperAdminSettingsPage() {
   });
   const [showSecrets, setShowSecrets] = useState(false);
 
+  // VAT config state
+  const [vatConfig, setVatConfig] = useState<VatConfig | null>(null);
+  const [vatForm, setVatForm] = useState({
+    enabled: false,
+    rate: 0.16,
+    name: 'VAT',
+    description: 'Value Added Tax',
+  });
+
   useEffect(() => {
     loadMpesaConfig();
+    loadVatConfig();
   }, [token]);
 
   const loadMpesaConfig = async () => {
@@ -139,6 +158,54 @@ export default function SuperAdminSettingsPage() {
     }
   };
 
+  const loadVatConfig = async () => {
+    if (!token) return;
+    try {
+      const config = await api.get<VatConfig>('/super-admin/system/vat-config');
+      setVatConfig(config);
+      if (config) {
+        setVatForm({
+          enabled: config.enabled,
+          rate: config.rate,
+          name: config.name || 'VAT',
+          description: config.description || 'Value Added Tax',
+        });
+      }
+    } catch (error: any) {
+      console.error('Failed to load VAT config:', error);
+    }
+  };
+
+  const saveVatConfig = async () => {
+    try {
+      setSaving(true);
+      await api.put('/super-admin/system/vat-config', vatForm);
+      setMessage({ type: 'success', text: 'VAT configuration saved successfully' });
+      await loadVatConfig();
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message || 'Failed to save VAT config' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleVat = async () => {
+    try {
+      setSaving(true);
+      const newEnabled = !vatForm.enabled;
+      await api.post('/super-admin/system/vat-config/toggle', { enabled: newEnabled });
+      setMessage({ 
+        type: 'success', 
+        text: `VAT ${newEnabled ? 'enabled' : 'disabled'} successfully` 
+      });
+      await loadVatConfig();
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message || 'Failed to toggle VAT' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const toggleMpesaActive = async () => {
     try {
       await api.put('/super-admin/system/config/mpesa/toggle', { isActive: !mpesaConfig?.isActive });
@@ -199,6 +266,10 @@ export default function SuperAdminSettingsPage() {
           <TabsTrigger value="stripe" className="flex items-center gap-2">
             <CreditCard className="h-4 w-4" />
             Stripe
+          </TabsTrigger>
+          <TabsTrigger value="vat" className="flex items-center gap-2">
+            <Receipt className="h-4 w-4" />
+            VAT Settings
           </TabsTrigger>
         </TabsList>
 
@@ -466,6 +537,172 @@ export default function SuperAdminSettingsPage() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="vat">
+          <div className="grid gap-4 md:gap-6 md:grid-cols-2">
+            {/* Current VAT Status */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <span>VAT Status</span>
+                  {vatConfig?.enabled ? (
+                    <Badge variant="default" className="bg-green-500">Enabled</Badge>
+                  ) : (
+                    <Badge variant="secondary">Disabled</Badge>
+                  )}
+                </CardTitle>
+                <CardDescription>
+                  System-wide VAT configuration for invoices and subscriptions
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between py-2 border-b">
+                  <span className="text-sm text-muted-foreground">VAT Application</span>
+                  <div className="flex items-center gap-2">
+                    {vatConfig?.enabled ? (
+                      <>
+                        <span className="h-2 w-2 rounded-full bg-green-500"></span>
+                        <span className="text-sm font-medium text-green-600">Active</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="h-2 w-2 rounded-full bg-gray-400"></span>
+                        <span className="text-sm font-medium text-gray-500">Inactive</span>
+                      </>
+                    )}
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={toggleVat}
+                      disabled={saving}
+                    >
+                      {saving ? (
+                        <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                      ) : null}
+                      {vatConfig?.enabled ? 'Disable' : 'Enable'}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between py-2 border-b">
+                  <span className="text-sm text-muted-foreground">Current Rate</span>
+                  <div className="flex items-center gap-1">
+                    <Percent className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium">{((vatConfig?.rate || 0) * 100).toFixed(1)}%</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between py-2 border-b">
+                  <span className="text-sm text-muted-foreground">Tax Name</span>
+                  <span className="font-medium">{vatConfig?.name || 'VAT'}</span>
+                </div>
+
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
+                  <div className="flex items-start gap-2">
+                    <Receipt className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                    <div className="text-blue-800">
+                      <strong>Impact:</strong> When enabled, VAT will be automatically calculated and added to all subscription invoices and manual invoices.
+                    </div>
+                  </div>
+                </div>
+
+                {!vatConfig?.enabled && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                      <div className="text-amber-800">
+                        <strong>Note:</strong> VAT is currently disabled. All invoices will be generated without tax.
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* VAT Configuration Form */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Configure VAT</CardTitle>
+                <CardDescription>
+                  Set VAT rate and display information
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="vatRate">VAT Rate (%) *</Label>
+                  <div className="relative">
+                    <Input
+                      id="vatRate"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="100"
+                      value={(vatForm.rate * 100).toFixed(2)}
+                      onChange={(e) => setVatForm(prev => ({ 
+                        ...prev, 
+                        rate: parseFloat(e.target.value) / 100 
+                      }))}
+                      placeholder="16.00"
+                      className="pr-8"
+                    />
+                    <Percent className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Standard VAT rate in Kenya is 16%
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="vatName">Tax Name</Label>
+                  <Input
+                    id="vatName"
+                    value={vatForm.name}
+                    onChange={(e) => setVatForm(prev => ({ ...prev, name: e.target.value }))}
+                    placeholder="VAT"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Display name for the tax (e.g., VAT, Tax, GST)
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="vatDescription">Description</Label>
+                  <Input
+                    id="vatDescription"
+                    value={vatForm.description}
+                    onChange={(e) => setVatForm(prev => ({ ...prev, description: e.target.value }))}
+                    placeholder="Value Added Tax"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Full description of the tax
+                  </p>
+                </div>
+
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm">
+                  <div className="flex items-start gap-2">
+                    <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                    <div className="text-green-800">
+                      <strong>Preview:</strong> A KES 10,000 invoice will show KES {(10000 * vatForm.rate).toLocaleString()} as {vatForm.name} and KES {(10000 * (1 + vatForm.rate)).toLocaleString()} total.
+                    </div>
+                  </div>
+                </div>
+
+                <Button 
+                  onClick={saveVatConfig} 
+                  disabled={saving}
+                  className="w-full"
+                >
+                  {saving ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : (
+                    <Save className="h-4 w-4 mr-2" />
+                  )}
+                  Save VAT Configuration
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
       </Tabs>
     </div>

@@ -29,6 +29,7 @@ export default function LoginPage() {
   const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
   const googleError = searchParams.get('error');
   const expired = searchParams.get('expired');
+  const logoutReason = searchParams.get('reason');
 
   useEffect(() => {
     fetchShops();
@@ -38,7 +39,11 @@ export default function LoginPage() {
     if (expired === 'true') {
       setSessionExpired(true);
     }
-  }, [googleError, expired]);
+    // Handle inactivity logout message
+    if (logoutReason === 'inactivity') {
+      setError('You were logged out due to inactivity. Please log in again.');
+    }
+  }, [googleError, expired, logoutReason]);
 
   // Auto-rotate features in hero section
   useEffect(() => {

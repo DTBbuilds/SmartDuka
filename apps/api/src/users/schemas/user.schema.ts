@@ -115,6 +115,17 @@ export class User {
 
   @Prop({ enum: ['local', 'google'], default: 'local' })
   authProvider: 'local' | 'google';
+
+  // User preferences
+  @Prop({ type: Object, default: {} })
+  preferences?: {
+    theme?: 'light' | 'dark' | 'system';
+    language?: string;
+    currency?: string;
+    dateFormat?: string;
+    soundEnabled?: boolean;
+    receiptPrinterEnabled?: boolean;
+  };
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

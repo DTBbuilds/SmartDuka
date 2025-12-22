@@ -5,6 +5,8 @@ import { activityTracker } from './activity-tracker';
 import { statusManager } from './status-manager';
 import { config } from './config';
 import { clearAllLocalData } from './db';
+import { clearAllCache } from './data-cache';
+import { hotDataManager } from './hot-data-manager';
 
 export type AuthUser = {
   sub: string;
@@ -80,9 +82,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Sync cookie for middleware authentication (in case cookie expired but localStorage still has token)
         document.cookie = `smartduka_token=${storedToken}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
         
-        // Initialize activity tracking and status manager
+        // Initialize activity tracking, status manager, and hot data
         activityTracker.setToken(storedToken, decoded.role);
         statusManager.initialize(storedToken, decoded.sub, decoded.shopId);
+        hotDataManager.initialize(storedToken);
         if (storedShop) {
           const parsedShop = JSON.parse(storedShop);
           setShop(parsedShop);
@@ -131,9 +134,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Set cookie for middleware authentication
     document.cookie = `smartduka_token=${authToken}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
     
-    // Initialize activity tracking and status manager
+    // Initialize activity tracking, status manager, and hot data
     activityTracker.setToken(authToken, decoded.role);
     statusManager.initialize(authToken, decoded.sub, decoded.shopId);
+    hotDataManager.initialize(authToken);
     
     // Track login activity
     await activityTracker.track('login', { email: userData.email });
@@ -200,12 +204,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.warn('Failed to clear local data on logout:', err);
     }
     
+    // Clear all cached data (dashboard, POS, user data)
+    try {
+      clearAllCache();
+    } catch (err) {
+      console.warn('Failed to clear cache on logout:', err);
+    }
+    
+    // Cleanup hot data manager
+    try {
+      hotDataManager.cleanup();
+    } catch (err) {
+      console.warn('Failed to cleanup hot data on logout:', err);
+    }
+    
     setUser(null);
     setShop(null);
     setToken(null);
     setIsDemoMode(false);
     window.localStorage.removeItem('smartduka:token');
     window.localStorage.removeItem('smartduka:shop');
+    window.localStorage.removeItem('smartduka:lastActivity');
     window.localStorage.removeItem(DEMO_MODE_KEY);
     
     // Clear auth cookie

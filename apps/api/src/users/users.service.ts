@@ -589,4 +589,25 @@ export class UsersService {
       role: { $ne: 'admin' },
     }).exec();
   }
+
+  /**
+   * Update user preferences
+   */
+  async updatePreferences(
+    userId: string,
+    preferences: {
+      theme?: 'light' | 'dark' | 'system';
+      language?: string;
+      currency?: string;
+      dateFormat?: string;
+      soundEnabled?: boolean;
+      receiptPrinterEnabled?: boolean;
+    },
+  ): Promise<User | null> {
+    return this.userModel.findByIdAndUpdate(
+      userId,
+      { $set: { preferences } },
+      { new: true },
+    ).exec();
+  }
 }

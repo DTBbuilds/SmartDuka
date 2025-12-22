@@ -24,14 +24,16 @@ import {
   InvoiceResponseDto,
 } from './dto/subscription.dto';
 
+import { SystemConfig, SystemConfigDocument, SystemConfigType } from '../super-admin/schemas/system-config.schema';
+
 // Grace period in days before suspension
 const GRACE_PERIOD_DAYS = 7;
 
 // Trial period in days
 const TRIAL_PERIOD_DAYS = 14;
 
-// VAT rate in Kenya
-const VAT_RATE = 0.16;
+// Default VAT rate (used when VAT is enabled but no config exists)
+const DEFAULT_VAT_RATE = 0.16;
 
 @Injectable()
 export class SubscriptionsService {
@@ -50,8 +52,43 @@ export class SubscriptionsService {
     private readonly productModel: Model<ProductDocument>,
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
+    @InjectModel(SystemConfig.name)
+    private readonly systemConfigModel: Model<SystemConfigDocument>,
     private readonly configService: ConfigService,
   ) {}
+
+  /**
+   * Get VAT configuration from system settings
+   * Returns { enabled: boolean, rate: number }
+   */
+  private async getVatConfig(): Promise<{ enabled: boolean; rate: number }> {
+    try {
+      const config = await this.systemConfigModel.findOne({ type: SystemConfigType.VAT });
+      if (!config) {
+        // Default: VAT disabled
+        return { enabled: false, rate: DEFAULT_VAT_RATE };
+      }
+      return {
+        enabled: config.config?.vatEnabled ?? false,
+        rate: config.config?.vatRate ?? DEFAULT_VAT_RATE,
+      };
+    } catch (error) {
+      this.logger.warn('Failed to get VAT config, defaulting to disabled');
+      return { enabled: false, rate: DEFAULT_VAT_RATE };
+    }
+  }
+
+  /**
+   * Calculate tax based on VAT settings
+   * Returns 0 if VAT is disabled
+   */
+  private async calculateTax(amount: number): Promise<number> {
+    const vatConfig = await this.getVatConfig();
+    if (!vatConfig.enabled) {
+      return 0;
+    }
+    return Math.round(amount * vatConfig.rate);
+  }
 
   // ============================================
   // PLAN MANAGEMENT
@@ -738,6 +775,7 @@ export class SubscriptionsService {
 
   /**
    * Create an invoice
+   * Tax is calculated based on system VAT settings (default: disabled)
    */
   private async createInvoice(
     shopId: string,
@@ -749,7 +787,7 @@ export class SubscriptionsService {
     periodEnd?: Date,
   ): Promise<SubscriptionInvoiceDocument> {
     const invoiceNumber = await this.generateInvoiceNumber();
-    const tax = Math.round(amount * VAT_RATE);
+    const tax = await this.calculateTax(amount);
     const totalAmount = amount + tax;
 
     const dueDate = new Date();

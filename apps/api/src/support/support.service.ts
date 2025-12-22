@@ -2,6 +2,8 @@ import { Injectable, Logger, NotFoundException, BadRequestException } from '@nes
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { SupportTicket, SupportTicketDocument } from './schemas/support-ticket.schema';
+import { Conversation, ConversationDocument } from '../messaging/schemas/conversation.schema';
+import { Message, MessageDocument } from '../messaging/schemas/message.schema';
 
 export interface CreateTicketDto {
   shopId: string;
@@ -22,10 +24,13 @@ export class SupportService {
 
   constructor(
     @InjectModel(SupportTicket.name) private readonly ticketModel: Model<SupportTicketDocument>,
+    @InjectModel(Conversation.name) private readonly conversationModel: Model<ConversationDocument>,
+    @InjectModel(Message.name) private readonly messageModel: Model<MessageDocument>,
   ) {}
 
   /**
    * Create a support ticket
+   * Also creates a conversation in the messaging system for inbox integration
    */
   async createTicket(dto: CreateTicketDto): Promise<SupportTicketDocument> {
     try {
@@ -46,7 +51,45 @@ export class SupportService {
         createdAt: new Date(),
         updatedAt: new Date(),
       });
-      return await ticket.save();
+      const savedTicket = await ticket.save();
+
+      // Also create a conversation in the messaging system for inbox integration
+      try {
+        const conversation = new this.conversationModel({
+          shopId: new Types.ObjectId(dto.shopId),
+          adminUserId: new Types.ObjectId(dto.createdBy),
+          subject: `[Support] ${dto.subject}`,
+          type: 'support',
+          priority: dto.priority || 'normal',
+          status: 'open',
+          unreadCountSuperAdmin: 1,
+        });
+        const savedConversation = await conversation.save();
+
+        // Create the initial message
+        const message = new this.messageModel({
+          conversationId: savedConversation._id,
+          senderId: new Types.ObjectId(dto.createdBy),
+          senderType: 'admin',
+          content: dto.description,
+          status: 'sent',
+        });
+        const savedMessage = await message.save();
+
+        // Update conversation with last message info
+        await this.conversationModel.findByIdAndUpdate(savedConversation._id, {
+          lastMessageId: savedMessage._id,
+          lastMessageAt: new Date(),
+          lastMessagePreview: dto.description.substring(0, 100),
+        });
+
+        this.logger.log(`Created inbox conversation for support ticket ${savedTicket._id}`);
+      } catch (msgError: any) {
+        // Don't fail the ticket creation if messaging fails
+        this.logger.warn(`Failed to create inbox conversation: ${msgError.message}`);
+      }
+
+      return savedTicket;
     } catch (error) {
       this.logger.error(`Failed to create support ticket: ${error.message}`);
       throw error;

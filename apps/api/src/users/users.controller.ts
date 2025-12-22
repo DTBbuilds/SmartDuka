@@ -26,18 +26,68 @@ export class UsersController {
     return safe;
   }
 
-  @Get(':id')
-  async findById(@Param('id') id: string) {
-    const user = await this.usersService.findById(id);
-    if (!user) return null;
-    const { passwordHash, ...safe } = (user as any).toObject();
-    return safe;
+  /**
+   * Get current user's preferences
+   * GET /users/preferences
+   * Must be defined BEFORE :id route to avoid conflict
+   */
+  @UseGuards(JwtAuthGuard)
+  @Get('preferences')
+  async getPreferences(@CurrentUser() user: any) {
+    const fullUser = await this.usersService.findById(user.sub);
+    if (!fullUser) {
+      return {
+        theme: 'system',
+        language: 'en',
+        currency: 'KES',
+        dateFormat: 'DD/MM/YYYY',
+        soundEnabled: true,
+        receiptPrinterEnabled: false,
+      };
+    }
+    return (fullUser as any).preferences || {
+      theme: 'system',
+      language: 'en',
+      currency: 'KES',
+      dateFormat: 'DD/MM/YYYY',
+      soundEnabled: true,
+      receiptPrinterEnabled: false,
+    };
+  }
+
+  /**
+   * Update current user's preferences
+   * PATCH /users/preferences
+   */
+  @UseGuards(JwtAuthGuard)
+  @Patch('preferences')
+  async updatePreferences(
+    @CurrentUser() user: any,
+    @Body() dto: {
+      theme?: 'light' | 'dark' | 'system';
+      language?: string;
+      currency?: string;
+      dateFormat?: string;
+      soundEnabled?: boolean;
+      receiptPrinterEnabled?: boolean;
+    },
+  ) {
+    const updated = await this.usersService.updatePreferences(user.sub, dto);
+    return updated?.preferences || dto;
   }
 
   @UseGuards(JwtAuthGuard)
   @Get('me')
   async me(@Req() req: any) {
     return req.user;
+  }
+
+  @Get(':id')
+  async findById(@Param('id') id: string) {
+    const user = await this.usersService.findById(id);
+    if (!user) return null;
+    const { passwordHash, ...safe } = (user as any).toObject();
+    return safe;
   }
 
   /**

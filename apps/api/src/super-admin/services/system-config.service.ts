@@ -286,4 +286,93 @@ export class SystemConfigService {
     if (str.length <= 8) return '****';
     return str.substring(0, 4) + '****' + str.substring(str.length - 4);
   }
+
+  /**
+   * Get VAT configuration
+   * Returns VAT settings for subscription/invoice calculations
+   */
+  async getVatConfig(): Promise<{
+    enabled: boolean;
+    rate: number;
+    name: string;
+    description: string;
+  }> {
+    const config = await this.configModel.findOne({ type: SystemConfigType.VAT });
+    
+    // Default: VAT disabled
+    if (!config) {
+      return {
+        enabled: false,
+        rate: 0.16,
+        name: 'VAT',
+        description: 'Value Added Tax (16%)',
+      };
+    }
+
+    return {
+      enabled: config.config.vatEnabled ?? false,
+      rate: config.config.vatRate ?? 0.16,
+      name: config.config.vatName ?? 'VAT',
+      description: config.config.vatDescription ?? 'Value Added Tax (16%)',
+    };
+  }
+
+  /**
+   * Save VAT configuration
+   */
+  async saveVatConfig(data: {
+    enabled: boolean;
+    rate?: number;
+    name?: string;
+    description?: string;
+    updatedByEmail?: string;
+  }): Promise<SystemConfigDocument> {
+    const configData = {
+      type: SystemConfigType.VAT,
+      name: 'VAT Configuration',
+      description: 'System-wide VAT settings for subscription payments and invoices',
+      isActive: data.enabled,
+      environment: 'production' as const,
+      config: {
+        vatEnabled: data.enabled,
+        vatRate: data.rate ?? 0.16,
+        vatName: data.name ?? 'VAT',
+        vatDescription: data.description ?? 'Value Added Tax (16%)',
+      },
+      updatedByEmail: data.updatedByEmail,
+    };
+
+    const result = await this.configModel.findOneAndUpdate(
+      { type: SystemConfigType.VAT },
+      { $set: configData },
+      { upsert: true, new: true },
+    );
+
+    this.logger.log(`VAT configuration saved: enabled=${data.enabled}, rate=${data.rate ?? 0.16}`);
+    return result;
+  }
+
+  /**
+   * Toggle VAT enabled/disabled
+   */
+  async toggleVatEnabled(enabled: boolean, updatedByEmail?: string): Promise<SystemConfigDocument | null> {
+    const existing = await this.configModel.findOne({ type: SystemConfigType.VAT });
+    
+    if (!existing) {
+      // Create new config with default values
+      return this.saveVatConfig({ enabled, updatedByEmail });
+    }
+
+    return this.configModel.findOneAndUpdate(
+      { type: SystemConfigType.VAT },
+      { 
+        $set: { 
+          isActive: enabled,
+          'config.vatEnabled': enabled,
+          updatedByEmail,
+        } 
+      },
+      { new: true },
+    );
+  }
 }

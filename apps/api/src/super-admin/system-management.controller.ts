@@ -15,7 +15,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import { JwtPayload } from '../auth/strategies/jwt.strategy';
+import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { SystemManagementService } from './services/system-management.service';
 import { SystemAuditService } from './services/system-audit.service';
 import { EmailLogService } from './services/email-log.service';
@@ -431,5 +431,50 @@ export class SystemManagementController {
       startDate ? new Date(startDate) : undefined,
       endDate ? new Date(endDate) : undefined,
     );
+  }
+
+  // ============================================
+  // VAT CONFIGURATION
+  // ============================================
+
+  /**
+   * Get VAT configuration
+   */
+  @Get('vat-config')
+  async getVatConfig() {
+    this.logger.log('Fetching VAT configuration');
+    return this.configService.getVatConfig();
+  }
+
+  /**
+   * Update VAT configuration
+   */
+  @Put('vat-config')
+  async updateVatConfig(
+    @CurrentUser() user: any,
+    @Body() body: { enabled: boolean; rate?: number; name?: string; description?: string },
+  ) {
+    this.logger.log(`Updating VAT config: enabled=${body.enabled}`);
+    await this.configService.saveVatConfig({
+      enabled: body.enabled,
+      rate: body.rate,
+      name: body.name,
+      description: body.description,
+      updatedByEmail: user.email,
+    });
+    return this.configService.getVatConfig();
+  }
+
+  /**
+   * Toggle VAT enabled/disabled
+   */
+  @Post('vat-config/toggle')
+  async toggleVat(
+    @CurrentUser() user: any,
+    @Body() body: { enabled: boolean },
+  ) {
+    this.logger.log(`Toggling VAT: enabled=${body.enabled}`);
+    await this.configService.toggleVatEnabled(body.enabled, user.email);
+    return this.configService.getVatConfig();
   }
 }

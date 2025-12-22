@@ -3,16 +3,18 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
-import { LoadingScreen } from '@/components/loading-screen';
+import { AppStartupScreen } from '@/components/app-startup-screen';
 
 export default function Home() {
   const router = useRouter();
   const { user, loading, isAuthenticated } = useAuth();
+  const [appReady, setAppReady] = useState(false);
   const [redirected, setRedirected] = useState(false);
 
+  // Handle redirect after app is ready
   useEffect(() => {
-    // Don't redirect if already redirected
-    if (redirected) return;
+    // Don't redirect if not ready or already redirected
+    if (!appReady || redirected) return;
 
     // Wait for auth to load
     if (loading) return;
@@ -37,8 +39,13 @@ export default function Home() {
       // Fallback to login if role is unknown
       router.push('/login');
     }
-  }, [user, loading, isAuthenticated, router, redirected]);
+  }, [user, loading, isAuthenticated, router, redirected, appReady]);
 
-  // Show simple loading screen during redirect
-  return <LoadingScreen title="SmartDuka" description="Redirecting..." />;
+  // Show startup screen until app is ready
+  if (!appReady) {
+    return <AppStartupScreen onReady={() => setAppReady(true)} />;
+  }
+
+  // Show nothing while redirecting (prevents flash)
+  return null;
 }

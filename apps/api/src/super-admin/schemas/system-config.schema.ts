@@ -12,6 +12,7 @@ export enum SystemConfigType {
   EMAIL = 'email',
   SMS = 'sms',
   GENERAL = 'general',
+  VAT = 'vat',
 }
 
 /**
@@ -89,6 +90,12 @@ export class SystemConfig {
     smtpPassIv?: string;
     smtpPassTag?: string;
     smtpFrom?: string;
+    
+    // VAT configuration
+    vatEnabled?: boolean;        // Master toggle for VAT on subscription payments
+    vatRate?: number;            // VAT rate (default 0.16 = 16%)
+    vatName?: string;            // Display name (default "VAT")
+    vatDescription?: string;     // Description for invoices
     
     // Generic key-value for other settings
     [key: string]: any;

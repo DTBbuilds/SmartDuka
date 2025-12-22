@@ -665,22 +665,42 @@ export default function SubscriptionPage() {
               </button>
               {subscription.status === 'cancelled' || subscription.status === 'expired' ? (
                 <button
-                  onClick={() => reactivateSubscription()}
-                  className="flex items-center gap-2 px-5 py-2.5 border-2 border-green-600 text-green-600 rounded-lg hover:bg-green-50 transition-colors font-medium"
+                  onClick={async () => {
+                    try {
+                      setProcessing(true);
+                      await reactivateSubscription();
+                      alert('Subscription reactivated successfully!');
+                    } catch (error: any) {
+                      alert(`Failed to reactivate: ${error.message}`);
+                    } finally {
+                      setProcessing(false);
+                    }
+                  }}
+                  disabled={processing}
+                  className="flex items-center gap-2 px-5 py-2.5 border-2 border-green-600 text-green-600 rounded-lg hover:bg-green-50 transition-colors font-medium disabled:opacity-50"
                 >
-                  <RefreshCw className="h-4 w-4" />
+                  {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                   Reactivate Subscription
                 </button>
               ) : subscription.planCode !== 'trial' ? (
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     if (confirm('Are you sure you want to cancel your subscription? You will be downgraded to the free Trial plan.')) {
-                      cancelSubscription('User requested cancellation');
+                      try {
+                        setProcessing(true);
+                        await cancelSubscription('User requested cancellation', true);
+                        alert('Subscription cancelled successfully. You have been downgraded to the Trial plan.');
+                      } catch (error: any) {
+                        alert(`Failed to cancel: ${error.message}`);
+                      } finally {
+                        setProcessing(false);
+                      }
                     }
                   }}
-                  className="flex items-center gap-2 px-5 py-2.5 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
+                  disabled={processing}
+                  className="flex items-center gap-2 px-5 py-2.5 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
                 >
-                  <X className="h-4 w-4" />
+                  {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
                   Cancel Subscription
                 </button>
               ) : null}

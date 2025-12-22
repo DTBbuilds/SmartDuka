@@ -505,9 +505,9 @@ export default function SuperAdminEmailsPage() {
                   <CheckCircle className="h-4 w-4 text-green-500" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-green-600">{stats.delivered}</div>
+                  <div className="text-2xl font-bold text-green-600">{stats.delivered ?? 0}</div>
                   <p className="text-xs text-muted-foreground">
-                    {stats.total > 0 ? `${((stats.delivered / stats.total) * 100).toFixed(1)}%` : '0%'} delivery rate
+                    {(stats.total ?? 0) > 0 ? `${(((stats.delivered ?? 0) / (stats.total ?? 1)) * 100).toFixed(1)}%` : '0%'} delivery rate
                   </p>
                 </CardContent>
               </Card>
@@ -518,9 +518,9 @@ export default function SuperAdminEmailsPage() {
                   <XCircle className="h-4 w-4 text-red-500" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-red-600">{stats.failed}</div>
+                  <div className="text-2xl font-bold text-red-600">{stats.failed ?? 0}</div>
                   <p className="text-xs text-muted-foreground">
-                    {stats.total > 0 ? `${((stats.failed / stats.total) * 100).toFixed(1)}%` : '0%'} failure rate
+                    {(stats.total ?? 0) > 0 ? `${(((stats.failed ?? 0) / (stats.total ?? 1)) * 100).toFixed(1)}%` : '0%'} failure rate
                   </p>
                 </CardContent>
               </Card>

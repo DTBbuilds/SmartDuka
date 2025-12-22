@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,6 +27,13 @@ import {
   TabsTrigger,
 } from '@/components/ui/tabs';
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
   Mail,
   Send,
   FileText,
@@ -42,6 +49,13 @@ import {
   DollarSign,
   Calendar,
   Trash2,
+  Zap,
+  ChevronLeft,
+  ChevronRight,
+  MoreVertical,
+  CheckSquare,
+  Square,
+  ChevronDown,
 } from 'lucide-react';
 
 interface Shop {
@@ -77,6 +91,11 @@ interface Invoice {
     amount: number;
   }>;
   notes?: string;
+  // Email tracking
+  emailSent?: boolean;
+  emailSentAt?: string;
+  emailSentCount?: number;
+  lastEmailError?: string;
 }
 
 interface LineItem {
@@ -125,8 +144,21 @@ export default function SuperAdminCommunicationsPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loadingInvoices, setLoadingInvoices] = useState(false);
   const [invoiceFilter, setInvoiceFilter] = useState('all');
+  const [sendingEmailId, setSendingEmailId] = useState<string | null>(null);
+  
+  // Pagination for invoices
+  const [invoicePage, setInvoicePage] = useState(1);
+  const INVOICES_PER_PAGE = 15;
+  
+  // Multi-select for invoices
+  const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<Set<string>>(new Set());
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+  
+  // Invoice cache
+  const invoiceCacheRef = { data: null as Invoice[] | null, filter: '', timestamp: 0 };
+  const CACHE_DURATION = 60000; // 1 minute
 
   useEffect(() => {
     loadShops();
@@ -157,14 +189,14 @@ export default function SuperAdminCommunicationsPage() {
     }
   };
 
-  const loadInvoices = async () => {
+  const loadInvoices = useCallback(async (forceRefresh = false) => {
     try {
       setLoadingInvoices(true);
       const params = new URLSearchParams();
       if (invoiceFilter !== 'all') {
         params.append('status', invoiceFilter);
       }
-      params.append('limit', '100');
+      params.append('limit', '500'); // Fetch more for client-side pagination
 
       const res = await fetch(`${apiUrl}/super-admin/communications/invoices?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -174,11 +206,72 @@ export default function SuperAdminCommunicationsPage() {
       
       if (res.ok) {
         setInvoices(invData.invoices || []);
+        setInvoicePage(1); // Reset to first page on new data
+        setSelectedInvoiceIds(new Set()); // Clear selection
       }
     } catch (err: any) {
       console.error('Failed to load invoices:', err);
     } finally {
       setLoadingInvoices(false);
+    }
+  }, [apiUrl, token, invoiceFilter]);
+
+  // Pagination calculations for invoices
+  const totalInvoicePages = Math.ceil(invoices.length / INVOICES_PER_PAGE);
+  const paginatedInvoices = useMemo(() => {
+    const start = (invoicePage - 1) * INVOICES_PER_PAGE;
+    return invoices.slice(start, start + INVOICES_PER_PAGE);
+  }, [invoices, invoicePage]);
+
+  // Reset page when filter changes
+  useEffect(() => {
+    setInvoicePage(1);
+  }, [invoiceFilter]);
+
+  // Multi-select handlers for invoices
+  const toggleSelectAllInvoices = () => {
+    if (selectedInvoiceIds.size === paginatedInvoices.length) {
+      setSelectedInvoiceIds(new Set());
+    } else {
+      setSelectedInvoiceIds(new Set(paginatedInvoices.map(inv => inv._id)));
+    }
+  };
+
+  const toggleSelectInvoice = (invoiceId: string) => {
+    const newSet = new Set(selectedInvoiceIds);
+    if (newSet.has(invoiceId)) {
+      newSet.delete(invoiceId);
+    } else {
+      newSet.add(invoiceId);
+    }
+    setSelectedInvoiceIds(newSet);
+  };
+
+  // Bulk send emails
+  const handleBulkSendEmails = async () => {
+    if (selectedInvoiceIds.size === 0) return;
+    
+    try {
+      setBulkActionLoading(true);
+      const results = await Promise.allSettled(
+        Array.from(selectedInvoiceIds).map(id =>
+          fetch(`${apiUrl}/super-admin/communications/invoices/${id}/send-email`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+          })
+        )
+      );
+      
+      const succeeded = results.filter(r => r.status === 'fulfilled').length;
+      const failed = results.filter(r => r.status === 'rejected').length;
+      
+      setSuccess(`Sent ${succeeded} emails${failed > 0 ? `, ${failed} failed` : ''}`);
+      setSelectedInvoiceIds(new Set());
+      await loadInvoices(true);
+    } catch (err: any) {
+      setError(err.message || 'Failed to send bulk emails');
+    } finally {
+      setBulkActionLoading(false);
     }
   };
 
@@ -333,6 +426,9 @@ export default function SuperAdminCommunicationsPage() {
 
   const handleResendInvoiceEmail = async (invoiceId: string) => {
     try {
+      setSendingEmailId(invoiceId);
+      setError('');
+      
       const res = await fetch(`${apiUrl}/super-admin/communications/invoices/${invoiceId}/send-email`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
@@ -343,11 +439,15 @@ export default function SuperAdminCommunicationsPage() {
       
       if (res.ok) {
         setSuccess('Invoice email sent successfully!');
+        // Immediately refresh the invoices list to show updated email status
+        await loadInvoices();
       } else {
         setError(resendData.message || 'Failed to send invoice email');
       }
     } catch (err: any) {
       setError(err.message || 'Failed to send invoice email');
+    } finally {
+      setSendingEmailId(null);
     }
   };
 
@@ -701,28 +801,108 @@ export default function SuperAdminCommunicationsPage() {
         {/* Create Invoice Tab */}
         <TabsContent value="create-invoice" className="space-y-6">
           <Card>
-            <CardHeader>
-              <CardTitle>Create Manual Invoice</CardTitle>
-              <CardDescription>
-                Generate a new invoice for a shop owner
-              </CardDescription>
+            <CardHeader className="pb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <FileText className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <CardTitle>Create Manual Invoice</CardTitle>
+                  <CardDescription>
+                    Generate and send a professional invoice to shop owners
+                  </CardDescription>
+                </div>
+              </div>
             </CardHeader>
             <CardContent className="space-y-6">
+              {/* Quick Templates */}
+              <div className="bg-muted/50 rounded-lg p-4">
+                <p className="text-sm font-medium mb-3 flex items-center gap-2">
+                  <Zap className="h-4 w-4 text-amber-500" />
+                  Quick Templates
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setInvoiceForm(prev => ({
+                      ...prev,
+                      type: 'subscription',
+                      description: `Monthly Subscription - ${new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' })}`,
+                      amount: 1500,
+                      dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                    }))}
+                    className="text-xs"
+                  >
+                    Basic Plan (KES 1,500)
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setInvoiceForm(prev => ({
+                      ...prev,
+                      type: 'subscription',
+                      description: `Monthly Subscription - ${new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' })}`,
+                      amount: 3000,
+                      dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                    }))}
+                    className="text-xs"
+                  >
+                    Pro Plan (KES 3,000)
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setInvoiceForm(prev => ({
+                      ...prev,
+                      type: 'subscription',
+                      description: `Monthly Subscription - ${new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' })}`,
+                      amount: 4500,
+                      dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                    }))}
+                    className="text-xs"
+                  >
+                    Gold Plan (KES 4,500)
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setInvoiceForm(prev => ({
+                      ...prev,
+                      type: 'setup',
+                      description: 'One-time Setup Fee',
+                      amount: 500,
+                      dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                    }))}
+                    className="text-xs"
+                  >
+                    Setup Fee (KES 500)
+                  </Button>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Shop Selection */}
                 <div className="space-y-2">
-                  <Label>Select Shop *</Label>
+                  <Label className="flex items-center gap-1">
+                    <Store className="h-4 w-4 text-muted-foreground" />
+                    Select Shop <span className="text-red-500">*</span>
+                  </Label>
                   <Select
                     value={invoiceForm.shopId}
                     onValueChange={(value) => setInvoiceForm(prev => ({ ...prev, shopId: value }))}
                   >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a shop" />
+                    <SelectTrigger className={!invoiceForm.shopId ? 'border-dashed' : ''}>
+                      <SelectValue placeholder="Choose a shop..." />
                     </SelectTrigger>
                     <SelectContent>
                       {shops.map((shop) => (
                         <SelectItem key={shop.id} value={shop.id}>
-                          {shop.name} ({shop.email})
+                          <div className="flex items-center gap-2">
+                            <Store className="h-4 w-4 text-muted-foreground" />
+                            <span>{shop.name}</span>
+                            <span className="text-muted-foreground text-xs">({shop.email})</span>
+                          </div>
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -731,7 +911,10 @@ export default function SuperAdminCommunicationsPage() {
 
                 {/* Invoice Type */}
                 <div className="space-y-2">
-                  <Label>Invoice Type *</Label>
+                  <Label className="flex items-center gap-1">
+                    <FileText className="h-4 w-4 text-muted-foreground" />
+                    Invoice Type <span className="text-red-500">*</span>
+                  </Label>
                   <Select
                     value={invoiceForm.type}
                     onValueChange={(value: 'subscription' | 'addon' | 'setup') =>
@@ -742,43 +925,124 @@ export default function SuperAdminCommunicationsPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="subscription">Subscription</SelectItem>
-                      <SelectItem value="addon">Add-on</SelectItem>
-                      <SelectItem value="setup">Setup Fee</SelectItem>
+                      <SelectItem value="subscription">
+                        <div className="flex items-center gap-2">
+                          <RefreshCw className="h-4 w-4 text-blue-500" />
+                          Subscription
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="addon">
+                        <div className="flex items-center gap-2">
+                          <Plus className="h-4 w-4 text-green-500" />
+                          Add-on Service
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="setup">
+                        <div className="flex items-center gap-2">
+                          <DollarSign className="h-4 w-4 text-amber-500" />
+                          Setup Fee
+                        </div>
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 {/* Description */}
                 <div className="space-y-2 md:col-span-2">
-                  <Label>Description *</Label>
+                  <Label className="flex items-center gap-1">
+                    Description <span className="text-red-500">*</span>
+                  </Label>
                   <Input
                     placeholder="e.g., Monthly subscription - January 2024"
                     value={invoiceForm.description}
                     onChange={(e) => setInvoiceForm(prev => ({ ...prev, description: e.target.value }))}
+                    className={!invoiceForm.description ? 'border-dashed' : ''}
                   />
+                  <p className="text-xs text-muted-foreground">This will appear on the invoice sent to the shop owner</p>
                 </div>
 
                 {/* Due Date */}
                 <div className="space-y-2">
-                  <Label>Due Date *</Label>
+                  <Label className="flex items-center gap-1">
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    Due Date <span className="text-red-500">*</span>
+                  </Label>
                   <Input
                     type="date"
                     value={invoiceForm.dueDate}
                     onChange={(e) => setInvoiceForm(prev => ({ ...prev, dueDate: e.target.value }))}
                     min={new Date().toISOString().split('T')[0]}
+                    className={!invoiceForm.dueDate ? 'border-dashed' : ''}
                   />
+                  <div className="flex gap-2 mt-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs h-6 px-2"
+                      onClick={() => setInvoiceForm(prev => ({
+                        ...prev,
+                        dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+                      }))}
+                    >
+                      3 days
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs h-6 px-2"
+                      onClick={() => setInvoiceForm(prev => ({
+                        ...prev,
+                        dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+                      }))}
+                    >
+                      7 days
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs h-6 px-2"
+                      onClick={() => setInvoiceForm(prev => ({
+                        ...prev,
+                        dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+                      }))}
+                    >
+                      14 days
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs h-6 px-2"
+                      onClick={() => setInvoiceForm(prev => ({
+                        ...prev,
+                        dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+                      }))}
+                    >
+                      30 days
+                    </Button>
+                  </div>
                 </div>
 
                 {/* Simple Amount (if no line items) */}
                 <div className="space-y-2">
-                  <Label>Amount (KES) - or use line items below</Label>
-                  <Input
-                    type="number"
-                    placeholder="0"
-                    value={invoiceForm.amount || ''}
-                    onChange={(e) => setInvoiceForm(prev => ({ ...prev, amount: parseFloat(e.target.value) || 0 }))}
-                  />
+                  <Label className="flex items-center gap-1">
+                    <DollarSign className="h-4 w-4 text-muted-foreground" />
+                    Amount (KES)
+                  </Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">KES</span>
+                    <Input
+                      type="number"
+                      placeholder="0"
+                      value={invoiceForm.amount || ''}
+                      onChange={(e) => setInvoiceForm(prev => ({ ...prev, amount: parseFloat(e.target.value) || 0 }))}
+                      className="pl-12"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">Or add detailed line items below</p>
                 </div>
               </div>
 
@@ -907,16 +1171,43 @@ export default function SuperAdminCommunicationsPage() {
         <TabsContent value="invoices" className="space-y-6">
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div>
                   <CardTitle>All Invoices</CardTitle>
                   <CardDescription>
-                    View and manage all invoices
+                    View and manage all invoices ({invoices.length} total)
                   </CardDescription>
                 </div>
-                <div className="flex gap-3">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
+                  {selectedInvoiceIds.size > 0 && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" className="gap-2" disabled={bulkActionLoading}>
+                          {bulkActionLoading ? (
+                            <RefreshCw className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <CheckSquare className="h-4 w-4" />
+                          )}
+                          <span className="hidden sm:inline">{selectedInvoiceIds.size} Selected</span>
+                          <span className="sm:hidden">{selectedInvoiceIds.size}</span>
+                          <ChevronDown className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={handleBulkSendEmails}>
+                          <Send className="h-4 w-4 mr-2" />
+                          Send Emails to Selected
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => setSelectedInvoiceIds(new Set())}>
+                          <XCircle className="h-4 w-4 mr-2" />
+                          Clear Selection
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
                   <Select value={invoiceFilter} onValueChange={setInvoiceFilter}>
-                    <SelectTrigger className="w-40">
+                    <SelectTrigger className="w-32 sm:w-40">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -927,9 +1218,9 @@ export default function SuperAdminCommunicationsPage() {
                       <SelectItem value="cancelled">Cancelled</SelectItem>
                     </SelectContent>
                   </Select>
-                  <Button variant="outline" onClick={loadInvoices} className="gap-2">
+                  <Button variant="outline" onClick={() => loadInvoices(true)} className="gap-2">
                     <RefreshCw className={`h-4 w-4 ${loadingInvoices ? 'animate-spin' : ''}`} />
-                    Refresh
+                    <span className="hidden sm:inline">Refresh</span>
                   </Button>
                 </div>
               </div>
@@ -948,62 +1239,192 @@ export default function SuperAdminCommunicationsPage() {
                   </p>
                 </div>
               ) : (
+                <>
+                <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-10">
+                        <button
+                          onClick={toggleSelectAllInvoices}
+                          className="p-1 hover:bg-gray-200 rounded"
+                        >
+                          {selectedInvoiceIds.size === paginatedInvoices.length && paginatedInvoices.length > 0 ? (
+                            <CheckSquare className="h-4 w-4 text-blue-600" />
+                          ) : (
+                            <Square className="h-4 w-4 text-gray-400" />
+                          )}
+                        </button>
+                      </TableHead>
                       <TableHead>Invoice #</TableHead>
-                      <TableHead>Shop</TableHead>
-                      <TableHead>Type</TableHead>
+                      <TableHead className="hidden md:table-cell">Shop</TableHead>
+                      <TableHead className="hidden lg:table-cell">Type</TableHead>
                       <TableHead>Amount</TableHead>
-                      <TableHead>Due Date</TableHead>
+                      <TableHead className="hidden sm:table-cell">Due Date</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead>Actions</TableHead>
+                      <TableHead className="hidden lg:table-cell">Email</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {invoices.map((invoice) => (
-                      <TableRow key={invoice._id}>
-                        <TableCell className="font-medium">
-                          {invoice.invoiceNumber}
-                        </TableCell>
-                        <TableCell>
-                          <div>
-                            <p className="font-medium">{invoice.shopId?.name || 'Unknown'}</p>
-                            <p className="text-xs text-muted-foreground">{invoice.shopId?.email}</p>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="capitalize">
-                            {invoice.type}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="font-medium">
-                          KES {invoice.totalAmount?.toLocaleString()}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Calendar className="h-4 w-4 text-muted-foreground" />
-                            {new Date(invoice.dueDate).toLocaleDateString()}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {getStatusBadge(invoice.status)}
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleResendInvoiceEmail(invoice._id)}
-                            className="gap-2"
-                          >
-                            <Send className="h-4 w-4" />
-                            Send Email
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {paginatedInvoices.map((invoice) => {
+                      const isSelected = selectedInvoiceIds.has(invoice._id);
+                      return (
+                        <TableRow key={invoice._id} className={isSelected ? 'bg-blue-50' : ''}>
+                          <TableCell>
+                            <button
+                              onClick={() => toggleSelectInvoice(invoice._id)}
+                              className="p-1 hover:bg-gray-200 rounded"
+                            >
+                              {isSelected ? (
+                                <CheckSquare className="h-4 w-4 text-blue-600" />
+                              ) : (
+                                <Square className="h-4 w-4 text-gray-400" />
+                              )}
+                            </button>
+                          </TableCell>
+                          <TableCell className="font-medium">
+                            <div>
+                              <span>{invoice.invoiceNumber}</span>
+                              <p className="text-xs text-muted-foreground md:hidden">{invoice.shopId?.name || 'Unknown'}</p>
+                            </div>
+                          </TableCell>
+                          <TableCell className="hidden md:table-cell">
+                            <div>
+                              <p className="font-medium">{invoice.shopId?.name || 'Unknown'}</p>
+                              <p className="text-xs text-muted-foreground truncate max-w-[150px]">{invoice.shopId?.email}</p>
+                            </div>
+                          </TableCell>
+                          <TableCell className="hidden lg:table-cell">
+                            <Badge variant="outline" className="capitalize">
+                              {invoice.type}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="font-medium">
+                            KES {invoice.totalAmount?.toLocaleString()}
+                          </TableCell>
+                          <TableCell className="hidden sm:table-cell">
+                            <div className="flex items-center gap-2">
+                              <Calendar className="h-4 w-4 text-muted-foreground" />
+                              {new Date(invoice.dueDate).toLocaleDateString()}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {getStatusBadge(invoice.status)}
+                          </TableCell>
+                          <TableCell className="hidden lg:table-cell">
+                            {invoice.emailSent ? (
+                              <div className="flex items-center gap-1">
+                                <CheckCircle className="h-4 w-4 text-green-500" />
+                                <span className="text-xs text-green-600">
+                                  Sent {invoice.emailSentCount && invoice.emailSentCount > 1 ? `(${invoice.emailSentCount}x)` : ''}
+                                </span>
+                              </div>
+                            ) : invoice.lastEmailError ? (
+                              <div className="flex items-center gap-1">
+                                <XCircle className="h-4 w-4 text-red-500" />
+                                <span className="text-xs text-red-600">Failed</span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1">
+                                <Clock className="h-4 w-4 text-gray-400" />
+                                <span className="text-xs text-gray-500">Not sent</span>
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center justify-end">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 w-8 p-0"
+                                    disabled={sendingEmailId === invoice._id}
+                                  >
+                                    {sendingEmailId === invoice._id ? (
+                                      <RefreshCw className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <MoreVertical className="h-4 w-4" />
+                                    )}
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-48">
+                                  <DropdownMenuItem onClick={() => handleResendInvoiceEmail(invoice._id)}>
+                                    <Send className="h-4 w-4 mr-2" />
+                                    {invoice.emailSent ? 'Resend Email' : 'Send Email'}
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem>
+                                    <Eye className="h-4 w-4 mr-2" />
+                                    View Details
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
+              </div>
+
+              {/* Pagination */}
+              {totalInvoicePages > 1 && (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t mt-4">
+                  <div className="text-sm text-muted-foreground">
+                    Showing {((invoicePage - 1) * INVOICES_PER_PAGE) + 1} to {Math.min(invoicePage * INVOICES_PER_PAGE, invoices.length)} of {invoices.length} invoices
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setInvoicePage(p => Math.max(1, p - 1))}
+                      disabled={invoicePage === 1}
+                      className="gap-1"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      <span className="hidden sm:inline">Previous</span>
+                    </Button>
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: Math.min(5, totalInvoicePages) }, (_, i) => {
+                        let pageNum: number;
+                        if (totalInvoicePages <= 5) {
+                          pageNum = i + 1;
+                        } else if (invoicePage <= 3) {
+                          pageNum = i + 1;
+                        } else if (invoicePage >= totalInvoicePages - 2) {
+                          pageNum = totalInvoicePages - 4 + i;
+                        } else {
+                          pageNum = invoicePage - 2 + i;
+                        }
+                        return (
+                          <Button
+                            key={pageNum}
+                            variant={invoicePage === pageNum ? 'default' : 'outline'}
+                            size="sm"
+                            onClick={() => setInvoicePage(pageNum)}
+                            className="w-8 h-8 p-0"
+                          >
+                            {pageNum}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setInvoicePage(p => Math.min(totalInvoicePages, p + 1))}
+                      disabled={invoicePage === totalInvoicePages}
+                      className="gap-1"
+                    >
+                      <span className="hidden sm:inline">Next</span>
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+              </>
               )}
             </CardContent>
           </Card>

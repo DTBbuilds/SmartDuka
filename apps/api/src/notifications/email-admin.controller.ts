@@ -330,12 +330,56 @@ export class EmailAdminController {
    */
   @Get('config/status')
   async getEmailConfig() {
+    const host = process.env.SMTP_HOST;
+    const port = process.env.SMTP_PORT;
+    const user = process.env.SMTP_USER;
+    const pass = process.env.SMTP_PASS;
+    const from = process.env.SMTP_FROM;
+
+    const isConfigured = !!(host && user && pass);
+
     return {
-      smtpConfigured: !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS),
-      smtpHost: process.env.SMTP_HOST,
-      smtpPort: process.env.SMTP_PORT,
-      smtpUser: process.env.SMTP_USER,
-      fromEmail: process.env.SMTP_FROM,
+      smtpConfigured: isConfigured,
+      smtpStatus: isConfigured ? 'configured' : 'not_configured',
+      configuration: {
+        host: host ? '✓ Set' : '✗ Missing',
+        port: port ? `${port}` : '587 (default)',
+        user: user ? '✓ Set' : '✗ Missing',
+        pass: pass ? '✓ Set' : '✗ Missing',
+        from: from || 'SmartDuka <noreply@smartduka.co.ke>',
+      },
+      missingFields: [
+        !host && 'SMTP_HOST',
+        !user && 'SMTP_USER',
+        !pass && 'SMTP_PASS',
+      ].filter(Boolean),
+      setupInstructions: {
+        gmail: {
+          host: 'smtp.gmail.com',
+          port: 587,
+          user: 'your-email@gmail.com',
+          pass: 'Use App Password (not regular password)',
+          link: 'https://myaccount.google.com/apppasswords',
+        },
+        outlook: {
+          host: 'smtp-mail.outlook.com',
+          port: 587,
+          user: 'your-email@outlook.com',
+          pass: 'Your Outlook password',
+        },
+        sendgrid: {
+          host: 'smtp.sendgrid.net',
+          port: 587,
+          user: 'apikey',
+          pass: 'Your SendGrid API key',
+        },
+        aws_ses: {
+          host: 'email-smtp.region.amazonaws.com',
+          port: 587,
+          user: 'Your SMTP username',
+          pass: 'Your SMTP password',
+        },
+      },
       frontendUrl: process.env.FRONTEND_URL,
     };
   }
@@ -344,18 +388,75 @@ export class EmailAdminController {
    * Test SMTP connection
    */
   @Post('config/test-connection')
-  async testSmtpConnection() {
+  async testSmtpConnection(@Body() body?: { testEmail?: string }) {
+    const host = process.env.SMTP_HOST;
+    const user = process.env.SMTP_USER;
+    const pass = process.env.SMTP_PASS;
+
+    if (!host || !user || !pass) {
+      return {
+        success: false,
+        error: 'SMTP not configured',
+        message: 'Please configure SMTP settings first',
+        missingFields: [
+          !host && 'SMTP_HOST',
+          !user && 'SMTP_USER',
+          !pass && 'SMTP_PASS',
+        ].filter(Boolean),
+      };
+    }
+
     try {
-      // This would test the actual SMTP connection
+      const testEmail = body?.testEmail || user;
       const testResult = await this.emailService.sendEmail({
-        to: process.env.SMTP_USER || 'test@example.com',
-        subject: 'SMTP Connection Test',
-        html: '<h1>SMTP Connection Test</h1><p>If you receive this, SMTP is working correctly.</p>',
+        to: testEmail,
+        subject: '✅ SmartDuka SMTP Connection Test',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="background: #10b981; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+              <h1>✅ SMTP Connection Successful!</h1>
+            </div>
+            <div style="background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px;">
+              <p>Your SMTP configuration is working correctly.</p>
+              <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin: 20px 0;">
+                <h3>Configuration Details:</h3>
+                <p><strong>SMTP Host:</strong> ${host}</p>
+                <p><strong>SMTP Port:</strong> ${process.env.SMTP_PORT || 587}</p>
+                <p><strong>From Address:</strong> ${process.env.SMTP_FROM || 'SmartDuka <noreply@smartduka.co.ke>'}</p>
+                <p><strong>Test Email Sent To:</strong> ${testEmail}</p>
+              </div>
+              <p style="color: #666; font-size: 14px;">
+                You can now send emails from SmartDuka. All email communications will be enabled.
+              </p>
+            </div>
+          </div>
+        `,
       });
-      
-      return testResult;
+
+      return {
+        success: testResult.success,
+        message: 'SMTP connection test successful',
+        messageId: testResult.messageId,
+        testEmail: testEmail,
+        configuration: {
+          host,
+          port: process.env.SMTP_PORT || 587,
+          from: process.env.SMTP_FROM || 'SmartDuka <noreply@smartduka.co.ke>',
+        },
+      };
     } catch (error: any) {
-      return { success: false, error: error.message };
+      return {
+        success: false,
+        error: error.message,
+        message: 'SMTP connection test failed',
+        troubleshooting: [
+          'Check SMTP credentials are correct',
+          'Verify SMTP server is reachable',
+          'Check firewall is not blocking SMTP port',
+          'For Gmail: Use App Password, not regular password',
+          'For Outlook: Enable "Allow less secure apps"',
+        ],
+      };
     }
   }
 

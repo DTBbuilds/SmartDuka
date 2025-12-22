@@ -151,6 +151,7 @@ export class PaymentAttemptService {
 
   /**
    * Get all payment attempts (for super admin)
+   * Populates shop data for display
    */
   async getAllAttempts(options: {
     status?: PaymentAttemptStatus;
@@ -160,7 +161,7 @@ export class PaymentAttemptService {
     endDate?: Date;
     limit?: number;
     skip?: number;
-  } = {}): Promise<{ attempts: PaymentAttemptDocument[]; total: number }> {
+  } = {}): Promise<{ attempts: any[]; total: number }> {
     const query: any = {};
 
     if (options.status) query.status = options.status;
@@ -175,13 +176,24 @@ export class PaymentAttemptService {
     const [attempts, total] = await Promise.all([
       this.attemptModel
         .find(query)
+        .populate('shopId', 'name email phone')
         .sort({ createdAt: -1 })
         .limit(options.limit || 50)
-        .skip(options.skip || 0),
+        .skip(options.skip || 0)
+        .lean(),
       this.attemptModel.countDocuments(query),
     ]);
 
-    return { attempts, total };
+    // Map attempts to include shop name from populated data
+    const mappedAttempts = attempts.map((attempt: any) => ({
+      ...attempt,
+      shopName: attempt.shopId?.name || attempt.shopName || 'Unknown Shop',
+      shopEmail: attempt.shopId?.email,
+      shopPhone: attempt.shopId?.phone,
+      shopIdStr: attempt.shopId?._id?.toString() || attempt.shopId?.toString(),
+    }));
+
+    return { attempts: mappedAttempts, total };
   }
 
   /**

@@ -122,6 +122,19 @@ export class SubscriptionInvoice {
   @Prop({ required: false })
   notes?: string;
 
+  // Email tracking
+  @Prop({ default: false })
+  emailSent: boolean;
+
+  @Prop({ required: false })
+  emailSentAt?: Date;
+
+  @Prop({ default: 0 })
+  emailSentCount: number;
+
+  @Prop({ required: false })
+  lastEmailError?: string;
+
   // Manual payment tracking
   @Prop({ type: Object, required: false })
   manualPayment?: {
