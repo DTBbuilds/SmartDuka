@@ -26,6 +26,12 @@ export class UsersController {
     return safe;
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Get('me')
+  async me(@Req() req: any) {
+    return req.user;
+  }
+
   /**
    * Get current user's preferences
    * GET /users/preferences
@@ -74,12 +80,6 @@ export class UsersController {
   ) {
     const updated = await this.usersService.updatePreferences(user.sub, dto);
     return updated?.preferences || dto;
-  }
-
-  @UseGuards(JwtAuthGuard)
-  @Get('me')
-  async me(@Req() req: any) {
-    return req.user;
   }
 
   @Get(':id')
