@@ -191,10 +191,18 @@ export function CategorySelectWithCreate({
   return (
     <div ref={dropdownRef} className={`relative ${className}`}>
       {/* Trigger Button */}
-      <button
-        type="button"
+      <div
+        role="combobox"
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
+        tabIndex={disabled ? -1 : 0}
         onClick={() => !disabled && setIsOpen(!isOpen)}
-        disabled={disabled}
+        onKeyDown={(e) => {
+          if (!disabled && (e.key === 'Enter' || e.key === ' ')) {
+            e.preventDefault();
+            setIsOpen(!isOpen);
+          }
+        }}
         className={`
           flex items-center justify-between w-full px-3 py-2 text-sm
           border rounded-md bg-background
@@ -208,20 +216,28 @@ export function CategorySelectWithCreate({
         </span>
         <div className="flex items-center gap-1">
           {selectedCategory && (
-            <button
-              type="button"
+            <span
+              role="button"
+              tabIndex={0}
               onClick={(e) => {
                 e.stopPropagation();
                 handleClear();
               }}
-              className="p-0.5 hover:bg-muted rounded"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleClear();
+                }
+              }}
+              className="p-0.5 hover:bg-muted rounded cursor-pointer"
             >
               <X className="h-3 w-3 text-muted-foreground" />
-            </button>
+            </span>
           )}
           <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${isOpen ? 'rotate-180' : ''}`} />
         </div>
-      </button>
+      </div>
 
       {/* Dropdown */}
       {isOpen && (

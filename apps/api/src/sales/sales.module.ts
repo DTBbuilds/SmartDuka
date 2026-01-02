@@ -11,6 +11,7 @@ import { InventoryModule } from '../inventory/inventory.module';
 import { ActivityModule } from '../activity/activity.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { ShopSettingsModule } from '../shop-settings/shop-settings.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     ActivityModule,
     PaymentsModule,
     NotificationsModule,
+    ShopSettingsModule,
   ],
   providers: [SalesService, ReceiptService, InvoiceService],
   controllers: [SalesController],

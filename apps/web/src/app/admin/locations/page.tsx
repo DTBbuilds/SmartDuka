@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { config } from "@/lib/config";
 import {
   Badge,
   Button,
@@ -70,8 +71,7 @@ export default function LocationsPage() {
 
     setLoading(true);
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-      const res = await fetch(`${base}/locations`, {
+      const res = await fetch(`${config.apiUrl}/locations`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -92,8 +92,7 @@ export default function LocationsPage() {
 
   const handleCreateLocation = async () => {
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-      const res = await fetch(`${base}/locations`, {
+      const res = await fetch(`${config.apiUrl}/locations`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -136,8 +135,7 @@ export default function LocationsPage() {
     if (!confirm("Are you sure you want to delete this location?")) return;
 
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-      const res = await fetch(`${base}/locations/${id}`, {
+      const res = await fetch(`${config.apiUrl}/locations/${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });

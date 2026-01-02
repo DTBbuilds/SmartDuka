@@ -35,6 +35,15 @@ export class InvoiceItem {
 
 export const InvoiceItemSchema = SchemaFactory.createForClass(InvoiceItem);
 
+/**
+ * Approval status for manual payments (send money, bank transfer, etc.)
+ * - pending: Payment submitted, awaiting super admin approval
+ * - approved: Super admin confirmed payment received
+ * - rejected: Super admin rejected the payment
+ * - auto_approved: Automatically approved (e.g., cash payments at POS)
+ */
+export type PaymentApprovalStatus = 'pending' | 'approved' | 'rejected' | 'auto_approved';
+
 @Schema({ _id: false })
 export class InvoicePayment {
   @Prop({ required: true })
@@ -51,6 +60,32 @@ export class InvoicePayment {
 
   @Prop()
   notes?: string;
+
+  // Approval workflow for manual payments
+  @Prop({ 
+    enum: ['pending', 'approved', 'rejected', 'auto_approved'], 
+    default: 'auto_approved' 
+  })
+  approvalStatus: PaymentApprovalStatus;
+
+  @Prop()
+  approvedAt?: Date;
+
+  @Prop()
+  approvedBy?: string;
+
+  @Prop()
+  rejectedAt?: Date;
+
+  @Prop()
+  rejectedBy?: string;
+
+  @Prop()
+  rejectionReason?: string;
+
+  // Unique ID for each payment entry (for approval reference)
+  @Prop()
+  paymentId?: string;
 }
 
 export const InvoicePaymentSchema = SchemaFactory.createForClass(InvoicePayment);

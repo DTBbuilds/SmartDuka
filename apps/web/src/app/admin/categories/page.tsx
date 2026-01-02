@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { config } from "@/lib/config";
 import {
   Button,
   Card,
@@ -96,8 +97,7 @@ export default function CategoriesPage() {
     setError(null);
     
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-      const res = await fetch(`${base}/inventory/categories`, {
+      const res = await fetch(`${config.apiUrl}/inventory/categories`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -144,8 +144,7 @@ export default function CategoriesPage() {
     setCategoryProducts([]);
     
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-      const res = await fetch(`${base}/inventory/products?categoryId=${category._id}`, {
+      const res = await fetch(`${config.apiUrl}/inventory/products?categoryId=${category._id}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -171,8 +170,7 @@ export default function CategoriesPage() {
     }
 
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-      const res = await fetch(`${base}/inventory/categories/${category._id}`, {
+      const res = await fetch(`${config.apiUrl}/inventory/categories/${category._id}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -203,10 +201,9 @@ export default function CategoriesPage() {
     setIsSubmitting(true);
 
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
       const url = editingCategory
-        ? `${base}/inventory/categories/${editingCategory._id}`
-        : `${base}/inventory/categories`;
+        ? `${config.apiUrl}/inventory/categories/${editingCategory._id}`
+        : `${config.apiUrl}/inventory/categories`;
       
       const res = await fetch(url, {
         method: editingCategory ? "PUT" : "POST",

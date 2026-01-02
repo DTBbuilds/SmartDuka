@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, BadRequestException, Logger } from '@nes
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { nanoid } from 'nanoid';
-import { Invoice, InvoiceDocument } from '../schemas/invoice.schema';
+import { Invoice, InvoiceDocument, PaymentApprovalStatus } from '../schemas/invoice.schema';
 import { Order, OrderDocument } from '../schemas/order.schema';
 import { CreateInvoiceDto, RecordPaymentDto } from '../dto/invoice.dto';
 import { EmailService } from '../../notifications/email.service';
@@ -279,6 +279,8 @@ export class InvoiceService {
 
   /**
    * Record payment on invoice
+   * For manual payments (bank_transfer, mpesa send money), set requiresApproval=true
+   * to require super admin approval before the payment is considered complete.
    */
   async recordPayment(shopId: string, invoiceId: string, dto: RecordPaymentDto): Promise<InvoiceDocument> {
     const invoice = await this.getById(shopId, invoiceId);
@@ -295,18 +297,75 @@ export class InvoiceService {
       throw new BadRequestException('Payment amount exceeds amount due');
     }
 
-    // Add payment
+    // Determine approval status based on payment method and requiresApproval flag
+    // Manual payments (bank_transfer, mpesa send money) should require approval
+    const requiresApproval = dto.requiresApproval ?? 
+      (dto.method === 'bank_transfer' || (dto.method === 'mpesa' && dto.notes?.toLowerCase().includes('send money')));
+    
+    const approvalStatus: PaymentApprovalStatus = requiresApproval ? 'pending' : 'auto_approved';
+    const paymentId = nanoid(12);
+
+    // Add payment with approval status
     invoice.payments.push({
       date: dto.date || new Date(),
       method: dto.method,
       amount: dto.amount,
       reference: dto.reference,
       notes: dto.notes,
+      approvalStatus,
+      paymentId,
     });
 
-    // Update amounts
-    invoice.amountPaid += dto.amount;
-    invoice.amountDue -= dto.amount;
+    // Only update amounts if payment is approved
+    if (approvalStatus === 'auto_approved') {
+      invoice.amountPaid += dto.amount;
+      invoice.amountDue -= dto.amount;
+
+      // Update payment status
+      if (invoice.amountDue <= 0) {
+        invoice.paymentStatus = 'paid';
+        invoice.status = 'paid';
+        invoice.paidAt = new Date();
+      } else {
+        invoice.paymentStatus = 'partial';
+      }
+    }
+    // If pending approval, don't update amounts yet - they'll be updated when approved
+
+    return await invoice.save();
+  }
+
+  /**
+   * Approve a pending payment (super admin only)
+   */
+  async approvePayment(
+    invoiceId: string, 
+    paymentId: string, 
+    approvedBy: string
+  ): Promise<InvoiceDocument> {
+    const invoice = await this.invoiceModel.findById(invoiceId).exec();
+    if (!invoice) {
+      throw new NotFoundException('Invoice not found');
+    }
+
+    const paymentIndex = invoice.payments.findIndex(p => p.paymentId === paymentId);
+    if (paymentIndex === -1) {
+      throw new NotFoundException('Payment not found');
+    }
+
+    const payment = invoice.payments[paymentIndex];
+    if (payment.approvalStatus !== 'pending') {
+      throw new BadRequestException('Payment is not pending approval');
+    }
+
+    // Update payment approval status
+    invoice.payments[paymentIndex].approvalStatus = 'approved';
+    invoice.payments[paymentIndex].approvedAt = new Date();
+    invoice.payments[paymentIndex].approvedBy = approvedBy;
+
+    // Now update the invoice amounts
+    invoice.amountPaid += payment.amount;
+    invoice.amountDue -= payment.amount;
 
     // Update payment status
     if (invoice.amountDue <= 0) {
@@ -316,6 +375,41 @@ export class InvoiceService {
     } else {
       invoice.paymentStatus = 'partial';
     }
+
+    return await invoice.save();
+  }
+
+  /**
+   * Reject a pending payment (super admin only)
+   */
+  async rejectPayment(
+    invoiceId: string, 
+    paymentId: string, 
+    rejectedBy: string,
+    reason: string
+  ): Promise<InvoiceDocument> {
+    const invoice = await this.invoiceModel.findById(invoiceId).exec();
+    if (!invoice) {
+      throw new NotFoundException('Invoice not found');
+    }
+
+    const paymentIndex = invoice.payments.findIndex(p => p.paymentId === paymentId);
+    if (paymentIndex === -1) {
+      throw new NotFoundException('Payment not found');
+    }
+
+    const payment = invoice.payments[paymentIndex];
+    if (payment.approvalStatus !== 'pending') {
+      throw new BadRequestException('Payment is not pending approval');
+    }
+
+    // Update payment approval status
+    invoice.payments[paymentIndex].approvalStatus = 'rejected';
+    invoice.payments[paymentIndex].rejectedAt = new Date();
+    invoice.payments[paymentIndex].rejectedBy = rejectedBy;
+    invoice.payments[paymentIndex].rejectionReason = reason;
+
+    // Payment amounts are not updated since payment was rejected
 
     return await invoice.save();
   }

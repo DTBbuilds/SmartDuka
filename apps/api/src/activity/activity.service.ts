@@ -18,11 +18,12 @@ export class ActivityService {
     shopId: string,
     userId: string,
     userName: string,
-    userRole: 'admin' | 'cashier' | 'super_admin',
+    userRole: 'admin' | 'cashier' | 'super_admin' | 'branch_admin' | 'branch_manager',
     action: string,
     details?: any,
     ipAddress?: string,
     userAgent?: string,
+    branchId?: string,
   ): Promise<ActivityDocument | null> {
     try {
       // Skip activity logging for super admin (no shopId)
@@ -32,9 +33,10 @@ export class ActivityService {
 
       const activity = new this.activityModel({
         shopId: new Types.ObjectId(shopId),
+        branchId: branchId ? new Types.ObjectId(branchId) : undefined,
         userId: new Types.ObjectId(userId),
         userName,
-        userRole,
+        userRole: userRole as 'admin' | 'cashier' | 'branch_admin' | 'branch_manager',
         action,
         details: details || {},
         ipAddress,
@@ -61,7 +63,7 @@ export class ActivityService {
     const query: any = { shopId: new Types.ObjectId(shopId) };
     
     if (branchId) {
-      query['details.branchId'] = branchId;
+      query.branchId = new Types.ObjectId(branchId);
     }
 
     return this.activityModel

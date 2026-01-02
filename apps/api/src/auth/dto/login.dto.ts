@@ -15,4 +15,8 @@ export class LoginDto {
   @IsOptional()
   @IsMongoId()
   shopId?: string;
+
+  @IsOptional()
+  @IsString()
+  deviceId?: string;
 }

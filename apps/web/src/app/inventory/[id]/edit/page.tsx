@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { config } from "@/lib/config";
 import { Button, Card, CardContent, CardHeader, CardTitle, Input, Label, Textarea } from "@smartduka/ui";
 import { ArrowLeft, Package } from "lucide-react";
 import { TableSkeleton } from "@/components/shared/loading-skeleton";
@@ -61,7 +62,7 @@ export default function EditProductPage() {
 
   const fetchProduct = async () => {
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+      const apiUrl = config.apiUrl;
       const res = await fetch(`${apiUrl}/inventory/products/${productId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -94,7 +95,7 @@ export default function EditProductPage() {
 
   const fetchCategories = async () => {
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+      const apiUrl = config.apiUrl;
       const res = await fetch(`${apiUrl}/inventory/categories`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -115,7 +116,7 @@ export default function EditProductPage() {
     setIsSaving(true);
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+      const apiUrl = config.apiUrl;
       
       // Clean up form data - remove empty categoryId
       const payload = {

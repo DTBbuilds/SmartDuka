@@ -1,5 +1,6 @@
 'use client';
 
+import { config } from '@/lib/config';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
@@ -40,8 +41,6 @@ export default function BranchesPage() {
     email: '',
   });
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-
   useEffect(() => {
     fetchBranches();
   }, []);
@@ -49,7 +48,7 @@ export default function BranchesPage() {
   const fetchBranches = async () => {
     try {
       setIsLoading(true);
-      const res = await fetch(`${apiUrl}/branches`, {
+      const res = await fetch(`${config.apiUrl}/branches`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -97,8 +96,8 @@ export default function BranchesPage() {
 
     try {
       const url = editingBranch
-        ? `${apiUrl}/branches/${editingBranch._id}`
-        : `${apiUrl}/branches`;
+        ? `${config.apiUrl}/branches/${editingBranch._id}`
+        : `${config.apiUrl}/branches`;
       const method = editingBranch ? 'PUT' : 'POST';
 
       const res = await fetch(url, {
@@ -131,7 +130,7 @@ export default function BranchesPage() {
     if (!confirm('Are you sure you want to delete this branch?')) return;
 
     try {
-      const res = await fetch(`${apiUrl}/branches/${branchId}`, {
+      const res = await fetch(`${config.apiUrl}/branches/${branchId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });

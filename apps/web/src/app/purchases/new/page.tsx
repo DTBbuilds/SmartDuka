@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { config } from "@/lib/config";
 import { Button, Card, CardContent, CardHeader, CardTitle, Input, Label, Textarea } from "@smartduka/ui";
 import { Plus, Trash2, ArrowLeft, UserPlus, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -54,8 +55,7 @@ export default function NewPurchasePage() {
 
   const fetchSuppliers = async () => {
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-      const res = await fetch(`${apiUrl}/suppliers/active`, {
+      const res = await fetch(`${config.apiUrl}/suppliers/active`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const text = await res.text();
@@ -74,8 +74,7 @@ export default function NewPurchasePage() {
     
     setAddingSupplier(true);
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-      const res = await fetch(`${apiUrl}/suppliers`, {
+      const res = await fetch(`${config.apiUrl}/suppliers`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -105,8 +104,7 @@ export default function NewPurchasePage() {
 
   const fetchProducts = async () => {
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-      const res = await fetch(`${apiUrl}/inventory/products`, {
+      const res = await fetch(`${config.apiUrl}/inventory/products`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const prodText = await res.text();
@@ -165,8 +163,7 @@ export default function NewPurchasePage() {
     setIsLoading(true);
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-      const res = await fetch(`${apiUrl}/purchases`, {
+      const res = await fetch(`${config.apiUrl}/purchases`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

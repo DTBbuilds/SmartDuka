@@ -1,5 +1,6 @@
 'use client';
 
+import { config } from '@/lib/config';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
@@ -38,8 +39,6 @@ export default function BranchManagerDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-
   useEffect(() => {
     fetchDashboardData();
   }, []);
@@ -57,19 +56,19 @@ export default function BranchManagerDashboard() {
       const today = new Date().toISOString().split('T')[0];
 
       const [branchRes, salesRes, inventoryRes, purchasesRes, staffRes] = await Promise.all([
-        fetch(`${apiUrl}/branches/${branchId}`, {
+        fetch(`${config.apiUrl}/branches/${branchId}`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
-        fetch(`${apiUrl}/sales/branch/${branchId}/daily-sales/${today}`, {
+        fetch(`${config.apiUrl}/sales/branch/${branchId}/daily-sales/${today}`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
-        fetch(`${apiUrl}/inventory/branch/${branchId}/stats`, {
+        fetch(`${config.apiUrl}/inventory/branch/${branchId}/stats`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
-        fetch(`${apiUrl}/purchases/branch/${branchId}/stats`, {
+        fetch(`${config.apiUrl}/purchases/branch/${branchId}/stats`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
-        fetch(`${apiUrl}/staff-assignment/branch/${branchId}`, {
+        fetch(`${config.apiUrl}/staff-assignment/branch/${branchId}`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
       ]);

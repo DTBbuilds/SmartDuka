@@ -29,6 +29,38 @@ import {
 } from './dto/mpesa.dto';
 import { UpdateMpesaConfigDto } from './dto/mpesa-config.dto';
 
+/**
+ * M-Pesa Payment Controller
+ * 
+ * MULTI-TENANT ARCHITECTURE:
+ * ==========================
+ * SmartDuka is a multi-tenant POS system. Each shop MUST configure their own
+ * M-Pesa credentials (Paybill/Till number) before accepting mobile payments.
+ * 
+ * Payment Types:
+ * 1. SHOP PAYMENTS (this controller):
+ *    - Customer pays shop for products/services
+ *    - Uses SHOP'S OWN M-Pesa credentials
+ *    - Shop must configure: shortCode, consumerKey, consumerSecret, passkey
+ *    - Credentials must be verified before accepting payments
+ *    - NO FALLBACK to system credentials (security requirement)
+ * 
+ * 2. SUBSCRIPTION PAYMENTS (SubscriptionMpesaService):
+ *    - Shop pays SmartDuka for subscription
+ *    - Uses SMARTDUKA'S SYSTEM credentials
+ *    - Handled by /subscriptions/payments/* endpoints
+ * 
+ * Configuration Flow:
+ * 1. Shop admin goes to Settings → Payments → M-Pesa
+ * 2. Enters their Paybill/Till credentials from Safaricom
+ * 3. Clicks "Verify Credentials" to test with Daraja API
+ * 4. Once verified, M-Pesa payments are enabled for the shop
+ * 
+ * Security:
+ * - All credentials are encrypted at rest using AES-256-GCM
+ * - Each shop's credentials are isolated from other shops
+ * - System credentials are NEVER exposed to shops
+ */
 @Controller('payments/mpesa')
 export class MpesaController {
   private readonly logger = new Logger(MpesaController.name);
@@ -43,6 +75,9 @@ export class MpesaController {
   /**
    * INITIATE M-PESA STK PUSH PAYMENT
    *
+   * MULTI-TENANT: Each shop MUST configure their own M-Pesa credentials.
+   * System/platform credentials are NOT shared with shops.
+   * 
    * Sends an STK push to the customer's phone for payment.
    * Implements idempotency - duplicate requests return existing transaction.
    *
@@ -61,22 +96,72 @@ export class MpesaController {
       `Initiating M-Pesa payment for order ${dto.orderId} by user ${user.sub}`,
     );
 
-    // Get order details to populate orderNumber
-    // For now, we'll use the orderId as orderNumber if not provided
-    // In production, this should fetch from OrdersService
-    const orderNumber = `ORD-${dto.orderId.slice(-8).toUpperCase()}`;
+    // MULTI-TENANT CHECK: Verify shop has configured their own M-Pesa credentials
+    const mpesaStatus = await this.mpesaMultiTenantService.getMpesaConfigStatus(user.shopId);
+    
+    if (!mpesaStatus.isConfigured) {
+      this.logger.warn(`Shop ${user.shopId} attempted M-Pesa payment without configuration`);
+      return {
+        success: false,
+        transactionId: '',
+        status: 'FAILED' as any,
+        message: 'M-Pesa is not configured for your shop. Please go to Settings → Payments → M-Pesa to configure your Paybill/Till number before accepting mobile payments.',
+        errorCode: 'MPESA_NOT_CONFIGURED',
+      };
+    }
 
-    // branchId may be passed in request body or derived from user context
-    // For now, we pass undefined - can be enhanced later
-    return this.mpesaService.initiatePayment(
-      user.shopId,
-      user.sub,
-      user.name || user.email || 'Cashier',
-      undefined, // branchId - can be added to DTO if needed
-      dto.orderId,
-      orderNumber,
-      dto,
-    );
+    if (!mpesaStatus.isEnabled) {
+      this.logger.warn(`Shop ${user.shopId} attempted M-Pesa payment but it's disabled`);
+      return {
+        success: false,
+        transactionId: '',
+        status: 'FAILED' as any,
+        message: 'M-Pesa payments are disabled for your shop. Please enable M-Pesa in Settings → Payments to accept mobile payments.',
+        errorCode: 'MPESA_DISABLED',
+      };
+    }
+
+    if (!mpesaStatus.isVerified) {
+      this.logger.warn(`Shop ${user.shopId} attempted M-Pesa payment with unverified credentials`);
+      return {
+        success: false,
+        transactionId: '',
+        status: 'FAILED' as any,
+        message: 'Your M-Pesa credentials have not been verified. Please verify your credentials in Settings → Payments → M-Pesa before accepting payments.',
+        errorCode: 'MPESA_NOT_VERIFIED',
+      };
+    }
+
+    // Use multi-tenant service with shop-specific credentials
+    const orderNumber = `ORD-${dto.orderId.slice(-8).toUpperCase()}`;
+    
+    const result = await this.mpesaMultiTenantService.initiateSTKPush({
+      shopId: user.shopId,
+      phoneNumber: dto.phoneNumber,
+      amount: dto.amount,
+      orderId: dto.orderId,
+      orderNumber: orderNumber,
+      description: dto.transactionDesc,
+    });
+
+    // Map multi-tenant response to standard response format
+    if (result.success) {
+      return {
+        success: true,
+        transactionId: result.transactionId || '',
+        checkoutRequestId: result.checkoutRequestId,
+        status: 'PENDING' as any,
+        message: `STK push sent. Enter your M-Pesa PIN to complete payment of KES ${dto.amount.toLocaleString()}.`,
+      };
+    } else {
+      return {
+        success: false,
+        transactionId: result.transactionId || '',
+        status: 'FAILED' as any,
+        message: result.error || 'Failed to initiate payment',
+        errorCode: result.responseCode,
+      };
+    }
   }
 
   /**
@@ -129,6 +214,7 @@ export class MpesaController {
    * RETRY FAILED PAYMENT
    *
    * Retries a failed M-Pesa payment with optional new phone number.
+   * MULTI-TENANT: Requires shop to have configured M-Pesa credentials.
    *
    * @param user - Authenticated user
    * @param id - Transaction ID to retry
@@ -144,6 +230,20 @@ export class MpesaController {
     @Body() dto: { newPhoneNumber?: string },
   ): Promise<MpesaPaymentResponseDto> {
     this.logger.log(`Retrying M-Pesa payment ${id} by user ${user.sub}`);
+
+    // MULTI-TENANT CHECK: Verify shop has configured their own M-Pesa credentials
+    const mpesaStatus = await this.mpesaMultiTenantService.getMpesaConfigStatus(user.shopId);
+    
+    if (!mpesaStatus.isConfigured || !mpesaStatus.isEnabled || !mpesaStatus.isVerified) {
+      return {
+        success: false,
+        transactionId: id,
+        status: 'FAILED' as any,
+        message: mpesaStatus.message,
+        errorCode: !mpesaStatus.isConfigured ? 'MPESA_NOT_CONFIGURED' : 
+                   !mpesaStatus.isEnabled ? 'MPESA_DISABLED' : 'MPESA_NOT_VERIFIED',
+      };
+    }
 
     return this.mpesaService.retryPayment(
       user.shopId,
@@ -315,10 +415,9 @@ export class MpesaController {
   }
 
   /**
-   * INITIATE PAYMENT WITH SHOP-SPECIFIC CREDENTIALS
-   * 
-   * Uses the shop's own M-Pesa credentials if configured,
-   * otherwise falls back to platform credentials.
+   * @deprecated Use POST /payments/mpesa/initiate instead.
+   * This endpoint is kept for backward compatibility but will be removed.
+   * The main /initiate endpoint now uses shop-specific credentials.
    */
   @UseGuards(JwtAuthGuard)
   @Post('initiate-v2')
@@ -327,7 +426,19 @@ export class MpesaController {
     @CurrentUser() user: JwtPayload,
     @Body() dto: { phoneNumber: string; amount: number; orderId: string; orderNumber: string; description?: string },
   ) {
-    this.logger.log(`Initiating multi-tenant M-Pesa payment for shop ${user.shopId}`);
+    this.logger.warn(`[DEPRECATED] initiate-v2 called by shop ${user.shopId} - use /initiate instead`);
+    
+    // Redirect to main initiate endpoint logic
+    const mpesaStatus = await this.mpesaMultiTenantService.getMpesaConfigStatus(user.shopId);
+    
+    if (!mpesaStatus.isConfigured || !mpesaStatus.isEnabled || !mpesaStatus.isVerified) {
+      return {
+        success: false,
+        error: mpesaStatus.message,
+        errorCode: !mpesaStatus.isConfigured ? 'MPESA_NOT_CONFIGURED' : 
+                   !mpesaStatus.isEnabled ? 'MPESA_DISABLED' : 'MPESA_NOT_VERIFIED',
+      };
+    }
     
     return this.mpesaMultiTenantService.initiateSTKPush({
       shopId: user.shopId,

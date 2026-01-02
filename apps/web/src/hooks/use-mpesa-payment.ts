@@ -551,8 +551,42 @@ export function useMpesaPayment(
           throw new Error('Invalid response from server');
         }
 
-        if (!response.ok) {
-          throw new Error((data as any).message || 'Failed to initiate payment');
+        if (!response.ok || !data.success) {
+          // Handle specific error codes from backend
+          const errorCode = (data as any).errorCode;
+          const errorMessage = (data as any).message || 'Failed to initiate payment';
+          
+          // Set appropriate error category based on backend error code
+          let errorCategory: MpesaErrorCategory = 'system_error';
+          let suggestedAction = 'Please try again';
+          let canRetry = true;
+          
+          if (errorCode === 'MPESA_NOT_CONFIGURED') {
+            errorCategory = 'system_error';
+            suggestedAction = 'Go to Settings → Payments → M-Pesa to configure your credentials';
+            canRetry = false;
+          } else if (errorCode === 'MPESA_DISABLED') {
+            errorCategory = 'system_error';
+            suggestedAction = 'Enable M-Pesa in Settings → Payments';
+            canRetry = false;
+          } else if (errorCode === 'MPESA_NOT_VERIFIED') {
+            errorCategory = 'system_error';
+            suggestedAction = 'Verify your M-Pesa credentials in Settings → Payments → M-Pesa';
+            canRetry = false;
+          }
+          
+          setStatus('failed');
+          setPhase('failed');
+          setError(errorMessage);
+          setErrorInfo({
+            category: errorCategory,
+            message: errorMessage,
+            userMessage: errorMessage,
+            suggestedAction,
+            canRetry,
+          });
+          onError?.(errorMessage);
+          return;
         }
 
         // Record when STK was sent for phase calculation

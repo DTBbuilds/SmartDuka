@@ -1,6 +1,6 @@
-import { Injectable, BadRequestException, InternalServerErrorException } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types, ClientSession } from 'mongoose';
+import { Injectable, BadRequestException, InternalServerErrorException, Logger } from '@nestjs/common';
+import { InjectModel, InjectConnection } from '@nestjs/mongoose';
+import { Model, Types, ClientSession, Connection } from 'mongoose';
 import { nanoid } from 'nanoid';
 import { Order, OrderDocument } from './schemas/order.schema';
 import { CheckoutDto } from './dto/checkout.dto';
@@ -9,15 +9,25 @@ import { ActivityService } from '../activity/activity.service';
 import { PaymentTransactionService } from '../payments/services/payment-transaction.service';
 import { PaginatedResponse, createPaginatedResponse } from '../common/dto/pagination.dto';
 import { CacheService, CACHE_TTL } from '../common/services/cache.service';
+import { ShopSettingsService } from '../shop-settings/shop-settings.service';
+import { TransactionService } from '../common/services/transaction.service';
+
+// Default tax rate (Kenya VAT) - used as fallback if shop settings not available
+const DEFAULT_TAX_RATE = 0.16;
 
 @Injectable()
 export class SalesService {
+  private readonly logger = new Logger(SalesService.name);
+
   constructor(
     @InjectModel(Order.name) private readonly orderModel: Model<OrderDocument>,
+    @InjectConnection() private readonly connection: Connection,
     private readonly inventoryService: InventoryService,
     private readonly activityService: ActivityService,
     private readonly paymentTransactionService: PaymentTransactionService,
     private readonly cacheService: CacheService,
+    private readonly shopSettingsService: ShopSettingsService,
+    private readonly transactionService: TransactionService,
   ) {}
 
   /**
@@ -59,8 +69,22 @@ export class SalesService {
       );
     }
 
-    // STEP 3: CALCULATE TOTALS
-    const taxRate = dto.taxRate ?? 0.16; // Kenya default VAT
+    // STEP 3: GET TAX RATE FROM SHOP SETTINGS (or use provided/default)
+    let taxRate = dto.taxRate;
+    if (taxRate === undefined) {
+      try {
+        const shopSettings = await this.shopSettingsService.getByShopId(shopId);
+        if (shopSettings?.tax?.enabled) {
+          taxRate = shopSettings.tax.rate ?? DEFAULT_TAX_RATE;
+        } else {
+          taxRate = 0; // Tax disabled for this shop
+        }
+      } catch (error) {
+        this.logger.warn(`Failed to get shop tax settings for ${shopId}, using default: ${error}`);
+        taxRate = DEFAULT_TAX_RATE;
+      }
+    }
+    
     const tax = Math.round(subtotal * taxRate * 100) / 100; // Proper rounding
     const total = subtotal + tax;
 
@@ -275,9 +299,14 @@ export class SalesService {
           continue;
         }
 
-        if ((product.stock || 0) < item.quantity) {
+        const currentStock = product.stock || 0;
+        
+        // Check if product is out of stock
+        if (currentStock <= 0) {
+          errors.push(`${item.name}: OUT OF STOCK - Cannot sell items with zero stock`);
+        } else if (currentStock < item.quantity) {
           errors.push(
-            `${item.name}: Only ${product.stock || 0} available, requested ${item.quantity}`
+            `${item.name}: Only ${currentStock} available, requested ${item.quantity}`
           );
         }
       } catch (error: any) {

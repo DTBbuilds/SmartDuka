@@ -1,5 +1,6 @@
 'use client';
 
+import { config } from '@/lib/config';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
@@ -44,8 +45,6 @@ export default function BranchInventoryPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-
   useEffect(() => {
     fetchBranches();
   }, []);
@@ -58,7 +57,7 @@ export default function BranchInventoryPage() {
 
   const fetchBranches = async () => {
     try {
-      const res = await fetch(`${apiUrl}/branches`, {
+      const res = await fetch(`${config.apiUrl}/branches`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -83,10 +82,10 @@ export default function BranchInventoryPage() {
     try {
       setIsLoading(true);
       const [statsRes, lowStockRes] = await Promise.all([
-        fetch(`${apiUrl}/inventory/branch/${selectedBranch}/stats`, {
+        fetch(`${config.apiUrl}/inventory/branch/${selectedBranch}/stats`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
-        fetch(`${apiUrl}/inventory/branch/${selectedBranch}/low-stock`, {
+        fetch(`${config.apiUrl}/inventory/branch/${selectedBranch}/low-stock`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
       ]);

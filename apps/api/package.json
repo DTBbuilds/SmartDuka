@@ -25,6 +25,7 @@
     "seed:super-admin": "npx ts-node -r tsconfig-paths/register src/scripts/seed-super-admin.ts"
   },
   "dependencies": {
+    "@nestjs/bullmq": "^11.0.4",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.0.1",
@@ -41,10 +42,12 @@
     "@types/passport-google-oauth20": "^2.0.17",
     "axios": "^1.7.7",
     "bcryptjs": "^3.0.3",
+    "bullmq": "^5.66.3",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.2",
     "compression": "^1.7.4",
     "helmet": "^8.0.0",
+    "ioredis": "^5.8.2",
     "mongoose": "^8.19.3",
     "nanoid": "^5.1.6",
     "nodemailer": "^7.0.11",
@@ -54,7 +57,8 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "socket.io": "^4.7.2",
-    "stripe": "^20.0.0"
+    "stripe": "^20.0.0",
+    "cookie-parser": "^1.4.6"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
@@ -68,6 +72,7 @@
     "@types/jest": "^30.0.0",
     "@types/node": "^22.10.7",
     "@types/nodemailer": "^7.0.4",
+    "@types/cookie-parser": "^1.4.7",
     "@types/supertest": "^6.0.2",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",

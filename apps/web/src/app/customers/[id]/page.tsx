@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { config } from "@/lib/config";
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@smartduka/ui";
 import { ArrowLeft, Mail, Phone, MapPin, ShoppingBag } from "lucide-react";
 import { TableSkeleton } from "@/components/shared/loading-skeleton";
@@ -35,7 +36,7 @@ export default function CustomerDetailsPage() {
 
   const fetchCustomer = async () => {
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+      const apiUrl = config.apiUrl;
       const res = await fetch(`${apiUrl}/customers/${customerId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });

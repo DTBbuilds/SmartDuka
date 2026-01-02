@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { config } from "@/lib/config";
 import { ShoppingCart, Eye, EyeOff } from "lucide-react";
 import {
   Button,
@@ -62,8 +63,7 @@ export default function SignupPage() {
     setIsLoading(true);
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-      const res = await fetch(`${apiUrl}/users`, {
+      const res = await fetch(`${config.apiUrl}/users`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -45,21 +45,11 @@ export class EmailService {
     const pass = process.env.SMTP_PASS;
     const from = process.env.SMTP_FROM || 'SmartDuka <noreply@smartduka.co.ke>';
 
-    // Log configuration status
-    this.logger.log('=== SMTP Configuration Status ===');
-    this.logger.log(`SMTP_HOST: ${host ? '✓ Configured' : '✗ Missing'}`);
-    this.logger.log(`SMTP_PORT: ${port || 587}`);
-    this.logger.log(`SMTP_USER: ${user ? '✓ Configured' : '✗ Missing'}`);
-    this.logger.log(`SMTP_PASS: ${pass ? '✓ Configured' : '✗ Missing'}`);
-    this.logger.log(`SMTP_FROM: ${from}`);
+    // Log configuration status (only once, concisely)
+    this.logger.log(`SMTP Config: host=${host ? '✓' : '✗'}, user=${user ? '✓' : '✗'}, pass=${pass ? '✓' : '✗'}, port=${port}`);
 
     if (!host || !user || !pass) {
-      this.logger.warn('⚠️  SMTP configuration incomplete. Email sending is DISABLED.');
-      this.logger.warn('To enable email sending, set these environment variables:');
-      if (!host) this.logger.warn('  - SMTP_HOST (e.g., smtp.gmail.com)');
-      if (!user) this.logger.warn('  - SMTP_USER (your email address)');
-      if (!pass) this.logger.warn('  - SMTP_PASS (your app password or password)');
-      this.logger.warn('See .env.example for detailed SMTP configuration instructions.');
+      this.logger.warn('⚠️  SMTP not configured - email sending DISABLED. Set SMTP_HOST, SMTP_USER, SMTP_PASS to enable.');
       return;
     }
 
@@ -69,27 +59,30 @@ export class EmailService {
         port,
         secure: port === 465,
         auth: { user, pass },
-        connectionTimeout: 10000,
-        greetingTimeout: 10000,
-        socketTimeout: 30000,
+        connectionTimeout: 15000, // Increased from 10s to 15s
+        greetingTimeout: 15000,   // Increased from 10s to 15s
+        socketTimeout: 45000,     // Increased from 30s to 45s
         pool: true,
-        maxConnections: 5,
-        maxMessages: 100,
+        maxConnections: 3,        // Reduced from 5 to 3 for stability
+        maxMessages: 50,          // Reduced from 100 to 50
+        tls: {
+          rejectUnauthorized: process.env.NODE_ENV === 'production', // Strict in prod only
+        },
       });
 
-      // Verify connection asynchronously
+      // Verify connection asynchronously - don't block startup
       this.transporter.verify((error) => {
         if (error) {
-          this.logger.error('❌ SMTP connection failed:', error.message);
-          this.logger.error('Possible issues:');
-          this.logger.error('  - Incorrect SMTP credentials');
-          this.logger.error('  - SMTP server not reachable');
-          this.logger.error('  - Firewall blocking SMTP port');
-          this.logger.error('  - For Gmail: Use App Password, not regular password');
+          this.logger.error(`❌ SMTP connection failed: ${error.message}`);
+          // Don't spam logs with detailed errors - just log the key issue
+          if (error.message.includes('timeout')) {
+            this.logger.warn('SMTP timeout - check if SMTP server is reachable from this network');
+          } else if (error.message.includes('auth')) {
+            this.logger.warn('SMTP auth failed - verify credentials (use App Password for Gmail)');
+          }
+          // Keep transporter alive - it may work later when sending
         } else {
-          this.logger.log('✅ SMTP connection established successfully');
-          this.logger.log(`   Connected to: ${host}:${port}`);
-          this.logger.log(`   From address: ${from}`);
+          this.logger.log(`✅ SMTP connected: ${host}:${port}`);
         }
       });
     } catch (error: any) {

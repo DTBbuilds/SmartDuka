@@ -1,5 +1,6 @@
 'use client';
 
+import { config } from '@/lib/config';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
@@ -22,6 +23,9 @@ export function SessionExpiryWarning() {
     timeUntilExpiry: null,
     isExpiringSoon: false,
     isExpired: false,
+    isRefreshing: false,
+    lastActivity: null,
+    refreshAttempts: 0,
   });
   const [dismissed, setDismissed] = useState(false);
   const [extending, setExtending] = useState(false);
@@ -58,37 +62,42 @@ export function SessionExpiryWarning() {
   const handleExtendSession = async () => {
     setExtending(true);
     try {
-      // Call API to refresh token
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-      const response = await fetch(`${apiUrl}/auth/refresh`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.token) {
-          // Update token in localStorage and cookie
-          window.localStorage.setItem('smartduka:token', data.token);
-          document.cookie = `smartduka_token=${data.token}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
-          
-          // Reinitialize session monitor with new token
-          sessionMonitor.initialize(data.token);
-          setDismissed(true);
-          
-          // Reload page to update auth context
-          window.location.reload();
-        }
+      // Use the secure-session refresh function which properly handles everything
+      const { refreshToken } = await import('@/lib/secure-session');
+      console.log('[SessionExpiry] Attempting to extend session...');
+      const result = await refreshToken();
+      
+      if (result?.accessToken) {
+        console.log('[SessionExpiry] Session extended successfully');
+        // Reinitialize session monitor with new token
+        sessionMonitor.initialize(result.accessToken);
+        setDismissed(true);
+        
+        // Trigger a page-level event so auth context can pick up the new token
+        // This avoids a full page reload while ensuring state consistency
+        window.dispatchEvent(new CustomEvent('token-refreshed', { 
+          detail: { accessToken: result.accessToken, csrfToken: result.csrfToken } 
+        }));
       } else {
-        // If refresh fails, redirect to login
-        logout();
-        router.push('/login?expired=true');
+        // Refresh returned null - could be network error or auth failure
+        // Check if we still have a valid token before logging out
+        const currentToken = localStorage.getItem('smartduka:token');
+        if (!currentToken) {
+          // Session was cleared by refresh function (401 error)
+          console.warn('[SessionExpiry] Session expired, redirecting to login');
+          logout();
+          router.push('/login?expired=true');
+        } else {
+          // Network/server error - don't logout, let user retry
+          console.warn('[SessionExpiry] Refresh failed but session still valid, user can retry');
+          setDismissed(true);
+        }
       }
-    } catch (error) {
-      console.error('Failed to extend session:', error);
+    } catch (error: any) {
+      console.error('[SessionExpiry] Failed to extend session:', error);
+      // Don't logout on errors - let user retry or manually logout
+      // Just dismiss the warning temporarily
+      setDismissed(true);
     } finally {
       setExtending(false);
     }
@@ -169,6 +178,9 @@ export function SessionStatusIndicator({ className }: { className?: string }) {
     timeUntilExpiry: null,
     isExpiringSoon: false,
     isExpired: false,
+    isRefreshing: false,
+    lastActivity: null,
+    refreshAttempts: 0,
   });
 
   useEffect(() => {

@@ -1,5 +1,6 @@
 'use client';
 
+import { config } from '@/lib/config';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
@@ -22,15 +23,13 @@ export default function CustomersPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-
   useEffect(() => {
     fetchCustomers();
   }, []);
 
   const fetchCustomers = async () => {
     try {
-      const res = await fetch(`${apiUrl}/customers`, {
+      const res = await fetch(`${config.apiUrl}/customers`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 

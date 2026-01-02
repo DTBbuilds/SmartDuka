@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { config } from "@/lib/config";
 
 interface Category {
   _id: string;
@@ -27,8 +28,7 @@ export function CategorySelector({ token, value, onChange, placeholder = "Select
     const loadCategories = async () => {
       try {
         setLoading(true);
-        const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-        const res = await fetch(`${base}/inventory/categories`, {
+        const res = await fetch(`${config.apiUrl}/inventory/categories`, {
           headers: { Authorization: `Bearer ${token}` },
         });
 

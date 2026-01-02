@@ -145,6 +145,13 @@ export class Order {
   // Shift reference
   @Prop({ type: Types.ObjectId, ref: 'Shift' })
   shiftId?: Types.ObjectId;
+
+  // Soft delete support
+  @Prop({ required: false })
+  deletedAt?: Date;
+
+  @Prop({ required: false, type: Types.ObjectId, ref: 'User' })
+  deletedBy?: Types.ObjectId;
 }
 
 export const OrderSchema = SchemaFactory.createForClass(Order);
@@ -156,3 +163,4 @@ OrderSchema.index({ shopId: 1, userId: 1 });
 OrderSchema.index({ shopId: 1, status: 1 });
 OrderSchema.index({ shopId: 1, transactionType: 1 });
 OrderSchema.index({ shopId: 1, shiftId: 1 });
+OrderSchema.index({ shopId: 1, deletedAt: 1 }); // For soft delete queries

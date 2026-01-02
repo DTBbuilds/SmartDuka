@@ -51,6 +51,35 @@ export class InventoryService implements OnModuleInit {
         this.logger.warn(`Index migration warning: ${err.message}`);
       }
     }
+
+    // Fix any existing negative stock (one-time cleanup, runs async)
+    setImmediate(() => {
+      this.fixNegativeStock().catch(err => {
+        this.logger.error('Failed to fix negative stock:', err);
+      });
+    });
+  }
+
+  /**
+   * Fix all products with negative stock by setting them to 0
+   * This is a one-time cleanup for data integrity
+   */
+  async fixNegativeStock(): Promise<{ fixed: number }> {
+    try {
+      const result = await this.productModel.updateMany(
+        { stock: { $lt: 0 } },
+        { $set: { stock: 0 } }
+      );
+      
+      if (result.modifiedCount > 0) {
+        this.logger.warn(`Fixed ${result.modifiedCount} products with negative stock (set to 0)`);
+      }
+      
+      return { fixed: result.modifiedCount };
+    } catch (error) {
+      this.logger.error('Error fixing negative stock:', error);
+      throw error;
+    }
   }
 
   async createProduct(shopId: string, dto: CreateProductDto): Promise<ProductDocument> {
@@ -116,7 +145,72 @@ export class InventoryService implements OnModuleInit {
     return product.save();
   }
 
-  async deleteProduct(shopId: string, productId: string): Promise<{ deleted: boolean; message: string }> {
+  /**
+   * Soft delete a product (sets deletedAt timestamp instead of removing)
+   * Product can be restored later if needed
+   */
+  async deleteProduct(shopId: string, productId: string, userId?: string): Promise<{ deleted: boolean; message: string }> {
+    const product = await this.productModel.findOne({
+      _id: new Types.ObjectId(productId),
+      shopId: new Types.ObjectId(shopId),
+      deletedAt: { $exists: false }, // Only find non-deleted products
+    });
+
+    if (!product) {
+      throw new NotFoundException('Product not found');
+    }
+
+    // Soft delete: set deletedAt timestamp and deletedBy user
+    await this.productModel.updateOne(
+      { _id: new Types.ObjectId(productId) },
+      { 
+        $set: { 
+          deletedAt: new Date(),
+          deletedBy: userId ? new Types.ObjectId(userId) : undefined,
+          status: 'inactive', // Also mark as inactive
+        } 
+      }
+    );
+    
+    // Decrement product count
+    await this.subscriptionGuard.decrementUsage(shopId, 'products');
+
+    return { deleted: true, message: 'Product deleted successfully' };
+  }
+
+  /**
+   * Restore a soft-deleted product
+   */
+  async restoreProduct(shopId: string, productId: string): Promise<{ restored: boolean; message: string }> {
+    const product = await this.productModel.findOne({
+      _id: new Types.ObjectId(productId),
+      shopId: new Types.ObjectId(shopId),
+      deletedAt: { $exists: true },
+    });
+
+    if (!product) {
+      throw new NotFoundException('Deleted product not found');
+    }
+
+    // Check subscription limit before restoring
+    await this.subscriptionGuard.enforceLimit(shopId, 'products');
+
+    await this.productModel.updateOne(
+      { _id: new Types.ObjectId(productId) },
+      { $unset: { deletedAt: 1, deletedBy: 1 }, $set: { status: 'active' } }
+    );
+
+    // Increment product count
+    await this.subscriptionGuard.incrementUsage(shopId, 'products');
+
+    return { restored: true, message: 'Product restored successfully' };
+  }
+
+  /**
+   * Permanently delete a product (hard delete)
+   * Use with caution - this cannot be undone
+   */
+  async permanentlyDeleteProduct(shopId: string, productId: string): Promise<{ deleted: boolean; message: string }> {
     const product = await this.productModel.findOne({
       _id: new Types.ObjectId(productId),
       shopId: new Types.ObjectId(shopId),
@@ -128,15 +222,18 @@ export class InventoryService implements OnModuleInit {
 
     await this.productModel.deleteOne({ _id: new Types.ObjectId(productId) });
     
-    // Decrement product count
-    await this.subscriptionGuard.decrementUsage(shopId, 'products');
+    // Only decrement if product wasn't already soft-deleted
+    if (!product.deletedAt) {
+      await this.subscriptionGuard.decrementUsage(shopId, 'products');
+    }
 
-    return { deleted: true, message: 'Product deleted successfully' };
+    return { deleted: true, message: 'Product permanently deleted' };
   }
 
   async listProducts(shopId: string, q: QueryProductsDto): Promise<ProductDocument[]> {
     const filter: FilterQuery<ProductDocument> = {
       shopId: new Types.ObjectId(shopId),
+      deletedAt: { $exists: false }, // Exclude soft-deleted products by default
     };
     
     if (q.q) {
@@ -197,6 +294,7 @@ export class InventoryService implements OnModuleInit {
   ): Promise<PaginatedResponse<ProductDocument>> {
     const filter: FilterQuery<ProductDocument> = {
       shopId: new Types.ObjectId(shopId),
+      deletedAt: { $exists: false }, // Exclude soft-deleted products by default
     };
 
     if (q.q) {
@@ -523,6 +621,37 @@ export class InventoryService implements OnModuleInit {
   }
 
   async updateStock(shopId: string, productId: string, quantityChange: number): Promise<ProductDocument | null> {
+    // For stock reduction, ensure we don't go below 0
+    if (quantityChange < 0) {
+      // First check current stock
+      const product = await this.productModel.findOne({
+        _id: new Types.ObjectId(productId),
+        shopId: new Types.ObjectId(shopId),
+      }).exec();
+      
+      if (!product) {
+        return null;
+      }
+      
+      const currentStock = product.stock || 0;
+      const newStock = currentStock + quantityChange; // quantityChange is negative
+      
+      // Prevent negative stock - set to 0 if would go negative
+      if (newStock < 0) {
+        this.logger.warn(
+          `Stock reduction would result in negative stock for product ${productId}. ` +
+          `Current: ${currentStock}, Requested change: ${quantityChange}. Setting to 0.`
+        );
+        return this.productModel
+          .findOneAndUpdate(
+            { _id: new Types.ObjectId(productId), shopId: new Types.ObjectId(shopId) },
+            { $set: { stock: 0 } },
+            { new: true }
+          )
+          .exec();
+      }
+    }
+    
     return this.productModel
       .findOneAndUpdate(
         { _id: new Types.ObjectId(productId), shopId: new Types.ObjectId(shopId) },

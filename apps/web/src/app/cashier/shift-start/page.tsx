@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label } from '@smartduka/ui';
 import { useAuth } from '@/lib/auth-context';
+import { config } from '@/lib/config';
 import { Clock, DollarSign, AlertCircle, CheckCircle } from 'lucide-react';
 import { AuthGuard } from '@/components/auth-guard';
 
@@ -22,8 +23,7 @@ function ShiftStartContent() {
     setIsLoading(true);
 
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-      const res = await fetch(`${base}/shifts/clock-in`, {
+      const res = await fetch(`${config.apiUrl}/shifts/clock-in`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Badge, Button } from '@smartduka/ui';
 import { ArrowLeft, AlertCircle, CheckCircle, Clock, Flag, Trash2 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
+import { config } from '@/lib/config';
 import { useToast } from '@/lib/use-toast';
 import { ToastContainer } from '@/components/toast-container';
 
@@ -53,7 +54,7 @@ export default function ShopDetailsPage() {
     if (!token || !shopId) return;
     try {
       setLoading(true);
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+      const base = config.apiUrl;
       const res = await fetch(`${base}/super-admin/shops/${shopId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -79,7 +80,7 @@ export default function ShopDetailsPage() {
   const handleSuspend = async () => {
     if (!token || !shopId) return;
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+      const base = config.apiUrl;
       const res = await fetch(`${base}/super-admin/shops/${shopId}/suspend`, {
         method: 'PUT',
         headers: {
@@ -103,7 +104,7 @@ export default function ShopDetailsPage() {
   const handleReactivate = async () => {
     if (!token || !shopId) return;
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+      const base = config.apiUrl;
       const res = await fetch(`${base}/super-admin/shops/${shopId}/reactivate`, {
         method: 'PUT',
         headers: {
@@ -127,7 +128,7 @@ export default function ShopDetailsPage() {
   const handleFlag = async () => {
     if (!token || !shopId) return;
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+      const base = config.apiUrl;
       const res = await fetch(`${base}/super-admin/shops/${shopId}/flag`, {
         method: 'PUT',
         headers: {
@@ -151,7 +152,7 @@ export default function ShopDetailsPage() {
   const handleUnflag = async () => {
     if (!token || !shopId) return;
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+      const base = config.apiUrl;
       const res = await fetch(`${base}/super-admin/shops/${shopId}/unflag`, {
         method: 'PUT',
         headers: {

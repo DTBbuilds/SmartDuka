@@ -981,7 +981,7 @@ export class PaymentConfigService {
    * Get default environment from config
    */
   private getDefaultEnvironment(): ConfigEnvironment {
-    return process.env.MPESA_ENVIRONMENT === 'production'
+    return process.env.MPESA_ENV === 'production'
       ? ConfigEnvironment.PRODUCTION
       : ConfigEnvironment.SANDBOX;
   }

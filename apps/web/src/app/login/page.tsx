@@ -2,16 +2,25 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ShoppingCart, AlertCircle, Lock, Store, BarChart3, Users, Shield, Sparkles, ArrowRight, Clock, Smartphone, CreditCard, Zap, CheckCircle, TrendingUp, Package, Receipt, Wifi } from 'lucide-react';
+import { ShoppingCart, AlertCircle, Lock, Store, BarChart3, Users, Shield, Sparkles, ArrowRight, Clock, Smartphone, CreditCard, Zap, CheckCircle, TrendingUp, Package, Receipt, Wifi, History } from 'lucide-react';
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@smartduka/ui';
 import { useAuth } from '@/lib/auth-context';
 import { config } from '@/lib/config';
 import { AdminLoginForm } from '@/components/login-forms/admin-login';
 import { CashierLoginForm } from '@/components/login-forms/cashier-login';
 import { ThemeToggleOutline } from '@/components/theme-toggle';
+import { getPreferredShop, getRecentShops, getPreferredRole, hasRecentShops, type RecentShop } from '@/lib/device-memory';
+import { QuickShopAccess } from '@/components/quick-shop-access';
 
 export default function LoginPage() {
-  const [role, setRole] = useState<'admin' | 'cashier'>('admin');
+  // Use preferred role from device memory if available
+  const [role, setRole] = useState<'admin' | 'cashier'>(() => {
+    if (typeof window !== 'undefined') {
+      return getPreferredRole() || 'admin';
+    }
+    return 'admin';
+  });
+  const [showQuickAccess, setShowQuickAccess] = useState(true);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [shops, setShops] = useState<Array<{ id: string; shopId?: string; name: string; status?: 'pending' | 'verified' | 'active' | 'suspended'; demoMode?: boolean; demoExpiresAt?: string }>>([]);
@@ -428,7 +437,7 @@ export default function LoginPage() {
                   className={`px-3 xl:px-4 py-1.5 xl:py-2 text-sm xl:text-base font-medium rounded-md xl:rounded-lg transition-colors ${
                     role === 'admin' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
                   }`}
-                  onClick={() => { setRole('admin'); setError(''); }}
+                  onClick={() => { setRole('admin'); setError(''); setShowQuickAccess(true); }}
                 >
                   Admin
                 </button>
@@ -437,12 +446,37 @@ export default function LoginPage() {
                   className={`px-3 xl:px-4 py-1.5 xl:py-2 text-sm xl:text-base font-medium rounded-md xl:rounded-lg transition-colors ${
                     role === 'cashier' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
                   }`}
-                  onClick={() => { setRole('cashier'); setError(''); }}
+                  onClick={() => { setRole('cashier'); setError(''); setShowQuickAccess(true); }}
                 >
                   Cashier
                 </button>
               </div>
             </div>
+
+            {/* Quick Shop Access - Shows recent shops for fast login */}
+            {showQuickAccess && hasRecentShops() && shops.length > 0 && (
+              <div className="mb-5 xl:mb-6">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-medium text-muted-foreground">Quick Access</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowQuickAccess(false)}
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    Show all shops
+                  </button>
+                </div>
+                <QuickShopAccess
+                  availableShops={shops}
+                  onSelectShop={(shopId, shopName) => {
+                    // For quick access, we still need credentials
+                    // Just pre-select the shop and hide quick access
+                    setShowQuickAccess(false);
+                    // The shop will be auto-selected in the form
+                  }}
+                />
+              </div>
+            )}
 
             {/* Session Expired Alert */}
             {sessionExpired && (
@@ -462,9 +496,21 @@ export default function LoginPage() {
 
             {/* Forms */}
             {role === 'admin' ? (
-              <AdminLoginForm shops={shops} onSubmit={handleAdminLogin} isLoading={isLoading} />
+              <AdminLoginForm 
+                shops={shops} 
+                onSubmit={handleAdminLogin} 
+                isLoading={isLoading}
+                preferredShopId={getPreferredShop()?.id}
+                recentShops={getRecentShops()}
+              />
             ) : (
-              <CashierLoginForm shops={shops} onSubmit={handleCashierLogin} isLoading={isLoading} />
+              <CashierLoginForm 
+                shops={shops} 
+                onSubmit={handleCashierLogin} 
+                isLoading={isLoading}
+                preferredShopId={getPreferredShop()?.id}
+                recentShops={getRecentShops()}
+              />
             )}
 
             {/* Google + Register - Horizontal */}

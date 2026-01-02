@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button, Badge } from '@smartduka/ui';
 import { useAuth } from '@/lib/auth-context';
+import { config } from '@/lib/config';
 import { useToast } from '@/lib/use-toast';
 import { ToastContainer } from '@/components/toast-container';
 import { AuthGuard } from '@/components/auth-guard';
@@ -91,7 +92,7 @@ function CashierDetailContent() {
 
     try {
       setLoading(true);
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+      const base = config.apiUrl;
       const headers = { Authorization: `Bearer ${token}` };
 
       // Get cashier details
@@ -153,7 +154,7 @@ function CashierDetailContent() {
     
     setSavingPermissions(true);
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+      const base = config.apiUrl;
       const res = await fetch(`${base}/users/${cashierId}/permissions`, {
         method: 'PATCH',
         headers: {
@@ -184,7 +185,7 @@ function CashierDetailContent() {
     
     setResettingPin(true);
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+      const base = config.apiUrl;
       const res = await fetch(`${base}/users/${cashierId}/reset-pin`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },

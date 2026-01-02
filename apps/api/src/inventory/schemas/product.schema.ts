@@ -88,6 +88,13 @@ export class Product {
       lastRestockDate?: Date;
     };
   };
+
+  // Soft delete support
+  @Prop({ required: false })
+  deletedAt?: Date;
+
+  @Prop({ required: false, type: Types.ObjectId, ref: 'User' })
+  deletedBy?: Types.ObjectId;
 }
 
 export const ProductSchema = SchemaFactory.createForClass(Product);
@@ -106,3 +113,4 @@ ProductSchema.index({ shopId: 1, barcode: 1, status: 1 }); // Fast barcode looku
 ProductSchema.index({ shopId: 1, sku: 1, status: 1 }); // Fast SKU lookup
 ProductSchema.index({ shopId: 1, brand: 1 }); // Brand filtering
 ProductSchema.index({ shopId: 1, name: 'text', description: 'text', brand: 'text' }); // Full-text search
+ProductSchema.index({ shopId: 1, deletedAt: 1 }); // For soft delete queries

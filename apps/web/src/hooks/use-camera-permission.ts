@@ -50,18 +50,24 @@ export function useCameraPermission(): CameraPermissionResult {
     }
 
     try {
-      // Use Permissions API if available
+      // Use Permissions API if available (not supported in Safari)
+      // Safari throws a TypeError when querying 'camera' permission
       if (navigator.permissions && navigator.permissions.query) {
-        const result = await navigator.permissions.query({ name: 'camera' as PermissionName });
-        const permState = result.state as CameraPermissionState;
-        setState(permState);
-        
-        // Listen for permission changes
-        result.onchange = () => {
-          setState(result.state as CameraPermissionState);
-        };
-        
-        return permState;
+        try {
+          const result = await navigator.permissions.query({ name: 'camera' as PermissionName });
+          const permState = result.state as CameraPermissionState;
+          setState(permState);
+          
+          // Listen for permission changes
+          result.onchange = () => {
+            setState(result.state as CameraPermissionState);
+          };
+          
+          return permState;
+        } catch (permError) {
+          // Safari doesn't support camera permission query - fall through to device enumeration
+          console.log('Permissions API not supported for camera, using fallback');
+        }
       }
       
       // Fallback: try to enumerate devices
@@ -75,6 +81,7 @@ export function useCameraPermission(): CameraPermissionResult {
       }
       
       // If we can see device labels, permission was granted before
+      // Note: On iOS Safari, labels are only available after permission is granted
       const hasLabels = videoDevices.some(d => d.label && d.label.length > 0);
       if (hasLabels) {
         setState('granted');
@@ -168,7 +175,27 @@ export function useCameraPermission(): CameraPermissionResult {
  */
 export function getCameraPermissionInstructions(browser?: string): string {
   const detectedBrowser = browser || detectBrowser();
+  const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const isAndroid = typeof navigator !== 'undefined' && /Android/.test(navigator.userAgent);
   
+  // iOS-specific instructions
+  if (isIOS) {
+    if (detectedBrowser === 'safari') {
+      return 'Go to Settings > Safari > Camera, or tap the "aA" button in the address bar > Website Settings > Camera > Allow';
+    }
+    // Chrome/Firefox on iOS use Safari's WebView
+    return 'Go to Settings > Safari > Camera and enable access. All browsers on iOS use Safari\'s camera permissions.';
+  }
+  
+  // Android-specific instructions
+  if (isAndroid) {
+    if (detectedBrowser === 'chrome') {
+      return 'Tap the lock icon in the address bar > Permissions > Camera > Allow, or go to Settings > Site Settings > Camera';
+    }
+    return 'Tap the lock/info icon in the address bar and enable Camera permission';
+  }
+  
+  // Desktop instructions
   switch (detectedBrowser) {
     case 'chrome':
       return 'Click the camera icon in the address bar, or go to Settings > Privacy and Security > Site Settings > Camera';

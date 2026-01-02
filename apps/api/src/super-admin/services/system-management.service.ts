@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Shop, ShopDocument } from '../../shops/schemas/shop.schema';
@@ -6,6 +6,8 @@ import { Subscription, SubscriptionDocument } from '../../subscriptions/schemas/
 import { SubscriptionInvoice, SubscriptionInvoiceDocument } from '../../subscriptions/schemas/subscription-invoice.schema';
 import { PaymentTransaction, PaymentTransactionDocument } from '../../payments/schemas/payment-transaction.schema';
 import { User, UserDocument } from '../../users/schemas/user.schema';
+import { Invoice, InvoiceDocument } from '../../sales/schemas/invoice.schema';
+import { PaymentAttempt, PaymentAttemptDocument, PaymentAttemptStatus } from '../../subscriptions/schemas/payment-attempt.schema';
 import { SystemAuditService } from './system-audit.service';
 import { EmailLogService } from './email-log.service';
 
@@ -22,9 +24,11 @@ export class SystemManagementService {
   constructor(
     @InjectModel(Shop.name) private readonly shopModel: Model<ShopDocument>,
     @InjectModel(Subscription.name) private readonly subscriptionModel: Model<SubscriptionDocument>,
-    @InjectModel(SubscriptionInvoice.name) private readonly invoiceModel: Model<SubscriptionInvoiceDocument>,
+    @InjectModel(SubscriptionInvoice.name) private readonly subscriptionInvoiceModel: Model<SubscriptionInvoiceDocument>,
     @InjectModel(PaymentTransaction.name) private readonly transactionModel: Model<PaymentTransactionDocument>,
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
+    @InjectModel(Invoice.name) private readonly salesInvoiceModel: Model<InvoiceDocument>,
+    @InjectModel(PaymentAttempt.name) private readonly paymentAttemptModel: Model<PaymentAttemptDocument>,
     private readonly auditService: SystemAuditService,
     private readonly emailLogService: EmailLogService,
   ) {}
@@ -121,19 +125,19 @@ export class SystemManagementService {
         { $group: { _id: null, total: { $sum: '$currentPrice' } } },
       ]).exec(),
       // Payments
-      this.invoiceModel.aggregate([
+      this.subscriptionInvoiceModel.aggregate([
         { $match: { status: 'paid' } },
         { $group: { _id: null, total: { $sum: '$totalAmount' } } },
       ]).exec(),
-      this.invoiceModel.aggregate([
+      this.subscriptionInvoiceModel.aggregate([
         { $match: { status: 'paid', paidAt: { $gte: startOfMonth } } },
         { $group: { _id: null, total: { $sum: '$totalAmount' } } },
       ]).exec(),
-      this.invoiceModel.aggregate([
+      this.subscriptionInvoiceModel.aggregate([
         { $match: { status: 'pending' } },
         { $group: { _id: null, count: { $sum: 1 }, total: { $sum: '$totalAmount' } } },
       ]).exec(),
-      this.invoiceModel.countDocuments({ status: 'failed' }).exec(),
+      this.subscriptionInvoiceModel.countDocuments({ status: 'failed' }).exec(),
       // Users
       this.userModel.countDocuments().exec(),
       this.userModel.countDocuments({ role: 'admin' }).exec(),
@@ -210,14 +214,14 @@ export class SystemManagementService {
     const skip = options.skip || 0;
 
     const [invoices, total] = await Promise.all([
-      this.invoiceModel
+      this.subscriptionInvoiceModel
         .find(query)
         .sort({ createdAt: -1 })
         .limit(limit)
         .skip(skip)
         .populate('shopId', 'name email shopId')
         .exec(),
-      this.invoiceModel.countDocuments(query).exec(),
+      this.subscriptionInvoiceModel.countDocuments(query).exec(),
     ]);
 
     return { invoices, total };
@@ -298,11 +302,11 @@ export class SystemManagementService {
     }
 
     const [totalResult, byPeriod, byPaymentMethod, byPlan] = await Promise.all([
-      this.invoiceModel.aggregate([
+      this.subscriptionInvoiceModel.aggregate([
         { $match: { status: 'paid', paidAt: { $gte: startDate } } },
         { $group: { _id: null, total: { $sum: '$totalAmount' } } },
       ]).exec(),
-      this.invoiceModel.aggregate([
+      this.subscriptionInvoiceModel.aggregate([
         { $match: { status: 'paid', paidAt: { $gte: startDate } } },
         {
           $group: {
@@ -312,7 +316,7 @@ export class SystemManagementService {
         },
         { $sort: { _id: 1 } },
       ]).exec(),
-      this.invoiceModel.aggregate([
+      this.subscriptionInvoiceModel.aggregate([
         { $match: { status: 'paid', paidAt: { $gte: startDate } } },
         { $group: { _id: '$paymentMethod', amount: { $sum: '$totalAmount' } } },
       ]).exec(),
@@ -372,6 +376,179 @@ export class SystemManagementService {
   }
 
   /**
+   * Get all sales invoice payments across all shops
+   * This includes payments made via send money, bank transfer, M-Pesa, etc.
+   */
+  async getSalesInvoicePayments(options: {
+    paymentMethod?: string;
+    paymentStatus?: string;
+    shopId?: string;
+    startDate?: Date;
+    endDate?: Date;
+    limit?: number;
+    skip?: number;
+  }): Promise<{
+    payments: Array<{
+      _id: string;
+      invoiceId: string;
+      invoiceNumber: string;
+      shopId: string;
+      shopName?: string;
+      customerName?: string;
+      customerPhone?: string;
+      paymentDate: Date;
+      paymentMethod: string;
+      amount: number;
+      reference?: string;
+      notes?: string;
+      invoiceTotal: number;
+      invoiceStatus: string;
+      paymentStatus: string;
+    }>;
+    total: number;
+    stats: {
+      totalAmount: number;
+      byMethod: Record<string, number>;
+      byStatus: Record<string, number>;
+    };
+  }> {
+    const matchStage: any = {};
+    
+    // Filter by payment status
+    if (options.paymentStatus && options.paymentStatus !== 'all') {
+      matchStage.paymentStatus = options.paymentStatus;
+    } else {
+      // By default, show invoices with payments
+      matchStage['payments.0'] = { $exists: true };
+    }
+
+    if (options.shopId) {
+      matchStage.shopId = new Types.ObjectId(options.shopId);
+    }
+
+    if (options.startDate || options.endDate) {
+      matchStage.updatedAt = {};
+      if (options.startDate) matchStage.updatedAt.$gte = options.startDate;
+      if (options.endDate) matchStage.updatedAt.$lte = options.endDate;
+    }
+
+    const limit = options.limit || 50;
+    const skip = options.skip || 0;
+
+    // Get invoices with payments
+    const invoicesWithPayments = await this.salesInvoiceModel.aggregate([
+      { $match: matchStage },
+      { $unwind: '$payments' },
+      ...(options.paymentMethod && options.paymentMethod !== 'all' 
+        ? [{ $match: { 'payments.method': options.paymentMethod } }] 
+        : []),
+      {
+        $lookup: {
+          from: 'shops',
+          localField: 'shopId',
+          foreignField: '_id',
+          as: 'shop',
+        },
+      },
+      { $unwind: { path: '$shop', preserveNullAndEmptyArrays: true } },
+      { $sort: { 'payments.date': -1 } },
+      { $skip: skip },
+      { $limit: limit },
+      {
+        $project: {
+          _id: { $concat: [{ $toString: '$_id' }, '-', { $toString: '$payments.date' }] },
+          invoiceId: '$_id',
+          invoiceNumber: 1,
+          shopId: 1,
+          shopName: '$shop.name',
+          customerName: 1,
+          customerPhone: 1,
+          paymentDate: '$payments.date',
+          paymentMethod: '$payments.method',
+          amount: '$payments.amount',
+          reference: '$payments.reference',
+          notes: '$payments.notes',
+          invoiceTotal: '$total',
+          invoiceStatus: '$status',
+          paymentStatus: 1,
+          approvalStatus: '$payments.approvalStatus',
+          paymentId: '$payments.paymentId',
+          approvedAt: '$payments.approvedAt',
+          approvedBy: '$payments.approvedBy',
+          rejectedAt: '$payments.rejectedAt',
+          rejectedBy: '$payments.rejectedBy',
+          rejectionReason: '$payments.rejectionReason',
+        },
+      },
+    ]).exec();
+
+    // Get total count
+    const countResult = await this.salesInvoiceModel.aggregate([
+      { $match: matchStage },
+      { $unwind: '$payments' },
+      ...(options.paymentMethod && options.paymentMethod !== 'all' 
+        ? [{ $match: { 'payments.method': options.paymentMethod } }] 
+        : []),
+      { $count: 'total' },
+    ]).exec();
+
+    const total = countResult[0]?.total || 0;
+
+    // Get stats
+    const statsResult = await this.salesInvoiceModel.aggregate([
+      { $match: { 'payments.0': { $exists: true } } },
+      { $unwind: '$payments' },
+      {
+        $group: {
+          _id: null,
+          totalAmount: { $sum: '$payments.amount' },
+        },
+      },
+    ]).exec();
+
+    const byMethodResult = await this.salesInvoiceModel.aggregate([
+      { $match: { 'payments.0': { $exists: true } } },
+      { $unwind: '$payments' },
+      {
+        $group: {
+          _id: '$payments.method',
+          amount: { $sum: '$payments.amount' },
+        },
+      },
+    ]).exec();
+
+    const byStatusResult = await this.salesInvoiceModel.aggregate([
+      { $match: { 'payments.0': { $exists: true } } },
+      {
+        $group: {
+          _id: '$paymentStatus',
+          count: { $sum: 1 },
+        },
+      },
+    ]).exec();
+
+    const byMethod: Record<string, number> = {};
+    byMethodResult.forEach((r: any) => {
+      byMethod[r._id] = r.amount;
+    });
+
+    const byStatus: Record<string, number> = {};
+    byStatusResult.forEach((r: any) => {
+      byStatus[r._id] = r.count;
+    });
+
+    return {
+      payments: invoicesWithPayments,
+      total,
+      stats: {
+        totalAmount: statsResult[0]?.totalAmount || 0,
+        byMethod,
+        byStatus,
+      },
+    };
+  }
+
+  /**
    * Get system health metrics
    */
   async getSystemHealth(): Promise<{
@@ -413,6 +590,214 @@ export class SystemManagementService {
         last24h: errorsLast24h.total,
         lastHour: errorsLastHour.total,
       },
+    };
+  }
+
+  // ============================================
+  // PAYMENT APPROVAL WORKFLOW
+  // ============================================
+
+  /**
+   * Approve an invoice payment (super admin only)
+   */
+  async approveInvoicePayment(
+    invoiceId: string,
+    paymentId: string,
+    approvedBy: string,
+    approvedByEmail: string,
+  ): Promise<InvoiceDocument> {
+    const invoice = await this.salesInvoiceModel.findById(invoiceId).exec();
+    if (!invoice) {
+      throw new NotFoundException('Invoice not found');
+    }
+
+    const paymentIndex = invoice.payments.findIndex(p => p.paymentId === paymentId);
+    if (paymentIndex === -1) {
+      throw new NotFoundException('Payment not found');
+    }
+
+    const payment = invoice.payments[paymentIndex];
+    if (payment.approvalStatus !== 'pending') {
+      throw new BadRequestException('Payment is not pending approval');
+    }
+
+    // Update payment approval status
+    invoice.payments[paymentIndex].approvalStatus = 'approved';
+    invoice.payments[paymentIndex].approvedAt = new Date();
+    invoice.payments[paymentIndex].approvedBy = approvedByEmail;
+
+    // Now update the invoice amounts
+    invoice.amountPaid += payment.amount;
+    invoice.amountDue -= payment.amount;
+
+    // Update payment status
+    if (invoice.amountDue <= 0) {
+      invoice.paymentStatus = 'paid';
+      invoice.status = 'paid';
+      invoice.paidAt = new Date();
+    } else {
+      invoice.paymentStatus = 'partial';
+    }
+
+    this.logger.log(`Invoice payment approved: ${invoiceId}/${paymentId} by ${approvedByEmail}`);
+    return await invoice.save();
+  }
+
+  /**
+   * Reject an invoice payment (super admin only)
+   */
+  async rejectInvoicePayment(
+    invoiceId: string,
+    paymentId: string,
+    rejectedBy: string,
+    rejectedByEmail: string,
+    reason: string,
+  ): Promise<InvoiceDocument> {
+    const invoice = await this.salesInvoiceModel.findById(invoiceId).exec();
+    if (!invoice) {
+      throw new NotFoundException('Invoice not found');
+    }
+
+    const paymentIndex = invoice.payments.findIndex(p => p.paymentId === paymentId);
+    if (paymentIndex === -1) {
+      throw new NotFoundException('Payment not found');
+    }
+
+    const payment = invoice.payments[paymentIndex];
+    if (payment.approvalStatus !== 'pending') {
+      throw new BadRequestException('Payment is not pending approval');
+    }
+
+    // Update payment approval status
+    invoice.payments[paymentIndex].approvalStatus = 'rejected';
+    invoice.payments[paymentIndex].rejectedAt = new Date();
+    invoice.payments[paymentIndex].rejectedBy = rejectedByEmail;
+    invoice.payments[paymentIndex].rejectionReason = reason;
+
+    this.logger.log(`Invoice payment rejected: ${invoiceId}/${paymentId} by ${rejectedByEmail}`);
+    return await invoice.save();
+  }
+
+  /**
+   * Approve a subscription payment attempt (super admin only)
+   * Used for manual payments like bank transfer, send money
+   */
+  async approveSubscriptionPayment(
+    paymentAttemptId: string,
+    approvedBy: string,
+    approvedByEmail: string,
+  ): Promise<PaymentAttemptDocument> {
+    const attempt = await this.paymentAttemptModel.findById(paymentAttemptId).exec();
+    if (!attempt) {
+      throw new NotFoundException('Payment attempt not found');
+    }
+
+    if (attempt.status !== PaymentAttemptStatus.PENDING_APPROVAL) {
+      throw new BadRequestException('Payment is not pending approval');
+    }
+
+    // Update payment status
+    attempt.status = PaymentAttemptStatus.SUCCESS;
+    attempt.approvedAt = new Date();
+    attempt.approvedBy = approvedBy;
+    attempt.approvedByEmail = approvedByEmail;
+    attempt.completedAt = new Date();
+
+    this.logger.log(`Subscription payment approved: ${paymentAttemptId} by ${approvedByEmail}`);
+    
+    // TODO: Activate subscription if this was a subscription payment
+    // This would require injecting SubscriptionsService
+
+    return await attempt.save();
+  }
+
+  /**
+   * Reject a subscription payment attempt (super admin only)
+   */
+  async rejectSubscriptionPayment(
+    paymentAttemptId: string,
+    rejectedBy: string,
+    rejectedByEmail: string,
+    reason: string,
+  ): Promise<PaymentAttemptDocument> {
+    const attempt = await this.paymentAttemptModel.findById(paymentAttemptId).exec();
+    if (!attempt) {
+      throw new NotFoundException('Payment attempt not found');
+    }
+
+    if (attempt.status !== PaymentAttemptStatus.PENDING_APPROVAL) {
+      throw new BadRequestException('Payment is not pending approval');
+    }
+
+    // Update payment status
+    attempt.status = PaymentAttemptStatus.REJECTED;
+    attempt.rejectedAt = new Date();
+    attempt.rejectedBy = rejectedBy;
+    attempt.rejectedByEmail = rejectedByEmail;
+    attempt.rejectionReason = reason;
+
+    this.logger.log(`Subscription payment rejected: ${paymentAttemptId} by ${rejectedByEmail}`);
+    return await attempt.save();
+  }
+
+  /**
+   * Get pending approval payments (both invoice and subscription)
+   */
+  async getPendingApprovals(): Promise<{
+    invoicePayments: Array<{
+      invoiceId: string;
+      invoiceNumber: string;
+      paymentId: string;
+      shopId: string;
+      shopName?: string;
+      customerName?: string;
+      paymentDate: Date;
+      paymentMethod: string;
+      amount: number;
+      reference?: string;
+    }>;
+    subscriptionPayments: PaymentAttemptDocument[];
+  }> {
+    // Get pending invoice payments
+    const invoicesWithPendingPayments = await this.salesInvoiceModel.aggregate([
+      { $match: { 'payments.approvalStatus': 'pending' } },
+      { $unwind: '$payments' },
+      { $match: { 'payments.approvalStatus': 'pending' } },
+      {
+        $lookup: {
+          from: 'shops',
+          localField: 'shopId',
+          foreignField: '_id',
+          as: 'shop',
+        },
+      },
+      { $unwind: { path: '$shop', preserveNullAndEmptyArrays: true } },
+      {
+        $project: {
+          invoiceId: '$_id',
+          invoiceNumber: 1,
+          paymentId: '$payments.paymentId',
+          shopId: 1,
+          shopName: '$shop.name',
+          customerName: 1,
+          paymentDate: '$payments.date',
+          paymentMethod: '$payments.method',
+          amount: '$payments.amount',
+          reference: '$payments.reference',
+        },
+      },
+      { $sort: { paymentDate: -1 } },
+    ]).exec();
+
+    // Get pending subscription payments
+    const pendingSubscriptionPayments = await this.paymentAttemptModel
+      .find({ status: PaymentAttemptStatus.PENDING_APPROVAL })
+      .sort({ createdAt: -1 })
+      .exec();
+
+    return {
+      invoicePayments: invoicesWithPendingPayments,
+      subscriptionPayments: pendingSubscriptionPayments,
     };
   }
 }

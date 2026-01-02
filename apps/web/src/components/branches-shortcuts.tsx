@@ -1,5 +1,6 @@
 'use client';
 
+import { config } from '@/lib/config';
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button, Badge } from '@smartduka/ui';
 import { MapPin, Users, Package, TrendingUp, Plus, Eye, Settings, AlertCircle, Loader2 } from 'lucide-react';
@@ -35,10 +36,9 @@ export function BranchesShortcuts() {
     if (!token) return;
     try {
       setLoading(true);
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
       const headers = { Authorization: `Bearer ${token}` };
 
-      const res = await fetch(`${base}/branches`, { headers });
+      const res = await fetch(`${config.apiUrl}/branches`, { headers });
       const text = await res.text();
       const data = text ? JSON.parse(text) : {};
       

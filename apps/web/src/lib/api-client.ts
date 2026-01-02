@@ -5,6 +5,8 @@
  */
 
 import { config } from './config';
+import { getCsrfToken } from './secure-session';
+import { apiResilience } from './api-resilience';
 
 // API Response types
 export interface ApiResponse<T = unknown> {
@@ -40,10 +42,17 @@ function getAuthToken(): string | null {
 
 /**
  * Build URL with query parameters
+ * Note: We concatenate baseUrl + endpoint directly because new URL() with a path
+ * starting with "/" replaces the entire path of the base URL, stripping /api/v1
  */
 function buildUrl(endpoint: string, params?: Record<string, string | number | boolean | undefined>): string {
   const baseUrl = config.apiUrl;
-  const url = new URL(endpoint.startsWith('/') ? endpoint : `/${endpoint}`, baseUrl);
+  // Ensure endpoint starts with / and baseUrl doesn't end with /
+  const normalizedBase = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+  const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const fullUrl = `${normalizedBase}${normalizedEndpoint}`;
+  
+  const url = new URL(fullUrl);
   
   if (params) {
     Object.entries(params).forEach(([key, value]) => {
@@ -67,6 +76,8 @@ async function request<T = unknown>(
   
   const token = getAuthToken();
   
+  const csrfToken = getCsrfToken();
+  
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
     ...customHeaders,
@@ -76,18 +87,43 @@ async function request<T = unknown>(
     (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
   }
   
+  // Include CSRF token for state-changing requests
+  if (csrfToken && !['GET', 'HEAD', 'OPTIONS'].includes(restOptions.method || 'GET')) {
+    (headers as Record<string, string>)['X-CSRF-Token'] = csrfToken;
+  }
+  
   const url = buildUrl(endpoint, params);
   
   const fetchOptions: RequestInit = {
     ...restOptions,
     headers,
+    credentials: 'include', // Send httpOnly cookies
   };
   
   if (body !== undefined) {
     fetchOptions.body = JSON.stringify(body);
   }
   
-  const response = await fetch(url, fetchOptions);
+  let response: Response;
+  
+  try {
+    // Use resilient fetch for automatic retries and wake-up handling
+    response = await apiResilience.resilientFetch(url, fetchOptions, {
+      maxRetries: 3,
+      timeoutMs: 30000, // 30 seconds for cold starts
+    });
+  } catch (fetchError: any) {
+    // Network error or all retries exhausted
+    const error: ApiError = {
+      message: fetchError.message || 'Unable to connect to server',
+      statusCode: 0,
+      error: 'NETWORK_ERROR',
+    };
+    throw error;
+  }
+  
+  // Mark backend as ready on successful response
+  apiResilience.markReady();
   
   // Handle no content responses
   if (response.status === 204) {

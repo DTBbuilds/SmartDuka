@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { config } from "@/lib/config";
 import {
   Badge,
   Button,
@@ -76,8 +77,7 @@ export default function ReceiptsPage() {
 
     setLoading(true);
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-      const res = await fetch(`${base}/receipts/templates`, {
+      const res = await fetch(`${config.apiUrl}/receipts/templates`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -98,8 +98,7 @@ export default function ReceiptsPage() {
 
   const handleSave = async () => {
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-      const res = await fetch(`${base}/receipts/templates`, {
+      const res = await fetch(`${config.apiUrl}/receipts/templates`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -145,8 +144,7 @@ export default function ReceiptsPage() {
     if (!confirm("Are you sure you want to delete this template?")) return;
 
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-      const res = await fetch(`${base}/receipts/templates/${id}`, {
+      const res = await fetch(`${config.apiUrl}/receipts/templates/${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });

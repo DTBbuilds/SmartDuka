@@ -5,6 +5,7 @@ import { Input, Button, Card, CardContent, CardHeader, CardTitle, Badge, Dialog,
 import { Tag, X, AlertCircle } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/lib/use-toast";
+import { config } from "@/lib/config";
 
 interface Discount {
   _id: string;
@@ -41,8 +42,7 @@ export function DiscountSelector({
 
       setLoading(true);
       try {
-        const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-        const res = await fetch(`${base}/discounts?status=active`, {
+        const res = await fetch(`${config.apiUrl}/discounts?status=active`, {
           headers: { Authorization: `Bearer ${token}` },
         });
 
@@ -102,8 +102,7 @@ export function DiscountSelector({
 
   const handleApplyDiscount = async (discount: Discount) => {
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-      const res = await fetch(`${base}/discounts/apply`, {
+      const res = await fetch(`${config.apiUrl}/discounts/apply`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,

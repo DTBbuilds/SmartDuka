@@ -30,8 +30,12 @@ export class SubscriptionMigrationService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    // Run migration on startup
-    await this.migrateExistingShops();
+    // Run migration asynchronously - don't block startup
+    setImmediate(() => {
+      this.migrateExistingShops().catch(err => {
+        this.logger.error('Subscription migration failed:', err);
+      });
+    });
   }
 
   /**

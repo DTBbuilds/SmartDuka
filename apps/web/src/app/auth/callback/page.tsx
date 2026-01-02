@@ -7,6 +7,7 @@ import { Loader2, CheckCircle, XCircle } from 'lucide-react';
 import { config } from '@/lib/config';
 import { activityTracker } from '@/lib/activity-tracker';
 import { statusManager } from '@/lib/status-manager';
+import { storeToken, storeShop, storeCsrfToken, getToken } from '@/lib/secure-session';
 
 function AuthCallbackContent() {
   const router = useRouter();
@@ -15,8 +16,10 @@ function AuthCallbackContent() {
   const [message, setMessage] = useState('Completing sign in...');
 
   useEffect(() => {
-    const token = searchParams.get('token');
+    const success = searchParams.get('success');
     const error = searchParams.get('error');
+    // Legacy support for token in URL (will be removed)
+    const legacyToken = searchParams.get('token');
 
     if (error) {
       setStatus('error');
@@ -27,32 +30,34 @@ function AuthCallbackContent() {
       return;
     }
 
-    if (token) {
+    // New flow: cookies are already set by server, just verify and redirect
+    if (success === 'true') {
+      // Cookies were set by server during OAuth callback
+      // We need to verify the session by making an authenticated request
+      verifySessionAndRedirect();
+      return;
+    }
+
+    // Legacy flow: token in URL (for backward compatibility)
+    if (legacyToken) {
       try {
-        // Decode and validate token
-        const decoded = JSON.parse(atob(token.split('.')[1]));
+        const decoded = JSON.parse(atob(legacyToken.split('.')[1]));
         
-        // Store token and user data
-        window.localStorage.setItem('smartduka:token', token);
-        
-        // Also set cookie for middleware authentication
-        document.cookie = `smartduka_token=${token}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
+        // Store token securely
+        storeToken(legacyToken);
         
         // Initialize activity tracking and status manager
-        activityTracker.setToken(token, decoded.role);
+        activityTracker.setToken(legacyToken, decoded.role);
         if (decoded.shopId) {
-          statusManager.initialize(token, decoded.sub, decoded.shopId);
+          statusManager.initialize(legacyToken, decoded.sub, decoded.shopId);
         }
 
-        // Fetch shop info if user has shopId
         if (decoded.shopId) {
-          fetchShopAndRedirect(token, decoded.shopId);
+          fetchShopAndRedirect(legacyToken, decoded.shopId);
         } else {
-          // Super admin or user without shop
           setStatus('success');
           setMessage('Login successful! Redirecting...');
           setTimeout(() => {
-            // Use window.location for full page reload to ensure AuthContext picks up the new token
             window.location.href = decoded.role === 'super_admin' ? '/super-admin' : '/';
           }, 1000);
         }
@@ -64,14 +69,65 @@ function AuthCallbackContent() {
           router.push('/login');
         }, 3000);
       }
-    } else {
+      return;
+    }
+
+    // No success flag or token - error
+    setStatus('error');
+    setMessage('No authentication received');
+    setTimeout(() => {
+      router.push('/login');
+    }, 3000);
+  }, [searchParams, router]);
+
+  const verifySessionAndRedirect = async () => {
+    try {
+      // Make authenticated request to verify session (cookies sent automatically)
+      const res = await fetch(`${config.apiUrl}/auth/me`, {
+        credentials: 'include',
+      });
+
+      if (res.ok) {
+        const userData = await res.json();
+        
+        // Store the access token returned by /auth/me for client-side use
+        if (userData.accessToken) {
+          storeToken(userData.accessToken);
+          
+          // Store CSRF token if provided
+          if (userData.csrfToken) {
+            storeCsrfToken(userData.csrfToken);
+          }
+          
+          // Initialize activity tracking and status manager
+          activityTracker.setToken(userData.accessToken, userData.role);
+          if (userData.shopId) {
+            statusManager.initialize(userData.accessToken, userData.sub, userData.shopId);
+          }
+        }
+
+        // Fetch shop info if user has shopId
+        if (userData.shopId && userData.accessToken) {
+          await fetchShopAndRedirect(userData.accessToken, userData.shopId);
+        } else {
+          setStatus('success');
+          setMessage('Login successful! Redirecting...');
+          setTimeout(() => {
+            window.location.href = userData.role === 'super_admin' ? '/super-admin' : '/';
+          }, 1000);
+        }
+      } else {
+        throw new Error('Session verification failed');
+      }
+    } catch (err) {
+      console.error('Session verification error:', err);
       setStatus('error');
-      setMessage('No authentication token received');
+      setMessage('Authentication failed. Please try again.');
       setTimeout(() => {
         router.push('/login');
       }, 3000);
     }
-  }, [searchParams, router]);
+  };
 
   const fetchShopAndRedirect = async (token: string, shopId: string) => {
     try {
@@ -79,6 +135,7 @@ function AuthCallbackContent() {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
+        credentials: 'include',
       });
 
       const text = await res.text();

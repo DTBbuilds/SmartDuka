@@ -11,6 +11,7 @@ import {
 } from "@smartduka/ui";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/lib/use-toast";
+import { config } from "@/lib/config";
 import { Scan, X } from "lucide-react";
 
 interface BarcodeScannedData {
@@ -56,8 +57,7 @@ export function BarcodeScannerModal({
 
     setLoading(true);
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-      const res = await fetch(`${base}/inventory/barcode/scan`, {
+      const res = await fetch(`${config.apiUrl}/inventory/barcode/scan`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,

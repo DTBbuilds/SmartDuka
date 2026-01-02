@@ -1487,13 +1487,19 @@ export class SubscriptionsService {
         1, // Each subscription is for one shop, branches would be counted separately
       ]);
 
-      // Update subscription with actual counts
-      subscription.currentProductCount = productCount;
-      subscription.currentEmployeeCount = employeeCount;
-      subscription.currentShopCount = shopCount;
-      await subscription.save();
+      // Only update and log if counts actually changed (prevents duplicate logs)
+      const hasChanges = 
+        subscription.currentProductCount !== productCount ||
+        subscription.currentEmployeeCount !== employeeCount ||
+        subscription.currentShopCount !== shopCount;
 
-      this.logger.log(`Synced usage counts for shop ${shopId}: products=${productCount}, employees=${employeeCount}, shops=${shopCount}`);
+      if (hasChanges) {
+        subscription.currentProductCount = productCount;
+        subscription.currentEmployeeCount = employeeCount;
+        subscription.currentShopCount = shopCount;
+        await subscription.save();
+        this.logger.log(`Synced usage counts for shop ${shopId}: products=${productCount}, employees=${employeeCount}, shops=${shopCount}`);
+      }
     } catch (error) {
       this.logger.error(`Failed to sync usage counts for shop ${shopId}:`, error);
       throw error;

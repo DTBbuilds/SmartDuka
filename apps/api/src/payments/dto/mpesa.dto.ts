@@ -105,9 +105,10 @@ export class MpesaPaymentResponseDto {
   transactionId: string;
   checkoutRequestId?: string;
   status: MpesaTransactionStatus;
-  expiresAt: Date;
+  expiresAt?: Date;
   message: string;
   isIdempotent?: boolean;
+  errorCode?: string;
 }
 
 /**

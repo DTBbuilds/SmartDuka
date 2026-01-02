@@ -2,6 +2,7 @@
 
 import { connectionMonitor } from './connection-monitor';
 import { sessionMonitor } from './session-monitor';
+import { apiResilience } from './api-resilience';
 
 type VisibilityCallback = (isVisible: boolean) => void;
 
@@ -77,9 +78,18 @@ class TabVisibilityManager {
     this.lastHiddenTime = null;
   }
 
-  private refreshState() {
+  private async refreshState() {
     // Check connection status
     connectionMonitor.checkConnection();
+
+    // Check if backend needs to wake up (after long inactivity)
+    // This proactively wakes the backend before user tries to do anything
+    const backendHealthy = await apiResilience.checkHealth();
+    if (!backendHealthy) {
+      console.log('[TabVisibility] Backend not responding, initiating wake-up...');
+      // Don't await - let it run in background while we check session
+      apiResilience.wakeBackend();
+    }
 
     // Re-validate session
     const token = typeof window !== 'undefined' 

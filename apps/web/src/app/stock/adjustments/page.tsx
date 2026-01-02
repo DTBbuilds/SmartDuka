@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { config } from "@/lib/config";
 import {
   Button,
   Card,
@@ -115,8 +116,7 @@ export default function StockAdjustmentsPage() {
   const fetchAdjustments = useCallback(async () => {
     if (!token) return;
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-      const res = await fetch(`${base}/stock/adjustments`, {
+      const res = await fetch(`${config.apiUrl}/stock/adjustments`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -133,8 +133,7 @@ export default function StockAdjustmentsPage() {
   const fetchProducts = useCallback(async () => {
     if (!token) return;
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-      const res = await fetch(`${base}/inventory/products?limit=200`, {
+      const res = await fetch(`${config.apiUrl}/inventory/products?limit=200`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -149,8 +148,7 @@ export default function StockAdjustmentsPage() {
   const fetchSummary = useCallback(async () => {
     if (!token) return;
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-      const res = await fetch(`${base}/stock/adjustments/summary`, {
+      const res = await fetch(`${config.apiUrl}/stock/adjustments/summary`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -180,11 +178,10 @@ export default function StockAdjustmentsPage() {
     }
     setIsSaving(true);
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
       const product = products.find(p => p._id === formData.productId);
       const delta = formData.adjustmentType === "decrease" ? -formData.quantity : formData.quantity;
 
-      const res = await fetch(`${base}/stock/adjustments`, {
+      const res = await fetch(`${config.apiUrl}/stock/adjustments`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({

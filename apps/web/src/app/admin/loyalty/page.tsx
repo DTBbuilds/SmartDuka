@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { config } from "@/lib/config";
 import {
   Badge,
   Button,
@@ -64,10 +65,8 @@ export default function LoyaltyPage() {
 
     setLoading(true);
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-
       // Load stats
-      const statsRes = await fetch(`${base}/loyalty/stats`, {
+      const statsRes = await fetch(`${config.apiUrl}/loyalty/stats`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (statsRes.ok) {
@@ -76,7 +75,7 @@ export default function LoyaltyPage() {
       }
 
       // Load top customers
-      const topRes = await fetch(`${base}/loyalty/top-customers?limit=10`, {
+      const topRes = await fetch(`${config.apiUrl}/loyalty/top-customers?limit=10`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (topRes.ok) {

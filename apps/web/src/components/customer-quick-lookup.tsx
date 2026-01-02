@@ -5,6 +5,7 @@ import { Input, Button, Card, CardContent, CardHeader, CardTitle, Badge } from "
 import { Search, X, User } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/lib/use-toast";
+import { config } from "@/lib/config";
 
 interface Customer {
   _id: string;
@@ -48,9 +49,8 @@ export function CustomerQuickLookup({
 
       setLoading(true);
       try {
-        const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
         const res = await fetch(
-          `${base}/customers/search/query?q=${encodeURIComponent(query)}`,
+          `${config.apiUrl}/customers/search/query?q=${encodeURIComponent(query)}`,
           {
             headers: { Authorization: `Bearer ${token}` },
           }

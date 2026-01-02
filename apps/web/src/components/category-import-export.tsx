@@ -1,5 +1,6 @@
 'use client';
 
+import { config } from '@/lib/config';
 import { useEffect, useRef, useState } from 'react';
 import { Button, Dialog, DialogContent, DialogHeader, DialogTitle, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@smartduka/ui';
 import { Upload, Download, AlertCircle, CheckCircle, FileUp, FileDown } from 'lucide-react';
@@ -32,8 +33,6 @@ export function CategoryImportExport({ token, isOpen, onClose, onImportComplete 
   const [importedCount, setImportedCount] = useState(0);
   const [loadingCategories, setLoadingCategories] = useState(false);
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-
   // Load categories
   useEffect(() => {
     if (!token || !isOpen) return;
@@ -41,7 +40,7 @@ export function CategoryImportExport({ token, isOpen, onClose, onImportComplete 
     const loadCategories = async () => {
       try {
         setLoadingCategories(true);
-        const res = await fetch(`${apiUrl}/inventory/categories`, {
+        const res = await fetch(`${config.apiUrl}/inventory/categories`, {
           headers: { Authorization: `Bearer ${token}` },
         });
 
@@ -61,7 +60,7 @@ export function CategoryImportExport({ token, isOpen, onClose, onImportComplete 
     };
 
     loadCategories();
-  }, [token, isOpen, apiUrl, toast]);
+  }, [token, isOpen, toast]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -122,7 +121,7 @@ export function CategoryImportExport({ token, isOpen, onClose, onImportComplete 
       }
 
       // Import products
-      const importRes = await fetch(`${apiUrl}/inventory/products/import`, {
+      const importRes = await fetch(`${config.apiUrl}/inventory/products/import`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -171,7 +170,7 @@ export function CategoryImportExport({ token, isOpen, onClose, onImportComplete 
     try {
       setIsLoading(true);
 
-      const res = await fetch(`${apiUrl}/inventory/products/export?categoryId=${selectedCategoryId}`, {
+      const res = await fetch(`${config.apiUrl}/inventory/products/export?categoryId=${selectedCategoryId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 

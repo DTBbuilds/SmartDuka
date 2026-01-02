@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { config } from "@/lib/config";
 import { Button, Input, Label } from "@smartduka/ui";
 import { Plus, Pencil, UserX, Users } from "lucide-react";
 import { DataTable, Column } from "@/components/shared/data-table";
@@ -56,9 +57,8 @@ export default function UsersPage() {
 
   const fetchUsers = async () => {
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
       // Note: This endpoint might need to be created in backend
-      const res = await fetch(`${apiUrl}/users`, {
+      const res = await fetch(`${config.apiUrl}/users`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -108,8 +108,7 @@ export default function UsersPage() {
     setIsSaving(true);
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-      const url = editingUser ? `${apiUrl}/users/${editingUser._id}` : `${apiUrl}/users`;
+      const url = editingUser ? `${config.apiUrl}/users/${editingUser._id}` : `${config.apiUrl}/users`;
       const method = editingUser ? "PUT" : "POST";
 
       const payload: any = {

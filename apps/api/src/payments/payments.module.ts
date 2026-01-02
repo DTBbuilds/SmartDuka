@@ -1,7 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
-import { ScheduleModule } from '@nestjs/schedule';
 import { PaymentsService } from './payments.service';
 import { PaymentsController } from './payments.controller';
 import { DarajaService } from './daraja.service';
@@ -24,7 +23,6 @@ import { Shop, ShopSchema } from '../shops/schemas/shop.schema';
 @Module({
   imports: [
     ConfigModule,
-    ScheduleModule.forRoot(),
     MongooseModule.forFeature([
       { name: PaymentTransaction.name, schema: PaymentTransactionSchema },
       { name: MpesaTransaction.name, schema: MpesaTransactionSchema },

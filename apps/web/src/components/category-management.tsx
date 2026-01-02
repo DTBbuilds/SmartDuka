@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button, Dialog, DialogContent, DialogHeader, DialogTitle, Input, Textarea } from "@smartduka/ui";
 import { Plus, Edit2, Trash2, ChevronDown, ChevronRight, AlertCircle } from "lucide-react";
 import { useToast } from "@/lib/use-toast";
+import { config } from "@/lib/config";
 
 interface Category {
   _id: string;
@@ -51,8 +52,7 @@ export function CategoryManagement({ token }: CategoryManagementProps) {
     if (!token) return;
     try {
       setLoading(true);
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-      const res = await fetch(`${base}/inventory/categories/hierarchy`, {
+      const res = await fetch(`${config.apiUrl}/inventory/categories/hierarchy`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -93,11 +93,10 @@ export function CategoryManagement({ token }: CategoryManagementProps) {
     }
 
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
       const method = editingId ? 'PUT' : 'POST';
       const url = editingId
-        ? `${base}/inventory/categories/${editingId}`
-        : `${base}/inventory/categories`;
+        ? `${config.apiUrl}/inventory/categories/${editingId}`
+        : `${config.apiUrl}/inventory/categories`;
 
       const res = await fetch(url, {
         method,
@@ -153,8 +152,7 @@ export function CategoryManagement({ token }: CategoryManagementProps) {
     if (!confirm('Are you sure you want to delete this category?')) return;
 
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-      const res = await fetch(`${base}/inventory/categories/${categoryId}`, {
+      const res = await fetch(`${config.apiUrl}/inventory/categories/${categoryId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });

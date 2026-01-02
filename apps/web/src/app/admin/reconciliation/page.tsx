@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { config } from "@/lib/config";
 import {
   Badge,
   Button,
@@ -64,8 +65,7 @@ export default function ReconciliationPage() {
 
     setLoading(true);
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-      const res = await fetch(`${base}/financial/reconciliation/history`, {
+      const res = await fetch(`${config.apiUrl}/financial/reconciliation/history`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -88,8 +88,7 @@ export default function ReconciliationPage() {
     if (!token) return;
 
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-      const res = await fetch(`${base}/financial/reconciliation/stats`, {
+      const res = await fetch(`${config.apiUrl}/financial/reconciliation/stats`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -113,8 +112,7 @@ export default function ReconciliationPage() {
     }
 
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-      const res = await fetch(`${base}/financial/reconciliation`, {
+      const res = await fetch(`${config.apiUrl}/financial/reconciliation`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,

@@ -55,11 +55,9 @@ export class MpesaReconciliationService {
    * 
    * Then queries M-Pesa for their actual status
    */
-  @Cron(CronExpression.EVERY_MINUTE)
+  @Cron(CronExpression.EVERY_5_MINUTES)
   async reconcilePendingTransactions(): Promise<void> {
     if (!this.isEnabled) return;
-
-    this.logger.debug('Starting M-Pesa reconciliation job...');
 
     try {
       // Find transactions pending for more than 30 seconds but not expired
@@ -75,7 +73,7 @@ export class MpesaReconciliationService {
         .exec();
 
       if (pendingTransactions.length === 0) {
-        this.logger.debug('No pending transactions to reconcile');
+        // Only log at debug level when nothing to do - reduces log noise
         return;
       }
 

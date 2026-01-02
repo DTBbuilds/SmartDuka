@@ -1,5 +1,6 @@
 'use client';
 
+import { config } from '@/lib/config';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
@@ -47,8 +48,6 @@ export default function StaffAssignmentPage() {
     branchId: '',
   });
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-
   useEffect(() => {
     fetchData();
   }, []);
@@ -57,10 +56,10 @@ export default function StaffAssignmentPage() {
     try {
       setIsLoading(true);
       const [staffRes, branchRes] = await Promise.all([
-        fetch(`${apiUrl}/users`, {
+        fetch(`${config.apiUrl}/users`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
-        fetch(`${apiUrl}/branches`, {
+        fetch(`${config.apiUrl}/branches`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
       ]);
@@ -98,7 +97,7 @@ export default function StaffAssignmentPage() {
     }
 
     try {
-      const res = await fetch(`${apiUrl}/staff-assignment/assign`, {
+      const res = await fetch(`${config.apiUrl}/staff-assignment/assign`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -131,7 +130,7 @@ export default function StaffAssignmentPage() {
     if (!confirm('Are you sure you want to remove this staff member from the branch?')) return;
 
     try {
-      const res = await fetch(`${apiUrl}/staff-assignment/remove`, {
+      const res = await fetch(`${config.apiUrl}/staff-assignment/remove`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',

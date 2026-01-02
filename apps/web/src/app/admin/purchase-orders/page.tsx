@@ -1,5 +1,6 @@
 'use client';
 
+import { config } from '@/lib/config';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
@@ -24,8 +25,6 @@ export default function PurchaseOrdersPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-
   useEffect(() => {
     fetchOrders();
   }, []);
@@ -33,7 +32,7 @@ export default function PurchaseOrdersPage() {
   const fetchOrders = async () => {
     try {
       setIsLoading(true);
-      const res = await fetch(`${apiUrl}/purchases`, {
+      const res = await fetch(`${config.apiUrl}/purchases`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 

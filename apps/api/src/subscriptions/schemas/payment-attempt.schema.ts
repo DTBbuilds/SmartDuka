@@ -21,10 +21,12 @@ export enum PaymentAttemptStatus {
   INITIATED = 'initiated',
   PENDING = 'pending',
   PROCESSING = 'processing',
+  PENDING_APPROVAL = 'pending_approval', // Awaiting super admin approval (for manual payments)
   SUCCESS = 'success',
   FAILED = 'failed',
   CANCELLED = 'cancelled',
   EXPIRED = 'expired',
+  REJECTED = 'rejected', // Super admin rejected the payment
 }
 
 /**
@@ -128,6 +130,28 @@ export class PaymentAttempt {
     callbackData?: any;
     [key: string]: any;
   };
+
+  // Approval workflow for manual payments (send money, bank transfer)
+  @Prop()
+  approvedAt?: Date;
+
+  @Prop()
+  approvedBy?: string;
+
+  @Prop()
+  approvedByEmail?: string;
+
+  @Prop()
+  rejectedAt?: Date;
+
+  @Prop()
+  rejectedBy?: string;
+
+  @Prop()
+  rejectedByEmail?: string;
+
+  @Prop()
+  rejectionReason?: string;
 
   // Auto timestamps
   createdAt?: Date;

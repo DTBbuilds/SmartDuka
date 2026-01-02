@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button, Dialog, DialogContent, DialogHeader, DialogTitle } from "@smartduka/ui";
 import { Upload, X, AlertCircle, CheckCircle, FolderPlus, Sparkles, AlertTriangle, FileSpreadsheet, Folder } from "lucide-react";
 import { parseProductsCSV, getCSVTemplate, downloadCSV, CSVParseResult } from "@/lib/csv-parser";
+import { config } from "@/lib/config";
 
 interface Category {
   _id: string;
@@ -64,8 +65,7 @@ export function CSVImportModal({ isOpen, onClose, onImport, token, categories: p
     const loadCategories = async () => {
       try {
         setLoadingCategories(true);
-        const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-        const res = await fetch(`${base}/inventory/categories`, {
+        const res = await fetch(`${config.apiUrl}/inventory/categories`, {
           headers: { Authorization: `Bearer ${token}` },
         });
 

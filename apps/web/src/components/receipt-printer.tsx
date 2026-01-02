@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { config } from "@/lib/config";
 import {
   Button,
   Card,
@@ -46,8 +47,7 @@ export function ReceiptPrinter({
   const handlePrint = async () => {
     try {
       setLoading(true);
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-      const res = await fetch(`${base}/receipts/print`, {
+      const res = await fetch(`${config.apiUrl}/receipts/print`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -86,8 +86,7 @@ export function ReceiptPrinter({
 
     try {
       setLoading(true);
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-      const res = await fetch(`${base}/receipts/email`, {
+      const res = await fetch(`${config.apiUrl}/receipts/email`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -129,8 +128,7 @@ export function ReceiptPrinter({
 
     try {
       setLoading(true);
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-      const res = await fetch(`${base}/receipts/sms`, {
+      const res = await fetch(`${config.apiUrl}/receipts/sms`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,

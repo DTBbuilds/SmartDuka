@@ -1,5 +1,6 @@
 'use client';
 
+import { config } from '@/lib/config';
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button, Badge } from '@smartduka/ui';
 import {
@@ -79,8 +80,7 @@ export function BranchPerformanceReport() {
   const loadBranches = async () => {
     if (!token) return;
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-      const res = await fetch(`${base}/branches`, {
+      const res = await fetch(`${config.apiUrl}/branches`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const text = await res.text();
@@ -103,9 +103,8 @@ export function BranchPerformanceReport() {
     if (!token || !selectedBranch) return;
     try {
       setLoading(true);
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
       const res = await fetch(
-        `${base}/reports/branch/${selectedBranch}/performance?period=${dateRange}`,
+        `${config.apiUrl}/reports/branch/${selectedBranch}/performance?period=${dateRange}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       const perfText = await res.text();

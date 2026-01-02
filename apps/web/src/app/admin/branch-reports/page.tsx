@@ -1,5 +1,6 @@
 'use client';
 
+import { config } from '@/lib/config';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
@@ -49,8 +50,6 @@ export default function BranchReportsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-
   useEffect(() => {
     fetchBranches();
   }, []);
@@ -63,7 +62,7 @@ export default function BranchReportsPage() {
 
   const fetchBranches = async () => {
     try {
-      const res = await fetch(`${apiUrl}/branches`, {
+      const res = await fetch(`${config.apiUrl}/branches`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -88,13 +87,13 @@ export default function BranchReportsPage() {
       const today = new Date().toISOString().split('T')[0];
 
       const [salesRes, inventoryRes, purchasesRes] = await Promise.all([
-        fetch(`${apiUrl}/sales/branch/${selectedBranch}/daily-sales/${today}`, {
+        fetch(`${config.apiUrl}/sales/branch/${selectedBranch}/daily-sales/${today}`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
-        fetch(`${apiUrl}/inventory/branch/${selectedBranch}/stats`, {
+        fetch(`${config.apiUrl}/inventory/branch/${selectedBranch}/stats`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
-        fetch(`${apiUrl}/purchases/branch/${selectedBranch}/stats`, {
+        fetch(`${config.apiUrl}/purchases/branch/${selectedBranch}/stats`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
       ]);

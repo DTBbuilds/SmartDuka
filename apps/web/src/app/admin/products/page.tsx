@@ -11,7 +11,7 @@ import {
   CardTitle,
   Input,
 } from '@smartduka/ui';
-import { Plus, Trash2, Edit2, Download, Upload, Eye, Search, ChevronDown, ChevronUp, Package, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Trash2, Edit2, Download, Upload, Eye, Search, ChevronDown, ChevronUp, Package, Loader2, ChevronLeft, ChevronRight, History } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
@@ -22,6 +22,7 @@ import { CSVImportModal } from '@/components/csv-import-modal';
 import { downloadCSV } from '@/lib/csv-parser';
 import { AuthGuard } from '@/components/auth-guard';
 import { QuickAddProductForm } from '@/components/quick-add-product-form';
+import { StockHistoryModal } from '@/components/stock-history-modal';
 
 type Product = {
   _id: string;
@@ -56,6 +57,7 @@ function ProductsContent() {
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [stockHistoryProduct, setStockHistoryProduct] = useState<Product | null>(null);
   const itemsPerPage = 20;
 
   useEffect(() => {
@@ -413,6 +415,15 @@ function ProductsContent() {
                       <Button 
                         size="sm" 
                         variant="ghost" 
+                        title="Stock history" 
+                        onClick={() => setStockHistoryProduct(product)}
+                        className="h-9 w-9 p-0 hover:bg-purple-100 hover:text-purple-600 dark:hover:bg-purple-900/30 transition-all active:scale-95"
+                      >
+                        <History className="h-4 w-4" />
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        variant="ghost" 
                         title="View details" 
                         onClick={() => {
                           setActionLoading(product._id + '-view');
@@ -474,6 +485,18 @@ function ProductsContent() {
           token={token || ''}
           categories={categories}
         />
+
+        {/* Stock History Modal */}
+        {stockHistoryProduct && (
+          <StockHistoryModal
+            isOpen={!!stockHistoryProduct}
+            onClose={() => setStockHistoryProduct(null)}
+            productId={stockHistoryProduct._id}
+            productName={stockHistoryProduct.name}
+            currentStock={stockHistoryProduct.stock ?? 0}
+            token={token || ''}
+          />
+        )}
       </div>
     </main>
   );

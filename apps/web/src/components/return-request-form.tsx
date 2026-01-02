@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { config } from "@/lib/config";
 import {
   Button,
   Card,
@@ -113,8 +114,7 @@ export function ReturnRequestForm({ order, onSuccess }: ReturnRequestFormProps) 
 
     setLoading(true);
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-      const res = await fetch(`${base}/returns`, {
+      const res = await fetch(`${config.apiUrl}/returns`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,

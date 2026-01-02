@@ -1,5 +1,6 @@
 'use client';
 
+import { config } from '@/lib/config';
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Badge, Tabs, TabsContent, TabsList, TabsTrigger } from '@smartduka/ui';
 import { useAuth } from '@/lib/auth-context';
@@ -48,8 +49,6 @@ export function PaymentManagement() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-
   const fetchTransactions = useCallback(async () => {
     try {
       setIsLoading(true);
@@ -61,7 +60,7 @@ export function PaymentManagement() {
       if (dateFrom) params.append('from', dateFrom);
       if (dateTo) params.append('to', dateTo);
 
-      const res = await fetch(`${apiUrl}/payments/transactions?${params.toString()}`, {
+      const res = await fetch(`${config.apiUrl}/payments/transactions?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -76,11 +75,11 @@ export function PaymentManagement() {
     } finally {
       setIsLoading(false);
     }
-  }, [apiUrl, token, filterMethod, filterStatus, dateFrom, dateTo, toast]);
+  }, [token, filterMethod, filterStatus, dateFrom, dateTo, toast]);
 
   const fetchStats = useCallback(async () => {
     try {
-      const res = await fetch(`${apiUrl}/payments/stats`, {
+      const res = await fetch(`${config.apiUrl}/payments/stats`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -92,7 +91,7 @@ export function PaymentManagement() {
     } catch (err: any) {
       console.error('Failed to load stats:', err);
     }
-  }, [apiUrl, token]);
+  }, [token]);
 
   useEffect(() => {
     if (token) {
@@ -103,7 +102,7 @@ export function PaymentManagement() {
 
   const handleExport = async () => {
     try {
-      const res = await fetch(`${apiUrl}/payments/export`, {
+      const res = await fetch(`${config.apiUrl}/payments/export`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 

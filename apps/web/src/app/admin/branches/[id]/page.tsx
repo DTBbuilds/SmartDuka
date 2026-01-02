@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
+import { config } from '@/lib/config';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -95,8 +96,19 @@ interface RecentActivity {
   action: string;
   userId?: string;
   userName?: string;
+  userRole?: string;
   details?: any;
   timestamp: string;
+  createdAt?: string;
+}
+
+interface StaffMember {
+  _id: string;
+  name: string;
+  email: string;
+  role: string;
+  status?: string;
+  lastActive?: string;
 }
 
 export default function BranchDetailPage() {
@@ -108,10 +120,12 @@ export default function BranchDetailPage() {
   const [branch, setBranch] = useState<Branch | null>(null);
   const [stats, setStats] = useState<BranchStats | null>(null);
   const [activities, setActivities] = useState<RecentActivity[]>([]);
+  const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
+  const [activityLoading, setActivityLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+  const apiUrl = config.apiUrl;
 
   useEffect(() => {
     if (branchId) {
@@ -149,17 +163,37 @@ export default function BranchDetailPage() {
         // Stats endpoint may not exist yet
       }
 
-      // Fetch recent activity (optional - may not exist yet)
+      // Fetch recent activity
+      setActivityLoading(true);
       try {
-        const activityRes = await fetch(`${apiUrl}/activity?branchId=${branchId}&limit=10`, {
+        const activityRes = await fetch(`${apiUrl}/activity?branchId=${branchId}&limit=20`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (activityRes.ok) {
           const activityData = await activityRes.json();
-          setActivities(Array.isArray(activityData) ? activityData : (activityData.data || []));
+          const activityList = Array.isArray(activityData) ? activityData : (activityData.data || []);
+          // Filter out heartbeat actions for cleaner display
+          setActivities(activityList.filter((a: RecentActivity) => a.action !== 'heartbeat'));
         }
       } catch {
         // Activity endpoint may not exist yet
+      } finally {
+        setActivityLoading(false);
+      }
+
+      // Fetch staff members for this branch
+      if (branchData.staffIds && branchData.staffIds.length > 0) {
+        try {
+          const staffRes = await fetch(`${apiUrl}/users?ids=${branchData.staffIds.join(',')}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (staffRes.ok) {
+            const staffData = await staffRes.json();
+            setStaffMembers(staffData.data || staffData || []);
+          }
+        } catch {
+          // Staff endpoint may not exist
+        }
       }
     } catch (err: any) {
       setError(err.message || 'Failed to load branch details');
@@ -200,6 +234,50 @@ export default function BranchDetailPage() {
       hour: '2-digit',
       minute: '2-digit',
     });
+
+  const getActivityIcon = (action: string): { icon: React.ReactNode; bg: string } => {
+    const icons: Record<string, { icon: React.ReactNode; bg: string }> = {
+      login: { icon: <Users className="h-4 w-4 text-green-600" />, bg: 'bg-green-100' },
+      login_pin: { icon: <Users className="h-4 w-4 text-green-600" />, bg: 'bg-green-100' },
+      logout: { icon: <Users className="h-4 w-4 text-gray-600" />, bg: 'bg-gray-100' },
+      checkout: { icon: <TrendingUp className="h-4 w-4 text-blue-600" />, bg: 'bg-blue-100' },
+      product_add: { icon: <Package className="h-4 w-4 text-purple-600" />, bg: 'bg-purple-100' },
+      product_edit: { icon: <Edit2 className="h-4 w-4 text-orange-600" />, bg: 'bg-orange-100' },
+      stock_update: { icon: <Package className="h-4 w-4 text-indigo-600" />, bg: 'bg-indigo-100' },
+      status_change: { icon: <Activity className="h-4 w-4 text-yellow-600" />, bg: 'bg-yellow-100' },
+    };
+    return icons[action] || { icon: <Activity className="h-4 w-4 text-gray-600" />, bg: 'bg-gray-100' };
+  };
+
+  const formatActivityAction = (action: string): string => {
+    const labels: Record<string, string> = {
+      login: 'Logged In',
+      login_pin: 'Logged In (PIN)',
+      logout: 'Logged Out',
+      checkout: 'Completed Sale',
+      product_add: 'Added Product',
+      product_edit: 'Edited Product',
+      product_delete: 'Deleted Product',
+      stock_update: 'Updated Stock',
+      status_change: 'Status Changed',
+      shift_start: 'Started Shift',
+      shift_end: 'Ended Shift',
+      transaction_void: 'Voided Transaction',
+      transaction_refund: 'Processed Refund',
+    };
+    return labels[action] || action.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  };
+
+  const formatActivityDetails = (details: any): string => {
+    if (!details) return '';
+    const parts: string[] = [];
+    if (details.amount) parts.push(`KES ${details.amount.toLocaleString()}`);
+    if (details.items) parts.push(`${details.items} items`);
+    if (details.productName) parts.push(details.productName);
+    if (details.paymentMethod) parts.push(details.paymentMethod);
+    if (details.status) parts.push(details.status);
+    return parts.join(' • ');
+  };
 
   if (isLoading) {
     return (
@@ -504,26 +582,47 @@ export default function BranchDetailPage() {
               <CardDescription>Latest actions at this branch</CardDescription>
             </CardHeader>
             <CardContent>
-              {activities.length === 0 ? (
+              {activityLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : activities.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
-                  No recent activity recorded
+                  <Activity className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                  <p>No recent activity recorded for this branch</p>
+                  <p className="text-sm mt-1">Activity will appear here as staff perform actions</p>
                 </div>
               ) : (
                 <div className="space-y-3">
                   {activities.map((activity) => (
                     <div
                       key={activity._id}
-                      className="flex items-center justify-between p-3 border rounded-lg"
+                      className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors"
                     >
-                      <div>
-                        <p className="font-medium">{activity.action}</p>
-                        {activity.userName && (
-                          <p className="text-sm text-muted-foreground">by {activity.userName}</p>
-                        )}
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-full ${getActivityIcon(activity.action).bg}`}>
+                          {getActivityIcon(activity.action).icon}
+                        </div>
+                        <div>
+                          <p className="font-medium">{formatActivityAction(activity.action)}</p>
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            {activity.userName && <span>by {activity.userName}</span>}
+                            {activity.userRole && (
+                              <Badge variant="outline" className="text-xs">
+                                {activity.userRole}
+                              </Badge>
+                            )}
+                          </div>
+                          {activity.details && Object.keys(activity.details).length > 0 && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {formatActivityDetails(activity.details)}
+                            </p>
+                          )}
+                        </div>
                       </div>
                       <div className="text-right text-sm text-muted-foreground">
-                        <p>{formatDate(activity.timestamp)}</p>
-                        <p>{formatTime(activity.timestamp)}</p>
+                        <p>{formatDate(activity.timestamp || activity.createdAt || '')}</p>
+                        <p>{formatTime(activity.timestamp || activity.createdAt || '')}</p>
                       </div>
                     </div>
                   ))}
@@ -540,6 +639,7 @@ export default function BranchDetailPage() {
                 <CardTitle>Branch Staff</CardTitle>
                 <CardDescription>
                   {branch.staffIds?.length || 0} staff members assigned
+                  {branch.maxStaff && ` (max: ${branch.maxStaff})`}
                 </CardDescription>
               </div>
               <Button
@@ -552,12 +652,53 @@ export default function BranchDetailPage() {
             <CardContent>
               {!branch.staffIds || branch.staffIds.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
-                  No staff assigned to this branch yet
+                  <Users className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                  <p>No staff assigned to this branch yet</p>
+                  <Button
+                    variant="link"
+                    onClick={() => router.push('/admin/staff-assignment')}
+                    className="mt-2"
+                  >
+                    Assign Staff Members
+                  </Button>
+                </div>
+              ) : staffMembers.length > 0 ? (
+                <div className="space-y-3">
+                  {staffMembers.map((staff) => (
+                    <div
+                      key={staff._id}
+                      className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                          <span className="text-sm font-medium text-primary">
+                            {staff.name?.charAt(0)?.toUpperCase() || 'U'}
+                          </span>
+                        </div>
+                        <div>
+                          <p className="font-medium">{staff.name}</p>
+                          <p className="text-sm text-muted-foreground">{staff.email}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="capitalize">
+                          {staff.role}
+                        </Badge>
+                        {staff.status && (
+                          <Badge 
+                            variant={staff.status === 'active' ? 'default' : 'secondary'}
+                            className="capitalize"
+                          >
+                            {staff.status}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
-                  {branch.staffIds.length} staff member(s) assigned
-                  <br />
+                  <p>{branch.staffIds.length} staff member(s) assigned</p>
                   <Button
                     variant="link"
                     onClick={() => router.push('/admin/staff-assignment')}

@@ -1,5 +1,6 @@
 'use client';
 
+import { config } from '@/lib/config';
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button, Badge } from '@smartduka/ui';
 import {
@@ -70,13 +71,12 @@ export function BranchStockSharing() {
     if (!token) return;
     try {
       setLoading(true);
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
       const headers = { Authorization: `Bearer ${token}` };
 
       const [branchesRes, productsRes, transfersRes] = await Promise.all([
-        fetch(`${base}/branches`, { headers }),
-        fetch(`${base}/inventory/products?limit=200`, { headers }),
-        fetch(`${base}/inventory/stock-transfers`, { headers }),
+        fetch(`${config.apiUrl}/branches`, { headers }),
+        fetch(`${config.apiUrl}/inventory/products?limit=200`, { headers }),
+        fetch(`${config.apiUrl}/inventory/stock-transfers`, { headers }),
       ]);
 
       if (branchesRes.ok) {
@@ -119,8 +119,7 @@ export function BranchStockSharing() {
 
     try {
       setSubmitting(true);
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-      const res = await fetch(`${base}/inventory/stock-transfers`, {
+      const res = await fetch(`${config.apiUrl}/inventory/stock-transfers`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -156,8 +155,7 @@ export function BranchStockSharing() {
 
   const handleApproveTransfer = async (transferId: string) => {
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-      const res = await fetch(`${base}/inventory/stock-transfers/${transferId}/approve`, {
+      const res = await fetch(`${config.apiUrl}/inventory/stock-transfers/${transferId}/approve`, {
         method: 'PUT',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -178,8 +176,7 @@ export function BranchStockSharing() {
 
   const handleRejectTransfer = async (transferId: string) => {
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-      const res = await fetch(`${base}/inventory/stock-transfers/${transferId}/reject`, {
+      const res = await fetch(`${config.apiUrl}/inventory/stock-transfers/${transferId}/reject`, {
         method: 'PUT',
         headers: { Authorization: `Bearer ${token}` },
       });

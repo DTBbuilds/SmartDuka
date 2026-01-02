@@ -79,6 +79,13 @@ export const defaultPaymentOptions: PaymentOption[] = [
   },
 ];
 
+interface MpesaConfigStatus {
+  isConfigured: boolean;
+  isVerified: boolean;
+  isEnabled: boolean;
+  shortCode?: string;
+}
+
 interface PaymentMethodModalProps {
   isOpen: boolean;
   total: number;
@@ -86,6 +93,7 @@ interface PaymentMethodModalProps {
   customerName?: string;
   customerPhone?: string;
   paymentOptions?: PaymentOption[];
+  mpesaConfigStatus?: MpesaConfigStatus | null;
   onConfirm: (paymentMethod: string, amountTendered?: number, phoneNumber?: string) => void;
   onCancel: () => void;
 }
@@ -120,6 +128,7 @@ export function PaymentMethodModal({
   customerName,
   customerPhone: initialPhone,
   paymentOptions = defaultPaymentOptions,
+  mpesaConfigStatus,
   onConfirm,
   onCancel,
 }: PaymentMethodModalProps) {
@@ -149,6 +158,22 @@ export function PaymentMethodModal({
       setStep('cash-input');
       setAmountTendered(0);
     } else if (methodId === 'mpesa') {
+      // Check M-Pesa config status before proceeding
+      if (!mpesaConfigStatus?.isConfigured) {
+        setPhoneError('M-Pesa is not configured. Go to Settings → Payments → M-Pesa to set up your credentials.');
+        setStep('mpesa-input');
+        return;
+      }
+      if (!mpesaConfigStatus?.isEnabled) {
+        setPhoneError('M-Pesa payments are disabled. Enable M-Pesa in Settings → Payments.');
+        setStep('mpesa-input');
+        return;
+      }
+      if (!mpesaConfigStatus?.isVerified) {
+        setPhoneError('M-Pesa credentials not verified. Verify your credentials in Settings → Payments → M-Pesa.');
+        setStep('mpesa-input');
+        return;
+      }
       // For M-Pesa, show phone input step
       setStep('mpesa-input');
       setPhoneError('');
@@ -321,23 +346,47 @@ export function PaymentMethodModal({
             {/* Primary Payment Options - Large buttons */}
             <div className="p-4 space-y-3">
               <div className="grid grid-cols-2 gap-3">
-                {primaryOptions.map((option) => (
-                  <button
-                    key={option.id}
-                    onClick={() => handleMethodSelect(option.id)}
-                    className="flex flex-col items-center justify-center gap-2 p-4 rounded-xl border-2 border-border bg-card hover:border-primary hover:bg-primary/5 transition-all duration-200 group"
-                  >
-                    <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-                      <option.icon className="h-6 w-6 text-primary" />
-                    </div>
-                    <div className="text-center">
-                      <p className="font-semibold text-sm">{option.label}</p>
-                      {option.description && (
-                        <p className="text-xs text-muted-foreground">{option.description}</p>
+                {primaryOptions.map((option) => {
+                  // Check if M-Pesa is not configured
+                  const isMpesaDisabled = option.id === 'mpesa' && (
+                    !mpesaConfigStatus?.isConfigured || 
+                    !mpesaConfigStatus?.isEnabled || 
+                    !mpesaConfigStatus?.isVerified
+                  );
+                  
+                  return (
+                    <button
+                      key={option.id}
+                      onClick={() => handleMethodSelect(option.id)}
+                      className={`flex flex-col items-center justify-center gap-2 p-4 rounded-xl border-2 transition-all duration-200 group relative ${
+                        isMpesaDisabled 
+                          ? 'border-amber-300 bg-amber-50 dark:bg-amber-950/30 hover:border-amber-400' 
+                          : 'border-border bg-card hover:border-primary hover:bg-primary/5'
+                      }`}
+                    >
+                      {isMpesaDisabled && (
+                        <div className="absolute -top-2 -right-2 bg-amber-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-medium">
+                          Setup
+                        </div>
                       )}
-                    </div>
-                  </button>
-                ))}
+                      <div className={`h-12 w-12 rounded-full flex items-center justify-center transition-colors ${
+                        isMpesaDisabled 
+                          ? 'bg-amber-100 dark:bg-amber-900/50 group-hover:bg-amber-200 dark:group-hover:bg-amber-900' 
+                          : 'bg-primary/10 group-hover:bg-primary/20'
+                      }`}>
+                        <option.icon className={`h-6 w-6 ${isMpesaDisabled ? 'text-amber-600' : 'text-primary'}`} />
+                      </div>
+                      <div className="text-center">
+                        <p className="font-semibold text-sm">{option.label}</p>
+                        {isMpesaDisabled ? (
+                          <p className="text-xs text-amber-600 dark:text-amber-400">Not configured</p>
+                        ) : option.description && (
+                          <p className="text-xs text-muted-foreground">{option.description}</p>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
 
               {/* Secondary Payment Options - Smaller buttons */}

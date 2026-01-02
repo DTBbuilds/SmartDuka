@@ -1,5 +1,6 @@
 'use client';
 
+import { config } from '@/lib/config';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button, Badge } from '@smartduka/ui';
@@ -64,16 +65,15 @@ function AdminMonitoringContent() {
 
     try {
       setLoading(true);
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
       const headers = { Authorization: `Bearer ${token}` };
 
       // Get cashiers
-      const cashiersRes = await fetch(`${base}/users/shop/${shop.id}/cashiers`, {
+      const cashiersRes = await fetch(`${config.apiUrl}/users/shop/${shop.id}/cashiers`, {
         headers,
       });
 
       // Get all cashier sales stats from the new endpoint
-      const salesStatsRes = await fetch(`${base}/sales/all-cashier-stats`, {
+      const salesStatsRes = await fetch(`${config.apiUrl}/sales/all-cashier-stats`, {
         headers,
       });
 
@@ -113,7 +113,7 @@ function AdminMonitoringContent() {
       }
 
       // Get activity log
-      const activityRes = await fetch(`${base}/activity/shop?limit=20`, {
+      const activityRes = await fetch(`${config.apiUrl}/activity/shop?limit=20`, {
         headers,
       });
 

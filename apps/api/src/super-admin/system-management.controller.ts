@@ -97,6 +97,30 @@ export class SystemManagementController {
   }
 
   /**
+   * Get all sales invoice payments (send money, bank transfer, M-Pesa, etc.)
+   */
+  @Get('invoice-payments')
+  async getSalesInvoicePayments(
+    @Query('paymentMethod') paymentMethod?: string,
+    @Query('paymentStatus') paymentStatus?: string,
+    @Query('shopId') shopId?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('limit') limit?: string,
+    @Query('skip') skip?: string,
+  ) {
+    return this.systemService.getSalesInvoicePayments({
+      paymentMethod,
+      paymentStatus,
+      shopId,
+      startDate: startDate ? new Date(startDate) : undefined,
+      endDate: endDate ? new Date(endDate) : undefined,
+      limit: limit ? parseInt(limit) : 50,
+      skip: skip ? parseInt(skip) : 0,
+    });
+  }
+
+  /**
    * Get all payment transactions (shop sales)
    */
   @Get('transactions')
@@ -476,5 +500,90 @@ export class SystemManagementController {
     this.logger.log(`Toggling VAT: enabled=${body.enabled}`);
     await this.configService.toggleVatEnabled(body.enabled, user.email);
     return this.configService.getVatConfig();
+  }
+
+  // ============================================
+  // PAYMENT APPROVAL WORKFLOW
+  // ============================================
+
+  /**
+   * Get all pending payment approvals (invoice and subscription)
+   */
+  @Get('pending-approvals')
+  async getPendingApprovals() {
+    this.logger.log('Fetching pending payment approvals');
+    return this.systemService.getPendingApprovals();
+  }
+
+  /**
+   * Approve an invoice payment
+   */
+  @Post('invoice-payments/:invoiceId/:paymentId/approve')
+  async approveInvoicePayment(
+    @CurrentUser() user: JwtPayload,
+    @Param('invoiceId') invoiceId: string,
+    @Param('paymentId') paymentId: string,
+  ) {
+    this.logger.log(`Approving invoice payment: ${invoiceId}/${paymentId} by ${user.email}`);
+    return this.systemService.approveInvoicePayment(
+      invoiceId,
+      paymentId,
+      user.sub,
+      user.email,
+    );
+  }
+
+  /**
+   * Reject an invoice payment
+   */
+  @Post('invoice-payments/:invoiceId/:paymentId/reject')
+  async rejectInvoicePayment(
+    @CurrentUser() user: JwtPayload,
+    @Param('invoiceId') invoiceId: string,
+    @Param('paymentId') paymentId: string,
+    @Body() body: { reason: string },
+  ) {
+    this.logger.log(`Rejecting invoice payment: ${invoiceId}/${paymentId} by ${user.email}`);
+    return this.systemService.rejectInvoicePayment(
+      invoiceId,
+      paymentId,
+      user.sub,
+      user.email,
+      body.reason,
+    );
+  }
+
+  /**
+   * Approve a subscription payment
+   */
+  @Post('subscription-payments/:paymentAttemptId/approve')
+  async approveSubscriptionPayment(
+    @CurrentUser() user: JwtPayload,
+    @Param('paymentAttemptId') paymentAttemptId: string,
+  ) {
+    this.logger.log(`Approving subscription payment: ${paymentAttemptId} by ${user.email}`);
+    return this.systemService.approveSubscriptionPayment(
+      paymentAttemptId,
+      user.sub,
+      user.email,
+    );
+  }
+
+  /**
+   * Reject a subscription payment
+   */
+  @Post('subscription-payments/:paymentAttemptId/reject')
+  async rejectSubscriptionPayment(
+    @CurrentUser() user: JwtPayload,
+    @Param('paymentAttemptId') paymentAttemptId: string,
+    @Body() body: { reason: string },
+  ) {
+    this.logger.log(`Rejecting subscription payment: ${paymentAttemptId} by ${user.email}`);
+    return this.systemService.rejectSubscriptionPayment(
+      paymentAttemptId,
+      user.sub,
+      user.email,
+      body.reason,
+    );
   }
 }

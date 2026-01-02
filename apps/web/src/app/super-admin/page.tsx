@@ -1,5 +1,6 @@
 'use client';
 
+import { config } from '@/lib/config';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Badge } from '@smartduka/ui';
@@ -54,8 +55,7 @@ export default function SuperAdminDashboard() {
     if (!token) return;
     try {
       setLoading(true);
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-      const res = await fetch(`${base}/super-admin/dashboard/stats`, {
+      const res = await fetch(`${config.apiUrl}/super-admin/dashboard/stats`, {
         headers: { 
           Authorization: `Bearer ${token}`,
           'Cache-Control': 'no-cache',

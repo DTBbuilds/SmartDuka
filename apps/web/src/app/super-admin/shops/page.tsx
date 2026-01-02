@@ -1,5 +1,6 @@
 'use client';
 
+import { config } from '@/lib/config';
 import { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Badge, Tabs, TabsContent, TabsList, TabsTrigger, Button, Input } from '@smartduka/ui';
@@ -62,10 +63,9 @@ export default function ShopsManagement() {
     if (!token) return;
     try {
       setLoading(true);
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
       // Use 'all' endpoint for all shops, otherwise use status-specific endpoint
       const endpoint = activeTab === 'all' ? '/super-admin/shops' : `/super-admin/shops/${activeTab}`;
-      const res = await fetch(`${base}${endpoint}`, {
+      const res = await fetch(`${config.apiUrl}${endpoint}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -87,8 +87,7 @@ export default function ShopsManagement() {
   const handleVerify = async (shopId: string) => {
     if (!token) return;
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-      const res = await fetch(`${base}/super-admin/shops/${shopId}/verify`, {
+      const res = await fetch(`${config.apiUrl}/super-admin/shops/${shopId}/verify`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -111,8 +110,7 @@ export default function ShopsManagement() {
   const handleReject = async (shopId: string) => {
     if (!token) return;
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-      const res = await fetch(`${base}/super-admin/shops/${shopId}/reject`, {
+      const res = await fetch(`${config.apiUrl}/super-admin/shops/${shopId}/reject`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -135,8 +133,7 @@ export default function ShopsManagement() {
   const handleSuspend = async (shopId: string) => {
     if (!token) return;
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-      const res = await fetch(`${base}/super-admin/shops/${shopId}/suspend`, {
+      const res = await fetch(`${config.apiUrl}/super-admin/shops/${shopId}/suspend`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -159,8 +156,7 @@ export default function ShopsManagement() {
   const handleReactivate = async (shopId: string) => {
     if (!token) return;
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-      const res = await fetch(`${base}/super-admin/shops/${shopId}/reactivate`, {
+      const res = await fetch(`${config.apiUrl}/super-admin/shops/${shopId}/reactivate`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

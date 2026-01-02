@@ -1,7 +1,6 @@
 import { Module, OnModuleInit } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
-import { ScheduleModule } from '@nestjs/schedule';
 import { SubscriptionsService } from './subscriptions.service';
 import { SubscriptionGuardService } from './subscription-guard.service';
 import { SubscriptionMpesaService } from './subscription-mpesa.service';
@@ -25,7 +24,6 @@ import { PaymentsModule } from '../payments/payments.module';
 @Module({
   imports: [
     ConfigModule,
-    ScheduleModule.forRoot(),
     MongooseModule.forFeature([
       { name: Subscription.name, schema: SubscriptionSchema },
       { name: SubscriptionPlan.name, schema: SubscriptionPlanSchema },

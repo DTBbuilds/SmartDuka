@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { config } from "@/lib/config";
 import {
   Badge,
   Button,
@@ -85,7 +86,7 @@ export default function ProductDetailsPage() {
 
   const fetchProduct = async () => {
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+      const apiUrl = config.apiUrl;
       const res = await fetch(`${apiUrl}/inventory/products/${productId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -108,7 +109,7 @@ export default function ProductDetailsPage() {
 
   const fetchStockMovements = async () => {
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+      const apiUrl = config.apiUrl;
       const res = await fetch(`${apiUrl}/inventory/stock/movements/${productId}?limit=10`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -127,7 +128,7 @@ export default function ProductDetailsPage() {
   const handleDelete = async () => {
     setIsDeleting(true);
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+      const apiUrl = config.apiUrl;
       const res = await fetch(`${apiUrl}/inventory/products/${productId}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },

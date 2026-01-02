@@ -1,5 +1,6 @@
 'use client';
 
+import { config } from '@/lib/config';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { TrendingUp, Package, Users, ShoppingCart, Crown } from 'lucide-react';
@@ -20,15 +21,13 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-
   useEffect(() => {
     fetchStats();
   }, []);
 
   const fetchStats = async () => {
     try {
-      const res = await fetch(`${apiUrl}/sales/stats`, {
+      const res = await fetch(`${config.apiUrl}/sales/stats`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 

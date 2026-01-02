@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { Button, Input } from '@smartduka/ui';
-import { NumericKeypad } from '../numeric-keypad';
 import { ShopSelector } from '../shop-selector';
-import { User, Lock, Loader2, ArrowRight } from 'lucide-react';
+import { User, Lock, Loader2, ArrowRight, Star, Clock } from 'lucide-react';
+import { getPreferredShop, getRecentShops, getTimeSinceLastLogin, type RecentShop } from '@/lib/device-memory';
 
 interface Shop {
   id: string;
@@ -19,24 +19,54 @@ interface CashierLoginFormProps {
   shops: Shop[];
   onSubmit: (name: string, pin: string, shopId: string) => Promise<void>;
   isLoading?: boolean;
+  preferredShopId?: string;
+  recentShops?: RecentShop[];
 }
 
 export function CashierLoginForm({
   shops,
   onSubmit,
   isLoading = false,
+  preferredShopId,
+  recentShops = [],
 }: CashierLoginFormProps) {
-  const [name, setName] = useState('');
+  // Use preferred shop if available
+  const [shopId, setShopId] = useState(() => {
+    if (preferredShopId && shops.some(s => s.id === preferredShopId)) {
+      return preferredShopId;
+    }
+    const preferred = getPreferredShop();
+    if (preferred && shops.some(s => s.id === preferred.id)) {
+      return preferred.id;
+    }
+    return shops[0]?.id || '';
+  });
+  
+  // Get saved name from recent shop if available
+  const [name, setName] = useState(() => {
+    const recent = recentShops.find(s => s.id === shopId);
+    return recent?.lastUserName || '';
+  });
   const [pin, setPin] = useState('');
-  const [shopId, setShopId] = useState(shops[0]?.id || '');
-  const [step, setStep] = useState<'shop' | 'credentials'>('shop');
+  
+  // Auto-skip to credentials if we have a preferred shop
+  const hasPreferredShop = !!preferredShopId || !!getPreferredShop();
+  const [step, setStep] = useState<'shop' | 'credentials'>(hasPreferredShop ? 'credentials' : 'shop');
 
-  // Load saved name from localStorage
+  // Load saved name from localStorage or recent shop
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    // First check recent shops for this shop
+    const deviceRecentShops = getRecentShops();
+    const recentForShop = deviceRecentShops.find(s => s.id === shopId);
+    if (recentForShop?.lastUserName) {
+      setName(recentForShop.lastUserName);
+      return;
+    }
+    // Fallback to localStorage
     const savedName = localStorage.getItem('smartduka:cashierName');
     if (savedName) setName(savedName);
-  }, []);
+  }, [shopId]);
 
   // Save name to localStorage when it changes
   useEffect(() => {
@@ -45,28 +75,11 @@ export function CashierLoginForm({
     }
   }, [name]);
 
-  const handlePinInput = (digit: string) => {
-    if (pin.length < 6) {
-      setPin(pin + digit);
-    }
-  };
-
-  const handlePinKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Backspace') {
-      e.preventDefault();
-      setPin(pin.slice(0, -1));
-    }
-  };
-
   const handlePinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value.replace(/\D/g, '');
     if (value.length <= 6) {
       setPin(value);
     }
-  };
-
-  const handleClear = () => {
-    setPin('');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -79,14 +92,47 @@ export function CashierLoginForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
+      {/* Quick Shop Indicator (when we have a preferred shop) */}
+      {step === 'credentials' && hasPreferredShop && (
+        <div className="flex items-center gap-3 p-3 bg-primary/5 border border-primary/20 rounded-xl mb-2">
+          <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+            <Star className="h-5 w-5 text-primary" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="font-medium text-foreground truncate">
+              {shops.find(s => s.id === shopId)?.name || 'Your Shop'}
+            </div>
+            <div className="text-xs text-muted-foreground flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              Remembered from last login
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setStep('shop')}
+            className="text-xs text-primary hover:underline"
+          >
+            Change
+          </button>
+        </div>
+      )}
+
       {/* Step 1: Shop Selection */}
-      <div className={step === 'credentials' ? 'opacity-60' : ''}>
+      <div className={step === 'credentials' ? 'hidden' : ''}>
         <ShopSelector
           shops={shops}
           selectedShopId={shopId}
           onShopChange={(id) => {
             setShopId(id);
-            if (id) setStep('credentials');
+            if (id) {
+              // Load name for this shop if available
+              const deviceRecentShops = getRecentShops();
+              const recentForShop = deviceRecentShops.find(s => s.id === id);
+              if (recentForShop?.lastUserName) {
+                setName(recentForShop.lastUserName);
+              }
+              setStep('credentials');
+            }
           }}
           disabled={isLoading}
           label="Step 1: Select Your Shop"
@@ -137,46 +183,25 @@ export function CashierLoginForm({
               Step 3: Enter Your PIN
             </label>
             
-            {/* PIN Display Dots */}
-            <div className="flex justify-center gap-3 mb-4">
-              {[...Array(6)].map((_, i) => (
-                <div
-                  key={i}
-                  className={`
-                    h-4 w-4 rounded-full transition-all duration-200
-                    ${i < pin.length 
-                      ? 'bg-gradient-to-br from-blue-500 to-indigo-600 scale-110 shadow-lg shadow-blue-500/30' 
-                      : 'bg-slate-200 dark:bg-slate-700'
-                    }
-                  `}
-                />
-              ))}
-            </div>
-
-            {/* Hidden PIN Input for keyboard */}
-            <div className="relative mb-3">
+            {/* PIN Input - uses device keyboard */}
+            <div className="relative">
               <div className="absolute left-3 top-1/2 -translate-y-1/2 h-9 w-9 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
                 <Lock className="h-4 w-4 text-slate-500" />
               </div>
               <Input
                 id="pin"
                 type="password"
-                placeholder="Enter PIN or use keypad"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                placeholder="Enter 4-6 digit PIN"
                 value={pin}
                 onChange={handlePinChange}
-                onKeyDown={handlePinKeyDown}
                 maxLength={6}
                 disabled={isLoading}
-                className="h-14 pl-14 pr-4 text-center text-xl tracking-[0.5em] font-bold border-2 border-slate-200 dark:border-slate-700 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+                className="h-14 pl-14 pr-4 text-center text-xl tracking-[0.3em] font-bold border-2 border-slate-200 dark:border-slate-700 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
               />
             </div>
-
-            {/* Numeric Keypad */}
-            <NumericKeypad
-              onInput={handlePinInput}
-              onClear={handleClear}
-              disabled={isLoading}
-            />
+            <p className="text-xs text-muted-foreground mt-1.5 text-center">4-6 digit PIN from your admin</p>
           </div>
 
           {/* Submit Button */}

@@ -26,6 +26,9 @@ import {
   Crown,
   Inbox,
   Target,
+  Building2,
+  ArrowLeftRight,
+  Activity,
 } from 'lucide-react';
 import { Button } from '@smartduka/ui';
 import { useAuth } from '@/lib/auth-context';
@@ -62,6 +65,15 @@ const adminNavSections: NavSection[] = [
       { name: 'Products', href: '/admin/products', icon: Package },
       { name: 'Categories', href: '/admin/categories', icon: Boxes },
       { name: 'Stock Adjustments', href: '/stock/adjustments', icon: Grid3x3 },
+      { name: 'Stock Transfers', href: '/admin/stock-transfers', icon: ArrowLeftRight },
+    ],
+  },
+  {
+    title: 'Branches',
+    items: [
+      { name: 'All Branches', href: '/admin/branches', icon: Building2 },
+      { name: 'Staff Assignment', href: '/admin/staff-assignment', icon: Users },
+      { name: 'Staff Monitoring', href: '/admin/staff-monitoring', icon: Activity },
     ],
   },
   {

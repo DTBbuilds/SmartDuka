@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
+import { config } from '@/lib/config';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Search, ShoppingCart, Plus, Minus, Trash2 } from 'lucide-react';
@@ -28,15 +29,13 @@ export default function POSTerminalPage() {
   const [search, setSearch] = useState('');
   const [isLoading, setIsLoading] = useState(true);
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-
   useEffect(() => {
     fetchProducts();
   }, []);
 
   const fetchProducts = async () => {
     try {
-      const res = await fetch(`${apiUrl}/inventory/products`, {
+      const res = await fetch(`${config.apiUrl}/inventory/products`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const text = await res.text();

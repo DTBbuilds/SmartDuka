@@ -131,7 +131,7 @@ export class SubscriptionMpesaService implements OnModuleInit {
         this.consumerSecret = this.configService.get('MPESA_CONSUMER_SECRET', '');
         this.passKey = this.configService.get('MPESA_PASSKEY', '');
         this.shortCode = this.configService.get('MPESA_SHORTCODE', '174379');
-        this.environment = this.configService.get('MPESA_ENV', 'sandbox') as any;
+        this.environment = this.configService.get('MPESA_ENV', 'sandbox') as 'sandbox' | 'production';
         this.callbackUrl = this.configService.get('MPESA_CALLBACK_URL', '');
         this.configSource = 'environment';
         
@@ -146,7 +146,7 @@ export class SubscriptionMpesaService implements OnModuleInit {
       this.consumerSecret = this.configService.get('MPESA_CONSUMER_SECRET', '');
       this.passKey = this.configService.get('MPESA_PASSKEY', '');
       this.shortCode = this.configService.get('MPESA_SHORTCODE', '174379');
-      this.environment = this.configService.get('MPESA_ENV', 'sandbox') as any;
+      this.environment = this.configService.get('MPESA_ENV', 'sandbox') as 'sandbox' | 'production';
       this.callbackUrl = this.configService.get('MPESA_CALLBACK_URL', '');
       this.configSource = 'environment';
     }
@@ -674,21 +674,27 @@ export class SubscriptionMpesaService implements OnModuleInit {
 
       // Create an invoice for this upgrade payment (plan change will be done via subscription service)
       const invoiceNumber = `UPG-${Date.now().toString(36).toUpperCase()}`;
+      const now = new Date();
+      const periodEnd = new Date(Date.now() + (billingCycle === 'annual' ? 365 : 30) * 24 * 60 * 60 * 1000);
+      
       const invoice = new this.invoiceModel({
         shopId: new Types.ObjectId(shopId),
         subscriptionId: subscription._id,
         invoiceNumber,
         type: 'upgrade',
         description: `Upgrade to ${planCode} Plan`,
-        subtotal: amount,
+        amount: amount,
+        currency: 'KES',
+        discount: 0,
         tax: 0,
         totalAmount: amount,
+        dueDate: now, // Due immediately for upgrade
         status: 'paid',
-        paidAt: new Date(),
+        paidAt: now,
         mpesaReceiptNumber: normalizedReceipt,
         paymentMethod: 'mpesa_manual',
-        periodStart: new Date(),
-        periodEnd: new Date(Date.now() + (billingCycle === 'annual' ? 365 : 30) * 24 * 60 * 60 * 1000),
+        periodStart: now,
+        periodEnd: periodEnd,
       });
 
       await invoice.save();

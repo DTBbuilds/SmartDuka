@@ -1,5 +1,6 @@
 'use client';
 
+import { config } from '@/lib/config';
 import { useEffect, useState } from 'react';
 import {
   Badge,
@@ -48,8 +49,7 @@ function ReportsContent() {
     if (!token || !date) return;
     try {
       setLoading(true);
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
-      const res = await fetch(`${base}/sales/daily-sales/${date}`, {
+      const res = await fetch(`${config.apiUrl}/sales/daily-sales/${date}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error(`Failed (${res.status})`);

@@ -19,8 +19,17 @@ const FRONTEND_URLS = {
   production: process.env.NEXT_PUBLIC_FRONTEND_URL || 'https://smartduka.vercel.app',
 } as const;
 
+// API version prefix
+const API_VERSION = '/api/v1';
+
 // Get the appropriate URL based on environment
 const getBackendUrl = (): string => {
+  const baseUrl = isDevelopment ? BACKEND_URLS.development : BACKEND_URLS.production;
+  return `${baseUrl}${API_VERSION}`;
+};
+
+// Get base backend URL without API version (for webhooks, health checks)
+const getBackendBaseUrl = (): string => {
   if (isDevelopment) {
     return BACKEND_URLS.development;
   }
@@ -40,13 +49,19 @@ export const config = {
   isProduction,
   nodeEnv: process.env.NODE_ENV || 'development',
   
-  // Backend API URL
+  // Backend API URL (includes /api/v1 prefix)
   apiUrl: getBackendUrl(),
+  
+  // Backend base URL (without API version - for health checks, webhooks)
+  apiBaseUrl: getBackendBaseUrl(),
   
   // Frontend URL
   frontendUrl: getFrontendUrl(),
   
-  // API endpoints
+  // API version
+  apiVersion: API_VERSION,
+  
+  // API endpoints (relative to apiUrl)
   endpoints: {
     auth: {
       login: '/auth/login',

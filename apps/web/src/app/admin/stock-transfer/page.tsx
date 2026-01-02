@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { config } from "@/lib/config";
 import {
   Badge,
   Button,
@@ -66,8 +67,7 @@ export default function StockTransferPage() {
 
     setLoading(true);
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-      const res = await fetch(`${base}/inventory/stock-transfer/history`, {
+      const res = await fetch(`${config.apiUrl}/inventory/stock-transfer/history`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -97,8 +97,7 @@ export default function StockTransferPage() {
     }
 
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-      const res = await fetch(`${base}/inventory/stock-transfer`, {
+      const res = await fetch(`${config.apiUrl}/inventory/stock-transfer`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -136,8 +135,7 @@ export default function StockTransferPage() {
 
   const handleApproveTransfer = async (id: string) => {
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-      const res = await fetch(`${base}/inventory/stock-transfer/${id}/approve`, {
+      const res = await fetch(`${config.apiUrl}/inventory/stock-transfer/${id}/approve`, {
         method: "PUT",
         headers: { Authorization: `Bearer ${token}` },
       });

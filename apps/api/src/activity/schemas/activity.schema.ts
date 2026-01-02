@@ -8,14 +8,17 @@ export class Activity {
   @Prop({ required: true, type: Types.ObjectId, ref: 'Shop' })
   shopId: Types.ObjectId;
 
+  @Prop({ type: Types.ObjectId, ref: 'Branch', index: true })
+  branchId?: Types.ObjectId;
+
   @Prop({ required: true, type: Types.ObjectId, ref: 'User' })
   userId: Types.ObjectId;
 
   @Prop({ required: true, trim: true })
   userName: string;
 
-  @Prop({ required: true, enum: ['admin', 'cashier'] })
-  userRole: 'admin' | 'cashier';
+  @Prop({ required: true, enum: ['admin', 'cashier', 'branch_admin', 'branch_manager'] })
+  userRole: 'admin' | 'cashier' | 'branch_admin' | 'branch_manager';
 
   @Prop({
     required: true,
@@ -77,5 +80,5 @@ ActivitySchema.index({ shopId: 1, createdAt: -1 });
 ActivitySchema.index({ shopId: 1, userId: 1, createdAt: -1 });
 ActivitySchema.index({ shopId: 1, action: 1 });
 ActivitySchema.index({ userId: 1, action: 1 });
-ActivitySchema.index({ shopId: 1, 'details.branchId': 1, createdAt: -1 }); // Branch activity queries
+ActivitySchema.index({ shopId: 1, branchId: 1, createdAt: -1 }); // Branch activity queries
 ActivitySchema.index({ timestamp: 1 }, { expireAfterSeconds: 7776000 }); // TTL: 90 days auto-cleanup

@@ -1,5 +1,6 @@
 'use client';
 
+import { config } from '@/lib/config';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
@@ -138,8 +139,6 @@ export default function SuperAdminEmailsPage() {
     variables: {} as Record<string, any>
   });
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-
   useEffect(() => {
     loadData();
   }, [activeTab, statusFilter, typeFilter, templateFilter, dateRange]);
@@ -169,7 +168,7 @@ export default function SuperAdminEmailsPage() {
   };
 
   const loadStats = async () => {
-    const res = await fetch(`${apiUrl}/admin/emails/stats`, {
+    const res = await fetch(`${config.apiUrl}/admin/emails/stats`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     const statsText = await res.text();
@@ -181,7 +180,7 @@ export default function SuperAdminEmailsPage() {
   };
 
   const loadSmtpStatus = async () => {
-    const res = await fetch(`${apiUrl}/admin/emails/config/status`, {
+    const res = await fetch(`${config.apiUrl}/admin/emails/config/status`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     const smtpText = await res.text();
@@ -200,7 +199,7 @@ export default function SuperAdminEmailsPage() {
       // backend currently supports type/status; template/search/date can be added later
     });
 
-    const res = await fetch(`${apiUrl}/admin/emails/logs?${params}`, {
+    const res = await fetch(`${config.apiUrl}/admin/emails/logs?${params}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     const logsText = await res.text();
@@ -212,7 +211,7 @@ export default function SuperAdminEmailsPage() {
   };
 
   const loadRecentEmails = async () => {
-    const res = await fetch(`${apiUrl}/admin/emails/logs?limit=10`, {
+    const res = await fetch(`${config.apiUrl}/admin/emails/logs?limit=10`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     const recentText = await res.text();
@@ -224,7 +223,7 @@ export default function SuperAdminEmailsPage() {
   };
 
   const loadTemplates = async () => {
-    const res = await fetch(`${apiUrl}/admin/emails/templates`, {
+    const res = await fetch(`${config.apiUrl}/admin/emails/templates`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     const templatesText = await res.text();
@@ -237,7 +236,7 @@ export default function SuperAdminEmailsPage() {
 
   const sendTestEmail = async () => {
     try {
-      const res = await fetch(`${apiUrl}/admin/emails/test`, {
+      const res = await fetch(`${config.apiUrl}/admin/emails/test`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -266,7 +265,7 @@ export default function SuperAdminEmailsPage() {
 
   const toggleTemplate = async (templateName: string) => {
     try {
-      const res = await fetch(`${apiUrl}/admin/emails/templates/${templateName}/toggle`, {
+      const res = await fetch(`${config.apiUrl}/admin/emails/templates/${templateName}/toggle`, {
         method: 'PUT',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -281,7 +280,7 @@ export default function SuperAdminEmailsPage() {
 
   const previewEmailTemplate = async (template: EmailTemplate) => {
     try {
-      const res = await fetch(`${apiUrl}/admin/emails/templates/${template.name}/preview`, {
+      const res = await fetch(`${config.apiUrl}/admin/emails/templates/${template.name}/preview`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -352,7 +351,7 @@ export default function SuperAdminEmailsPage() {
 
   const handleRetryEmail = async (id: string) => {
     try {
-      const res = await fetch(`${apiUrl}/admin/emails/logs/${id}/retry`, {
+      const res = await fetch(`${config.apiUrl}/admin/emails/logs/${id}/retry`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -367,7 +366,7 @@ export default function SuperAdminEmailsPage() {
   const handleDeleteEmail = async (id: string) => {
     if (!confirm('Delete this email log?')) return;
     try {
-      const res = await fetch(`${apiUrl}/admin/emails/logs/${id}`, {
+      const res = await fetch(`${config.apiUrl}/admin/emails/logs/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -390,7 +389,7 @@ export default function SuperAdminEmailsPage() {
 
   const handleDownloadCsv = async () => {
     try {
-      const res = await fetch(`${apiUrl}/admin/emails/export/csv`, {
+      const res = await fetch(`${config.apiUrl}/admin/emails/export/csv`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error('Failed to export email logs');

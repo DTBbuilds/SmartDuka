@@ -1,5 +1,6 @@
 'use client';
 
+import { config } from '@/lib/config';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
@@ -52,6 +53,10 @@ import {
   ChevronLeft,
   ChevronRight,
   RefreshCw,
+  Copy,
+  Check,
+  Share2,
+  ShieldCheck,
 } from 'lucide-react';
 
 interface Cashier {
@@ -104,12 +109,15 @@ export default function CashiersPage() {
     name: '',
     email: '',
     phone: '',
-    password: '',
     branchId: 'none',
   });
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+  
+  // State for showing generated PIN after cashier creation
+  const [showPinDialog, setShowPinDialog] = useState(false);
+  const [generatedPin, setGeneratedPin] = useState('');
+  const [createdCashierName, setCreatedCashierName] = useState('');
+  const [pinCopied, setPinCopied] = useState(false);
 
   useEffect(() => {
     fetchCashiers();
@@ -119,7 +127,7 @@ export default function CashiersPage() {
   const fetchCashiers = async () => {
     try {
       setIsLoading(true);
-      let url = `${apiUrl}/users?role=cashier`;
+      let url = `${config.apiUrl}/users?role=cashier`;
 
       // Filter by selected branch from UI filter ("All" = no branch filter)
       if (filterBranch !== 'all') {
@@ -149,7 +157,7 @@ export default function CashiersPage() {
 
   const fetchBranches = async () => {
     try {
-      const res = await fetch(`${apiUrl}/branches`, {
+      const res = await fetch(`${config.apiUrl}/branches`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -171,7 +179,6 @@ export default function CashiersPage() {
       name: '',
       email: '',
       phone: '',
-      password: '',
       branchId: currentBranch?._id || 'none',
     });
     setIsDialogOpen(true);
@@ -183,10 +190,40 @@ export default function CashiersPage() {
       name: cashier.name,
       email: cashier.email,
       phone: cashier.phone || '',
-      password: '',
       branchId: cashier.branchId || 'none',
     });
     setIsDialogOpen(true);
+  };
+
+  // Copy PIN to clipboard
+  const handleCopyPin = async () => {
+    try {
+      await navigator.clipboard.writeText(generatedPin);
+      setPinCopied(true);
+      setTimeout(() => setPinCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy PIN:', err);
+    }
+  };
+
+  // Share PIN via Web Share API or fallback
+  const handleSharePin = async () => {
+    const shareText = `Your SmartDuka cashier PIN is: ${generatedPin}\n\nUse this PIN along with your name to login to the POS system.`;
+    
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Cashier PIN',
+          text: shareText,
+        });
+      } catch (err) {
+        // User cancelled or share failed, fallback to copy
+        handleCopyPin();
+      }
+    } else {
+      // Fallback: copy to clipboard
+      handleCopyPin();
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -209,15 +246,11 @@ export default function CashiersPage() {
       setError('Please enter a valid email address');
       return;
     }
-    if (!editingCashier && !formData.password) {
-      setError('Password is required for new cashiers');
-      return;
-    }
 
     try {
       const url = editingCashier
-        ? `${apiUrl}/users/${editingCashier._id}`
-        : `${apiUrl}/users/cashier`;
+        ? `${config.apiUrl}/users/${editingCashier._id}`
+        : `${config.apiUrl}/users/cashier`;
       const method = editingCashier ? 'PUT' : 'POST';
 
       const payload: any = {
@@ -226,10 +259,6 @@ export default function CashiersPage() {
         phone: formData.phone || undefined,
         branchId: formData.branchId !== 'none' ? formData.branchId : undefined,
       };
-
-      if (formData.password) {
-        payload.password = formData.password;
-      }
 
       const res = await fetch(url, {
         method,
@@ -241,11 +270,21 @@ export default function CashiersPage() {
       });
 
       if (res.ok) {
-        setSuccess(editingCashier ? 'Cashier updated successfully' : 'Cashier created successfully');
+        const responseData = await res.json();
         await fetchCashiers();
         setIsDialogOpen(false);
         setError(null);
-        setTimeout(() => setSuccess(null), 3000);
+        
+        if (editingCashier) {
+          setSuccess('Cashier updated successfully');
+          setTimeout(() => setSuccess(null), 3000);
+        } else {
+          // Show the generated PIN to the admin
+          setCreatedCashierName(formData.name);
+          setGeneratedPin(responseData.pin);
+          setPinCopied(false);
+          setShowPinDialog(true);
+        }
       } else {
         const errText = await res.text();
         const errorData = errText ? JSON.parse(errText) : {};
@@ -261,7 +300,7 @@ export default function CashiersPage() {
     const newStatus = cashier.status === 'active' ? 'disabled' : 'active';
     
     try {
-      const res = await fetch(`${apiUrl}/users/${cashier._id}/status`, {
+      const res = await fetch(`${config.apiUrl}/users/${cashier._id}/status`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -290,7 +329,7 @@ export default function CashiersPage() {
 
     setActionLoading(cashierId);
     try {
-      const res = await fetch(`${apiUrl}/users/${cashierId}`, {
+      const res = await fetch(`${config.apiUrl}/users/${cashierId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -331,7 +370,7 @@ export default function CashiersPage() {
 
     setActionLoading(selectedCashierForPin._id);
     try {
-      const res = await fetch(`${apiUrl}/users/${selectedCashierForPin._id}/pin`, {
+      const res = await fetch(`${config.apiUrl}/users/${selectedCashierForPin._id}/pin`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -855,9 +894,9 @@ export default function CashiersPage() {
         </CardContent>
       </Card>
 
-      {/* Add/Edit Dialog */}
+      {/* Add/Edit Dialog - Wider on desktop with horizontal layout */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[700px] lg:max-w-[800px]">
           <DialogHeader>
             <DialogTitle>{editingCashier ? 'Edit Cashier' : 'Add New Cashier'}</DialogTitle>
             <DialogDescription>
@@ -866,69 +905,69 @@ export default function CashiersPage() {
                 : 'Create a new cashier account'}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Full Name *</Label>
-              <Input
-                id="name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="e.g., John Doe"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="email">Email *</Label>
-              <Input
-                id="email"
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                placeholder="e.g., john@shop.com"
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="phone">Phone</Label>
-              <Input
-                id="phone"
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                placeholder="+254 7XX XXX XXX"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">
-                Password {editingCashier ? '(leave empty to keep current)' : '*'}
-              </Label>
-              <Input
-                id="password"
-                type="password"
-                value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                placeholder={editingCashier ? '••••••••' : 'Enter password'}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="branch">Assign to Branch</Label>
-              <Select
-                value={formData.branchId}
-                onValueChange={(value) => setFormData({ ...formData, branchId: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a branch" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No specific branch</SelectItem>
-                  {branches.map((branch) => (
-                    <SelectItem key={branch._id} value={branch._id}>
-                      {branch.name} ({branch.code})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          
+          {/* Form Grid - Vertical on mobile, horizontal 2-column on desktop */}
+          <div className="py-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+              {/* Left Column */}
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Full Name *</Label>
+                  <Input
+                    id="name"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="e.g., John Doe"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email *</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    placeholder="e.g., john@shop.com"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Phone</Label>
+                  <Input
+                    id="phone"
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    placeholder="+254 7XX XXX XXX"
+                  />
+                </div>
+              </div>
+
+              {/* Right Column */}
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="branch">Assign to Branch</Label>
+                  <Select
+                    value={formData.branchId}
+                    onValueChange={(value) => setFormData({ ...formData, branchId: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a branch" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No specific branch</SelectItem>
+                      {branches.map((branch) => (
+                        <SelectItem key={branch._id} value={branch._id}>
+                          {branch.name} ({branch.code})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </div>
           </div>
-          <div className="flex gap-3 justify-end">
+
+          <div className="flex gap-3 justify-end pt-2 border-t">
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
               Cancel
             </Button>
@@ -1000,6 +1039,75 @@ export default function CashiersPage() {
               ) : (
                 'Change PIN'
               )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Generated PIN Display Dialog */}
+      <Dialog open={showPinDialog} onOpenChange={setShowPinDialog}>
+        <DialogContent className="sm:max-w-[450px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-green-600">
+              <ShieldCheck className="h-5 w-5" />
+              Cashier Created Successfully
+            </DialogTitle>
+            <DialogDescription>
+              A PIN has been generated for <span className="font-semibold">{createdCashierName}</span>. 
+              Share this PIN securely with the cashier.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="py-6">
+            {/* PIN Display */}
+            <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30 border-2 border-green-200 dark:border-green-800 rounded-xl p-6 text-center">
+              <p className="text-sm text-muted-foreground mb-2">Cashier PIN</p>
+              <p className="text-4xl font-mono font-bold tracking-[0.5em] text-green-700 dark:text-green-400">
+                {generatedPin}
+              </p>
+            </div>
+
+            {/* Instructions */}
+            <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg">
+              <p className="text-sm text-amber-800 dark:text-amber-300">
+                <strong>Important:</strong> The cashier will use their <strong>name</strong> and this <strong>PIN</strong> to login to the POS system. 
+                Make sure to share this PIN securely.
+              </p>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex gap-3 mt-6">
+              <Button
+                variant="outline"
+                className="flex-1 gap-2"
+                onClick={handleCopyPin}
+              >
+                {pinCopied ? (
+                  <>
+                    <Check className="h-4 w-4 text-green-600" />
+                    Copied!
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-4 w-4" />
+                    Copy PIN
+                  </>
+                )}
+              </Button>
+              <Button
+                variant="outline"
+                className="flex-1 gap-2"
+                onClick={handleSharePin}
+              >
+                <Share2 className="h-4 w-4" />
+                Share
+              </Button>
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-2 border-t">
+            <Button onClick={() => setShowPinDialog(false)}>
+              Done
             </Button>
           </div>
         </DialogContent>

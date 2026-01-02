@@ -1,5 +1,6 @@
 'use client';
 
+import { config } from '@/lib/config';
 import { useState, useEffect } from 'react';
 import {
   Card,
@@ -51,8 +52,7 @@ export default function TaxSettingsPage() {
   const fetchSettings = async () => {
     try {
       setLoading(true);
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-      const res = await fetch(`${base}/shop-settings/${shop?.id}`, {
+      const res = await fetch(`${config.apiUrl}/shop-settings/${shop?.id}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -79,8 +79,7 @@ export default function TaxSettingsPage() {
 
     try {
       setSaving(true);
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-      const res = await fetch(`${base}/shop-settings/${shop.id}`, {
+      const res = await fetch(`${config.apiUrl}/shop-settings/${shop.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

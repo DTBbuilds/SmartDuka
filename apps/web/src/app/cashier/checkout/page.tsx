@@ -1,5 +1,6 @@
 'use client';
 
+import { config } from '@/lib/config';
 import { useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
@@ -15,8 +16,6 @@ export default function CheckoutPage() {
   const [paymentAmount, setPaymentAmount] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-
   const subtotal = 0;
   const tax = 0;
   const total = 0;
@@ -24,7 +23,7 @@ export default function CheckoutPage() {
   const handleCheckout = async () => {
     try {
       setIsProcessing(true);
-      const res = await fetch(`${apiUrl}/sales/checkout`, {
+      const res = await fetch(`${config.apiUrl}/sales/checkout`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

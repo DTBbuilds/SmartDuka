@@ -5,6 +5,7 @@ import { AppService } from './app.service';
 import { ConfigModule } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ScheduleModule } from '@nestjs/schedule';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { InventoryModule } from './inventory/inventory.module';
@@ -37,15 +38,20 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { StripeModule } from './stripe/stripe.module';
 import { MessagingModule } from './messaging/messaging.module';
 import { CommonModule } from './common/common.module';
+import { QueueModule } from './queue/queue.module';
+import { AiModule } from './ai/ai.module';
+import { WhatsAppModule } from './whatsapp/whatsapp.module';
 
 @Module({
   imports: [
     CommonModule,
+    QueueModule,
     ConfigModule.forRoot({ 
       isGlobal: true,
       envFilePath: ['.env.local', '.env'],
     }),
     MongooseModule.forRoot(process.env.MONGODB_URI ?? 'mongodb://localhost:27017/smartduka'),
+    ScheduleModule.forRoot(),
     // Global rate limiting: 100 requests per minute per IP
     ThrottlerModule.forRoot([
       {
@@ -95,6 +101,8 @@ import { CommonModule } from './common/common.module';
     NotificationsModule,
     StripeModule.forRootAsync(),
     MessagingModule,
+    AiModule,
+    WhatsAppModule,
   ],
   controllers: [AppController],
   providers: [

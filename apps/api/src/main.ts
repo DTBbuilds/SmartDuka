@@ -5,6 +5,7 @@ import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import helmet from 'helmet';
 import compression from 'compression';
+import cookieParser from 'cookie-parser';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -14,11 +15,32 @@ async function bootstrap() {
       : ['error', 'warn', 'log', 'debug', 'verbose'],
   });
 
-  // Security: HTTP headers protection
-  app.use(helmet());
+  // Enable CORS FIRST - before any other middleware
+  // This ensures preflight requests work correctly
+  app.enableCors({
+    origin: [
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'https://smartduka.vercel.app',
+      'https://smartduka-eta.vercel.app',
+      process.env.CORS_ORIGIN,
+    ].filter(Boolean),
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'X-CSRF-Token', 'x-csrf-token'],
+    exposedHeaders: ['Content-Type', 'Authorization', 'Cache-Control'],
+  });
+
+  // Security: HTTP headers protection (after CORS)
+  app.use(helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  }));
 
   // Performance: Response compression
   app.use(compression());
+
+  // Cookie parser for httpOnly cookie support
+  app.use(cookieParser());
 
   // Global validation pipe - validates all incoming DTOs
   app.useGlobalPipes(
@@ -35,11 +57,20 @@ async function bootstrap() {
   // Global exception filter - consistent error responses
   app.useGlobalFilters(new AllExceptionsFilter());
 
-  // Note: API prefix disabled for backward compatibility with existing frontend
-  // TODO: Enable API versioning after updating all frontend API calls to use centralized config
-  // app.setGlobalPrefix('api/v1', {
-  //   exclude: ['health', 'health/ready', 'health/live', 'api/docs'],
-  // });
+  // API versioning - enabled with v1 prefix
+  // Excludes health endpoints and docs for direct access
+  app.setGlobalPrefix('api/v1', {
+    exclude: [
+      'health', 
+      'health/ready', 
+      'health/live', 
+      'api/docs',
+      // M-Pesa callback must be accessible without prefix (external webhook)
+      'payments/mpesa/callback',
+      // Stripe webhook must be accessible without prefix
+      'stripe/webhook',
+    ],
+  });
 
   // Swagger API Documentation
   const config = new DocumentBuilder()
@@ -90,21 +121,6 @@ Include the token in the Authorization header: \`Bearer <token>\`
       operationsSorter: 'alpha',
     },
     customSiteTitle: 'SmartDuka API Docs',
-  });
-
-  // Enable CORS with explicit configuration
-  app.enableCors({
-    origin: [
-      'http://localhost:3000',
-      'http://localhost:3001',
-      'https://smartduka.vercel.app',
-      'https://smartduka-eta.vercel.app',
-      process.env.CORS_ORIGIN,
-    ].filter(Boolean),
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control'],
-    exposedHeaders: ['Content-Type', 'Authorization', 'Cache-Control'],
   });
 
   const port = process.env.PORT ?? 5000;

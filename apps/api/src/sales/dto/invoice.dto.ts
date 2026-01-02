@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsEnum, IsNumber, IsArray, IsDate, ValidateNested, Min } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsNumber, IsArray, IsDate, ValidateNested, Min, IsBoolean } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class InvoiceItemDto {
@@ -140,6 +140,12 @@ export class RecordPaymentDto {
   @IsOptional()
   @Type(() => Date)
   date?: Date;
+
+  // If true, payment requires super admin approval before being marked as complete
+  // Typically used for send money, bank transfer payments
+  @IsBoolean()
+  @IsOptional()
+  requiresApproval?: boolean;
 }
 
 export class InvoiceFiltersDto {

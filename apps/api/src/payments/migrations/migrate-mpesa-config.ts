@@ -97,7 +97,7 @@ async function migrate() {
           : PaymentProvider.MPESA_PAYBILL;
 
         // Determine environment from global setting
-        const environment = process.env.MPESA_ENVIRONMENT === 'production'
+        const environment = process.env.MPESA_ENV === 'production'
           ? ConfigEnvironment.PRODUCTION
           : ConfigEnvironment.SANDBOX;
 

@@ -1,5 +1,6 @@
 'use client';
 
+import { config } from '@/lib/config';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
@@ -27,8 +28,6 @@ export default function SalesAnalyticsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-
   useEffect(() => {
     fetchSalesData();
   }, [dateRange]);
@@ -37,7 +36,7 @@ export default function SalesAnalyticsPage() {
     try {
       setIsLoading(true);
       const today = new Date().toISOString().split('T')[0];
-      const res = await fetch(`${apiUrl}/sales/daily-sales/${today}`, {
+      const res = await fetch(`${config.apiUrl}/sales/daily-sales/${today}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 

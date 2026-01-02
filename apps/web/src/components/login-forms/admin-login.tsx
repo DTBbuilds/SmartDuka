@@ -18,16 +18,26 @@ interface AdminLoginFormProps {
   shops: Shop[];
   onSubmit: (email: string, password: string, shopId: string) => Promise<void>;
   isLoading?: boolean;
+  preferredShopId?: string;
+  recentShops?: Array<{ id: string; name: string; lastUsed: number }>;
 }
 
 export function AdminLoginForm({
   shops,
   onSubmit,
   isLoading = false,
+  preferredShopId,
+  recentShops = [],
 }: AdminLoginFormProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [shopId, setShopId] = useState(shops[0]?.id || '');
+  // Use preferred shop if available and exists in shops list, otherwise first shop
+  const [shopId, setShopId] = useState(() => {
+    if (preferredShopId && shops.some(s => s.id === preferredShopId)) {
+      return preferredShopId;
+    }
+    return shops[0]?.id || '';
+  });
   const [showPassword, setShowPassword] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {

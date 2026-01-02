@@ -1,9 +1,11 @@
-import { Injectable, BadRequestException, Logger, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, BadRequestException, Logger, Inject, forwardRef, Optional } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Branch, BranchDocument, BranchPaymentConfig, BranchLocation, BranchOperations, BranchContacts } from './branch.schema';
 import { AuditLog, AuditLogDocument } from '../audit/audit-log.schema';
 import { SubscriptionGuardService } from '../subscriptions/subscription-guard.service';
+import { Order, OrderDocument } from '../sales/schemas/order.schema';
+import { Product, ProductDocument } from '../inventory/schemas/product.schema';
 
 export interface CreateBranchDto {
   name: string;
@@ -166,6 +168,8 @@ export class BranchesService {
     @InjectModel(AuditLog.name) private readonly auditModel: Model<AuditLogDocument>,
     @Inject(forwardRef(() => SubscriptionGuardService))
     private readonly subscriptionGuard: SubscriptionGuardService,
+    @Optional() @InjectModel(Order.name) private readonly orderModel: Model<OrderDocument>,
+    @Optional() @InjectModel(Product.name) private readonly productModel: Model<ProductDocument>,
   ) {}
 
   /**
@@ -689,16 +693,113 @@ export class BranchesService {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    // Return basic stats - these can be enhanced with actual aggregations
-    // when the sales and inventory modules are integrated
+    const shopObjId = new Types.ObjectId(shopId);
+    const branchObjId = new Types.ObjectId(branchId);
+
+    // Initialize stats
+    let totalSales = 0;
+    let todaySales = 0;
+    let totalOrders = 0;
+    let todayOrders = 0;
+    let productCount = 0;
+    let lowStockCount = 0;
+
+    // Get order/sales stats if Order model is available
+    if (this.orderModel) {
+      try {
+        // Total sales and orders for this branch
+        const totalAgg = await this.orderModel.aggregate([
+          {
+            $match: {
+              shopId: shopObjId,
+              branchId: branchObjId,
+              status: { $in: ['completed', 'paid'] },
+              deletedAt: { $exists: false },
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              totalSales: { $sum: '$total' },
+              totalOrders: { $sum: 1 },
+            },
+          },
+        ]);
+
+        if (totalAgg.length > 0) {
+          totalSales = totalAgg[0].totalSales || 0;
+          totalOrders = totalAgg[0].totalOrders || 0;
+        }
+
+        // Today's sales and orders
+        const todayAgg = await this.orderModel.aggregate([
+          {
+            $match: {
+              shopId: shopObjId,
+              branchId: branchObjId,
+              status: { $in: ['completed', 'paid'] },
+              createdAt: { $gte: today, $lt: tomorrow },
+              deletedAt: { $exists: false },
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              todaySales: { $sum: '$total' },
+              todayOrders: { $sum: 1 },
+            },
+          },
+        ]);
+
+        if (todayAgg.length > 0) {
+          todaySales = todayAgg[0].todaySales || 0;
+          todayOrders = todayAgg[0].todayOrders || 0;
+        }
+      } catch (err) {
+        this.logger.warn(`Failed to get order stats for branch ${branchId}: ${err.message}`);
+      }
+    }
+
+    // Get product stats if Product model is available
+    if (this.productModel) {
+      try {
+        // Count products for this branch (or shared products)
+        productCount = await this.productModel.countDocuments({
+          shopId: shopObjId,
+          $or: [
+            { branchId: branchObjId },
+            { branchId: { $exists: false } },
+            { branchId: null },
+          ],
+          status: 'active',
+          deletedAt: { $exists: false },
+        });
+
+        // Count low stock products
+        lowStockCount = await this.productModel.countDocuments({
+          shopId: shopObjId,
+          $or: [
+            { branchId: branchObjId },
+            { branchId: { $exists: false } },
+            { branchId: null },
+          ],
+          status: 'active',
+          deletedAt: { $exists: false },
+          $expr: { $lte: ['$stock', '$lowStockThreshold'] },
+        });
+      } catch (err) {
+        this.logger.warn(`Failed to get product stats for branch ${branchId}: ${err.message}`);
+      }
+    }
+
     return {
-      totalSales: 0, // TODO: Aggregate from sales collection
-      todaySales: 0, // TODO: Aggregate from sales collection for today
-      totalOrders: 0, // TODO: Count from orders collection
-      todayOrders: 0, // TODO: Count from orders collection for today
+      totalSales,
+      todaySales,
+      totalOrders,
+      todayOrders,
       staffCount: branch.staffIds?.length || 0,
-      productCount: 0, // TODO: Count from products collection
-      lowStockCount: 0, // TODO: Count low stock products
+      productCount,
+      lowStockCount,
     };
   }
 }

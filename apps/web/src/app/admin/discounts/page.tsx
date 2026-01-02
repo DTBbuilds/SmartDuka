@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { config } from "@/lib/config";
 import {
   Badge,
   Button,
@@ -57,8 +58,7 @@ export default function DiscountsPage() {
 
     setLoading(true);
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-      const res = await fetch(`${base}/discounts`, {
+      const res = await fetch(`${config.apiUrl}/discounts`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -81,8 +81,7 @@ export default function DiscountsPage() {
     if (!confirm("Are you sure you want to delete this discount?")) return;
 
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-      const res = await fetch(`${base}/discounts/${id}`, {
+      const res = await fetch(`${config.apiUrl}/discounts/${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });

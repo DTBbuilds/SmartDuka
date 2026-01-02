@@ -9,6 +9,8 @@ import { User, UserSchema } from '../users/schemas/user.schema';
 import { SystemAuditLog, SystemAuditLogSchema } from './schemas/system-audit-log.schema';
 import { EmailLog, EmailLogSchema } from './schemas/email-log.schema';
 import { SystemConfig, SystemConfigSchema } from './schemas/system-config.schema';
+import { Invoice, InvoiceSchema } from '../sales/schemas/invoice.schema';
+import { PaymentAttempt, PaymentAttemptSchema } from '../subscriptions/schemas/payment-attempt.schema';
 import { SuperAdminService } from './super-admin.service';
 import { SuperAdminController } from './super-admin.controller';
 import { SystemManagementController } from './system-management.controller';
@@ -35,6 +37,8 @@ import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
       { name: SystemAuditLog.name, schema: SystemAuditLogSchema },
       { name: EmailLog.name, schema: EmailLogSchema },
       { name: SystemConfig.name, schema: SystemConfigSchema },
+      { name: Invoice.name, schema: InvoiceSchema },
+      { name: PaymentAttempt.name, schema: PaymentAttemptSchema },
     ]),
     NotificationsModule,
     PaymentsModule,

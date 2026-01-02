@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label } from "@smartduka/ui";
 import { useAuth } from "@/lib/auth-context";
+import { config } from "@/lib/config";
 import { AuthGuard } from "@/components/auth-guard";
 import { 
   Plus, 
@@ -69,9 +70,7 @@ function CashiersContent() {
     
     try {
       setIsLoading(true);
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-
-      const res = await fetch(`${base}/users/shop/${shop.id}/cashiers`, {
+      const res = await fetch(`${config.apiUrl}/users/shop/${shop.id}/cashiers`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -101,9 +100,7 @@ function CashiersContent() {
     setIsSubmitting(true);
 
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-
-      const res = await fetch(`${base}/users/cashier`, {
+      const res = await fetch(`${config.apiUrl}/users/cashier`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -141,9 +138,7 @@ function CashiersContent() {
     if (!confirm(`Reset PIN for ${cashierName}?`)) return;
 
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-
-      const res = await fetch(`${base}/users/${cashierId}/reset-pin`, {
+      const res = await fetch(`${config.apiUrl}/users/${cashierId}/reset-pin`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -167,9 +162,7 @@ function CashiersContent() {
     if (!confirm("Are you sure you want to delete this cashier?")) return;
 
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-
-      const res = await fetch(`${base}/users/${cashierId}`, {
+      const res = await fetch(`${config.apiUrl}/users/${cashierId}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -186,9 +179,7 @@ function CashiersContent() {
 
   const handleToggleStatus = async (cashierId: string, newStatus: "active" | "disabled") => {
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-
-      const res = await fetch(`${base}/users/${cashierId}`, {
+      const res = await fetch(`${config.apiUrl}/users/${cashierId}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",

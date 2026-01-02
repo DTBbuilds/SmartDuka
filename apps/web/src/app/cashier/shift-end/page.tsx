@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label, Textarea } from '@smartduka/ui';
 import { useAuth } from '@/lib/auth-context';
+import { config } from '@/lib/config';
 import { Clock, DollarSign, AlertCircle, CheckCircle, TrendingUp } from 'lucide-react';
 import { AuthGuard } from '@/components/auth-guard';
 
@@ -34,8 +35,7 @@ function ShiftEndContent() {
 
   const loadCurrentShift = async () => {
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-      const res = await fetch(`${base}/shifts/current`, {
+      const res = await fetch(`${config.apiUrl}/shifts/current`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -52,7 +52,7 @@ function ShiftEndContent() {
 
       // Load sales data for this shift
       try {
-        const salesRes = await fetch(`${base}/shifts/${data._id}/sales`, {
+        const salesRes = await fetch(`${config.apiUrl}/shifts/${data._id}/sales`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         
@@ -88,10 +88,8 @@ function ShiftEndContent() {
     setIsSubmitting(true);
 
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-
       // First clock out
-      const clockOutRes = await fetch(`${base}/shifts/clock-out`, {
+      const clockOutRes = await fetch(`${config.apiUrl}/shifts/clock-out`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -103,7 +101,7 @@ function ShiftEndContent() {
       if (!clockOutRes.ok) throw new Error('Failed to clock out');
 
       // Then reconcile
-      const reconcileRes = await fetch(`${base}/shifts/${shift._id}/reconcile`, {
+      const reconcileRes = await fetch(`${config.apiUrl}/shifts/${shift._id}/reconcile`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

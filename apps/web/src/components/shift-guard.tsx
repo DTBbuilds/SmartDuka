@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { config } from "@/lib/config";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button } from "@smartduka/ui";
 import { Clock, AlertCircle, ArrowRight } from "lucide-react";
 
@@ -27,8 +28,7 @@ export function ShiftGuard({ children }: ShiftGuardProps) {
       }
 
       try {
-        const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-        const res = await fetch(`${base}/shifts/current`, {
+        const res = await fetch(`${config.apiUrl}/shifts/current`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },

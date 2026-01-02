@@ -187,7 +187,7 @@ class AppInitializer {
         });
       }, 3000);
 
-      const response = await fetch(`${config.apiUrl}/health`, {
+      const response = await fetch(`${config.apiBaseUrl}/health`, {
         method: 'GET',
         signal: controller.signal,
         cache: 'no-store',
@@ -240,7 +240,7 @@ class AppInitializer {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout for cold starts
 
-      const response = await fetch(`${config.apiUrl}/health`, {
+      const response = await fetch(`${config.apiBaseUrl}/health`, {
         method: 'GET',
         signal: controller.signal,
         cache: 'no-store',

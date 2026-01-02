@@ -70,7 +70,21 @@ export class InventoryController {
   @Roles('admin')
   @Delete('products/:id')
   deleteProduct(@Param('id') productId: string, @CurrentUser() user: any) {
-    return this.inventoryService.deleteProduct(user.shopId, productId);
+    return this.inventoryService.deleteProduct(user.shopId, productId, user.sub);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Post('products/:id/restore')
+  restoreProduct(@Param('id') productId: string, @CurrentUser() user: any) {
+    return this.inventoryService.restoreProduct(user.shopId, productId);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Delete('products/:id/permanent')
+  permanentlyDeleteProduct(@Param('id') productId: string, @CurrentUser() user: any) {
+    return this.inventoryService.permanentlyDeleteProduct(user.shopId, productId);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -124,6 +138,24 @@ export class InventoryController {
   @Get('stock/low-stock')
   getLowStockProducts(@CurrentUser() user: any) {
     return this.inventoryService.getLowStockProducts(user.shopId, 10);
+  }
+
+  /**
+   * Get stock movements/adjustments for a specific product
+   */
+  @UseGuards(JwtAuthGuard)
+  @Get('stock/movements/:productId')
+  async getStockMovements(
+    @Param('productId') productId: string,
+    @Query('limit') limit: string,
+    @CurrentUser() user: any
+  ) {
+    const movements = await this.inventoryService.getStockAdjustmentHistory(user.shopId, {
+      productId,
+    });
+    // Apply limit after fetching (service doesn't support limit param)
+    const limitNum = limit ? parseInt(limit, 10) : 10;
+    return movements.slice(0, limitNum);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

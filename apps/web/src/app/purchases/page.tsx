@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { useBranch } from "@/lib/branch-context";
+import { config } from "@/lib/config";
 import { Button } from "@smartduka/ui";
 import { Plus, Package, Eye, List, Grid3x3 } from "lucide-react";
 import { DataTable, Column } from "@/components/shared/data-table";
@@ -45,8 +46,7 @@ export default function PurchasesPage() {
 
   const fetchPurchases = async () => {
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-      let url = `${apiUrl}/purchases`;
+      let url = `${config.apiUrl}/purchases`;
       
       if (statusFilter !== "all") {
         url += `/${statusFilter}`;

@@ -10,7 +10,7 @@ import {
   DialogTitle,
   Input,
 } from "@smartduka/ui";
-import { X, Camera, AlertCircle, CheckCircle, Zap, Settings, RefreshCw } from "lucide-react";
+import { X, Camera, AlertCircle, CheckCircle, Zap, RefreshCw, Flashlight, RotateCcw } from "lucide-react";
 import { playSuccessBeep, playErrorBeep } from "@/lib/audio-utils";
 import { useCameraPermission, getCameraPermissionInstructions } from "@/hooks/use-camera-permission";
 
@@ -70,6 +70,11 @@ export function BarcodeScannerZXing({
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [showPermissionRequest, setShowPermissionRequest] = useState(false);
+  const [torchEnabled, setTorchEnabled] = useState(false);
+  const [torchSupported, setTorchSupported] = useState(false);
+  const [lastScannedBarcode, setLastScannedBarcode] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const MAX_RETRIES = 3;
 
   /**
    * Initialize ZXing-JS CodeReader
@@ -94,6 +99,10 @@ export function BarcodeScannerZXing({
         );
       }
 
+      // Detect iOS for special handling
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      const isAndroid = /Android/.test(navigator.userAgent);
+
       // Dynamically import ZXing-JS
       const { BrowserMultiFormatReader } = await import("@zxing/browser");
       
@@ -111,9 +120,18 @@ export function BarcodeScannerZXing({
       setCameraDevices(devices);
       
       // Select back camera if available (mobile), otherwise first camera
-      const backCamera = devices.find((device: MediaDeviceInfo) =>
-        device.label.toLowerCase().includes("back")
+      // Try multiple detection methods for back camera
+      let backCamera = devices.find((device: MediaDeviceInfo) =>
+        device.label.toLowerCase().includes("back") ||
+        device.label.toLowerCase().includes("rear") ||
+        device.label.toLowerCase().includes("environment")
       );
+      
+      // On mobile, if no label match, prefer the last camera (usually back camera)
+      if (!backCamera && (isIOS || isAndroid) && devices.length > 1) {
+        backCamera = devices[devices.length - 1];
+      }
+      
       const deviceId = backCamera?.deviceId || devices[0].deviceId;
       setSelectedDeviceId(deviceId);
 
@@ -125,23 +143,97 @@ export function BarcodeScannerZXing({
       setScanStatus("ready");
       setMessage("✓ Scanner ready - Point at barcode");
 
-      // Start continuous scanning
-      const controls = await codeReader.decodeFromVideoDevice(
-        deviceId,
+      // Use decodeFromConstraints for mobile-optimized camera settings
+      // This gives us more control over camera selection and resolution
+      const videoConstraints: MediaTrackConstraints = {
+        deviceId: deviceId ? { exact: deviceId } : undefined,
+        facingMode: deviceId ? undefined : { ideal: 'environment' },
+        // Use lower resolution for better performance on mobile
+        width: { ideal: isIOS ? 640 : 1280, max: 1920 },
+        height: { ideal: isIOS ? 480 : 720, max: 1080 },
+      };
+
+      const controls = await codeReader.decodeFromConstraints(
+        { video: videoConstraints },
         videoRef.current,
         (result, error) => {
           if (result) {
-            handleBarcodeDetected(result.getText());
+            const barcode = result.getText();
+            // Debounce: prevent duplicate scans of same barcode within 2 seconds
+            if (barcode !== lastScannedBarcode) {
+              setLastScannedBarcode(barcode);
+              handleBarcodeDetected(barcode);
+            }
           }
           // Ignore errors during scanning (continuous process)
         }
       );
 
       scanControlsRef.current = controls;
+      
+      // Check if torch/flash is supported
+      try {
+        const videoTrack = videoRef.current?.srcObject instanceof MediaStream 
+          ? videoRef.current.srcObject.getVideoTracks()[0] 
+          : null;
+        if (videoTrack) {
+          const capabilities = videoTrack.getCapabilities?.() as any;
+          if (capabilities?.torch) {
+            setTorchSupported(true);
+          }
+        }
+      } catch (e) {
+        // Torch detection failed, not critical
+      }
+      
+      setRetryCount(0); // Reset retry count on success
       console.log("✅ ZXing-JS initialized successfully");
 
     } catch (err: any) {
       console.error("Camera initialization error:", err);
+      
+      // For OverconstrainedError, try fallback with simpler constraints
+      if (err.name === "OverconstrainedError" && retryCount === 0) {
+        console.log("OverconstrainedError - retrying with basic constraints...");
+        setRetryCount(1);
+        // Try again with minimal constraints
+        try {
+          const { BrowserMultiFormatReader } = await import("@zxing/browser");
+          const fallbackReader = new BrowserMultiFormatReader();
+          codeReaderRef.current = fallbackReader;
+          
+          const fallbackControls = await fallbackReader.decodeFromConstraints(
+            { video: { facingMode: 'environment' } }, // Minimal constraints
+            videoRef.current!,
+            (result) => {
+              if (result) {
+                const barcode = result.getText();
+                if (barcode !== lastScannedBarcode) {
+                  setLastScannedBarcode(barcode);
+                  handleBarcodeDetected(barcode);
+                }
+              }
+            }
+          );
+          scanControlsRef.current = fallbackControls;
+          setRetryCount(0);
+          console.log("✅ ZXing-JS initialized with fallback constraints");
+          return;
+        } catch (fallbackErr) {
+          console.error("Fallback also failed:", fallbackErr);
+          // Continue to error handling below
+        }
+      }
+      
+      // Retry logic for transient failures
+      if (retryCount < MAX_RETRIES && 
+          (err.name === "NotReadableError" || err.name === "AbortError")) {
+        console.log(`Retrying camera initialization (${retryCount + 1}/${MAX_RETRIES})...`);
+        setRetryCount(prev => prev + 1);
+        setTimeout(() => initZXing(), 1000); // Retry after 1 second
+        return;
+      }
+      
       setScanStatus("error");
 
       // User-friendly error messages
@@ -168,7 +260,8 @@ export function BarcodeScannerZXing({
       } else if (err.name === "AbortError") {
         setError("Camera initialization was canceled. Please try again.");
       } else if (err.name === "OverconstrainedError") {
-        setError("Camera constraints could not be satisfied. Try a different camera.");
+        // On iOS, try again with simpler constraints
+        setError("Camera constraints could not be satisfied. Try switching cameras or use manual entry.");
       } else if (err.name === "SecurityError") {
         setError("Camera access blocked by security policy. Check browser permissions.");
       } else {
@@ -178,12 +271,13 @@ export function BarcodeScannerZXing({
       // Fallback to hardware scanner mode
       setScanMode("hardware");
     }
-  }, []);
+  }, [retryCount, lastScannedBarcode]);
 
   /**
    * Cleanup ZXing-JS on unmount or mode change
    */
   const cleanupZXing = useCallback(() => {
+    // Stop the scanner controls
     if (scanControlsRef.current) {
       try {
         scanControlsRef.current.stop();
@@ -194,8 +288,21 @@ export function BarcodeScannerZXing({
       scanControlsRef.current = null;
     }
 
-    // Note: BrowserMultiFormatReader doesn't have a reset() method
-    // Just clear the reference
+    // Also stop any active video stream to release camera
+    if (videoRef.current?.srcObject instanceof MediaStream) {
+      try {
+        const stream = videoRef.current.srcObject;
+        stream.getTracks().forEach(track => {
+          track.stop();
+          console.log(`✅ Stopped track: ${track.kind}`);
+        });
+        videoRef.current.srcObject = null;
+      } catch (err) {
+        console.error("Error stopping video stream:", err);
+      }
+    }
+
+    // Clear the code reader reference
     codeReaderRef.current = null;
   }, []);
 
@@ -353,6 +460,10 @@ export function BarcodeScannerZXing({
     setMessage("");
     setManualBarcode("");
     setIsProcessing(false);
+    setTorchEnabled(false);
+    setTorchSupported(false);
+    setLastScannedBarcode(null);
+    setRetryCount(0);
     onClose();
   };
 
@@ -517,6 +628,7 @@ export function BarcodeScannerZXing({
                 </div>
               ) : (
                 <>
+                  {/* Video element with iOS-specific attributes for inline playback */}
                   <video
                     ref={videoRef}
                     className="w-full h-auto aspect-[4/3] sm:aspect-video object-cover"
@@ -524,14 +636,16 @@ export function BarcodeScannerZXing({
                     autoPlay
                     muted
                     style={{ display: "block", width: "100%" }}
+                    // @ts-ignore - iOS Safari requires these non-standard attributes
+                    {...{ 'webkit-playsinline': 'true', 'x-webkit-airplay': 'allow' }}
                   />
 
                   {scanStatus === "ready" && (
                     <>
-                      {/* Green scanning box */}
+                      {/* Green scanning box - larger on mobile for easier targeting */}
                       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                         <div
-                          className="w-48 h-32 sm:w-56 sm:h-40 border-3 border-green-500 rounded-md shadow-lg"
+                          className="w-[70%] max-w-[280px] h-24 sm:h-32 md:h-40 border-3 border-green-500 rounded-md shadow-lg"
                           style={{
                             boxShadow:
                               "0 0 0 9999px rgba(0, 0, 0, 0.4), 0 0 15px rgba(34, 197, 94, 0.6)",
@@ -540,28 +654,57 @@ export function BarcodeScannerZXing({
                         />
                       </div>
 
-                      {/* Status indicator */}
+                      {/* Status indicator with mobile tips */}
                       <div className="absolute top-2 left-2 right-2 bg-green-500/90 text-white text-xs px-2 py-1 rounded text-center font-medium">
-                        ✓ Scanner ready - Point at barcode
+                        ✓ Point at barcode • Hold steady • Good lighting helps
                       </div>
                       
-                      {/* Camera switch button if multiple cameras */}
-                      {cameraDevices.length > 1 && (
-                        <button
-                          onClick={() => {
-                            const currentIndex = cameraDevices.findIndex(d => d.deviceId === selectedDeviceId);
-                            const nextIndex = (currentIndex + 1) % cameraDevices.length;
-                            setSelectedDeviceId(cameraDevices[nextIndex].deviceId);
-                            // Reinitialize with new camera
-                            cleanupZXing();
-                            setTimeout(() => initZXing(), 100);
-                          }}
-                          className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded flex items-center gap-1 hover:bg-black/80"
-                        >
-                          <RefreshCw className="h-3 w-3" />
-                          Switch Camera
-                        </button>
-                      )}
+                      {/* Bottom controls: torch and camera switch */}
+                      <div className="absolute bottom-2 left-2 right-2 flex justify-between items-center">
+                        {/* Torch/Flash toggle */}
+                        {torchSupported && (
+                          <button
+                            onClick={async () => {
+                              try {
+                                const videoTrack = videoRef.current?.srcObject instanceof MediaStream 
+                                  ? videoRef.current.srcObject.getVideoTracks()[0] 
+                                  : null;
+                                if (videoTrack) {
+                                  await videoTrack.applyConstraints({
+                                    advanced: [{ torch: !torchEnabled } as any]
+                                  });
+                                  setTorchEnabled(!torchEnabled);
+                                }
+                              } catch (e) {
+                                console.error('Failed to toggle torch:', e);
+                              }
+                            }}
+                            className={`bg-black/60 text-white text-xs px-2 py-1 rounded flex items-center gap-1 hover:bg-black/80 ${torchEnabled ? 'bg-yellow-500/80' : ''}`}
+                          >
+                            <Flashlight className={`h-3 w-3 ${torchEnabled ? 'text-yellow-300' : ''}`} />
+                            {torchEnabled ? 'Flash On' : 'Flash'}
+                          </button>
+                        )}
+                        
+                        {/* Camera switch button if multiple cameras */}
+                        {cameraDevices.length > 1 && (
+                          <button
+                            onClick={() => {
+                              const currentIndex = cameraDevices.findIndex(d => d.deviceId === selectedDeviceId);
+                              const nextIndex = (currentIndex + 1) % cameraDevices.length;
+                              setSelectedDeviceId(cameraDevices[nextIndex].deviceId);
+                              setTorchEnabled(false); // Reset torch when switching cameras
+                              // Reinitialize with new camera
+                              cleanupZXing();
+                              setTimeout(() => initZXing(), 100);
+                            }}
+                            className="bg-black/60 text-white text-xs px-2 py-1 rounded flex items-center gap-1 hover:bg-black/80 ml-auto"
+                          >
+                            <RotateCcw className="h-3 w-3" />
+                            Switch Camera
+                          </button>
+                        )}
+                      </div>
                     </>
                   )}
 

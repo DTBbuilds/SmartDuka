@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { config } from "@/lib/config";
 import {
   Badge,
   Button,
@@ -63,11 +64,10 @@ export default function InventoryPage() {
 
     setLoading(true);
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
       const branchParam = currentBranch ? `branchId=${currentBranch._id}` : '';
 
       // Load stats
-      const statsRes = await fetch(`${base}/inventory/stats${branchParam ? `?${branchParam}` : ''}`, {
+      const statsRes = await fetch(`${config.apiUrl}/inventory/stats${branchParam ? `?${branchParam}` : ''}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (statsRes.ok) {
@@ -76,7 +76,7 @@ export default function InventoryPage() {
       }
 
       // Load expiring products
-      const expiringRes = await fetch(`${base}/inventory/expiring-products?days=30${branchParam ? `&${branchParam}` : ''}`, {
+      const expiringRes = await fetch(`${config.apiUrl}/inventory/expiring-products?days=30${branchParam ? `&${branchParam}` : ''}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (expiringRes.ok) {

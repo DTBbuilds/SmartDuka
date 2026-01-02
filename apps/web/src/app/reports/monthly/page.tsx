@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { config } from "@/lib/config";
 import { Card, CardContent, CardHeader, CardTitle, Button } from "@smartduka/ui";
 import { Calendar, TrendingUp, DollarSign, ShoppingCart, Package } from "lucide-react";
 import { TableSkeleton } from "@/components/shared/loading-skeleton";
@@ -52,8 +53,7 @@ export default function MonthlySalesPage() {
   const fetchMonthlySales = async () => {
     setIsLoading(true);
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-      const res = await fetch(`${apiUrl}/reports/monthly-sales?month=${selectedMonth}`, {
+      const res = await fetch(`${config.apiUrl}/reports/monthly-sales?month=${selectedMonth}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 

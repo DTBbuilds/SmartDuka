@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { config } from "@/lib/config";
 import {
   Badge,
   Button,
@@ -67,8 +68,7 @@ export default function ReturnsPage() {
 
     setLoading(true);
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-      const res = await fetch(`${base}/returns`, {
+      const res = await fetch(`${config.apiUrl}/returns`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -90,8 +90,7 @@ export default function ReturnsPage() {
   const handleApprove = async (returnId: string) => {
     setActionLoading(true);
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-      const res = await fetch(`${base}/returns/${returnId}/approve`, {
+      const res = await fetch(`${config.apiUrl}/returns/${returnId}/approve`, {
         method: "PUT",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -130,8 +129,7 @@ export default function ReturnsPage() {
   const handleReject = async (returnId: string) => {
     setActionLoading(true);
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-      const res = await fetch(`${base}/returns/${returnId}/reject`, {
+      const res = await fetch(`${config.apiUrl}/returns/${returnId}/reject`, {
         method: "PUT",
         headers: {
           Authorization: `Bearer ${token}`,

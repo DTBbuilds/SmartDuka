@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { config } from "@/lib/config";
 import {
   Button,
   Card,
@@ -53,8 +54,7 @@ export function StockAdjustmentForm({
 
     setLoading(true);
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-      const res = await fetch(`${base}/inventory/adjustments`, {
+      const res = await fetch(`${config.apiUrl}/inventory/adjustments`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,

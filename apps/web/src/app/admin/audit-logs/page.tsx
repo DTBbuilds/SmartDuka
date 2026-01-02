@@ -1,5 +1,6 @@
 'use client';
 
+import { config } from '@/lib/config';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
@@ -54,7 +55,6 @@ export default function AuditLogsPage() {
     search: '',
   });
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
   const limit = 20;
 
   useEffect(() => {
@@ -68,7 +68,7 @@ export default function AuditLogsPage() {
 
   const fetchBranches = async () => {
     try {
-      const res = await fetch(`${apiUrl}/branches`, {
+      const res = await fetch(`${config.apiUrl}/branches`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -97,7 +97,7 @@ export default function AuditLogsPage() {
       params.append('limit', limit.toString());
       params.append('skip', ((page - 1) * limit).toString());
 
-      const res = await fetch(`${apiUrl}/audit/logs?${params}`, {
+      const res = await fetch(`${config.apiUrl}/audit/logs?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -127,7 +127,7 @@ export default function AuditLogsPage() {
       if (filters.startDate) params.append('startDate', filters.startDate);
       if (filters.endDate) params.append('endDate', filters.endDate);
 
-      const res = await fetch(`${apiUrl}/audit/logs/export?${params}`, {
+      const res = await fetch(`${config.apiUrl}/audit/logs/export?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 

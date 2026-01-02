@@ -37,7 +37,7 @@ export class MpesaMultiTenantService {
     private readonly encryptionService: MpesaEncryptionService,
   ) {
     // Use sandbox for development, production URL for live
-    const environment = this.configService.get<string>('MPESA_ENVIRONMENT', 'sandbox');
+    const environment = this.configService.get<string>('MPESA_ENV', 'sandbox');
     this.baseUrl = environment === 'production'
       ? 'https://api.safaricom.co.ke'
       : 'https://sandbox.safaricom.co.ke';

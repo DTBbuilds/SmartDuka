@@ -836,7 +836,8 @@ export class PaymentConfigService {
    * Get default environment from config
    */
   private getDefaultEnvironment(): ConfigEnvironment {
-    return this.configService.get<string>('MPESA_ENVIRONMENT') === 'production'
+    const env = this.configService.get<string>('MPESA_ENV', 'sandbox');
+    return env === 'production'
       ? ConfigEnvironment.PRODUCTION
       : ConfigEnvironment.SANDBOX;
   }

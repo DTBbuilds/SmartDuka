@@ -1,8 +1,10 @@
 'use client';
 
+import { config } from '@/lib/config';
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Badge, Tabs, TabsContent, TabsList, TabsTrigger, Input } from '@smartduka/ui';
-import { Search, MessageSquare, Clock, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
+import { Search, MessageSquare, Clock, CheckCircle, AlertCircle, RefreshCw, Inbox, ArrowRight } from 'lucide-react';
+import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/lib/use-toast';
 import { ToastContainer } from '@/components/toast-container';
@@ -37,8 +39,7 @@ export default function SupportTickets() {
     if (!token) return;
     try {
       setLoading(true);
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-      const res = await fetch(`${base}/support/admin/tickets?status=${activeTab}`, {
+      const res = await fetch(`${config.apiUrl}/support/admin/tickets?status=${activeTab}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -60,8 +61,7 @@ export default function SupportTickets() {
   const handleUpdateStatus = async (ticketId: string, newStatus: string) => {
     if (!token) return;
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-      const res = await fetch(`${base}/support/admin/tickets/${ticketId}/status`, {
+      const res = await fetch(`${config.apiUrl}/support/admin/tickets/${ticketId}/status`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -85,8 +85,7 @@ export default function SupportTickets() {
   const handleAddMessage = async (ticketId: string) => {
     if (!token || !newMessage.trim()) return;
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-      const res = await fetch(`${base}/support/tickets/${ticketId}/messages`, {
+      const res = await fetch(`${config.apiUrl}/support/tickets/${ticketId}/messages`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -161,6 +160,32 @@ export default function SupportTickets() {
             </button>
           </div>
         </div>
+
+        {/* Inbox Notice */}
+        <Card className="mb-6 border-blue-200 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800">
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
+                  <Inbox className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div>
+                  <p className="font-medium text-blue-900 dark:text-blue-100">Looking for user messages?</p>
+                  <p className="text-sm text-blue-700 dark:text-blue-300">
+                    Most user messages are in the Inbox. This page shows formal support tickets only.
+                  </p>
+                </div>
+              </div>
+              <Link 
+                href="/super-admin/inbox" 
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium flex-shrink-0"
+              >
+                Open Inbox
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Search */}
         <div className="mb-6">

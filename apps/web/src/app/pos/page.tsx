@@ -169,6 +169,12 @@ function POSContent() {
   const [showMpesaFlow, setShowMpesaFlow] = useState(false);
   const [mpesaPhoneNumber, setMpesaPhoneNumber] = useState('');
   const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
+  const [mpesaConfigStatus, setMpesaConfigStatus] = useState<{
+    isConfigured: boolean;
+    isVerified: boolean;
+    isEnabled: boolean;
+    shortCode?: string;
+  } | null>(null);
   const [showMobileCart, setShowMobileCart] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -177,7 +183,7 @@ function POSContent() {
   const { favorites, toggleFavorite, removeFavorite: removeFromFavorites, clearAll: clearFavorites } = useFavoriteProducts();
   const quantityPad = useQuantityPad();
   const itemDiscount = useItemDiscount();
-  const stockSync = useStockSync(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000', token);
+  const stockSync = useStockSync(config.apiUrl, token);
 
   // State for keyboard shortcuts help
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
@@ -520,8 +526,7 @@ function POSContent() {
     
     const loadCurrentShift = async () => {
       try {
-        const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-        const res = await fetch(`${base}/shifts/current`, {
+        const res = await fetch(`${config.apiUrl}/shifts/current`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         
@@ -581,12 +586,11 @@ function POSContent() {
     const controller = new AbortController();
     const run = async () => {
       try {
-        const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
         const headers: HeadersInit = {};
         if (token) {
           headers.Authorization = `Bearer ${token}`;
         }
-        const res = await fetch(`${base}/inventory/categories`, { signal: controller.signal, headers });
+        const res = await fetch(`${config.apiUrl}/inventory/categories`, { signal: controller.signal, headers });
         if (!res.ok) throw new Error(`Failed to load categories (${res.status})`);
         const text = await res.text();
         const data = text ? JSON.parse(text) : [];
@@ -609,12 +613,11 @@ function POSContent() {
       try {
         setLoading(true);
         setError(null);
-        const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
         const params = new URLSearchParams();
         if (q) params.set("q", q);
         if (tab !== "all") params.set("categoryId", tab);
         const query = params.toString();
-        const url = `${base}/inventory/products${query ? `?${query}` : ""}`;
+        const url = `${config.apiUrl}/inventory/products${query ? `?${query}` : ""}`;
         const headers: HeadersInit = {};
         if (token) {
           headers.Authorization = `Bearer ${token}`;
@@ -690,6 +693,31 @@ function POSContent() {
 
     fetchShopSettings();
   }, [shop?.id, token]);
+
+  // Fetch M-Pesa config status on mount
+  useEffect(() => {
+    const fetchMpesaConfigStatus = async () => {
+      try {
+        if (!token) return;
+        const res = await fetch(`${config.apiUrl}/payments/mpesa/config/status`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        if (res.ok) {
+          const statusText = await res.text();
+          const data = statusText ? JSON.parse(statusText) : null;
+          setMpesaConfigStatus(data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch M-Pesa config status:', err);
+        // Assume not configured if fetch fails
+        setMpesaConfigStatus({ isConfigured: false, isVerified: false, isEnabled: false });
+      }
+    };
+
+    fetchMpesaConfigStatus();
+  }, [token]);
 
   const subtotal = cartItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
   const totalDiscount = cartItems.reduce((sum, item) => sum + (item.discount ?? 0) * (item.quantity ?? 1), 0);
@@ -842,7 +870,6 @@ function POSContent() {
         setFeedbackType('loading');
         setFeedbackMessage('Creating order...');
         
-        const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
         const payload = {
           items: cartItems.map((item) => ({
             productId: item.productId,
@@ -869,7 +896,7 @@ function POSContent() {
           shiftId: currentShift?._id,
         };
         
-        const res = await fetch(`${base}/sales/checkout`, {
+        const res = await fetch(`${config.apiUrl}/sales/checkout`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -1008,7 +1035,6 @@ function POSContent() {
       setCheckoutStep(2);
       setFeedbackType('loading');
       setFeedbackMessage('Processing payment...');
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
       // Build payment with full details for analytics
       const paymentDetails: any = {
         method: selectedPaymentMethod || 'cash',
@@ -1044,7 +1070,7 @@ function POSContent() {
         cashierName,
         shiftId: currentShift?._id,
       };
-      const res = await fetch(`${base}/sales/checkout`, {
+      const res = await fetch(`${config.apiUrl}/sales/checkout`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1334,14 +1360,13 @@ function POSContent() {
         return;
       }
 
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
       let success = 0;
       let failed = 0;
 
       for (const order of orders) {
         try {
           const payload = { ...order.payload, status: "completed", isOffline: false };
-          const res = await fetch(`${base}/sales/checkout`, {
+          const res = await fetch(`${config.apiUrl}/sales/checkout`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -1734,9 +1759,8 @@ function POSContent() {
                                   if (!token) {
                                     throw new Error('Authentication token not available. Please log in again.');
                                   }
-                                  const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
                                   const payload = { ...order, status: "completed", isOffline: false };
-                                  const res = await fetch(`${base}/sales/checkout`, {
+                                  const res = await fetch(`${config.apiUrl}/sales/checkout`, {
                                     method: "POST",
                                     headers: { 
                                       "Content-Type": "application/json",
@@ -1811,6 +1835,7 @@ function POSContent() {
         total={total}
         itemCount={cartItems.reduce((sum, item) => sum + item.quantity, 0)}
         customerName={customerName || undefined}
+        mpesaConfigStatus={mpesaConfigStatus}
         onConfirm={handlePaymentMethodConfirm}
         onCancel={() => setShowPaymentMethodModal(false)}
       />

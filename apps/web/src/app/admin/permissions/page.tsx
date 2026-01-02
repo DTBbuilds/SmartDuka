@@ -1,5 +1,6 @@
 'use client';
 
+import { config } from '@/lib/config';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
@@ -41,8 +42,6 @@ export default function PermissionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-
   useEffect(() => {
     fetchData();
   }, []);
@@ -51,10 +50,10 @@ export default function PermissionsPage() {
     try {
       setIsLoading(true);
       const [staffRes, branchRes] = await Promise.all([
-        fetch(`${apiUrl}/users`, {
+        fetch(`${config.apiUrl}/users`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
-        fetch(`${apiUrl}/branches`, {
+        fetch(`${config.apiUrl}/branches`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
       ]);
@@ -99,7 +98,7 @@ export default function PermissionsPage() {
       setIsSaving(true);
       const permissionsArray = Object.values(permissions).filter((p) => p.userId && p.branchId);
 
-      const res = await fetch(`${apiUrl}/staff-assignment/permissions`, {
+      const res = await fetch(`${config.apiUrl}/staff-assignment/permissions`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

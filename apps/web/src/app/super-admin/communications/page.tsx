@@ -1,5 +1,6 @@
 'use client';
 
+import { config } from '@/lib/config';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
@@ -154,8 +155,6 @@ export default function SuperAdminCommunicationsPage() {
   const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<Set<string>>(new Set());
   const [bulkActionLoading, setBulkActionLoading] = useState(false);
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-  
   // Invoice cache
   const invoiceCacheRef = { data: null as Invoice[] | null, filter: '', timestamp: 0 };
   const CACHE_DURATION = 60000; // 1 minute
@@ -173,7 +172,7 @@ export default function SuperAdminCommunicationsPage() {
   const loadShops = async () => {
     try {
       setLoadingShops(true);
-      const res = await fetch(`${apiUrl}/super-admin/communications/shops`, {
+      const res = await fetch(`${config.apiUrl}/super-admin/communications/shops`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const shopsText = await res.text();
@@ -198,7 +197,7 @@ export default function SuperAdminCommunicationsPage() {
       }
       params.append('limit', '500'); // Fetch more for client-side pagination
 
-      const res = await fetch(`${apiUrl}/super-admin/communications/invoices?${params}`, {
+      const res = await fetch(`${config.apiUrl}/super-admin/communications/invoices?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const invText = await res.text();
@@ -214,7 +213,7 @@ export default function SuperAdminCommunicationsPage() {
     } finally {
       setLoadingInvoices(false);
     }
-  }, [apiUrl, token, invoiceFilter]);
+  }, [token, invoiceFilter]);
 
   // Pagination calculations for invoices
   const totalInvoicePages = Math.ceil(invoices.length / INVOICES_PER_PAGE);
@@ -255,7 +254,7 @@ export default function SuperAdminCommunicationsPage() {
       setBulkActionLoading(true);
       const results = await Promise.allSettled(
         Array.from(selectedInvoiceIds).map(id =>
-          fetch(`${apiUrl}/super-admin/communications/invoices/${id}/send-email`, {
+          fetch(`${config.apiUrl}/super-admin/communications/invoices/${id}/send-email`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}` },
           })
@@ -309,7 +308,7 @@ export default function SuperAdminCommunicationsPage() {
         category: emailForm.category,
       };
 
-      const res = await fetch(`${apiUrl}/super-admin/communications/email/send`, {
+      const res = await fetch(`${config.apiUrl}/super-admin/communications/email/send`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -385,7 +384,7 @@ export default function SuperAdminCommunicationsPage() {
         sendEmail: invoiceForm.sendEmail,
       };
 
-      const res = await fetch(`${apiUrl}/super-admin/communications/invoices`, {
+      const res = await fetch(`${config.apiUrl}/super-admin/communications/invoices`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -429,7 +428,7 @@ export default function SuperAdminCommunicationsPage() {
       setSendingEmailId(invoiceId);
       setError('');
       
-      const res = await fetch(`${apiUrl}/super-admin/communications/invoices/${invoiceId}/send-email`, {
+      const res = await fetch(`${config.apiUrl}/super-admin/communications/invoices/${invoiceId}/send-email`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });

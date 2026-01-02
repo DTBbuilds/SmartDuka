@@ -7,6 +7,8 @@ import { config } from './config';
 import { clearAllLocalData } from './db';
 import { clearAllCache } from './data-cache';
 import { hotDataManager } from './hot-data-manager';
+import { recordShopLogin, getPreferredShop, getRecentShops, getDeviceId, type RecentShop } from './device-memory';
+import { storeToken, storeShop, storeUser, clearSession, validateSessionIntegrity, shouldRefreshToken, refreshToken as refreshAuthToken, storeCsrfToken, getCsrfToken } from './secure-session';
 
 export type AuthUser = {
   sub: string;
@@ -69,49 +71,148 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const storedToken = window.localStorage.getItem('smartduka:token');
-    const storedShop = window.localStorage.getItem('smartduka:shop');
-    const storedDemoMode = window.localStorage.getItem(DEMO_MODE_KEY);
     
-    if (storedToken) {
-      try {
-        const decoded = JSON.parse(atob(storedToken.split('.')[1]));
-        setUser(decoded);
-        setToken(storedToken);
-        
-        // Sync cookie for middleware authentication (in case cookie expired but localStorage still has token)
-        document.cookie = `smartduka_token=${storedToken}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
-        
-        // Initialize activity tracking, status manager, and hot data
-        activityTracker.setToken(storedToken, decoded.role);
-        statusManager.initialize(storedToken, decoded.sub, decoded.shopId);
-        hotDataManager.initialize(storedToken);
-        if (storedShop) {
-          const parsedShop = JSON.parse(storedShop);
-          setShop(parsedShop);
-          // Restore demo mode only if shop is still pending
-          if (storedDemoMode === 'true' && parsedShop.status === 'pending') {
-            setIsDemoMode(true);
+    const initializeSession = async () => {
+      const storedToken = window.localStorage.getItem('smartduka:token');
+      const storedShop = window.localStorage.getItem('smartduka:shop');
+      const storedDemoMode = window.localStorage.getItem(DEMO_MODE_KEY);
+      
+      if (storedToken) {
+        try {
+          // Validate session integrity
+          const integrity = validateSessionIntegrity();
+          if (!integrity.valid) {
+            console.warn('Session integrity check failed:', integrity.reason);
+            clearSession();
+            setLoading(false);
+            return;
           }
+          
+          const decoded = JSON.parse(atob(storedToken.split('.')[1]));
+          
+          // Check if token is expired
+          const isExpired = decoded.exp && Date.now() >= decoded.exp * 1000;
+          if (isExpired) {
+            console.warn('Token expired, clearing session');
+            clearSession();
+            setLoading(false);
+            return;
+          }
+          
+          setUser(decoded);
+          setToken(storedToken);
+          
+          // Sync cookie for middleware authentication
+          const isSecure = window.location.protocol === 'https:';
+          const cookieFlags = [
+            `smartduka_token=${storedToken}`,
+            'path=/',
+            `max-age=${7 * 24 * 60 * 60}`,
+            'SameSite=Lax',
+          ];
+          if (isSecure) cookieFlags.push('Secure');
+          document.cookie = cookieFlags.join('; ');
+          
+          // Initialize activity tracking, status manager, and hot data
+          activityTracker.setToken(storedToken, decoded.role);
+          statusManager.initialize(storedToken, decoded.sub, decoded.shopId);
+          hotDataManager.initialize(storedToken);
+          
+          if (storedShop) {
+            const parsedShop = JSON.parse(storedShop);
+            setShop(parsedShop);
+            // Restore demo mode only if shop is still pending
+            if (storedDemoMode === 'true' && parsedShop.status === 'pending') {
+              setIsDemoMode(true);
+            }
+          }
+          
+          // Check if token should be refreshed (less than 5 minutes remaining)
+          if (shouldRefreshToken(storedToken)) {
+            const refreshResult = await refreshAuthToken();
+            if (refreshResult) {
+              setToken(refreshResult.accessToken);
+              const newDecoded = JSON.parse(atob(refreshResult.accessToken.split('.')[1]));
+              setUser(newDecoded);
+              // Update status manager with new token
+              statusManager.updateToken(refreshResult.accessToken);
+            }
+          }
+        } catch (err) {
+          console.error('Session initialization error:', err);
+          clearSession();
         }
-      } catch (err) {
-        window.localStorage.removeItem('smartduka:token');
-        window.localStorage.removeItem('smartduka:shop');
-        window.localStorage.removeItem(DEMO_MODE_KEY);
       }
-    }
-    setLoading(false);
+      setLoading(false);
+    };
+    
+    initializeSession();
+  }, []);
+
+  // Proactive token refresh - check every 2 minutes for 15-minute tokens
+  useEffect(() => {
+    if (!token) return;
+
+    const checkAndRefresh = async () => {
+      if (shouldRefreshToken(token)) {
+        console.log('[Auth] Token expiring soon, refreshing...');
+        const refreshResult = await refreshAuthToken();
+        if (refreshResult) {
+          setToken(refreshResult.accessToken);
+          const newDecoded = JSON.parse(atob(refreshResult.accessToken.split('.')[1]));
+          setUser(newDecoded);
+          // Update status manager with new token
+          statusManager.updateToken(refreshResult.accessToken);
+          console.log('[Auth] Token refreshed successfully');
+        } else {
+          console.warn('[Auth] Token refresh failed');
+        }
+      }
+    };
+
+    // Check every 2 minutes
+    const interval = setInterval(checkAndRefresh, 2 * 60 * 1000);
+    
+    return () => clearInterval(interval);
+  }, [token]);
+
+  // Listen for token-refreshed events from session expiry warning component
+  useEffect(() => {
+    const handleTokenRefreshed = (event: CustomEvent<{ accessToken: string; csrfToken: string }>) => {
+      const { accessToken } = event.detail;
+      if (accessToken) {
+        console.log('[Auth] Token refreshed via session extension');
+        setToken(accessToken);
+        try {
+          const newDecoded = JSON.parse(atob(accessToken.split('.')[1]));
+          setUser(newDecoded);
+          // Update status manager with new token
+          statusManager.updateToken(accessToken);
+          // Update activity tracker
+          activityTracker.setToken(accessToken, newDecoded.role);
+        } catch (err) {
+          console.error('[Auth] Failed to decode refreshed token:', err);
+        }
+      }
+    };
+
+    window.addEventListener('token-refreshed', handleTokenRefreshed as EventListener);
+    return () => {
+      window.removeEventListener('token-refreshed', handleTokenRefreshed as EventListener);
+    };
   }, []);
 
   const login = async (email: string, password: string, role?: 'admin' | 'cashier' | 'super_admin', shopId?: string) => {
     const res = await fetch(`${config.apiUrl}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include', // Important: receive httpOnly cookies
       body: JSON.stringify({ 
         email, 
         password,
         role,
         shopId,
+        deviceId: getDeviceId(),
       }),
     });
     const text = await res.text();
@@ -119,8 +220,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!res.ok) {
       throw new Error(data.message || 'Login failed');
     }
-    const { token: authToken, user: userData, shop: shopData } = data;
+    const { tokens, user: userData, shop: shopData } = data;
     
+    // Get access token from response (also set as httpOnly cookie by server)
+    const authToken = tokens?.accessToken;
     if (!authToken) throw new Error('No token received');
     
     const decoded = JSON.parse(atob(authToken.split('.')[1]));
@@ -128,11 +231,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(authToken);
     setShop(shopData);
     
-    window.localStorage.setItem('smartduka:token', authToken);
-    window.localStorage.setItem('smartduka:shop', JSON.stringify(shopData));
+    // Use secure session storage
+    storeToken(authToken, tokens?.sessionId, tokens?.expiresIn);
+    storeShop(shopData);
+    storeUser(userData);
     
-    // Set cookie for middleware authentication
-    document.cookie = `smartduka_token=${authToken}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
+    // Store CSRF token for future requests
+    if (tokens?.csrfToken) {
+      storeCsrfToken(tokens.csrfToken);
+    }
+    
+    // Record shop login for device memory (with role)
+    if (shopData) {
+      recordShopLogin(
+        { id: shopData.id, name: shopData.name },
+        { email: userData.email, name: userData.name, role: decoded.role }
+      );
+    }
     
     // Initialize activity tracking, status manager, and hot data
     activityTracker.setToken(authToken, decoded.role);
@@ -161,6 +276,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const res = await fetch(`${config.apiUrl}/auth/register-shop`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include', // Important: receive httpOnly cookies
       body: JSON.stringify({ shop: normalizedShop, admin: adminPayload }),
     });
     
@@ -169,8 +285,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!res.ok) {
       throw new Error(data.message || 'Registration failed');
     }
-    const { token: authToken, user: userData, shop: shopInfo } = data;
+    const { tokens, user: userData, shop: shopInfo } = data;
     
+    const authToken = tokens?.accessToken;
     if (!authToken) throw new Error('No token received');
     
     const decoded = JSON.parse(atob(authToken.split('.')[1]));
@@ -178,11 +295,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(authToken);
     setShop(shopInfo);
     
-    window.localStorage.setItem('smartduka:token', authToken);
-    window.localStorage.setItem('smartduka:shop', JSON.stringify(shopInfo));
+    // Use secure session storage
+    storeToken(authToken, tokens?.sessionId, tokens?.expiresIn);
+    storeShop(shopInfo);
+    storeUser(userData);
     
-    // Set cookie for middleware authentication
-    document.cookie = `smartduka_token=${authToken}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
+    // Store CSRF token
+    if (tokens?.csrfToken) {
+      storeCsrfToken(tokens.csrfToken);
+    }
     
     // Initialize activity tracking and status manager
     activityTracker.setToken(authToken, decoded.role);
@@ -222,13 +343,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setShop(null);
     setToken(null);
     setIsDemoMode(false);
-    window.localStorage.removeItem('smartduka:token');
-    window.localStorage.removeItem('smartduka:shop');
-    window.localStorage.removeItem('smartduka:lastActivity');
-    window.localStorage.removeItem(DEMO_MODE_KEY);
     
-    // Clear auth cookie
-    document.cookie = 'smartduka_token=; path=/; max-age=0';
+    // Use secure session clear (handles localStorage, cookie, and session meta)
+    clearSession();
+    window.localStorage.removeItem(DEMO_MODE_KEY);
   };
 
   // Demo mode functions
@@ -268,6 +386,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const res = await fetch(`${config.apiUrl}/auth/login-pin`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ pin, shopId }),
     });
 
@@ -276,8 +395,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!res.ok) {
       throw new Error(data.message || 'Invalid PIN or Shop ID');
     }
-    const { token: authToken, user: userData, shop: shopInfo } = data;
+    const { tokens, user: userData, shop: shopInfo } = data;
 
+    const authToken = tokens?.accessToken;
     if (!authToken) throw new Error('No token received');
 
     const decoded = JSON.parse(atob(authToken.split('.')[1]));
@@ -285,11 +405,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(authToken);
     setShop(shopInfo);
 
-    window.localStorage.setItem('smartduka:token', authToken);
-    window.localStorage.setItem('smartduka:shop', JSON.stringify(shopInfo));
+    storeToken(authToken, tokens?.sessionId, tokens?.expiresIn);
+    storeShop(shopInfo);
+    storeUser(userData);
     
-    // Set cookie for middleware authentication
-    document.cookie = `smartduka_token=${authToken}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
+    if (tokens?.csrfToken) {
+      storeCsrfToken(tokens.csrfToken);
+    }
 
     // Initialize activity tracking and status manager
     activityTracker.setToken(authToken, decoded.role);
@@ -309,6 +431,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const res = await fetch(`${config.apiUrl}/auth/register-shop-google`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ googleProfile, shop: shopData }),
     });
 
@@ -317,8 +440,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!res.ok) {
       throw new Error(data.message || 'Registration failed');
     }
-    const { token: authToken, user: userData, shop: shopInfo } = data;
+    const { tokens, user: userData, shop: shopInfo } = data;
 
+    const authToken = tokens?.accessToken;
     if (!authToken) throw new Error('No token received');
 
     const decoded = JSON.parse(atob(authToken.split('.')[1]));
@@ -326,11 +450,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(authToken);
     setShop(shopInfo);
 
-    window.localStorage.setItem('smartduka:token', authToken);
-    window.localStorage.setItem('smartduka:shop', JSON.stringify(shopInfo));
+    storeToken(authToken, tokens?.sessionId, tokens?.expiresIn);
+    storeShop(shopInfo);
+    storeUser(userData);
     
-    // Set cookie for middleware authentication
-    document.cookie = `smartduka_token=${authToken}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
+    if (tokens?.csrfToken) {
+      storeCsrfToken(tokens.csrfToken);
+    }
 
     // Initialize activity tracking and status manager
     activityTracker.setToken(authToken, decoded.role);

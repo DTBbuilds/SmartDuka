@@ -1,42 +1,151 @@
-import { Controller, Post, Body, Get, UseGuards, Req, Res, Query } from '@nestjs/common';
-import type { Response } from 'express';
+import { Controller, Post, Body, Get, UseGuards, Req, Res, Query, Delete, Param } from '@nestjs/common';
+import type { Response, Request } from 'express';
 import { AuthService } from './auth.service';
+import { TokenService } from './token.service';
 import { RegisterShopDto } from './dto/register-shop.dto';
 import { LoginDto } from './dto/login.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { JwtCookieAuthGuard, Public } from './guards/jwt-cookie-auth.guard';
+import { RefreshTokenGuard } from './guards/refresh-token.guard';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { PinRateLimitGuard } from './guards/pin-rate-limit.guard';
+import { SkipCsrf } from './guards/csrf.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { ConfigService } from '@nestjs/config';
+import { CookieService } from './services/cookie.service';
+import { Throttle } from '@nestjs/throttler';
 
 @Controller('auth')
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
+    private readonly tokenService: TokenService,
     private readonly configService: ConfigService,
+    private readonly cookieService: CookieService,
   ) {}
 
   @Post('register-shop')
-  async registerShop(@Body() dto: RegisterShopDto) {
-    return this.authService.registerShop(dto);
+  @SkipCsrf()
+  async registerShop(@Body() dto: RegisterShopDto, @Res({ passthrough: true }) res: Response) {
+    const result = await this.authService.registerShopWithTokens(dto);
+    
+    // Set secure httpOnly cookies
+    if (result.tokens) {
+      this.cookieService.setAuthCookies(
+        res,
+        result.tokens.accessToken,
+        result.tokens.refreshToken,
+        result.tokens.csrfToken,
+      );
+    }
+    
+    // Return response without sensitive tokens in body (cookies handle it)
+    return {
+      shop: result.shop,
+      user: result.user,
+      // Include tokens for mobile/API clients that can't use cookies
+      tokens: {
+        accessToken: result.tokens?.accessToken,
+        expiresIn: result.tokens?.expiresIn,
+        csrfToken: result.tokens?.csrfToken,
+      },
+    };
   }
 
   @Post('login')
-  async login(@Body() dto: LoginDto, @Req() req: any) {
+  @SkipCsrf()
+  async login(@Body() dto: LoginDto, @Req() req: any, @Res({ passthrough: true }) res: Response) {
     const ipAddress = req.ip || req.connection.remoteAddress;
     const userAgent = req.get('user-agent');
-    return this.authService.login(dto, ipAddress, userAgent);
+    const result = await this.authService.loginWithTokens(dto, ipAddress, userAgent);
+    
+    // Set secure httpOnly cookies
+    if (result.tokens) {
+      this.cookieService.setAuthCookies(
+        res,
+        result.tokens.accessToken,
+        result.tokens.refreshToken,
+        result.tokens.csrfToken,
+      );
+    }
+    
+    return {
+      user: result.user,
+      shop: result.shop,
+      tokens: {
+        accessToken: result.tokens?.accessToken,
+        expiresIn: result.tokens?.expiresIn,
+        csrfToken: result.tokens?.csrfToken,
+      },
+    };
   }
 
   @UseGuards(PinRateLimitGuard)
   @Post('login-pin')
+  @SkipCsrf()
   async loginWithPin(
     @Body() body: { pin: string; shopId: string },
     @Req() req: any,
+    @Res({ passthrough: true }) res: Response,
   ) {
     const ipAddress = req.ip || req.connection.remoteAddress;
     const userAgent = req.get('user-agent');
-    return this.authService.loginWithPin(body.pin, body.shopId, ipAddress, userAgent);
+    const result = await this.authService.loginWithPinAndTokens(body.pin, body.shopId, ipAddress, userAgent);
+    
+    if (result.tokens) {
+      this.cookieService.setAuthCookies(
+        res,
+        result.tokens.accessToken,
+        result.tokens.refreshToken,
+        result.tokens.csrfToken,
+      );
+    }
+    
+    return {
+      user: result.user,
+      shop: result.shop,
+      tokens: {
+        accessToken: result.tokens?.accessToken,
+        expiresIn: result.tokens?.expiresIn,
+        csrfToken: result.tokens?.csrfToken,
+      },
+    };
+  }
+
+  /**
+   * Login with name and PIN (for cashiers)
+   * POST /auth/login-cashier
+   */
+  @UseGuards(PinRateLimitGuard)
+  @Post('login-cashier')
+  @SkipCsrf()
+  async loginCashier(
+    @Body() body: { name: string; pin: string },
+    @Req() req: any,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.get('user-agent');
+    const result = await this.authService.loginWithNameAndPinAndTokens(body.name, body.pin, ipAddress, userAgent);
+    
+    if (result.tokens) {
+      this.cookieService.setAuthCookies(
+        res,
+        result.tokens.accessToken,
+        result.tokens.refreshToken,
+        result.tokens.csrfToken,
+      );
+    }
+    
+    return {
+      user: result.user,
+      shop: result.shop,
+      tokens: {
+        accessToken: result.tokens?.accessToken,
+        expiresIn: result.tokens?.expiresIn,
+        csrfToken: result.tokens?.csrfToken,
+      },
+    };
   }
 
   @UseGuards(JwtAuthGuard)
@@ -49,10 +158,74 @@ export class AuthController {
     return { message: 'PIN set successfully' };
   }
 
+  /**
+   * Refresh token endpoint
+   * Uses refresh token (from cookie or body) to issue new token pair
+   * Does NOT require valid access token - that's the whole point!
+   */
+  @UseGuards(RefreshTokenGuard)
+  @Throttle({ default: { limit: 10, ttl: 60000 } }) // 10 refreshes per minute max
+  @Post('refresh')
+  @SkipCsrf() // Refresh doesn't need CSRF - it uses refresh token
+  async refreshToken(
+    @Req() req: any,
+    @Res({ passthrough: true }) res: Response,
+    @Body() body: { deviceId?: string; deviceFingerprint?: string; refreshToken?: string },
+  ) {
+    const refreshToken = req.refreshToken || body.refreshToken;
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    
+    const result = await this.authService.refreshTokenWithRotation(
+      refreshToken,
+      {
+        deviceId: body.deviceId,
+        deviceFingerprint: body.deviceFingerprint,
+        ipAddress,
+      },
+    );
+    
+    if (result.tokens) {
+      this.cookieService.setAuthCookies(
+        res,
+        result.tokens.accessToken,
+        result.tokens.refreshToken,
+        result.tokens.csrfToken,
+      );
+    }
+    
+    return {
+      user: result.user,
+      shop: result.shop,
+      tokens: {
+        accessToken: result.tokens?.accessToken,
+        expiresIn: result.tokens?.expiresIn,
+        csrfToken: result.tokens?.csrfToken,
+      },
+    };
+  }
+
   @UseGuards(JwtAuthGuard)
   @Get('me')
-  async getProfile(@CurrentUser() user: any) {
-    return user;
+  async getProfile(@CurrentUser() user: any, @Req() req: any) {
+    // Extract the access token from cookie or header to return to frontend
+    // This allows the frontend to store it in localStorage for client-side use
+    let accessToken: string | null = null;
+    
+    if (req.cookies && req.cookies['smartduka_access']) {
+      accessToken = req.cookies['smartduka_access'];
+    } else if (req.headers.authorization?.startsWith('Bearer ')) {
+      accessToken = req.headers.authorization.substring(7);
+    }
+    
+    // Get CSRF token from cookie
+    const csrfToken = req.cookies?.['smartduka_csrf'] || null;
+    
+    return {
+      ...user,
+      // Include tokens for frontend storage (needed after OAuth callback)
+      accessToken,
+      csrfToken,
+    };
   }
 
   // Google OAuth endpoints
@@ -74,21 +247,30 @@ export class AuthController {
   async googleAuthCallback(@Req() req: any, @Res() res: Response) {
     const ipAddress = req.ip || req.connection.remoteAddress;
     const userAgent = req.get('user-agent');
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
     
     try {
-      const result = await this.authService.googleLogin(req.user, ipAddress, userAgent);
-      const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
+      const result = await this.authService.googleLoginWithTokens(req.user, ipAddress, userAgent);
       
       if (result.isNewUser) {
         // New user - redirect to shop registration with Google profile
+        // Profile data is safe to include in URL (no tokens)
         const profileData = encodeURIComponent(JSON.stringify(result.googleProfile));
         res.redirect(`${frontendUrl}/register-shop?google=${profileData}`);
       } else {
-        // Existing user - redirect with token
-        res.redirect(`${frontendUrl}/auth/callback?token=${result.token}`);
+        // Existing user - set secure httpOnly cookies instead of URL token
+        if (result.tokens) {
+          this.cookieService.setAuthCookies(
+            res,
+            result.tokens.accessToken,
+            result.tokens.refreshToken,
+            result.tokens.csrfToken,
+          );
+        }
+        // Redirect without token in URL - cookies handle auth
+        res.redirect(`${frontendUrl}/auth/callback?success=true`);
       }
     } catch (error: any) {
-      const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
       res.redirect(`${frontendUrl}/login?error=${encodeURIComponent(error.message || 'Google login failed')}`);
     }
   }
@@ -104,5 +286,125 @@ export class AuthController {
     const ipAddress = req.ip || req.connection.remoteAddress;
     const userAgent = req.get('user-agent');
     return this.authService.registerShopWithGoogle(body.googleProfile, body.shop, ipAddress, userAgent);
+  }
+
+  // ==================== Password Reset ====================
+
+  /**
+   * Request password reset - sends email with reset link
+   */
+  @Post('forgot-password')
+  async forgotPassword(
+    @Body() body: { email: string },
+    @Req() req: any,
+  ) {
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.get('user-agent');
+    return this.authService.requestPasswordReset(body.email, ipAddress, userAgent);
+  }
+
+  /**
+   * Reset password using token
+   */
+  @Post('reset-password')
+  async resetPassword(
+    @Body() body: { token: string; newPassword: string },
+  ) {
+    return this.authService.resetPassword(body.token, body.newPassword);
+  }
+
+  // ==================== Session Management ====================
+
+  /**
+   * Get all active sessions for current user
+   */
+  @UseGuards(JwtAuthGuard)
+  @Get('sessions')
+  async getSessions(@CurrentUser() user: any) {
+    const sessions = await this.tokenService.getUserSessions(user.sub);
+    return {
+      sessions: sessions.map(s => ({
+        id: s.sessionId,
+        deviceId: s.deviceId,
+        deviceName: s.deviceName,
+        browser: s.browser,
+        os: s.os,
+        location: s.location,
+        clientType: s.clientType,
+        lastActivityAt: s.lastActivityAt,
+        createdAt: (s as any).createdAt,
+        isCurrent: s.accessTokenJti === user.jti,
+      })),
+    };
+  }
+
+  /**
+   * Terminate a specific session
+   */
+  @UseGuards(JwtAuthGuard)
+  @Delete('sessions/:sessionId')
+  async terminateSession(
+    @Param('sessionId') sessionId: string,
+    @CurrentUser() user: any,
+  ) {
+    await this.tokenService.terminateSession(sessionId, 'User requested termination');
+    return { message: 'Session terminated successfully' };
+  }
+
+  /**
+   * Logout from all devices (revoke all tokens)
+   */
+  @UseGuards(JwtAuthGuard)
+  @Post('logout-all')
+  async logoutAll(@CurrentUser() user: any) {
+    const count = await this.tokenService.revokeAllUserTokens(user.sub, 'User logged out from all devices');
+    return { 
+      message: 'Logged out from all devices',
+      sessionsTerminated: count,
+    };
+  }
+
+  /**
+   * Logout current session
+   */
+  @UseGuards(JwtAuthGuard)
+  @Post('logout')
+  async logout(@CurrentUser() user: any, @Res({ passthrough: true }) res: Response) {
+    if (user.sessionId) {
+      await this.tokenService.terminateSession(user.sessionId, 'User logout');
+    }
+    
+    // Clear all auth cookies
+    this.cookieService.clearAuthCookies(res);
+    
+    return { message: 'Logged out successfully' };
+  }
+
+  /**
+   * Logout from all devices and clear cookies
+   */
+  @UseGuards(JwtAuthGuard)
+  @Post('logout-all')
+  async logoutAllDevices(@CurrentUser() user: any, @Res({ passthrough: true }) res: Response) {
+    const count = await this.tokenService.revokeAllUserTokens(user.sub, 'User logged out from all devices');
+    
+    // Clear all auth cookies
+    this.cookieService.clearAuthCookies(res);
+    
+    return { 
+      message: 'Logged out from all devices',
+      sessionsTerminated: count,
+    };
+  }
+
+  /**
+   * Get new CSRF token (for SPA that needs to refresh CSRF)
+   */
+  @UseGuards(JwtAuthGuard)
+  @Get('csrf-token')
+  async getCsrfToken(@Res({ passthrough: true }) res: Response) {
+    const csrfToken = require('crypto').randomBytes(32).toString('hex');
+    this.cookieService.setCsrfTokenCookie(res, csrfToken);
+    return { csrfToken };
   }
 }

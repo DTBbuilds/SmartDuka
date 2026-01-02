@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button } from '@smartduka/ui';
 import { useAuth } from '@/lib/auth-context';
+import { config } from '@/lib/config';
 import { useToast } from '@/lib/use-toast';
 import { ToastContainer } from '@/components/toast-container';
 import { AuthGuard } from '@/components/auth-guard';
@@ -85,8 +86,7 @@ function CashierDashboardContent() {
     if (!token || !user) return;
 
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-      const res = await fetch(`${base}/shifts/current`, {
+      const res = await fetch(`${config.apiUrl}/shifts/current`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -106,7 +106,7 @@ function CashierDashboardContent() {
           
           // Load sales data for this shift
           try {
-            const salesRes = await fetch(`${base}/shifts/${data._id}/sales`, {
+            const salesRes = await fetch(`${config.apiUrl}/shifts/${data._id}/sales`, {
               headers: { Authorization: `Bearer ${token}` },
             });
             
@@ -140,10 +140,8 @@ function CashierDashboardContent() {
 
     try {
       setLoading(true);
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-
       // Use the dedicated cashier stats endpoint
-      const res = await fetch(`${base}/sales/cashier-stats`, {
+      const res = await fetch(`${config.apiUrl}/sales/cashier-stats`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 

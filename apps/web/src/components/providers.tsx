@@ -12,6 +12,7 @@ import { PWAInstallPrompt } from "./pwa-install-prompt";
 import { SessionExpiryWarning } from "./session-expiry-warning";
 import { InactivityWarning } from "./inactivity-warning";
 import { ConnectionStatusIndicator } from "./startup-screen";
+import { BackendStatusOverlay } from "./backend-status-overlay";
 import { connectionMonitor } from "@/lib/connection-monitor";
 import { tabVisibilityManager } from "@/lib/tab-visibility";
 import { inactivityManager } from "@/lib/inactivity-manager";
@@ -55,6 +56,7 @@ export function Providers({ children }: { children: ReactNode }) {
             <DemoModeIndicator />
             <SessionExpiryWarning />
             <InactivityWarning />
+            <BackendStatusOverlay />
             <PWAInstallPrompt />
           </ThemeProvider>
         </LoadingProvider>
