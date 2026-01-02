@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Loader2, WifiOff, AlertTriangle, RefreshCw, Server, CheckCircle, Clock } from 'lucide-react';
+import { Loader2, WifiOff, AlertTriangle, RefreshCw, Server, CheckCircle, Clock, Database, Shield } from 'lucide-react';
 import { apiResilience, type BackendState, type BackendStatus } from '@/lib/api-resilience';
+import { cn } from '@/lib/utils';
 
 interface BackendStatusOverlayProps {
   /** Show as full-screen overlay (default) or inline banner */
@@ -51,8 +52,14 @@ export function BackendStatusOverlay({
     setVisible(false);
   };
 
-  // For waking/slow states, show non-blocking banner at top
-  if (state.status === 'waking' || state.status === 'slow') {
+  // For waking state, show full-screen informative overlay with progress and tips
+  // This is more helpful for users during long backend wake-up periods
+  if (state.status === 'waking') {
+    return <WakingOverlay state={state} onRetry={handleRetry} zIndex={zIndex} />;
+  }
+
+  // For slow state, show non-blocking banner at top
+  if (state.status === 'slow') {
     return <StatusBanner state={state} onRetry={handleRetry} />;
   }
 
@@ -208,6 +215,216 @@ function StatusBanner({ state, onRetry }: { state: BackendState; onRetry: () => 
             <span className="hidden xs:inline">Retry</span>
           </button>
         )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Full-screen informative overlay for backend wake-up
+ * Shows detailed progress, tips, and elapsed time
+ */
+function WakingOverlay({ state, onRetry, zIndex = 50 }: { state: BackendState; onRetry: () => void; zIndex?: number }) {
+  const [elapsedTime, setElapsedTime] = useState(0);
+  const [showTips, setShowTips] = useState(false);
+  const [currentTip, setCurrentTip] = useState(0);
+
+  const tips = [
+    "Our servers may take a moment to wake up if they've been idle.",
+    "First load of the day might be slower - we're preparing everything for you.",
+    "Your data is being securely loaded from our servers.",
+    "Thank you for your patience - we're almost there!",
+    "Tip: You can work offline once the app loads.",
+  ];
+
+  // Track elapsed time
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setElapsedTime(prev => prev + 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Show tips after 5 seconds
+  useEffect(() => {
+    if (elapsedTime >= 5) {
+      setShowTips(true);
+    }
+  }, [elapsedTime]);
+
+  // Rotate tips every 5 seconds
+  useEffect(() => {
+    if (!showTips) return;
+    const interval = setInterval(() => {
+      setCurrentTip(prev => (prev + 1) % tips.length);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [showTips, tips.length]);
+
+  const getStepStatus = (progress: number | undefined, thresholds: { complete: number; loading: number }): 'complete' | 'loading' | 'pending' => {
+    if (!progress) return 'loading';
+    if (progress > thresholds.complete) return 'complete';
+    if (progress > thresholds.loading) return 'loading';
+    return 'pending';
+  };
+
+  const steps: Array<{ id: string; label: string; icon: React.ReactNode; status: 'complete' | 'loading' | 'pending' }> = [
+    { 
+      id: 'server', 
+      label: 'Waking up server', 
+      icon: <Server className="h-4 w-4" />, 
+      status: state.progress && state.progress > 20 ? 'complete' : 'loading',
+    },
+    { 
+      id: 'connection', 
+      label: 'Establishing connection', 
+      icon: <Database className="h-4 w-4" />, 
+      status: getStepStatus(state.progress, { complete: 60, loading: 20 }),
+    },
+    { 
+      id: 'ready', 
+      label: 'Preparing your workspace', 
+      icon: <Shield className="h-4 w-4" />, 
+      status: state.progress && state.progress > 90 ? 'loading' : 'pending',
+    },
+  ];
+
+  return (
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-background via-background to-primary/5"
+      style={{ zIndex }}
+    >
+      <div className="w-full max-w-md px-6">
+        {/* Logo and Brand */}
+        <div className="text-center mb-8">
+          <div className="relative inline-block mb-4">
+            {/* Animated logo ring */}
+            <div className="h-20 w-20 rounded-full border-4 border-primary/20 mx-auto" />
+            <div className="absolute inset-0 h-20 w-20 rounded-full border-4 border-transparent border-t-primary animate-spin mx-auto" />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="text-3xl font-bold text-primary">S</span>
+            </div>
+          </div>
+          <h1 className="text-2xl font-bold text-foreground">SmartDuka</h1>
+          <p className="text-sm text-muted-foreground mt-1">Point of Sale & Inventory Management</p>
+        </div>
+
+        {/* Connection Status Card */}
+        <div className="bg-card border rounded-xl p-6 shadow-lg mb-6">
+          {/* Status Header */}
+          <div className="flex items-center justify-center gap-3 mb-6">
+            <RefreshCw className="h-5 w-5 text-primary animate-spin" />
+            <span className="font-medium text-primary">
+              {state.message || 'Connecting to server...'}
+            </span>
+          </div>
+
+          {/* Progress Steps */}
+          <div className="space-y-3 mb-6">
+            {steps.map((step) => (
+              <div key={step.id} className="flex items-center gap-3">
+                {/* Step indicator */}
+                <div className={cn(
+                  'flex items-center justify-center h-8 w-8 rounded-full border-2 transition-all',
+                  step.status === 'complete' && 'bg-green-500 border-green-500 text-white',
+                  step.status === 'loading' && 'border-primary text-primary animate-pulse',
+                  step.status === 'pending' && 'border-muted-foreground/30 text-muted-foreground/50',
+                )}>
+                  {step.status === 'complete' ? (
+                    <CheckCircle className="h-4 w-4" />
+                  ) : step.status === 'loading' ? (
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                  ) : (
+                    step.icon
+                  )}
+                </div>
+
+                {/* Step label */}
+                <div className="flex-1">
+                  <p className={cn(
+                    'text-sm font-medium',
+                    step.status === 'complete' && 'text-green-600 dark:text-green-400',
+                    step.status === 'loading' && 'text-foreground',
+                    step.status === 'pending' && 'text-muted-foreground/50',
+                  )}>
+                    {step.label}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Progress bar */}
+          {state.progress !== undefined && (
+            <div className="space-y-2">
+              <div className="h-2 bg-muted rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-primary transition-all duration-500 ease-out rounded-full"
+                  style={{ width: `${state.progress}%` }}
+                />
+              </div>
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>{state.progress}% complete</span>
+                {state.estimatedWaitTime !== undefined && state.estimatedWaitTime > 0 && (
+                  <span className="flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    ~{state.estimatedWaitTime}s remaining
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Retry info */}
+          {state.retryCount > 0 && (
+            <p className="text-xs text-center text-muted-foreground mt-3">
+              Attempt {state.retryCount} of 10
+            </p>
+          )}
+
+          {/* Why is this happening */}
+          <div className="bg-muted/50 rounded-lg p-3 mt-4">
+            <p className="text-xs text-muted-foreground">
+              💡 <strong>Why is this happening?</strong> The server goes to sleep after periods of inactivity to save resources. It will be ready in a moment.
+            </p>
+          </div>
+        </div>
+
+        {/* Tips for long waits */}
+        {showTips && (
+          <div className="text-center animate-in fade-in slide-in-from-bottom-2 duration-500">
+            <div className="bg-primary/5 border border-primary/10 rounded-lg p-4">
+              <p className="text-sm text-muted-foreground italic">
+                💡 {tips[currentTip]}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Elapsed time indicator for very long waits */}
+        {elapsedTime >= 10 && (
+          <div className="text-center mt-4">
+            <p className="text-xs text-muted-foreground">
+              Loading for {elapsedTime} seconds...
+              {elapsedTime >= 30 && (
+                <span className="block mt-1">
+                  This is taking longer than usual. Please check your internet connection.
+                </span>
+              )}
+            </p>
+          </div>
+        )}
+
+        {/* Progress dots */}
+        <div className="flex justify-center gap-1 mt-6">
+          {[0, 1, 2].map((i) => (
+            <div
+              key={i}
+              className="h-2 w-2 rounded-full bg-primary animate-bounce"
+              style={{ animationDelay: `${i * 150}ms` }}
+            />
+          ))}
+        </div>
       </div>
     </div>
   );

@@ -14,15 +14,30 @@ function AuthCallbackContent() {
   const searchParams = useSearchParams();
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [message, setMessage] = useState('Completing sign in...');
+  const [hasProcessed, setHasProcessed] = useState(false);
 
   useEffect(() => {
+    // Prevent processing multiple times
+    if (hasProcessed) return;
+
     const success = searchParams.get('success');
     const error = searchParams.get('error');
-    // Token in URL - used as fallback for cross-origin OAuth when cookies are blocked
+    // Token in URL - used for cross-origin OAuth
     const urlToken = searchParams.get('token');
     const urlCsrf = searchParams.get('csrf');
 
+    // Wait for searchParams to be populated - on initial render they may be empty
+    // Only proceed if we have at least one expected parameter OR if URL has no query string
+    const urlHasParams = typeof window !== 'undefined' && window.location.search.length > 1;
+    const paramsReady = success !== null || error !== null || urlToken !== null || !urlHasParams;
+    
+    if (!paramsReady) {
+      // SearchParams not ready yet, wait for next render
+      return;
+    }
+
     if (error) {
+      setHasProcessed(true);
       setStatus('error');
       setMessage(decodeURIComponent(error));
       setTimeout(() => {
@@ -34,31 +49,43 @@ function AuthCallbackContent() {
     // OAuth success flow - token is passed via URL for cross-origin support
     if (success === 'true') {
       if (urlToken) {
+        setHasProcessed(true);
         handleTokenFromUrl(urlToken, urlCsrf);
         return;
       }
-      // No token in URL - this shouldn't happen with Option 2
-      setStatus('error');
-      setMessage('Authentication token not received');
-      setTimeout(() => {
-        router.push('/login');
-      }, 3000);
-      return;
+      // No token in URL - wait a moment in case params are still loading
+      // Use a small delay before showing error
+      const timeout = setTimeout(() => {
+        if (!hasProcessed) {
+          setHasProcessed(true);
+          setStatus('error');
+          setMessage('Authentication token not received');
+          setTimeout(() => {
+            router.push('/login');
+          }, 3000);
+        }
+      }, 500);
+      return () => clearTimeout(timeout);
     }
 
     // Direct token in URL (legacy or direct API usage)
     if (urlToken) {
+      setHasProcessed(true);
       handleTokenFromUrl(urlToken, urlCsrf);
       return;
     }
 
-    // No success flag or token - error
-    setStatus('error');
-    setMessage('No authentication received');
-    setTimeout(() => {
-      router.push('/login');
-    }, 3000);
-  }, [searchParams, router]);
+    // No success flag or token - but only show error if URL actually has no params
+    // This prevents false errors during initial hydration
+    if (!urlHasParams) {
+      setHasProcessed(true);
+      setStatus('error');
+      setMessage('No authentication received');
+      setTimeout(() => {
+        router.push('/login');
+      }, 3000);
+    }
+  }, [searchParams, router, hasProcessed]);
 
   const handleTokenFromUrl = async (token: string, csrfToken: string | null) => {
     try {

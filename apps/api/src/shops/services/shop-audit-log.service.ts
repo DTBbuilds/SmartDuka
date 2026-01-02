@@ -6,7 +6,7 @@ import { ShopAuditLog, ShopAuditLogDocument } from '../schemas/shop-audit-log.sc
 export interface CreateAuditLogDto {
   shopId: string;
   performedBy: string;
-  action: 'verify' | 'reject' | 'suspend' | 'reactivate' | 'flag' | 'unflag' | 'update' | 'create';
+  action: 'verify' | 'reject' | 'suspend' | 'reactivate' | 'flag' | 'unflag' | 'update' | 'create' | 'delete' | 'restore';
   oldValue?: Record<string, any>;
   newValue?: Record<string, any>;
   reason?: string;

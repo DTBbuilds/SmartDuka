@@ -531,4 +531,144 @@ export class SuperAdminService {
   async getActiveShopsCount(): Promise<number> {
     return this.shopModel.countDocuments({ status: 'active' });
   }
+
+  /**
+   * Soft delete a shop
+   * This marks the shop as deleted without removing data from the database
+   * All related data remains but the shop becomes inaccessible
+   */
+  async softDeleteShop(
+    shopId: string,
+    superAdminId: string,
+    reason: string,
+  ): Promise<ShopDocument> {
+    const shop = await this.getShopDetails(shopId);
+
+    // Check if already deleted
+    if (shop.deletedAt) {
+      throw new BadRequestException('Shop is already deleted');
+    }
+
+    const oldValue = { 
+      status: shop.status,
+      deletedAt: null,
+    };
+
+    const updatedShop = await this.shopModel
+      .findByIdAndUpdate(
+        new Types.ObjectId(shopId),
+        {
+          status: 'suspended', // Change status to suspended
+          deletedAt: new Date(),
+          deletedBy: new Types.ObjectId(superAdminId),
+          deletionReason: reason,
+          updatedAt: new Date(),
+        },
+        { new: true },
+      )
+      .exec();
+
+    // Log the action
+    await this.auditLogService.create({
+      shopId,
+      performedBy: superAdminId,
+      action: 'delete',
+      oldValue,
+      newValue: { 
+        status: 'suspended',
+        deletedAt: new Date(),
+      },
+      reason,
+      notes: `Shop soft deleted by super admin. Reason: ${reason}`,
+    });
+
+    this.logger.log(`Shop ${shopId} soft deleted by ${superAdminId}. Reason: ${reason}`);
+    
+    if (!updatedShop) {
+      throw new NotFoundException('Shop not found after update');
+    }
+
+    return updatedShop;
+  }
+
+  /**
+   * Restore a soft-deleted shop
+   */
+  async restoreShop(
+    shopId: string,
+    superAdminId: string,
+    notes?: string,
+  ): Promise<ShopDocument> {
+    const shop = await this.shopModel.findById(new Types.ObjectId(shopId)).exec();
+    
+    if (!shop) {
+      throw new NotFoundException('Shop not found');
+    }
+
+    if (!shop.deletedAt) {
+      throw new BadRequestException('Shop is not deleted');
+    }
+
+    const oldValue = { 
+      status: shop.status,
+      deletedAt: shop.deletedAt,
+    };
+
+    const updatedShop = await this.shopModel
+      .findByIdAndUpdate(
+        new Types.ObjectId(shopId),
+        {
+          status: 'active', // Restore to active status
+          $unset: { 
+            deletedAt: 1,
+            deletedBy: 1,
+            deletionReason: 1,
+          },
+          updatedAt: new Date(),
+        },
+        { new: true },
+      )
+      .exec();
+
+    // Log the action
+    await this.auditLogService.create({
+      shopId,
+      performedBy: superAdminId,
+      action: 'reactivate',
+      oldValue,
+      newValue: { 
+        status: 'active',
+        deletedAt: null,
+      },
+      reason: 'Shop restored by super admin',
+      notes,
+    });
+
+    this.logger.log(`Shop ${shopId} restored by ${superAdminId}`);
+    
+    if (!updatedShop) {
+      throw new NotFoundException('Shop not found after update');
+    }
+
+    return updatedShop;
+  }
+
+  /**
+   * Get deleted shops
+   */
+  async getDeletedShops(limit: number = 50, skip: number = 0): Promise<ShopDocument[]> {
+    return this.shopModel
+      .find({ deletedAt: { $ne: null } })
+      .sort({ deletedAt: -1 })
+      .limit(limit)
+      .skip(skip)
+      .exec();
+  }
+
+  /**
+   * Get deleted shops count
+   */
+  async getDeletedShopsCount(): Promise<number> {
+    return this.shopModel.countDocuments({ deletedAt: { $ne: null } });
+  }
 }

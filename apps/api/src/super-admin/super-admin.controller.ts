@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Query, Param, Body, UseGuards, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Put, Delete, Post, Query, Param, Body, UseGuards, BadRequestException } from '@nestjs/common';
 import { SuperAdminService } from './super-admin.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -217,6 +217,7 @@ export class SuperAdminController {
     const active = await this.superAdminService.getActiveShopsCount();
     const suspended = await this.superAdminService.getSuspendedShopsCount();
     const flagged = await this.superAdminService.getFlaggedShopsCount();
+    const deleted = await this.superAdminService.getDeletedShopsCount();
 
     return {
       pending,
@@ -224,7 +225,49 @@ export class SuperAdminController {
       active,
       suspended,
       flagged,
+      deleted,
       total: pending + verified + active + suspended,
     };
+  }
+
+  /**
+   * Soft delete a shop
+   * This marks the shop as deleted without removing data from the database
+   */
+  @Delete('shops/:id')
+  async deleteShop(
+    @Param('id') shopId: string,
+    @Body() body: { reason: string },
+    @CurrentUser() user: any,
+  ) {
+    if (!body.reason || body.reason.trim().length === 0) {
+      throw new BadRequestException('Deletion reason is required');
+    }
+    return this.superAdminService.softDeleteShop(shopId, user.sub, body.reason);
+  }
+
+  /**
+   * Restore a soft-deleted shop
+   */
+  @Post('shops/:id/restore')
+  async restoreShop(
+    @Param('id') shopId: string,
+    @Body() body: { notes?: string },
+    @CurrentUser() user: any,
+  ) {
+    return this.superAdminService.restoreShop(shopId, user.sub, body.notes);
+  }
+
+  /**
+   * Get deleted shops
+   */
+  @Get('shops-deleted')
+  async getDeletedShops(
+    @Query('limit') limit: string = '50',
+    @Query('skip') skip: string = '0',
+  ) {
+    const shops = await this.superAdminService.getDeletedShops(parseInt(limit), parseInt(skip));
+    const count = await this.superAdminService.getDeletedShopsCount();
+    return { shops, count };
   }
 }

@@ -4,7 +4,8 @@ import { config } from '@/lib/config';
 import { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Badge, Tabs, TabsContent, TabsList, TabsTrigger, Button, Input } from '@smartduka/ui';
-import { Search, Eye, CheckCircle, XCircle, AlertCircle, Clock, RefreshCw, ArrowLeft, Store } from 'lucide-react';
+import { Search, Eye, CheckCircle, XCircle, AlertCircle, Clock, RefreshCw, ArrowLeft, Store, Trash2, RotateCcw } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/lib/use-toast';
 import { ToastContainer } from '@/components/toast-container';
@@ -22,6 +23,8 @@ type Shop = {
   verificationDate?: string;
   suspensionDate?: string;
   createdAt: string;
+  deletedAt?: string;
+  deletionReason?: string;
 };
 
 export default function ShopsManagement() {
@@ -36,6 +39,10 @@ export default function ShopsManagement() {
   const [shops, setShops] = useState<Shop[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [shopToDelete, setShopToDelete] = useState<Shop | null>(null);
+  const [deleteReason, setDeleteReason] = useState('');
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Update tab when URL changes
   useEffect(() => {
@@ -63,8 +70,14 @@ export default function ShopsManagement() {
     if (!token) return;
     try {
       setLoading(true);
-      // Use 'all' endpoint for all shops, otherwise use status-specific endpoint
-      const endpoint = activeTab === 'all' ? '/super-admin/shops' : `/super-admin/shops/${activeTab}`;
+      // Use 'all' endpoint for all shops, 'shops-deleted' for deleted, otherwise use status-specific endpoint
+      let endpoint = '/super-admin/shops';
+      if (activeTab === 'deleted') {
+        endpoint = '/super-admin/shops-deleted';
+      } else if (activeTab !== 'all') {
+        endpoint = `/super-admin/shops/${activeTab}`;
+      }
+      
       const res = await fetch(`${config.apiUrl}${endpoint}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -176,6 +189,65 @@ export default function ShopsManagement() {
     }
   };
 
+  const openDeleteDialog = (shop: Shop) => {
+    setShopToDelete(shop);
+    setDeleteReason('');
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!token || !shopToDelete || !deleteReason.trim()) return;
+    try {
+      setDeleteLoading(true);
+      const res = await fetch(`${config.apiUrl}/super-admin/shops/${shopToDelete._id}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ reason: deleteReason }),
+      });
+
+      if (res.ok) {
+        toast({ type: 'success', title: 'Success', message: 'Shop deleted successfully' });
+        setDeleteDialogOpen(false);
+        setShopToDelete(null);
+        setDeleteReason('');
+        loadShops();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        toast({ type: 'error', title: 'Failed', message: data.message || 'Could not delete shop' });
+      }
+    } catch (err: any) {
+      toast({ type: 'error', title: 'Error', message: err?.message });
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  const handleRestore = async (shopId: string) => {
+    if (!token) return;
+    try {
+      const res = await fetch(`${config.apiUrl}/super-admin/shops/${shopId}/restore`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ notes: 'Restored by super admin' }),
+      });
+
+      if (res.ok) {
+        toast({ type: 'success', title: 'Success', message: 'Shop restored successfully' });
+        loadShops();
+      } else {
+        toast({ type: 'error', title: 'Failed', message: 'Could not restore shop' });
+      }
+    } catch (err: any) {
+      toast({ type: 'error', title: 'Error', message: err?.message });
+    }
+  };
+
   const filteredShops = shops.filter(shop =>
     shop.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     shop.email.toLowerCase().includes(searchTerm.toLowerCase())
@@ -244,7 +316,7 @@ export default function ShopsManagement() {
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
-          <TabsList className="grid w-full grid-cols-5 h-auto">
+          <TabsList className="grid w-full grid-cols-6 h-auto">
             <TabsTrigger value="all" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-2 md:py-1.5">
               <Store className="h-4 w-4" />
               <span className="text-xs md:text-sm">All</span>
@@ -265,6 +337,10 @@ export default function ShopsManagement() {
               <AlertCircle className="h-4 w-4 text-orange-500" />
               <span className="text-xs md:text-sm">Flagged</span>
             </TabsTrigger>
+            <TabsTrigger value="deleted" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-2 md:py-1.5">
+              <Trash2 className="h-4 w-4 text-slate-500" />
+              <span className="text-xs md:text-sm">Deleted</span>
+            </TabsTrigger>
           </TabsList>
 
           {/* All Shops */}
@@ -284,6 +360,7 @@ export default function ShopsManagement() {
                   onReject={shop.status === 'pending' ? () => handleReject(shop._id) : undefined}
                   onSuspend={shop.status === 'active' ? () => handleSuspend(shop._id) : undefined}
                   onReactivate={shop.status === 'suspended' || shop.status === 'flagged' ? () => handleReactivate(shop._id) : undefined}
+                  onDelete={!shop.deletedAt ? () => openDeleteDialog(shop) : undefined}
                   getStatusIcon={getStatusIcon}
                 />
               ))
@@ -305,6 +382,7 @@ export default function ShopsManagement() {
                   shop={shop}
                   onVerify={() => handleVerify(shop._id)}
                   onReject={() => handleReject(shop._id)}
+                  onDelete={() => openDeleteDialog(shop)}
                   getStatusIcon={getStatusIcon}
                 />
               ))
@@ -325,6 +403,7 @@ export default function ShopsManagement() {
                   key={shop._id}
                   shop={shop}
                   onSuspend={() => handleSuspend(shop._id)}
+                  onDelete={() => openDeleteDialog(shop)}
                   getStatusIcon={getStatusIcon}
                 />
               ))
@@ -345,6 +424,7 @@ export default function ShopsManagement() {
                   key={shop._id}
                   shop={shop}
                   onReactivate={() => handleReactivate(shop._id)}
+                  onDelete={() => openDeleteDialog(shop)}
                   getStatusIcon={getStatusIcon}
                 />
               ))
@@ -365,12 +445,93 @@ export default function ShopsManagement() {
                   key={shop._id}
                   shop={shop}
                   onReactivate={() => handleReactivate(shop._id)}
+                  onDelete={() => openDeleteDialog(shop)}
                   getStatusIcon={getStatusIcon}
                 />
               ))
             )}
           </TabsContent>
+
+          {/* Deleted Shops */}
+          <TabsContent value="deleted" className="space-y-4">
+            {filteredShops.length === 0 ? (
+              <Card>
+                <CardContent className="pt-6 text-center text-muted-foreground">
+                  No deleted shops
+                </CardContent>
+              </Card>
+            ) : (
+              filteredShops.map((shop) => (
+                <ShopCard
+                  key={shop._id}
+                  shop={shop}
+                  onRestore={() => handleRestore(shop._id)}
+                  getStatusIcon={getStatusIcon}
+                  isDeleted
+                />
+              ))
+            )}
+          </TabsContent>
         </Tabs>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-red-600">
+                <Trash2 className="h-5 w-5" />
+                Delete Shop
+              </DialogTitle>
+              <DialogDescription>
+                This will soft delete the shop and all its data. The shop can be restored later if needed.
+              </DialogDescription>
+            </DialogHeader>
+            {shopToDelete && (
+              <div className="space-y-4">
+                <div className="p-4 bg-muted rounded-lg">
+                  <p className="font-medium">{shopToDelete.name}</p>
+                  <p className="text-sm text-muted-foreground">{shopToDelete.email}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Reason for deletion <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    value={deleteReason}
+                    onChange={(e) => setDeleteReason(e.target.value)}
+                    placeholder="Enter the reason for deleting this shop..."
+                    className="w-full p-3 border rounded-lg resize-none h-24 focus:outline-none focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+              </div>
+            )}
+            <DialogFooter className="gap-2">
+              <button
+                onClick={() => setDeleteDialogOpen(false)}
+                className="px-4 py-2 text-sm border rounded-lg hover:bg-muted"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={!deleteReason.trim() || deleteLoading}
+                className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {deleteLoading ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-4 w-4" />
+                    Delete Shop
+                  </>
+                )}
+              </button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </main>
   );
@@ -382,6 +543,9 @@ interface ShopCardProps {
   onReject?: () => void;
   onSuspend?: () => void;
   onReactivate?: () => void;
+  onDelete?: () => void;
+  onRestore?: () => void;
+  isDeleted?: boolean;
   getStatusIcon: (status: string) => React.ReactNode;
 }
 
@@ -391,6 +555,9 @@ function ShopCard({
   onReject,
   onSuspend,
   onReactivate,
+  onDelete,
+  onRestore,
+  isDeleted,
   getStatusIcon,
 }: ShopCardProps) {
   return (
@@ -431,6 +598,18 @@ function ShopCard({
               <p className="font-medium text-orange-600">{shop.flagReason || 'Flagged'}</p>
             </div>
           )}
+          {isDeleted && shop.deletedAt && (
+            <div>
+              <p className="text-xs text-muted-foreground">Deleted On</p>
+              <p className="font-medium text-red-600">{new Date(shop.deletedAt).toLocaleDateString()}</p>
+            </div>
+          )}
+          {isDeleted && shop.deletionReason && (
+            <div className="col-span-2">
+              <p className="text-xs text-muted-foreground">Deletion Reason</p>
+              <p className="font-medium text-red-600">{shop.deletionReason}</p>
+            </div>
+          )}
         </div>
 
         {/* Actions */}
@@ -465,6 +644,24 @@ function ShopCard({
               className="px-2 md:px-3 py-1 bg-blue-600 text-white text-xs md:text-sm rounded hover:bg-blue-700"
             >
               Reactivate
+            </button>
+          )}
+          {onRestore && (
+            <button
+              onClick={onRestore}
+              className="px-2 md:px-3 py-1 bg-green-600 text-white text-xs md:text-sm rounded hover:bg-green-700 flex items-center gap-1"
+            >
+              <RotateCcw className="h-3 w-3" />
+              Restore
+            </button>
+          )}
+          {onDelete && (
+            <button
+              onClick={onDelete}
+              className="px-2 md:px-3 py-1 bg-red-600 text-white text-xs md:text-sm rounded hover:bg-red-700 flex items-center gap-1"
+            >
+              <Trash2 className="h-3 w-3" />
+              Delete
             </button>
           )}
           <button

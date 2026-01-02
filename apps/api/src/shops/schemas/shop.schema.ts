@@ -163,6 +163,16 @@ export class Shop {
 
   @Prop({ default: false })
   isSubscriptionActive: boolean;
+
+  // Soft delete fields
+  @Prop({ required: false })
+  deletedAt?: Date;
+
+  @Prop({ required: false, type: Types.ObjectId })
+  deletedBy?: Types.ObjectId;
+
+  @Prop({ required: false, trim: true })
+  deletionReason?: string;
 }
 
 export const ShopSchema = SchemaFactory.createForClass(Shop);
@@ -174,6 +184,7 @@ ShopSchema.index({ createdAt: -1 });
 ShopSchema.index({ verificationBy: 1 });
 ShopSchema.index({ isFlagged: 1 });
 ShopSchema.index({ isMonitored: 1 });
+ShopSchema.index({ deletedAt: 1 });
 // Ensure kraPin is unique only when present (sparse index ignores null/undefined)
 ShopSchema.index(
   { kraPin: 1 },
