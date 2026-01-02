@@ -7,7 +7,7 @@ import { Loader2, CheckCircle, XCircle } from 'lucide-react';
 import { config } from '@/lib/config';
 import { activityTracker } from '@/lib/activity-tracker';
 import { statusManager } from '@/lib/status-manager';
-import { storeToken, storeShop, storeCsrfToken, getToken } from '@/lib/secure-session';
+import { storeToken, storeCsrfToken } from '@/lib/secure-session';
 
 function AuthCallbackContent() {
   const router = useRouter();
@@ -18,8 +18,9 @@ function AuthCallbackContent() {
   useEffect(() => {
     const success = searchParams.get('success');
     const error = searchParams.get('error');
-    // Legacy support for token in URL (will be removed)
-    const legacyToken = searchParams.get('token');
+    // Token in URL - used as fallback for cross-origin OAuth when cookies are blocked
+    const urlToken = searchParams.get('token');
+    const urlCsrf = searchParams.get('csrf');
 
     if (error) {
       setStatus('error');
@@ -30,45 +31,24 @@ function AuthCallbackContent() {
       return;
     }
 
-    // New flow: cookies are already set by server, just verify and redirect
+    // OAuth success flow - token is passed via URL for cross-origin support
     if (success === 'true') {
-      // Cookies were set by server during OAuth callback
-      // We need to verify the session by making an authenticated request
-      verifySessionAndRedirect();
+      if (urlToken) {
+        handleTokenFromUrl(urlToken, urlCsrf);
+        return;
+      }
+      // No token in URL - this shouldn't happen with Option 2
+      setStatus('error');
+      setMessage('Authentication token not received');
+      setTimeout(() => {
+        router.push('/login');
+      }, 3000);
       return;
     }
 
-    // Legacy flow: token in URL (for backward compatibility)
-    if (legacyToken) {
-      try {
-        const decoded = JSON.parse(atob(legacyToken.split('.')[1]));
-        
-        // Store token securely
-        storeToken(legacyToken);
-        
-        // Initialize activity tracking and status manager
-        activityTracker.setToken(legacyToken, decoded.role);
-        if (decoded.shopId) {
-          statusManager.initialize(legacyToken, decoded.sub, decoded.shopId);
-        }
-
-        if (decoded.shopId) {
-          fetchShopAndRedirect(legacyToken, decoded.shopId);
-        } else {
-          setStatus('success');
-          setMessage('Login successful! Redirecting...');
-          setTimeout(() => {
-            window.location.href = decoded.role === 'super_admin' ? '/super-admin' : '/';
-          }, 1000);
-        }
-      } catch (err) {
-        console.error('Token processing error:', err);
-        setStatus('error');
-        setMessage('Invalid authentication token');
-        setTimeout(() => {
-          router.push('/login');
-        }, 3000);
-      }
+    // Direct token in URL (legacy or direct API usage)
+    if (urlToken) {
+      handleTokenFromUrl(urlToken, urlCsrf);
       return;
     }
 
@@ -80,49 +60,40 @@ function AuthCallbackContent() {
     }, 3000);
   }, [searchParams, router]);
 
-  const verifySessionAndRedirect = async () => {
+  const handleTokenFromUrl = async (token: string, csrfToken: string | null) => {
     try {
-      // Make authenticated request to verify session (cookies sent automatically)
-      const res = await fetch(`${config.apiUrl}/auth/me`, {
-        credentials: 'include',
-      });
+      const decoded = JSON.parse(atob(token.split('.')[1]));
+      
+      // Store token securely
+      storeToken(token);
+      
+      // Store CSRF token if provided
+      if (csrfToken) {
+        storeCsrfToken(csrfToken);
+      }
+      
+      // Clear token from URL for security (replace current history entry)
+      window.history.replaceState({}, '', '/auth/callback?success=true');
+      
+      // Initialize activity tracking and status manager
+      activityTracker.setToken(token, decoded.role);
+      if (decoded.shopId) {
+        statusManager.initialize(token, decoded.sub, decoded.shopId);
+      }
 
-      if (res.ok) {
-        const userData = await res.json();
-        
-        // Store the access token returned by /auth/me for client-side use
-        if (userData.accessToken) {
-          storeToken(userData.accessToken);
-          
-          // Store CSRF token if provided
-          if (userData.csrfToken) {
-            storeCsrfToken(userData.csrfToken);
-          }
-          
-          // Initialize activity tracking and status manager
-          activityTracker.setToken(userData.accessToken, userData.role);
-          if (userData.shopId) {
-            statusManager.initialize(userData.accessToken, userData.sub, userData.shopId);
-          }
-        }
-
-        // Fetch shop info if user has shopId
-        if (userData.shopId && userData.accessToken) {
-          await fetchShopAndRedirect(userData.accessToken, userData.shopId);
-        } else {
-          setStatus('success');
-          setMessage('Login successful! Redirecting...');
-          setTimeout(() => {
-            window.location.href = userData.role === 'super_admin' ? '/super-admin' : '/';
-          }, 1000);
-        }
+      if (decoded.shopId) {
+        await fetchShopAndRedirect(token, decoded.shopId);
       } else {
-        throw new Error('Session verification failed');
+        setStatus('success');
+        setMessage('Login successful! Redirecting...');
+        setTimeout(() => {
+          window.location.href = decoded.role === 'super_admin' ? '/super-admin' : '/';
+        }, 1000);
       }
     } catch (err) {
-      console.error('Session verification error:', err);
+      console.error('Token processing error:', err);
       setStatus('error');
-      setMessage('Authentication failed. Please try again.');
+      setMessage('Invalid authentication token');
       setTimeout(() => {
         router.push('/login');
       }, 3000);

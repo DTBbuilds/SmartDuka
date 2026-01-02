@@ -40,6 +40,7 @@ const REDIS_URL = process.env.REDIS_URL;
             password: url.password || undefined,
             username: url.username || undefined,
             tls: url.protocol === 'rediss:' ? {} : undefined,
+            maxRetriesPerRequest: null,
           },
           defaultJobOptions: {
             attempts: 3,

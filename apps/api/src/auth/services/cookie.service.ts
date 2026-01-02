@@ -49,7 +49,7 @@ export class CookieService {
     res.cookie(CookieService.REFRESH_TOKEN_COOKIE, token, {
       httpOnly: true,
       secure: this.isProduction,
-      sameSite: 'strict', // Stricter for refresh token
+      sameSite: 'strict',
       maxAge: this.REFRESH_TOKEN_MAX_AGE,
       path: '/api/v1/auth', // Only accessible by auth endpoints
       domain: this.cookieDomain,
@@ -99,7 +99,7 @@ export class CookieService {
     res.clearCookie(CookieService.ACCESS_TOKEN_COOKIE, clearOptions);
     res.clearCookie(CookieService.REFRESH_TOKEN_COOKIE, {
       ...clearOptions,
-      sameSite: 'strict',
+      sameSite: 'strict' as const,
       path: '/api/v1/auth',
     });
     res.clearCookie(CookieService.CSRF_TOKEN_COOKIE, {

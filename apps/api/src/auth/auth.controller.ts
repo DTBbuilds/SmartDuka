@@ -258,17 +258,16 @@ export class AuthController {
         const profileData = encodeURIComponent(JSON.stringify(result.googleProfile));
         res.redirect(`${frontendUrl}/register-shop?google=${profileData}`);
       } else {
-        // Existing user - set secure httpOnly cookies instead of URL token
+        // Existing user - pass tokens via URL for cross-origin support
+        // This is necessary because frontend (Vercel) and backend (Render) are on different domains
+        // Cookies won't work cross-origin without SameSite=None which has browser compatibility issues
+        // The token is short-lived (30min) and immediately stored client-side, then cleared from URL
         if (result.tokens) {
-          this.cookieService.setAuthCookies(
-            res,
-            result.tokens.accessToken,
-            result.tokens.refreshToken,
-            result.tokens.csrfToken,
-          );
+          const tokenParam = `token=${encodeURIComponent(result.tokens.accessToken)}&csrf=${encodeURIComponent(result.tokens.csrfToken)}`;
+          res.redirect(`${frontendUrl}/auth/callback?success=true&${tokenParam}`);
+        } else {
+          res.redirect(`${frontendUrl}/login?error=${encodeURIComponent('Failed to generate authentication tokens')}`);
         }
-        // Redirect without token in URL - cookies handle auth
-        res.redirect(`${frontendUrl}/auth/callback?success=true`);
       }
     } catch (error: any) {
       res.redirect(`${frontendUrl}/login?error=${encodeURIComponent(error.message || 'Google login failed')}`);
