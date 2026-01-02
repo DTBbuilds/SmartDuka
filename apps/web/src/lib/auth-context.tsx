@@ -190,6 +190,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           statusManager.updateToken(accessToken);
           // Update activity tracker
           activityTracker.setToken(accessToken, newDecoded.role);
+          // Update hot data manager with new token
+          hotDataManager.updateToken(accessToken);
         } catch (err) {
           console.error('[Auth] Failed to decode refreshed token:', err);
         }

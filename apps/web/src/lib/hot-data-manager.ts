@@ -107,6 +107,17 @@ class HotDataManager {
   }
 
   /**
+   * Update token (e.g., after token refresh)
+   */
+  updateToken(token: string) {
+    this.token = token;
+    // Restart sync if it was stopped due to token expiry
+    if (this.initialized && !this.syncInterval) {
+      this.startSync();
+    }
+  }
+
+  /**
    * Load data from localStorage
    */
   private loadFromStorage() {
@@ -177,6 +188,7 @@ class HotDataManager {
       // Fetch user preferences from server
       const res = await fetch(`${config.apiUrl}/users/preferences`, {
         headers: { Authorization: `Bearer ${this.token}` },
+        credentials: 'include',
       });
 
       if (res.ok) {
@@ -187,10 +199,15 @@ class HotDataManager {
             ...serverPrefs,
           };
         }
+        this.data.lastSynced = Date.now();
+        this.saveToStorage();
+      } else if (res.status === 401) {
+        // Token is invalid/expired - stop syncing to avoid spamming server
+        console.debug('Hot data sync: Token expired, stopping sync');
+        this.stopSync();
+        this.token = null;
       }
-
-      this.data.lastSynced = Date.now();
-      this.saveToStorage();
+      // For other errors, silently fail and use cached data
     } catch (e) {
       // Silently fail - we'll use cached data
       console.debug('Hot data sync failed:', e);
@@ -221,14 +238,21 @@ class HotDataManager {
     // Sync to server
     if (this.token) {
       try {
-        await fetch(`${config.apiUrl}/users/preferences`, {
+        const res = await fetch(`${config.apiUrl}/users/preferences`, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.token}`,
           },
+          credentials: 'include',
           body: JSON.stringify(updates),
         });
+        
+        if (res.status === 401) {
+          // Token expired - stop syncing
+          this.stopSync();
+          this.token = null;
+        }
       } catch (e) {
         console.debug('Failed to sync preferences:', e);
       }
