@@ -395,87 +395,6 @@ export class AuthService {
     await this.usersService.updatePin(userId, hashedPin);
   }
 
-  /**
-   * Login with name and PIN (for cashiers)
-   * Finds user by name (case-insensitive) and validates PIN
-   */
-  async loginWithNameAndPin(name: string, pin: string, ipAddress?: string, userAgent?: string) {
-    if (!name?.trim()) {
-      throw new UnauthorizedException('Name is required');
-    }
-    if (!pin) {
-      throw new UnauthorizedException('PIN is required');
-    }
-
-    // Find user by name and PIN
-    const user = await this.usersService.findByNameAndPin(name, pin);
-    if (!user) {
-      throw new UnauthorizedException('Invalid name or PIN');
-    }
-
-    // Check if user is active
-    if (user.status !== 'active') {
-      throw new UnauthorizedException('Account is disabled');
-    }
-
-    // Get shop info
-    const shop = await this.shopsService.findById((user as any).shopId.toString());
-    if (!shop) {
-      throw new UnauthorizedException('Shop not found');
-    }
-
-    // Check shop status
-    if (shop.status === 'suspended') {
-      throw new UnauthorizedException('Shop is suspended');
-    }
-
-    // Generate JWT token
-    const token = this.jwtService.sign({
-      sub: (user as any)._id,
-      email: user.email,
-      name: (user as any).name || user.email,
-      cashierId: (user as any).cashierId,
-      role: user.role,
-      shopId: (user as any).shopId,
-      branchId: (user as any).branchId,
-    });
-
-    // Update last login time
-    await this.usersService.updateLastLogin((user as any)._id.toString());
-
-    // Log login activity
-    if (this.activityService) {
-      await this.activityService.logActivity(
-        (user as any).shopId.toString(),
-        (user as any)._id.toString(),
-        (user as any).name || user.email,
-        user.role,
-        'login_pin',
-        { method: 'name_pin' },
-        ipAddress,
-        userAgent,
-      );
-    }
-
-    return {
-      user: {
-        id: (user as any)._id,
-        email: user.email,
-        name: (user as any).name,
-        cashierId: (user as any).cashierId,
-        role: user.role,
-        shopId: (user as any).shopId,
-        branchId: (user as any).branchId,
-      },
-      shop: {
-        id: shop._id,
-        name: shop.name,
-        status: shop.status,
-      },
-      token,
-    };
-  }
-
   async validateUser(userId: string) {
     const user = await this.usersService.findById(userId);
     if (!user || user.status !== 'active') {
@@ -834,6 +753,145 @@ export class AuthService {
     };
   }
 
+  /**
+   * Link Google account to existing cashier using PIN verification
+   * 
+   * Security flow:
+   * 1. Cashier must have been created by admin (has PIN)
+   * 2. Cashier provides Google profile + PIN + shopId
+   * 3. We validate PIN against the shop's cashiers
+   * 4. If valid, link Google account to cashier
+   * 5. Future logins use Google OAuth directly
+   */
+  async linkGoogleToCashier(
+    googleProfile: { googleId: string; email: string; name: string; avatarUrl?: string },
+    pin: string,
+    shopId: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
+    // Validate inputs
+    if (!pin) {
+      throw new UnauthorizedException('PIN is required');
+    }
+    if (!shopId) {
+      throw new UnauthorizedException('Shop selection is required');
+    }
+
+    // Check if Google account is already linked to another user
+    const existingGoogleUser = await this.usersService.findByGoogleId(googleProfile.googleId);
+    if (existingGoogleUser) {
+      // Already linked - just log them in
+      return this.googleLoginWithTokens(googleProfile, ipAddress, userAgent);
+    }
+
+    // Find cashier by PIN in the specified shop
+    const cashier = await this.usersService.findByPin(pin, shopId);
+    if (!cashier) {
+      throw new UnauthorizedException('Invalid PIN. Please check your PIN and try again.');
+    }
+
+    // Verify cashier is active
+    if (cashier.status !== 'active') {
+      throw new UnauthorizedException('Account is disabled. Contact your admin.');
+    }
+
+    // Verify cashier role
+    if (cashier.role !== 'cashier') {
+      throw new UnauthorizedException('This PIN is not for a cashier account. Use email login instead.');
+    }
+
+    // Check if cashier already has a Google account linked
+    if ((cashier as any).googleId) {
+      throw new BadRequestException(
+        'This cashier account already has a Google account linked. Use that Google account to login.',
+      );
+    }
+
+    // Get shop info
+    const shop = await this.shopsService.findById(shopId);
+    if (!shop) {
+      throw new UnauthorizedException('Shop not found');
+    }
+
+    if (shop.status === 'suspended') {
+      throw new UnauthorizedException('Shop is suspended');
+    }
+
+    // Link Google account to cashier
+    await this.usersService.linkGoogleAccount(
+      (cashier as any)._id.toString(),
+      googleProfile.googleId,
+      googleProfile.avatarUrl,
+    );
+
+    // Update cashier email if different (optional - use Google email)
+    // Note: We keep the original email to avoid conflicts
+    // The googleId is the primary identifier for Google login
+
+    // Generate secure token pair
+    let tokens: any = null;
+    if (this.tokenService) {
+      tokens = await this.tokenService.generateTokenPair(
+        {
+          sub: (cashier as any)._id.toString(),
+          email: cashier.email,
+          name: (cashier as any).name || cashier.email,
+          role: cashier.role,
+          shopId: (cashier as any).shopId.toString(),
+          branchId: (cashier as any).branchId?.toString(),
+          cashierId: (cashier as any).cashierId,
+        },
+        {
+          userAgent,
+          ipAddress,
+          clientType: 'pos',
+        },
+      );
+    }
+
+    // Update last login
+    await this.usersService.updateLastLogin((cashier as any)._id.toString());
+
+    // Log activity
+    if (this.activityService) {
+      await this.activityService.logActivity(
+        shopId,
+        (cashier as any)._id.toString(),
+        (cashier as any).name || cashier.email,
+        cashier.role,
+        'google_account_linked',
+        { 
+          googleEmail: googleProfile.email,
+          method: 'PIN verification',
+        },
+        ipAddress,
+        userAgent,
+      );
+    }
+
+    this.logger.log(`Google account linked for cashier ${(cashier as any).cashierId} in shop ${shopId}`);
+
+    return {
+      user: {
+        id: (cashier as any)._id,
+        email: cashier.email,
+        name: (cashier as any).name,
+        cashierId: (cashier as any).cashierId,
+        role: cashier.role,
+        shopId: (cashier as any).shopId,
+        branchId: (cashier as any).branchId,
+        avatarUrl: googleProfile.avatarUrl,
+      },
+      shop: {
+        id: shop._id,
+        name: shop.name,
+        status: shop.status,
+      },
+      tokens,
+    };
+  }
+
   // ==================== Password Reset ====================
 
   /**
@@ -1146,89 +1204,6 @@ export class AuthService {
         user.role,
         'login_pin',
         { method: 'PIN' },
-        ipAddress,
-        userAgent,
-      );
-    }
-
-    return {
-      user: {
-        id: (user as any)._id,
-        email: user.email,
-        name: (user as any).name,
-        cashierId: (user as any).cashierId,
-        role: user.role,
-        shopId: (user as any).shopId,
-        branchId: (user as any).branchId,
-      },
-      shop: {
-        id: shop._id,
-        name: shop.name,
-        status: shop.status,
-      },
-      tokens,
-    };
-  }
-
-  /**
-   * Login with name and PIN, return secure tokens
-   */
-  async loginWithNameAndPinAndTokens(name: string, pin: string, ipAddress?: string, userAgent?: string) {
-    if (!name?.trim()) {
-      throw new UnauthorizedException('Name is required');
-    }
-    if (!pin) {
-      throw new UnauthorizedException('PIN is required');
-    }
-
-    const user = await this.usersService.findByNameAndPin(name, pin);
-    if (!user) {
-      throw new UnauthorizedException('Invalid name or PIN');
-    }
-
-    if (user.status !== 'active') {
-      throw new UnauthorizedException('Account is disabled');
-    }
-
-    const shop = await this.shopsService.findById((user as any).shopId.toString());
-    if (!shop) {
-      throw new UnauthorizedException('Shop not found');
-    }
-
-    if (shop.status === 'suspended') {
-      throw new UnauthorizedException('Shop is suspended');
-    }
-
-    let tokens: any = null;
-    if (this.tokenService) {
-      tokens = await this.tokenService.generateTokenPair(
-        {
-          sub: (user as any)._id.toString(),
-          email: user.email,
-          name: (user as any).name || user.email,
-          role: user.role,
-          shopId: (user as any).shopId.toString(),
-          branchId: (user as any).branchId?.toString(),
-          cashierId: (user as any).cashierId,
-        },
-        {
-          userAgent,
-          ipAddress,
-          clientType: 'pos',
-        },
-      );
-    }
-
-    await this.usersService.updateLastLogin((user as any)._id.toString());
-
-    if (this.activityService) {
-      await this.activityService.logActivity(
-        (user as any).shopId.toString(),
-        (user as any)._id.toString(),
-        (user as any).name || user.email,
-        user.role,
-        'login_pin',
-        { method: 'name_pin' },
         ipAddress,
         userAgent,
       );

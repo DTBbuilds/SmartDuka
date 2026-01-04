@@ -3,6 +3,14 @@ import { HydratedDocument, Types } from 'mongoose';
 
 export type ShiftDocument = HydratedDocument<Shift>;
 
+// Activity period tracking for accurate time measurement
+export interface ActivityPeriod {
+  startTime: Date;
+  endTime?: Date;
+  type: 'active' | 'inactive' | 'break';
+  reason?: string;
+}
+
 @Schema({ timestamps: true })
 export class Shift {
   @Prop({ type: Types.ObjectId, required: true, ref: 'Shop' })
@@ -52,6 +60,30 @@ export class Shift {
 
   @Prop()
   reconciliedAt?: Date;
+
+  // Activity tracking fields
+  @Prop({ default: 0 })
+  activeTimeMs: number; // Total active time in milliseconds
+
+  @Prop({ default: 0 })
+  inactiveTimeMs: number; // Total inactive time in milliseconds
+
+  @Prop({ default: 0 })
+  breakTimeMs: number; // Total break time in milliseconds
+
+  @Prop()
+  lastActivityAt?: Date; // Last recorded activity timestamp
+
+  @Prop({ type: [{ 
+    startTime: Date, 
+    endTime: Date, 
+    type: { type: String, enum: ['active', 'inactive', 'break'] },
+    reason: String 
+  }], default: [] })
+  activityPeriods: ActivityPeriod[]; // Detailed activity log
+
+  @Prop({ default: 0 })
+  activityPingCount: number; // Number of activity pings received
 
   @Prop({ default: Date.now })
   createdAt: Date;

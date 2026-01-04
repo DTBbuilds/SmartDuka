@@ -134,4 +134,83 @@ export class ShiftsController {
     const shifts = await this.shiftsService.getShiftsByStatus(user.shopId, status);
     return shifts;
   }
+
+  /**
+   * Record activity ping from cashier frontend
+   * Called periodically to track active vs inactive time
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('cashier')
+  @Post(':id/activity-ping')
+  async recordActivityPing(
+    @Param('id') shiftId: string,
+    @Body() body: { isActive: boolean },
+    @CurrentUser() user: any,
+  ) {
+    return this.shiftsService.recordActivityPing(
+      shiftId,
+      user.shopId,
+      body.isActive,
+    );
+  }
+
+  /**
+   * Start a break period
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('cashier')
+  @Post(':id/break/start')
+  async startBreak(
+    @Param('id') shiftId: string,
+    @Body() body: { reason?: string },
+    @CurrentUser() user: any,
+  ) {
+    return this.shiftsService.recordBreak(shiftId, user.shopId, body.reason);
+  }
+
+  /**
+   * End a break period
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('cashier')
+  @Post(':id/break/end')
+  async endBreak(
+    @Param('id') shiftId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.shiftsService.endBreak(shiftId, user.shopId);
+  }
+
+  /**
+   * Get detailed shift statistics with activity breakdown
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'cashier')
+  @Get(':id/stats')
+  async getShiftStats(
+    @Param('id') shiftId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.shiftsService.getShiftStats(shiftId, user.shopId);
+  }
+
+  /**
+   * Get cashier shift summary (for admin cashier management)
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Get('cashier/:cashierId/summary')
+  async getCashierShiftSummary(
+    @Param('cashierId') cashierId: string,
+    @CurrentUser() user: any,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.shiftsService.getCashierShiftSummary(
+      user.shopId,
+      cashierId,
+      startDate ? new Date(startDate) : undefined,
+      endDate ? new Date(endDate) : undefined,
+    );
+  }
 }

@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Button, Input } from '@smartduka/ui';
 import { ShopSelector } from '../shop-selector';
-import { User, Lock, Loader2, ArrowRight, Star, Clock } from 'lucide-react';
-import { getPreferredShop, getRecentShops, getTimeSinceLastLogin, type RecentShop } from '@/lib/device-memory';
+import { Lock, Loader2, ArrowRight, Star, Clock, Sparkles } from 'lucide-react';
+import { getPreferredShop, type RecentShop } from '@/lib/device-memory';
+import { config } from '@/lib/config';
 
 interface Shop {
   id: string;
@@ -17,7 +18,7 @@ interface Shop {
 
 interface CashierLoginFormProps {
   shops: Shop[];
-  onSubmit: (name: string, pin: string, shopId: string) => Promise<void>;
+  onSubmit: (pin: string, shopId: string) => Promise<void>;
   isLoading?: boolean;
   preferredShopId?: string;
   recentShops?: RecentShop[];
@@ -42,38 +43,11 @@ export function CashierLoginForm({
     return shops[0]?.id || '';
   });
   
-  // Get saved name from recent shop if available
-  const [name, setName] = useState(() => {
-    const recent = recentShops.find(s => s.id === shopId);
-    return recent?.lastUserName || '';
-  });
   const [pin, setPin] = useState('');
   
-  // Auto-skip to credentials if we have a preferred shop
+  // Auto-skip to PIN entry if we have a preferred shop
   const hasPreferredShop = !!preferredShopId || !!getPreferredShop();
-  const [step, setStep] = useState<'shop' | 'credentials'>(hasPreferredShop ? 'credentials' : 'shop');
-
-  // Load saved name from localStorage or recent shop
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    // First check recent shops for this shop
-    const deviceRecentShops = getRecentShops();
-    const recentForShop = deviceRecentShops.find(s => s.id === shopId);
-    if (recentForShop?.lastUserName) {
-      setName(recentForShop.lastUserName);
-      return;
-    }
-    // Fallback to localStorage
-    const savedName = localStorage.getItem('smartduka:cashierName');
-    if (savedName) setName(savedName);
-  }, [shopId]);
-
-  // Save name to localStorage when it changes
-  useEffect(() => {
-    if (name && typeof window !== 'undefined') {
-      localStorage.setItem('smartduka:cashierName', name);
-    }
-  }, [name]);
+  const [step, setStep] = useState<'shop' | 'pin'>(hasPreferredShop ? 'pin' : 'shop');
 
   const handlePinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value.replace(/\D/g, '');
@@ -84,16 +58,16 @@ export function CashierLoginForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await onSubmit(name, pin, shopId);
+    await onSubmit(pin, shopId);
   };
 
-  const canProceedToCredentials = !!shopId;
-  const canSubmit = name.trim().length > 0 && pin.length >= 4;
+  const canProceedToPin = !!shopId;
+  const canSubmit = pin.length >= 4;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       {/* Quick Shop Indicator (when we have a preferred shop) */}
-      {step === 'credentials' && hasPreferredShop && (
+      {step === 'pin' && hasPreferredShop && (
         <div className="flex items-center gap-3 p-3 bg-primary/5 border border-primary/20 rounded-xl mb-2">
           <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
             <Star className="h-5 w-5 text-primary" />
@@ -118,20 +92,14 @@ export function CashierLoginForm({
       )}
 
       {/* Step 1: Shop Selection */}
-      <div className={step === 'credentials' ? 'hidden' : ''}>
+      <div className={step === 'pin' ? 'hidden' : ''}>
         <ShopSelector
           shops={shops}
           selectedShopId={shopId}
           onShopChange={(id) => {
             setShopId(id);
             if (id) {
-              // Load name for this shop if available
-              const deviceRecentShops = getRecentShops();
-              const recentForShop = deviceRecentShops.find(s => s.id === id);
-              if (recentForShop?.lastUserName) {
-                setName(recentForShop.lastUserName);
-              }
-              setStep('credentials');
+              setStep('pin');
             }
           }}
           disabled={isLoading}
@@ -141,10 +109,10 @@ export function CashierLoginForm({
       </div>
 
       {/* Continue Button (mobile-friendly) */}
-      {step === 'shop' && canProceedToCredentials && (
+      {step === 'shop' && canProceedToPin && (
         <Button
           type="button"
-          onClick={() => setStep('credentials')}
+          onClick={() => setStep('pin')}
           className="w-full h-12 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold rounded-xl shadow-lg shadow-blue-500/25 gap-2"
         >
           Continue
@@ -152,35 +120,13 @@ export function CashierLoginForm({
         </Button>
       )}
 
-      {/* Step 2: Credentials */}
-      {step === 'credentials' && (
+      {/* Step 2: PIN Entry */}
+      {step === 'pin' && (
         <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
-          {/* Name Input */}
-          <div>
-            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
-              Step 2: Enter Your Name
-            </label>
-            <div className="relative">
-              <div className="absolute left-3 top-1/2 -translate-y-1/2 h-9 w-9 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
-                <User className="h-4 w-4 text-slate-500" />
-              </div>
-              <Input
-                id="name"
-                type="text"
-                placeholder="Enter your name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                disabled={isLoading}
-                required
-                className="h-14 pl-14 pr-4 text-base border-2 border-slate-200 dark:border-slate-700 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
-              />
-            </div>
-          </div>
-
           {/* PIN Input */}
           <div>
             <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
-              Step 3: Enter Your PIN
+              Step 2: Enter Your PIN
             </label>
             
             {/* PIN Input - uses device keyboard */}
@@ -198,6 +144,7 @@ export function CashierLoginForm({
                 onChange={handlePinChange}
                 maxLength={6}
                 disabled={isLoading}
+                autoFocus
                 className="h-14 pl-14 pr-4 text-center text-xl tracking-[0.3em] font-bold border-2 border-slate-200 dark:border-slate-700 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
               />
             </div>
@@ -237,6 +184,36 @@ export function CashierLoginForm({
           >
             ← Change shop
           </button>
+
+          {/* Google Signup Option */}
+          <div className="relative mt-4">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-slate-200 dark:border-slate-700" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-card px-2 text-muted-foreground">Or</span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              window.location.href = `${config.apiUrl}/auth/google/cashier`;
+            }}
+            className="w-full mt-4 flex items-center justify-center gap-2 h-12 px-4 text-sm font-medium border-2 border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+          >
+            <svg className="h-5 w-5" viewBox="0 0 24 24">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+            </svg>
+            <span>Sign up with Google</span>
+            <Sparkles className="h-4 w-4 text-amber-500" />
+          </button>
+          <p className="text-xs text-center text-muted-foreground mt-2">
+            Link your Google account for faster login (requires PIN once)
+          </p>
         </div>
       )}
     </form>

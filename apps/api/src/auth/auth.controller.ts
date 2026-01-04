@@ -112,42 +112,6 @@ export class AuthController {
     };
   }
 
-  /**
-   * Login with name and PIN (for cashiers)
-   * POST /auth/login-cashier
-   */
-  @UseGuards(PinRateLimitGuard)
-  @Post('login-cashier')
-  @SkipCsrf()
-  async loginCashier(
-    @Body() body: { name: string; pin: string },
-    @Req() req: any,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    const ipAddress = req.ip || req.connection.remoteAddress;
-    const userAgent = req.get('user-agent');
-    const result = await this.authService.loginWithNameAndPinAndTokens(body.name, body.pin, ipAddress, userAgent);
-    
-    if (result.tokens) {
-      this.cookieService.setAuthCookies(
-        res,
-        result.tokens.accessToken,
-        result.tokens.refreshToken,
-        result.tokens.csrfToken,
-      );
-    }
-    
-    return {
-      user: result.user,
-      shop: result.shop,
-      tokens: {
-        accessToken: result.tokens?.accessToken,
-        expiresIn: result.tokens?.expiresIn,
-        csrfToken: result.tokens?.csrfToken,
-      },
-    };
-  }
-
   @UseGuards(JwtAuthGuard)
   @Post('set-pin')
   async setPin(
@@ -242,21 +206,68 @@ export class AuthController {
     // The guard handles the redirect to Google
   }
 
+  /**
+   * Google OAuth for cashiers - redirects to Google with cashier state
+   * This allows the callback to know this is a cashier signup flow
+   */
+  @Get('google/cashier')
+  async googleAuthCashier(@Res() res: Response) {
+    const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
+    if (!clientId || clientId === 'not-configured') {
+      const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
+      res.redirect(`${frontendUrl}/login?error=${encodeURIComponent('Google login is not configured')}`);
+      return;
+    }
+    
+    const clientSecret = this.configService.get<string>('GOOGLE_CLIENT_SECRET');
+    const callbackUrl = this.configService.get<string>('GOOGLE_CALLBACK_URL') || 'http://localhost:5000/api/v1/auth/google/callback';
+    
+    // Build Google OAuth URL with state parameter
+    const state = encodeURIComponent(JSON.stringify({ role: 'cashier' }));
+    const googleAuthUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+    googleAuthUrl.searchParams.set('client_id', clientId);
+    googleAuthUrl.searchParams.set('redirect_uri', callbackUrl);
+    googleAuthUrl.searchParams.set('response_type', 'code');
+    googleAuthUrl.searchParams.set('scope', 'email profile');
+    googleAuthUrl.searchParams.set('state', state);
+    googleAuthUrl.searchParams.set('access_type', 'offline');
+    googleAuthUrl.searchParams.set('prompt', 'select_account');
+    
+    res.redirect(googleAuthUrl.toString());
+  }
+
   @Get('google/callback')
   @UseGuards(GoogleAuthGuard)
-  async googleAuthCallback(@Req() req: any, @Res() res: Response) {
+  async googleAuthCallback(@Req() req: any, @Res() res: Response, @Query('state') state?: string) {
     const ipAddress = req.ip || req.connection.remoteAddress;
     const userAgent = req.get('user-agent');
     const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
+    
+    // Parse state to check if this is a cashier signup flow
+    let isCashierSignup = false;
+    if (state) {
+      try {
+        const stateData = JSON.parse(decodeURIComponent(state));
+        isCashierSignup = stateData.role === 'cashier';
+      } catch {
+        // Invalid state, ignore
+      }
+    }
     
     try {
       const result = await this.authService.googleLoginWithTokens(req.user, ipAddress, userAgent);
       
       if (result.isNewUser) {
-        // New user - redirect to shop registration with Google profile
-        // Profile data is safe to include in URL (no tokens)
+        // New user - check if they want to sign up as cashier or register a shop
         const profileData = encodeURIComponent(JSON.stringify(result.googleProfile));
-        res.redirect(`${frontendUrl}/register-shop?google=${profileData}`);
+        
+        if (isCashierSignup) {
+          // Cashier signup - redirect to PIN verification page
+          res.redirect(`${frontendUrl}/auth/cashier-google-signup?google=${profileData}`);
+        } else {
+          // Shop registration - redirect to shop registration page
+          res.redirect(`${frontendUrl}/register-shop?google=${profileData}`);
+        }
       } else {
         // Existing user - pass tokens via URL for cross-origin support
         // This is necessary because frontend (Vercel) and backend (Render) are on different domains
@@ -285,6 +296,60 @@ export class AuthController {
     const ipAddress = req.ip || req.connection.remoteAddress;
     const userAgent = req.get('user-agent');
     return this.authService.registerShopWithGoogle(body.googleProfile, body.shop, ipAddress, userAgent);
+  }
+
+  /**
+   * Link Google account to existing cashier using PIN verification
+   * POST /auth/link-google-cashier
+   * 
+   * Flow:
+   * 1. Cashier clicks "Sign up with Google" on login page
+   * 2. Google OAuth returns profile to frontend
+   * 3. Frontend shows PIN entry form
+   * 4. Cashier enters their admin-provided PIN
+   * 5. Backend validates PIN, links Google account to cashier
+   * 6. Cashier can now login with Google (no PIN needed)
+   */
+  @UseGuards(PinRateLimitGuard)
+  @Post('link-google-cashier')
+  @SkipCsrf()
+  async linkGoogleToCashier(
+    @Body() body: {
+      googleProfile: { googleId: string; email: string; name: string; avatarUrl?: string };
+      pin: string;
+      shopId: string;
+    },
+    @Req() req: any,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.get('user-agent');
+    const result = await this.authService.linkGoogleToCashier(
+      body.googleProfile,
+      body.pin,
+      body.shopId,
+      ipAddress,
+      userAgent,
+    );
+    
+    if (result.tokens) {
+      this.cookieService.setAuthCookies(
+        res,
+        result.tokens.accessToken,
+        result.tokens.refreshToken,
+        result.tokens.csrfToken,
+      );
+    }
+    
+    return {
+      user: result.user,
+      shop: result.shop,
+      tokens: {
+        accessToken: result.tokens?.accessToken,
+        expiresIn: result.tokens?.expiresIn,
+        csrfToken: result.tokens?.csrfToken,
+      },
+    };
   }
 
   // ==================== Password Reset ====================

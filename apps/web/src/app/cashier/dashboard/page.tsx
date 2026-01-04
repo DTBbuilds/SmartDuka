@@ -8,7 +8,8 @@ import { config } from '@/lib/config';
 import { useToast } from '@/lib/use-toast';
 import { ToastContainer } from '@/components/toast-container';
 import { AuthGuard } from '@/components/auth-guard';
-import { DollarSign, ShoppingCart, TrendingUp, Clock, LogOut, Play, Square } from 'lucide-react';
+import { shiftActivityTracker, type ShiftActivityState } from '@/lib/shift-activity-tracker';
+import { DollarSign, ShoppingCart, TrendingUp, Clock, LogOut, Play, Square, Coffee, Activity, Pause } from 'lucide-react';
 
 interface Transaction {
   _id: string;
@@ -30,6 +31,9 @@ interface Shift {
   totalSales?: number;
   transactionCount?: number;
   expectedCash?: number;
+  activeTimeMs?: number;
+  inactiveTimeMs?: number;
+  breakTimeMs?: number;
 }
 
 interface CashierStats {
@@ -53,6 +57,8 @@ function CashierDashboardContent() {
   const [shift, setShift] = useState<Shift | null>(null);
   const [loading, setLoading] = useState(true);
   const [shiftDuration, setShiftDuration] = useState('0m');
+  const [activityState, setActivityState] = useState<ShiftActivityState | null>(null);
+  const [isOnBreak, setIsOnBreak] = useState(false);
 
   useEffect(() => {
     loadCashierStats();
@@ -68,6 +74,24 @@ function CashierDashboardContent() {
 
     return () => clearInterval(interval);
   }, [token, shift?.status]);
+
+  // Initialize activity tracker when shift is loaded
+  useEffect(() => {
+    if (shift && shift.status === 'open' && token) {
+      shiftActivityTracker.initialize(shift._id, token);
+      
+      // Subscribe to activity state updates
+      const unsubscribe = shiftActivityTracker.subscribe((state) => {
+        setActivityState(state);
+        setIsOnBreak(state.isOnBreak);
+      });
+
+      return () => {
+        unsubscribe();
+        shiftActivityTracker.cleanup();
+      };
+    }
+  }, [shift?._id, shift?.status, token]);
 
   const updateShiftDuration = () => {
     const shiftData = localStorage.getItem('smartduka:shift');
@@ -190,8 +214,23 @@ function CashierDashboardContent() {
   };
 
   const handleLogout = () => {
+    shiftActivityTracker.cleanup();
     logout();
     router.push('/login');
+  };
+
+  const handleStartBreak = async () => {
+    const success = await shiftActivityTracker.startBreak('Break');
+    if (success) {
+      toast({ type: 'info', title: 'Break Started', message: 'Your break has started. Activity tracking is paused.' });
+    }
+  };
+
+  const handleEndBreak = async () => {
+    const success = await shiftActivityTracker.endBreak();
+    if (success) {
+      toast({ type: 'success', title: 'Break Ended', message: 'Welcome back! Activity tracking resumed.' });
+    }
   };
 
   const formatCurrency = (value: number) =>
@@ -200,6 +239,20 @@ function CashierDashboardContent() {
   const formatTime = (timestamp: string) => {
     const date = new Date(timestamp);
     return date.toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const formatDuration = (ms: number) => {
+    const minutes = Math.floor(ms / (1000 * 60));
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    return hours > 0 ? `${hours}h ${remainingMinutes}m` : `${minutes}m`;
+  };
+
+  const getActivePercentage = () => {
+    if (!activityState) return 100;
+    const total = activityState.activeTimeMs + activityState.inactiveTimeMs;
+    if (total === 0) return 100;
+    return Math.round((activityState.activeTimeMs / total) * 100);
   };
 
   return (
@@ -229,27 +282,53 @@ function CashierDashboardContent() {
 
         {/* Shift Status Card */}
         {shift ? (
-          <Card className="mb-8 border-l-4 border-l-blue-500">
+          <Card className={`mb-8 border-l-4 ${isOnBreak ? 'border-l-amber-500' : 'border-l-blue-500'}`}>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-blue-600" />
-                  Active Shift
+                  {isOnBreak ? (
+                    <Coffee className="h-4 w-4 text-amber-600" />
+                  ) : (
+                    <Clock className="h-4 w-4 text-blue-600" />
+                  )}
+                  {isOnBreak ? 'On Break' : 'Active Shift'}
                 </CardTitle>
-                <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">
-                  {shift.status === 'open' ? 'Running' : 'Closed'}
-                </span>
+                <div className="flex items-center gap-2">
+                  {activityState && (
+                    <span className={`px-2 py-1 text-xs font-medium rounded-full flex items-center gap-1 ${
+                      activityState.isActive 
+                        ? 'bg-green-100 text-green-700' 
+                        : 'bg-yellow-100 text-yellow-700'
+                    }`}>
+                      <Activity className="h-3 w-3" />
+                      {activityState.isActive ? 'Active' : 'Idle'}
+                    </span>
+                  )}
+                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                    isOnBreak 
+                      ? 'bg-amber-100 text-amber-700' 
+                      : 'bg-green-100 text-green-700'
+                  }`}>
+                    {isOnBreak ? 'Break' : shift.status === 'open' ? 'Running' : 'Closed'}
+                  </span>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 gap-4 mb-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-4">
                 <div>
                   <p className="text-xs text-muted-foreground">Start Time</p>
                   <p className="font-semibold">{formatTime(shift.startTime)}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">Duration</p>
+                  <p className="text-xs text-muted-foreground">Total Duration</p>
                   <p className="font-semibold">{shiftDuration}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Active Time</p>
+                  <p className="font-semibold text-green-600">
+                    {activityState ? formatDuration(activityState.activeTimeMs) : shiftDuration}
+                  </p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Opening Balance</p>
@@ -267,21 +346,83 @@ function CashierDashboardContent() {
                   <p className="text-xs text-muted-foreground">Expected Cash</p>
                   <p className="font-semibold">{formatCurrency(shift.expectedCash || shift.openingBalance)}</p>
                 </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Activity Rate</p>
+                  <p className={`font-semibold ${getActivePercentage() >= 70 ? 'text-green-600' : getActivePercentage() >= 50 ? 'text-yellow-600' : 'text-red-600'}`}>
+                    {getActivePercentage()}%
+                  </p>
+                </div>
+                {activityState && activityState.inactiveTimeMs > 0 && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Idle Time</p>
+                    <p className="font-semibold text-yellow-600">{formatDuration(activityState.inactiveTimeMs)}</p>
+                  </div>
+                )}
               </div>
-              <div className="flex gap-2">
+              
+              {/* Activity Progress Bar */}
+              {activityState && (activityState.activeTimeMs > 0 || activityState.inactiveTimeMs > 0) && (
+                <div className="mb-4">
+                  <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                    <span>Activity Breakdown</span>
+                    <span>{getActivePercentage()}% active</span>
+                  </div>
+                  <div className="h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden flex">
+                    <div 
+                      className="bg-green-500 h-full transition-all duration-300" 
+                      style={{ width: `${getActivePercentage()}%` }}
+                    />
+                    <div 
+                      className="bg-yellow-500 h-full transition-all duration-300" 
+                      style={{ width: `${100 - getActivePercentage()}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-xs mt-1">
+                    <span className="text-green-600">Active: {formatDuration(activityState.activeTimeMs)}</span>
+                    <span className="text-yellow-600">Idle: {formatDuration(activityState.inactiveTimeMs)}</span>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-2 flex-wrap">
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={() => router.push('/pos')}
                   className="flex-1"
+                  disabled={isOnBreak}
                 >
                   <ShoppingCart className="h-4 w-4 mr-1" />
                   POS
                 </Button>
+                
+                {/* Break Toggle Button */}
+                {isOnBreak ? (
+                  <Button
+                    size="sm"
+                    onClick={handleEndBreak}
+                    className="flex-1 bg-green-600 hover:bg-green-700"
+                  >
+                    <Play className="h-4 w-4 mr-1" />
+                    End Break
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleStartBreak}
+                    className="flex-1"
+                  >
+                    <Coffee className="h-4 w-4 mr-1" />
+                    Take Break
+                  </Button>
+                )}
+                
                 <Button
                   size="sm"
                   onClick={() => router.push('/cashier/shift-end')}
                   className="flex-1 bg-orange-600 hover:bg-orange-700"
+                  disabled={isOnBreak}
                 >
                   <Square className="h-4 w-4 mr-1" />
                   End Shift

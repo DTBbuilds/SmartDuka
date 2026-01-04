@@ -41,6 +41,7 @@ type AuthContextType = {
   loginWithPin: (pin: string, shopId: string) => Promise<void>;
   loginWithGoogle: () => void;
   registerShopWithGoogle: (googleProfile: GoogleProfile, shopData: any) => Promise<void>;
+  setAuthFromTokens: (tokens: { accessToken: string; csrfToken?: string; sessionId?: string; expiresIn?: number }, userData: any, shopData: any) => void;
   logout: () => void;
   registerShop: (shopData: any, adminData: any) => Promise<void>;
   enterDemoMode: (forceShop?: Shop) => void;
@@ -524,6 +525,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.localStorage.setItem('smartduka:shop', JSON.stringify(updatedShop));
   };
 
+  /**
+   * Set auth state from tokens (used by cashier Google signup)
+   */
+  const setAuthFromTokens = (
+    tokens: { accessToken: string; csrfToken?: string; sessionId?: string; expiresIn?: number },
+    userData: any,
+    shopData: any
+  ) => {
+    const authToken = tokens.accessToken;
+    if (!authToken) return;
+
+    const decoded = JSON.parse(atob(authToken.split('.')[1]));
+    setUser(decoded);
+    setToken(authToken);
+    
+    const shopInfo: Shop = {
+      id: shopData?.id || decoded.shopId,
+      name: shopData?.name || 'Shop',
+      status: shopData?.status || 'active',
+    };
+    setShop(shopInfo);
+
+    storeToken(authToken, tokens.sessionId, tokens.expiresIn);
+    storeShop(shopInfo);
+    storeUser(userData);
+    
+    if (tokens.csrfToken) {
+      storeCsrfToken(tokens.csrfToken);
+    }
+
+    // Initialize activity tracking and status manager
+    activityTracker.setToken(authToken, decoded.role);
+    statusManager.initialize(authToken, decoded.sub, decoded.shopId);
+  };
+
   return (
     <AuthContext.Provider value={{ 
       user, 
@@ -537,6 +573,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loginWithPin,
       loginWithGoogle,
       registerShopWithGoogle,
+      setAuthFromTokens,
       logout, 
       registerShop,
       enterDemoMode,

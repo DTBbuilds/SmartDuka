@@ -316,27 +316,6 @@ export class UsersService {
     return null;
   }
 
-  /**
-   * Find user by name and PIN (case-insensitive name match)
-   * Used for cashier login where they enter their name and PIN
-   */
-  async findByNameAndPin(name: string, pin: string): Promise<User | null> {
-    // Find all active users with matching name (case-insensitive)
-    const users = await this.userModel.find({
-      name: { $regex: new RegExp(`^${name.trim()}$`, 'i') },
-      status: 'active',
-      pinHash: { $exists: true, $ne: null },
-    }).exec();
-
-    for (const user of users) {
-      const isValid = await this.validatePin(user, pin);
-      if (isValid) {
-        return user;
-      }
-    }
-    return null;
-  }
-
   async validatePin(user: User, pin: string): Promise<boolean> {
     if (!(user as any).pinHash) {
       return false;

@@ -271,6 +271,15 @@ export function getPreferredRole(): 'admin' | 'cashier' | undefined {
 }
 
 /**
+ * Set the preferred role for this device
+ */
+export function setPreferredRole(role: 'admin' | 'cashier'): void {
+  const memory = getDeviceMemory();
+  memory.preferredRole = role;
+  saveDeviceMemory(memory);
+}
+
+/**
  * Check if auto-select shop is enabled
  */
 export function shouldAutoSelectShop(): boolean {
