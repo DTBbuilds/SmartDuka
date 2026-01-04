@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label, Textarea } from '@smartduka/ui';
 import { useAuth } from '@/lib/auth-context';
 import { config } from '@/lib/config';
-import { Clock, DollarSign, AlertCircle, CheckCircle, TrendingUp } from 'lucide-react';
+import { shiftActivityTracker } from '@/lib/shift-activity-tracker';
+import { Clock, DollarSign, AlertCircle, CheckCircle, TrendingUp, Activity, Coffee, Award, Target, Zap } from 'lucide-react';
 import { AuthGuard } from '@/components/auth-guard';
 
 interface Shift {
@@ -18,16 +19,30 @@ interface Shift {
   expectedCash?: number;
 }
 
+interface ShiftStats {
+  totalDurationMs: number;
+  activeTimeMs: number;
+  inactiveTimeMs: number;
+  breakTimeMs: number;
+  activePercentage: number;
+  totalSales: number;
+  transactionCount: number;
+  averageTransactionValue: number;
+  salesPerActiveHour: number;
+}
+
 function ShiftEndContent() {
   const router = useRouter();
   const { user, shop, token } = useAuth();
   const [shift, setShift] = useState<Shift | null>(null);
+  const [shiftStats, setShiftStats] = useState<ShiftStats | null>(null);
   const [actualCash, setActualCash] = useState('0');
   const [notes, setNotes] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [showReport, setShowReport] = useState(false);
 
   useEffect(() => {
     loadCurrentShift();
@@ -67,6 +82,20 @@ function ShiftEndContent() {
         }
       } catch (salesError) {
         console.error('Failed to load sales data:', salesError);
+      }
+
+      // Load shift stats with activity data
+      try {
+        const statsRes = await fetch(`${config.apiUrl}/shifts/${data._id}/stats`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        
+        if (statsRes.ok) {
+          const statsData = await statsRes.json();
+          setShiftStats(statsData);
+        }
+      } catch (statsError) {
+        console.error('Failed to load shift stats:', statsError);
       }
     } catch (err: any) {
       setError(err.message || 'Failed to load shift');
@@ -115,20 +144,21 @@ function ShiftEndContent() {
 
       if (!reconcileRes.ok) throw new Error('Failed to reconcile shift');
 
-      // Clear shift from localStorage
+      // Clear shift from localStorage and cleanup activity tracker
       localStorage.removeItem('smartduka:shift');
+      shiftActivityTracker.cleanup();
 
       setSuccess(true);
-
-      // Redirect after 2 seconds
-      setTimeout(() => {
-        router.push('/cashier/dashboard');
-      }, 2000);
+      setShowReport(true);
     } catch (err: any) {
       setError(err.message || 'Failed to end shift');
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleDone = () => {
+    router.push('/cashier/dashboard');
   };
 
   const formatCurrency = (value: number) =>
@@ -139,6 +169,28 @@ function ShiftEndContent() {
       hour: '2-digit',
       minute: '2-digit',
     });
+  };
+
+  const formatDuration = (ms: number) => {
+    const minutes = Math.floor(ms / (1000 * 60));
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    return hours > 0 ? `${hours}h ${remainingMinutes}m` : `${minutes}m`;
+  };
+
+  const getPerformanceRating = () => {
+    if (!shiftStats) return { label: 'Good', color: 'text-green-600', bg: 'bg-green-100' };
+    
+    const activePercent = shiftStats.activePercentage;
+    const avgTransaction = shiftStats.averageTransactionValue;
+    
+    if (activePercent >= 80 && avgTransaction > 500) {
+      return { label: 'Excellent', color: 'text-green-600', bg: 'bg-green-100', icon: Award };
+    } else if (activePercent >= 60) {
+      return { label: 'Good', color: 'text-blue-600', bg: 'bg-blue-100', icon: Target };
+    } else {
+      return { label: 'Needs Improvement', color: 'text-yellow-600', bg: 'bg-yellow-100', icon: Zap };
+    }
   };
 
   const calculateDuration = () => {
@@ -201,7 +253,136 @@ function ShiftEndContent() {
         </CardHeader>
 
         <CardContent>
-          {success ? (
+          {success && showReport ? (
+            <div className="space-y-4">
+              {/* Success Header */}
+              <div className="text-center space-y-2 pb-4 border-b">
+                <div className="flex justify-center">
+                  <div className="p-3 bg-green-100 rounded-full">
+                    <CheckCircle className="h-8 w-8 text-green-600" />
+                  </div>
+                </div>
+                <h3 className="font-semibold text-green-900 text-lg">Shift Completed!</h3>
+                <p className="text-sm text-slate-600">Here's your shift summary</p>
+              </div>
+
+              {/* Performance Rating */}
+              {shiftStats && (
+                <div className={`p-4 rounded-lg ${getPerformanceRating().bg} text-center`}>
+                  <div className="flex items-center justify-center gap-2 mb-1">
+                    {getPerformanceRating().icon && <Award className={`h-5 w-5 ${getPerformanceRating().color}`} />}
+                    <span className={`font-bold text-lg ${getPerformanceRating().color}`}>
+                      {getPerformanceRating().label}
+                    </span>
+                  </div>
+                  <p className="text-sm text-slate-600">Overall Performance</p>
+                </div>
+              )}
+
+              {/* Activity Summary */}
+              {shiftStats && (
+                <div className="space-y-3 p-4 bg-slate-50 rounded-lg border">
+                  <h4 className="font-semibold text-slate-700 flex items-center gap-2">
+                    <Activity className="h-4 w-4" />
+                    Activity Summary
+                  </h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="text-center p-2 bg-white rounded border">
+                      <p className="text-xs text-slate-500">Total Duration</p>
+                      <p className="font-bold text-slate-900">{formatDuration(shiftStats.totalDurationMs)}</p>
+                    </div>
+                    <div className="text-center p-2 bg-white rounded border">
+                      <p className="text-xs text-slate-500">Active Time</p>
+                      <p className="font-bold text-green-600">{formatDuration(shiftStats.activeTimeMs)}</p>
+                    </div>
+                    <div className="text-center p-2 bg-white rounded border">
+                      <p className="text-xs text-slate-500">Idle Time</p>
+                      <p className="font-bold text-yellow-600">{formatDuration(shiftStats.inactiveTimeMs)}</p>
+                    </div>
+                    <div className="text-center p-2 bg-white rounded border">
+                      <p className="text-xs text-slate-500">Activity Rate</p>
+                      <p className={`font-bold ${
+                        shiftStats.activePercentage >= 70 ? 'text-green-600' : 
+                        shiftStats.activePercentage >= 50 ? 'text-yellow-600' : 'text-red-600'
+                      }`}>{shiftStats.activePercentage}%</p>
+                    </div>
+                  </div>
+                  
+                  {/* Activity Progress Bar */}
+                  <div>
+                    <div className="h-2 bg-slate-200 rounded-full overflow-hidden flex">
+                      <div 
+                        className="bg-green-500 h-full transition-all" 
+                        style={{ width: `${shiftStats.activePercentage}%` }}
+                      />
+                      <div 
+                        className="bg-yellow-500 h-full transition-all" 
+                        style={{ width: `${100 - shiftStats.activePercentage}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-xs mt-1 text-slate-500">
+                      <span>Active</span>
+                      <span>Idle</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Sales Summary */}
+              <div className="space-y-3 p-4 bg-green-50 rounded-lg border border-green-200">
+                <h4 className="font-semibold text-green-800 flex items-center gap-2">
+                  <DollarSign className="h-4 w-4" />
+                  Sales Summary
+                </h4>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="text-center p-2 bg-white rounded border border-green-100">
+                    <p className="text-xs text-slate-500">Total Sales</p>
+                    <p className="font-bold text-green-600 text-lg">{formatCurrency(shift?.totalSales || 0)}</p>
+                  </div>
+                  <div className="text-center p-2 bg-white rounded border border-green-100">
+                    <p className="text-xs text-slate-500">Transactions</p>
+                    <p className="font-bold text-slate-900 text-lg">{shift?.transactionCount || 0}</p>
+                  </div>
+                  {shiftStats && (
+                    <>
+                      <div className="text-center p-2 bg-white rounded border border-green-100">
+                        <p className="text-xs text-slate-500">Avg Transaction</p>
+                        <p className="font-bold text-slate-900">{formatCurrency(shiftStats.averageTransactionValue)}</p>
+                      </div>
+                      <div className="text-center p-2 bg-white rounded border border-green-100">
+                        <p className="text-xs text-slate-500">Sales/Active Hour</p>
+                        <p className="font-bold text-blue-600">{formatCurrency(shiftStats.salesPerActiveHour)}</p>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Cash Reconciliation */}
+              <div className="space-y-2 p-4 bg-slate-50 rounded-lg border">
+                <h4 className="font-semibold text-slate-700">Cash Reconciliation</h4>
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-600">Expected Cash:</span>
+                  <span className="font-medium">{formatCurrency(shift?.expectedCash || shift?.openingBalance || 0)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-600">Actual Cash:</span>
+                  <span className="font-medium">{formatCurrency(parseFloat(actualCash) || 0)}</span>
+                </div>
+                <div className="flex justify-between text-sm font-medium pt-2 border-t">
+                  <span className="text-slate-700">Variance:</span>
+                  <span className={variance >= 0 ? 'text-green-600' : 'text-red-600'}>
+                    {variance >= 0 ? '+' : ''}{formatCurrency(variance)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Done Button */}
+              <Button onClick={handleDone} className="w-full bg-green-600 hover:bg-green-700">
+                Done
+              </Button>
+            </div>
+          ) : success ? (
             <div className="text-center space-y-4">
               <div className="flex justify-center">
                 <div className="p-3 bg-green-100 rounded-full">
@@ -210,7 +391,7 @@ function ShiftEndContent() {
               </div>
               <div>
                 <h3 className="font-semibold text-green-900">Shift Ended!</h3>
-                <p className="text-sm text-green-700 mt-1">Redirecting to dashboard...</p>
+                <p className="text-sm text-green-700 mt-1">Loading report...</p>
               </div>
             </div>
           ) : (

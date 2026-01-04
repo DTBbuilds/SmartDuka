@@ -23,16 +23,23 @@ function ShiftStartContent() {
     setIsLoading(true);
 
     try {
+      // shopId is now optional - backend will use JWT shopId if not provided
+      const payload: { openingBalance: number; shopId?: string } = {
+        openingBalance: parseFloat(openingBalance) || 0,
+      };
+      
+      // Only include shopId if available
+      if (shop?.id) {
+        payload.shopId = shop.id;
+      }
+
       const res = await fetch(`${config.apiUrl}/shifts/clock-in`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          shopId: shop?.id,
-          openingBalance: parseFloat(openingBalance) || 0,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const text = await res.text();

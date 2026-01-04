@@ -26,7 +26,11 @@ import {
   Calendar,
   Building2,
   Key,
-  RefreshCw
+  RefreshCw,
+  Activity,
+  Timer,
+  Coffee,
+  BarChart3
 } from 'lucide-react';
 
 interface Transaction {
@@ -69,6 +73,32 @@ interface CashierDetail {
   lastActivity: string;
 }
 
+interface ShiftSummary {
+  totalShifts: number;
+  totalActiveTimeMs: number;
+  totalInactiveTimeMs: number;
+  totalBreakTimeMs: number;
+  totalSales: number;
+  totalTransactions: number;
+  averageActivePercentage: number;
+  shifts: ShiftData[];
+}
+
+interface ShiftData {
+  _id: string;
+  startTime: string;
+  endTime?: string;
+  status: 'open' | 'closed' | 'reconciled';
+  totalSales?: number;
+  transactionCount?: number;
+  activeTimeMs?: number;
+  inactiveTimeMs?: number;
+  breakTimeMs?: number;
+  openingBalance: number;
+  closingBalance?: number;
+  variance?: number;
+}
+
 function CashierDetailContent() {
   const router = useRouter();
   const params = useParams();
@@ -81,11 +111,41 @@ function CashierDetailContent() {
   const [savingPermissions, setSavingPermissions] = useState(false);
   const [resettingPin, setResettingPin] = useState(false);
   const [newPin, setNewPin] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'overview' | 'permissions' | 'activity'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'permissions' | 'activity' | 'shifts'>('overview');
+  const [shiftSummary, setShiftSummary] = useState<ShiftSummary | null>(null);
+  const [loadingShifts, setLoadingShifts] = useState(false);
 
   useEffect(() => {
     loadCashierDetail();
   }, [token, cashierId]);
+
+  // Load shift summary when shifts tab is selected
+  useEffect(() => {
+    if (activeTab === 'shifts' && !shiftSummary && !loadingShifts) {
+      loadShiftSummary();
+    }
+  }, [activeTab]);
+
+  const loadShiftSummary = async () => {
+    if (!token || !cashierId) return;
+
+    try {
+      setLoadingShifts(true);
+      const res = await fetch(`${config.apiUrl}/shifts/cashier/${cashierId}/summary`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setShiftSummary(data);
+      }
+    } catch (err: any) {
+      console.error('Failed to load shift summary:', err);
+      toast({ type: 'error', title: 'Failed to load shifts', message: err?.message });
+    } finally {
+      setLoadingShifts(false);
+    }
+  };
 
   const loadCashierDetail = async () => {
     if (!token || !cashierId) return;
@@ -215,6 +275,13 @@ function CashierDetailContent() {
     return date.toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' });
   };
 
+  const formatDuration = (ms: number) => {
+    const minutes = Math.floor(ms / (1000 * 60));
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    return hours > 0 ? `${hours}h ${remainingMinutes}m` : `${minutes}m`;
+  };
+
   if (loading) {
     return (
       <main className="bg-background py-6 min-h-screen">
@@ -282,12 +349,12 @@ function CashierDetailContent() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-2 mb-6 border-b">
-          {(['overview', 'permissions', 'activity'] as const).map((tab) => (
+        <div className="flex gap-2 mb-6 border-b overflow-x-auto">
+          {(['overview', 'shifts', 'permissions', 'activity'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 font-medium capitalize border-b-2 transition-colors ${
+              className={`px-4 py-2 font-medium capitalize border-b-2 transition-colors whitespace-nowrap ${
                 activeTab === tab
                   ? 'border-primary text-primary'
                   : 'border-transparent text-muted-foreground hover:text-foreground'
@@ -425,6 +492,214 @@ function CashierDetailContent() {
               </Card>
             </div>
           </>
+        )}
+
+        {/* Shifts Tab */}
+        {activeTab === 'shifts' && (
+          <div className="space-y-6">
+            {loadingShifts ? (
+              <div className="text-center py-12 text-muted-foreground">Loading shift data...</div>
+            ) : shiftSummary ? (
+              <>
+                {/* Shift Summary Stats */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium flex items-center gap-2">
+                        <Timer className="h-4 w-4 text-blue-600" />
+                        Total Shifts
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">{shiftSummary.totalShifts}</div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium flex items-center gap-2">
+                        <Activity className="h-4 w-4 text-green-600" />
+                        Active Time
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-green-600">
+                        {formatDuration(shiftSummary.totalActiveTimeMs)}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium flex items-center gap-2">
+                        <Coffee className="h-4 w-4 text-amber-600" />
+                        Idle/Break Time
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-amber-600">
+                        {formatDuration(shiftSummary.totalInactiveTimeMs + shiftSummary.totalBreakTimeMs)}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium flex items-center gap-2">
+                        <BarChart3 className="h-4 w-4 text-purple-600" />
+                        Activity Rate
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className={`text-2xl font-bold ${
+                        shiftSummary.averageActivePercentage >= 70 ? 'text-green-600' : 
+                        shiftSummary.averageActivePercentage >= 50 ? 'text-yellow-600' : 'text-red-600'
+                      }`}>
+                        {shiftSummary.averageActivePercentage}%
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Sales Summary */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <DollarSign className="h-5 w-5 text-green-600" />
+                      Sales Performance
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      <div>
+                        <p className="text-sm text-muted-foreground">Total Sales</p>
+                        <p className="text-xl font-bold text-green-600">{formatCurrency(shiftSummary.totalSales)}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">Transactions</p>
+                        <p className="text-xl font-bold">{shiftSummary.totalTransactions}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">Avg per Transaction</p>
+                        <p className="text-xl font-bold">
+                          {formatCurrency(shiftSummary.totalTransactions > 0 
+                            ? shiftSummary.totalSales / shiftSummary.totalTransactions 
+                            : 0)}
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Recent Shifts List */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Clock className="h-5 w-5" />
+                      Recent Shifts
+                    </CardTitle>
+                    <CardDescription>Last {shiftSummary.shifts.length} shifts</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {shiftSummary.shifts.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">No shifts recorded yet</div>
+                    ) : (
+                      <div className="space-y-3 max-h-[500px] overflow-y-auto">
+                        {shiftSummary.shifts.map((shift) => {
+                          const activePercent = shift.activeTimeMs && shift.inactiveTimeMs 
+                            ? Math.round((shift.activeTimeMs / (shift.activeTimeMs + shift.inactiveTimeMs)) * 100)
+                            : 100;
+                          return (
+                            <div
+                              key={shift._id}
+                              className="p-4 rounded-lg border bg-card hover:bg-muted/50 transition-colors"
+                            >
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                                    shift.status === 'open' ? 'bg-green-100 text-green-700' :
+                                    shift.status === 'reconciled' ? 'bg-blue-100 text-blue-700' :
+                                    'bg-gray-100 text-gray-700'
+                                  }`}>
+                                    {shift.status}
+                                  </span>
+                                  <span className="text-sm text-muted-foreground">
+                                    {new Date(shift.startTime).toLocaleDateString('en-KE', { 
+                                      weekday: 'short', month: 'short', day: 'numeric' 
+                                    })}
+                                  </span>
+                                </div>
+                                <span className="font-semibold text-green-600">
+                                  {formatCurrency(shift.totalSales || 0)}
+                                </span>
+                              </div>
+                              
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                                <div>
+                                  <span className="text-muted-foreground">Start:</span>{' '}
+                                  <span className="font-medium">{formatTime(shift.startTime)}</span>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">End:</span>{' '}
+                                  <span className="font-medium">
+                                    {shift.endTime ? formatTime(shift.endTime) : 'Active'}
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">Active:</span>{' '}
+                                  <span className="font-medium text-green-600">
+                                    {formatDuration(shift.activeTimeMs || 0)}
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">Activity:</span>{' '}
+                                  <span className={`font-medium ${
+                                    activePercent >= 70 ? 'text-green-600' : 
+                                    activePercent >= 50 ? 'text-yellow-600' : 'text-red-600'
+                                  }`}>
+                                    {activePercent}%
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Activity Progress Bar */}
+                              {(shift.activeTimeMs || shift.inactiveTimeMs) && (
+                                <div className="mt-2">
+                                  <div className="h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden flex">
+                                    <div 
+                                      className="bg-green-500 h-full" 
+                                      style={{ width: `${activePercent}%` }}
+                                    />
+                                    <div 
+                                      className="bg-yellow-500 h-full" 
+                                      style={{ width: `${100 - activePercent}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+
+                              {shift.variance !== undefined && shift.variance !== 0 && (
+                                <div className="mt-2 text-sm">
+                                  <span className="text-muted-foreground">Variance:</span>{' '}
+                                  <span className={shift.variance > 0 ? 'text-green-600' : 'text-red-600'}>
+                                    {shift.variance > 0 ? '+' : ''}{formatCurrency(shift.variance)}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </>
+            ) : (
+              <div className="text-center py-12 text-muted-foreground">
+                No shift data available
+              </div>
+            )}
+          </div>
         )}
 
         {/* Permissions Tab */}

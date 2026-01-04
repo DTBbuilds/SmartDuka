@@ -25,17 +25,25 @@ export class ShiftsController {
   async clockIn(
     @Body()
     body: {
-      shopId: string;
+      shopId?: string;
       openingBalance: number;
     },
     @CurrentUser() user: any,
   ) {
-    if (user.shopId !== body.shopId) {
+    // Use shopId from JWT if available, otherwise from body
+    const shopId = user.shopId || body.shopId;
+    
+    if (!shopId) {
+      throw new ForbiddenException('No shop associated with your account');
+    }
+
+    // If body.shopId is provided, verify it matches user's shop
+    if (body.shopId && user.shopId && body.shopId !== user.shopId) {
       throw new ForbiddenException('You are not allowed to clock in for this shop');
     }
 
     const shift = await this.shiftsService.clockIn(
-      body.shopId,
+      shopId,
       user.sub,
       user.name || user.email,
       body.openingBalance,
