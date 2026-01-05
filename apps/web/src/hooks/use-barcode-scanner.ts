@@ -49,6 +49,11 @@ export function useBarcodeScanner({
   const scanTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastKeyTime = useRef<number>(0);
   const rapidKeyCount = useRef<number>(0);
+  
+  // Debounce tracking to prevent duplicate scans
+  const lastScannedBarcode = useRef<string>('');
+  const lastScannedTime = useRef<number>(0);
+  const SCAN_DEBOUNCE_MS = 1000; // Prevent same barcode within 1 second
 
   // Detect if input is from hardware scanner (rapid key presses)
   const isHardwareScannerInput = useCallback((timeDelta: number): boolean => {
@@ -94,6 +99,20 @@ export function useBarcodeScanner({
           if (looksLikeBarcode || !isInputField) {
             e.preventDefault();
             e.stopPropagation();
+            
+            // DEBOUNCE: Prevent duplicate scans of same barcode
+            const timeSinceLastScan = now - lastScannedTime.current;
+            if (barcode === lastScannedBarcode.current && timeSinceLastScan < SCAN_DEBOUNCE_MS) {
+              console.log(`[HardwareScanner] Debounced duplicate: ${barcode}`);
+              barcodeBuffer.current = '';
+              rapidKeyCount.current = 0;
+              setIsScanning(false);
+              return;
+            }
+            
+            // Update debounce tracking
+            lastScannedBarcode.current = barcode;
+            lastScannedTime.current = now;
             
             const barcodeData: BarcodeData = {
               barcode,

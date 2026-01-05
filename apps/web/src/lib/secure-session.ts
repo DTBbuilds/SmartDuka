@@ -245,15 +245,39 @@ export function isTokenAboutToExpire(token: string): boolean {
   return expiryTime < 120; // Less than 2 minutes
 }
 
+// Track refresh attempts to prevent infinite loops
+let refreshAttempts = 0;
+let lastRefreshAttempt = 0;
+const MAX_REFRESH_ATTEMPTS = 3;
+const REFRESH_COOLDOWN_MS = 5000; // 5 seconds between refresh attempts
+
 /**
  * Refresh the auth token using refresh token rotation
  * The refresh token is in httpOnly cookie - we don't need to send it manually
  */
 export async function refreshToken(): Promise<{ accessToken: string; csrfToken: string } | null> {
+  // Rate limiting to prevent refresh loops
+  const now = Date.now();
+  if (now - lastRefreshAttempt < REFRESH_COOLDOWN_MS) {
+    console.warn('[SecureSession] Refresh rate limited, waiting...');
+    return null;
+  }
+  
+  if (refreshAttempts >= MAX_REFRESH_ATTEMPTS) {
+    console.error('[SecureSession] Max refresh attempts reached, clearing session');
+    clearSession();
+    // Reset for next session
+    refreshAttempts = 0;
+    return null;
+  }
+  
+  lastRefreshAttempt = now;
+  refreshAttempts++;
+  
   try {
     const csrfToken = getCsrfToken();
     
-    console.log('[SecureSession] Attempting token refresh...');
+    console.log(`[SecureSession] Attempting token refresh (attempt ${refreshAttempts}/${MAX_REFRESH_ATTEMPTS})...`);
     
     const response = await fetch(`${config.apiUrl}/auth/refresh`, {
       method: 'POST',
@@ -272,6 +296,9 @@ export async function refreshToken(): Promise<{ accessToken: string; csrfToken: 
       const data = await response.json();
       if (data.tokens?.accessToken) {
         console.log('[SecureSession] Token refresh successful');
+        
+        // Reset refresh attempts on success
+        refreshAttempts = 0;
         
         // Store new tokens
         storeToken(data.tokens.accessToken, data.tokens.sessionId, data.tokens.expiresIn);
@@ -298,14 +325,22 @@ export async function refreshToken(): Promise<{ accessToken: string; csrfToken: 
     const errorText = await response.text().catch(() => 'Unknown error');
     console.error('[SecureSession] Token refresh failed:', response.status, errorText);
     
-    // Only clear session on definitive auth failures, not on server errors
-    // 401 = Unauthorized (token invalid/expired - clear session)
-    // 403 = Forbidden (might be CSRF issue - don't clear, let user retry)
-    // 5xx = Server error (don't clear, let user retry)
+    // Handle specific error cases
     if (response.status === 401) {
+      // Check if it's a "No refresh token provided" error - this means cookies aren't being sent
+      // This happens in cross-origin setups where sameSite cookies are blocked
+      if (errorText.includes('No refresh token provided')) {
+        console.error('[SecureSession] Refresh token cookie not sent - likely cross-origin cookie issue');
+        console.warn('[SecureSession] User needs to re-login to get new cookies');
+      }
+      
+      // Clear session on auth failures
       console.warn('[SecureSession] Refresh token invalid, clearing session');
       clearSession();
+      refreshAttempts = 0; // Reset for next session
     }
+    // 403 = Forbidden (might be CSRF issue - don't clear, let user retry)
+    // 5xx = Server error (don't clear, let user retry)
     
     return null;
   } catch (err) {
@@ -313,6 +348,14 @@ export async function refreshToken(): Promise<{ accessToken: string; csrfToken: 
     console.error('[SecureSession] Failed to refresh token (network error):', err);
     return null;
   }
+}
+
+/**
+ * Reset refresh attempt counter (call after successful login)
+ */
+export function resetRefreshAttempts(): void {
+  refreshAttempts = 0;
+  lastRefreshAttempt = 0;
 }
 
 /**

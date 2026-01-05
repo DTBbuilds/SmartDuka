@@ -183,7 +183,7 @@ export default function StockTransfersPage() {
     if (!token) return;
     
     try {
-      const res = await fetch(`${config.apiUrl}/inventory/products?status=active&limit=500`, {
+      const res = await fetch(`${config.apiUrl}/inventory/products?status=active&limit=200`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       

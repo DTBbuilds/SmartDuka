@@ -33,6 +33,8 @@ import {
   UserCheck,
   UserX,
   Coffee,
+  Pause,
+  Play,
 } from 'lucide-react';
 
 interface StaffMember {
@@ -96,6 +98,8 @@ export default function StaffMonitoringPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStaff, setSelectedStaff] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState<'today' | 'week' | 'month'>('today');
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
 
   const fetchData = useCallback(async () => {
     if (!token) return;
@@ -113,8 +117,8 @@ export default function StaffMonitoringPage() {
         setStaff(staffData.data || staffData || []);
       }
 
-      // Fetch today's activity
-      const activityRes = await fetch(`${config.apiUrl}/activity/today`, {
+      // Fetch today's activity with limit
+      const activityRes = await fetch(`${config.apiUrl}/activity?limit=100`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (activityRes.ok) {
@@ -123,6 +127,7 @@ export default function StaffMonitoringPage() {
         // Filter out heartbeats for cleaner display
         setActivities(activityList.filter((a: ActivityLog) => a.action !== 'heartbeat').slice(0, 50));
       }
+      setLastRefresh(new Date());
 
       // Calculate dashboard stats from activities
       calculateDashboardStats();
@@ -166,10 +171,14 @@ export default function StaffMonitoringPage() {
 
   useEffect(() => {
     fetchData();
-    // Refresh every 30 seconds
+  }, [fetchData]);
+
+  // Auto-refresh every 30 seconds when enabled
+  useEffect(() => {
+    if (!autoRefresh) return;
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
-  }, [fetchData]);
+  }, [fetchData, autoRefresh]);
 
   useEffect(() => {
     if (staff.length > 0 && activities.length > 0) {
@@ -258,19 +267,45 @@ export default function StaffMonitoringPage() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 md:space-y-6 px-2 md:px-0">
+      {/* Header - Mobile optimized */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Staff Monitoring</h1>
-          <p className="text-muted-foreground mt-2">
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Staff Monitoring</h1>
+          <p className="text-sm md:text-base text-muted-foreground mt-1 md:mt-2">
             Real-time staff activity and performance tracking
           </p>
         </div>
-        <Button onClick={fetchData} variant="outline" className="gap-2">
-          <RefreshCw className="h-4 w-4" />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          {/* Auto-refresh toggle with high contrast */}
+          <Button
+            onClick={() => setAutoRefresh(!autoRefresh)}
+            variant={autoRefresh ? 'default' : 'outline'}
+            size="sm"
+            className={`gap-2 transition-all ${
+              autoRefresh 
+                ? 'bg-green-600 hover:bg-green-700 text-white' 
+                : 'bg-red-100 border-red-300 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:border-red-700 dark:text-red-400'
+            }`}
+          >
+            {autoRefresh ? (
+              <><Play className="h-3 w-3" /> Auto-refresh ON</>
+            ) : (
+              <><Pause className="h-3 w-3" /> Auto-refresh OFF</>
+            )}
+          </Button>
+          <Button onClick={fetchData} variant="outline" size="sm" className="gap-2">
+            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">Refresh</span>
+          </Button>
+        </div>
+      </div>
+
+      {/* Last refresh indicator */}
+      <div className="text-xs text-muted-foreground flex items-center gap-1">
+        <Clock className="h-3 w-3" />
+        Last updated: {lastRefresh.toLocaleTimeString()}
+        {autoRefresh && <span className="text-green-600 ml-2">• Auto-refreshing every 30s</span>}
       </div>
 
       {error && (
@@ -280,57 +315,57 @@ export default function StaffMonitoringPage() {
         </Alert>
       )}
 
-      {/* Dashboard Stats */}
+      {/* Dashboard Stats - Mobile optimized */}
       {dashboardStats && (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Staff</CardTitle>
+        <div className="grid grid-cols-2 gap-2 md:gap-4 lg:grid-cols-4">
+          <Card className="p-3 md:p-0">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 p-0 md:p-6 md:pb-2">
+              <CardTitle className="text-xs md:text-sm font-medium">Total Staff</CardTitle>
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{dashboardStats.totalStaff}</div>
-              <div className="flex items-center gap-2 mt-1">
-                <span className="text-xs text-green-600">{dashboardStats.activeNow} active</span>
-                <span className="text-xs text-gray-500">{dashboardStats.offlineNow} offline</span>
+            <CardContent className="p-0 pt-2 md:p-6 md:pt-0">
+              <div className="text-xl md:text-2xl font-bold">{dashboardStats.totalStaff}</div>
+              <div className="flex flex-wrap items-center gap-1 md:gap-2 mt-1">
+                <span className="text-[10px] md:text-xs text-green-600">{dashboardStats.activeNow} active</span>
+                <span className="text-[10px] md:text-xs text-gray-500">{dashboardStats.offlineNow} offline</span>
               </div>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Today's Sales</CardTitle>
+          <Card className="p-3 md:p-0">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 p-0 md:p-6 md:pb-2">
+              <CardTitle className="text-xs md:text-sm font-medium">Today's Sales</CardTitle>
               <DollarSign className="h-4 w-4 text-green-600" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{formatCurrency(dashboardStats.todayTotalSales)}</div>
-              <p className="text-xs text-muted-foreground">
+            <CardContent className="p-0 pt-2 md:p-6 md:pt-0">
+              <div className="text-lg md:text-2xl font-bold truncate">{formatCurrency(dashboardStats.todayTotalSales)}</div>
+              <p className="text-[10px] md:text-xs text-muted-foreground">
                 {dashboardStats.todayTotalTransactions} transactions
               </p>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Avg per Cashier</CardTitle>
+          <Card className="p-3 md:p-0">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 p-0 md:p-6 md:pb-2">
+              <CardTitle className="text-xs md:text-sm font-medium">Avg per Cashier</CardTitle>
               <Target className="h-4 w-4 text-blue-600" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{formatCurrency(dashboardStats.avgSalesPerCashier)}</div>
-              <p className="text-xs text-muted-foreground">Today's average</p>
+            <CardContent className="p-0 pt-2 md:p-6 md:pt-0">
+              <div className="text-lg md:text-2xl font-bold truncate">{formatCurrency(dashboardStats.avgSalesPerCashier)}</div>
+              <p className="text-[10px] md:text-xs text-muted-foreground">Today's average</p>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Top Performer</CardTitle>
+          <Card className="p-3 md:p-0">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 p-0 md:p-6 md:pb-2">
+              <CardTitle className="text-xs md:text-sm font-medium">Top Performer</CardTitle>
               <TrendingUp className="h-4 w-4 text-purple-600" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold truncate">
+            <CardContent className="p-0 pt-2 md:p-6 md:pt-0">
+              <div className="text-base md:text-2xl font-bold truncate">
                 {dashboardStats.topPerformer?.name || 'N/A'}
               </div>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-[10px] md:text-xs text-muted-foreground truncate">
                 {dashboardStats.topPerformer ? formatCurrency(dashboardStats.topPerformer.sales) : 'No sales yet'}
               </p>
             </CardContent>
@@ -338,31 +373,31 @@ export default function StaffMonitoringPage() {
         </div>
       )}
 
-      {/* Search */}
-      <div className="flex gap-4">
-        <div className="relative flex-1 max-w-md">
+      {/* Search - Mobile optimized */}
+      <div className="flex gap-2 md:gap-4">
+        <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search staff..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
+            className="pl-10 h-9 md:h-10 text-sm"
           />
         </div>
       </div>
 
-      {/* Tabs */}
+      {/* Tabs - Mobile scrollable */}
       <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="cashiers">Cashiers ({cashiers.length})</TabsTrigger>
-          <TabsTrigger value="activity">Live Activity</TabsTrigger>
-          <TabsTrigger value="performance">Performance</TabsTrigger>
+        <TabsList className="w-full justify-start overflow-x-auto flex-nowrap">
+          <TabsTrigger value="overview" className="text-xs md:text-sm">Overview</TabsTrigger>
+          <TabsTrigger value="cashiers" className="text-xs md:text-sm">Cashiers ({cashiers.length})</TabsTrigger>
+          <TabsTrigger value="activity" className="text-xs md:text-sm">Live Activity</TabsTrigger>
+          <TabsTrigger value="performance" className="text-xs md:text-sm">Performance</TabsTrigger>
         </TabsList>
 
-        {/* Overview Tab */}
+        {/* Overview Tab - Mobile optimized */}
         <TabsContent value="overview" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-3 md:gap-4 grid-cols-1 md:grid-cols-2">
             {/* Active Staff */}
             <Card>
               <CardHeader>
@@ -481,20 +516,20 @@ export default function StaffMonitoringPage() {
                           {getStatusBadge(cashier.status)}
                         </div>
 
-                        <div className="grid grid-cols-3 gap-4 mt-4">
-                          <div className="text-center p-2 bg-muted/50 rounded-lg">
-                            <p className="text-lg font-bold text-green-600">{formatCurrency(cashierSales)}</p>
-                            <p className="text-xs text-muted-foreground">Today's Sales</p>
+                        <div className="grid grid-cols-3 gap-2 md:gap-4 mt-3 md:mt-4">
+                          <div className="text-center p-1.5 md:p-2 bg-muted/50 rounded-lg">
+                            <p className="text-sm md:text-lg font-bold text-green-600 truncate">{formatCurrency(cashierSales)}</p>
+                            <p className="text-[10px] md:text-xs text-muted-foreground">Sales</p>
                           </div>
-                          <div className="text-center p-2 bg-muted/50 rounded-lg">
-                            <p className="text-lg font-bold text-blue-600">{transactionCount}</p>
-                            <p className="text-xs text-muted-foreground">Transactions</p>
+                          <div className="text-center p-1.5 md:p-2 bg-muted/50 rounded-lg">
+                            <p className="text-sm md:text-lg font-bold text-blue-600">{transactionCount}</p>
+                            <p className="text-[10px] md:text-xs text-muted-foreground">Trans.</p>
                           </div>
-                          <div className="text-center p-2 bg-muted/50 rounded-lg">
-                            <p className="text-lg font-bold text-purple-600">
+                          <div className="text-center p-1.5 md:p-2 bg-muted/50 rounded-lg">
+                            <p className="text-sm md:text-lg font-bold text-purple-600 truncate">
                               {transactionCount > 0 ? formatCurrency(cashierSales / transactionCount) : 'N/A'}
                             </p>
-                            <p className="text-xs text-muted-foreground">Avg Value</p>
+                            <p className="text-[10px] md:text-xs text-muted-foreground">Avg</p>
                           </div>
                         </div>
 
@@ -578,7 +613,7 @@ export default function StaffMonitoringPage() {
 
         {/* Performance Tab */}
         <TabsContent value="performance" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-3 md:gap-4 grid-cols-1 md:grid-cols-2">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">

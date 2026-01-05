@@ -1,0 +1,425 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@smartduka/ui';
+import {
+  TrendingUp,
+  TrendingDown,
+  DollarSign,
+  Calendar,
+  ArrowLeft,
+  ShoppingCart,
+  Users,
+  Clock,
+  Target,
+  Package,
+  CreditCard,
+  BarChart3,
+  PieChart,
+  Activity,
+  Award,
+  Loader2,
+} from 'lucide-react';
+import { Button } from '@smartduka/ui';
+import { useAuth } from '@/lib/auth-context';
+import { useBranch } from '@/lib/branch-context';
+import { config } from '@/lib/config';
+
+type AllTimeData = {
+  totalRevenue: number;
+  totalOrders: number;
+  totalProducts: number;
+  totalCustomers: number;
+  averageOrderValue: number;
+  topSellingProducts: Array<{ name: string; quantity: number; revenue: number }>;
+  monthlyTrend: Array<{ month: string; revenue: number; orders: number }>;
+  paymentMethods: Array<{ method: string; count: number; total: number }>;
+  categoryBreakdown: Array<{ category: string; revenue: number; count: number }>;
+  yearlyComparison: Array<{ year: number; revenue: number; orders: number }>;
+  bestMonth: { month: string; revenue: number };
+  bestDay: { date: string; revenue: number };
+  growthRate: number;
+};
+
+export default function AllTimeAnalyticsPage() {
+  const router = useRouter();
+  const { token } = useAuth();
+  const { currentBranch } = useBranch();
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<AllTimeData | null>(null);
+
+  useEffect(() => {
+    if (token) {
+      loadAllTimeData();
+    }
+  }, [token, currentBranch]);
+
+  const loadAllTimeData = async () => {
+    try {
+      setLoading(true);
+      const branchParam = currentBranch ? `&branchId=${currentBranch._id}` : '';
+      const res = await fetch(`${config.apiUrl}/sales/analytics?range=all${branchParam}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      
+      if (res.ok) {
+        const text = await res.text();
+        const salesData = text ? JSON.parse(text) : null;
+        
+        if (salesData) {
+          // Transform the data for all-time view
+          setData({
+            totalRevenue: salesData.totalRevenue || 0,
+            totalOrders: salesData.totalOrders || 0,
+            totalProducts: salesData.totalProducts || 0,
+            totalCustomers: salesData.totalCustomers || 0,
+            averageOrderValue: salesData.averageOrderValue || 0,
+            topSellingProducts: salesData.topSellingProducts || [],
+            monthlyTrend: salesData.monthlyTrend || salesData.dailyTrend || [],
+            paymentMethods: salesData.paymentMethods || [],
+            categoryBreakdown: salesData.categoryBreakdown || [],
+            yearlyComparison: salesData.yearlyComparison || [],
+            bestMonth: salesData.bestMonth || { month: 'N/A', revenue: 0 },
+            bestDay: salesData.bestDay || { date: 'N/A', revenue: 0 },
+            growthRate: salesData.growthRate || 0,
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load all-time data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatCurrency = (value: number) => {
+    if (value >= 1000000) {
+      return `Ksh ${(value / 1000000).toFixed(2)}M`;
+    } else if (value >= 1000) {
+      return `Ksh ${(value / 1000).toFixed(1)}K`;
+    }
+    return `Ksh ${value.toLocaleString()}`;
+  };
+
+  if (loading) {
+    return (
+      <div className="container py-8 px-4 sm:px-6">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="container py-8">
+        <div className="flex items-center gap-4 mb-8">
+          <Button variant="ghost" size="icon" onClick={() => router.back()}>
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold">All-Time Analytics</h1>
+            <p className="text-muted-foreground">Complete business performance overview</p>
+          </div>
+        </div>
+        <Card className="p-12 text-center">
+          <BarChart3 className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
+          <h2 className="text-xl font-semibold mb-2">No Data Available</h2>
+          <p className="text-muted-foreground mb-4">
+            Start making sales to see your all-time analytics here.
+          </p>
+          <Button onClick={() => router.push('/pos')}>Go to POS</Button>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="container py-4 md:py-8 px-4 md:px-6">
+      {/* Header */}
+      <div className="flex flex-col gap-4 mb-6 md:mb-8">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={() => router.back()} className="h-9 w-9">
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div>
+            <h1 className="text-xl md:text-3xl font-bold">All-Time Analytics</h1>
+            <p className="text-sm text-muted-foreground">Complete business performance since inception</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Hero Stats - Large Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        <Card className="bg-gradient-to-br from-green-500/10 via-green-600/5 to-emerald-500/10 border-green-500/20">
+          <CardContent className="p-6 md:p-8">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm md:text-base text-muted-foreground font-medium">Total Revenue</p>
+                <p className="text-3xl md:text-5xl font-bold text-green-700 dark:text-green-400 mt-2">
+                  {formatCurrency(data.totalRevenue)}
+                </p>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Lifetime earnings from all sales
+                </p>
+              </div>
+              <div className="p-4 rounded-full bg-green-500/20">
+                <DollarSign className="h-8 w-8 md:h-10 md:w-10 text-green-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-blue-500/10 via-blue-600/5 to-indigo-500/10 border-blue-500/20">
+          <CardContent className="p-6 md:p-8">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm md:text-base text-muted-foreground font-medium">Total Orders</p>
+                <p className="text-3xl md:text-5xl font-bold text-blue-700 dark:text-blue-400 mt-2">
+                  {data.totalOrders.toLocaleString()}
+                </p>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Avg: {formatCurrency(data.averageOrderValue)} per order
+                </p>
+              </div>
+              <div className="p-4 rounded-full bg-blue-500/20">
+                <ShoppingCart className="h-8 w-8 md:h-10 md:w-10 text-blue-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Secondary Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6">
+        <Card>
+          <CardContent className="p-4 md:p-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-purple-500/10">
+                <Package className="h-5 w-5 text-purple-600" />
+              </div>
+              <div>
+                <p className="text-xs md:text-sm text-muted-foreground">Products Sold</p>
+                <p className="text-lg md:text-2xl font-bold">{data.totalProducts.toLocaleString()}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4 md:p-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-orange-500/10">
+                <Users className="h-5 w-5 text-orange-600" />
+              </div>
+              <div>
+                <p className="text-xs md:text-sm text-muted-foreground">Customers</p>
+                <p className="text-lg md:text-2xl font-bold">{data.totalCustomers.toLocaleString()}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4 md:p-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-emerald-500/10">
+                <Award className="h-5 w-5 text-emerald-600" />
+              </div>
+              <div>
+                <p className="text-xs md:text-sm text-muted-foreground">Best Month</p>
+                <p className="text-sm md:text-lg font-bold truncate">{data.bestMonth.month}</p>
+                <p className="text-xs text-muted-foreground">{formatCurrency(data.bestMonth.revenue)}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4 md:p-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-pink-500/10">
+                <TrendingUp className="h-5 w-5 text-pink-600" />
+              </div>
+              <div>
+                <p className="text-xs md:text-sm text-muted-foreground">Growth Rate</p>
+                <p className={`text-lg md:text-2xl font-bold ${data.growthRate >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {data.growthRate >= 0 ? '+' : ''}{data.growthRate.toFixed(1)}%
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Charts Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mb-6">
+        {/* Monthly Trend */}
+        <Card>
+          <CardHeader className="p-4 md:p-6">
+            <CardTitle className="text-base md:text-lg flex items-center gap-2">
+              <Activity className="h-5 w-5" />
+              Revenue Trend
+            </CardTitle>
+            <CardDescription className="text-xs md:text-sm">Monthly performance over time</CardDescription>
+          </CardHeader>
+          <CardContent className="p-4 md:p-6 pt-0">
+            {data.monthlyTrend.length === 0 ? (
+              <div className="h-48 flex items-center justify-center text-muted-foreground">
+                <p className="text-sm">No trend data available</p>
+              </div>
+            ) : (
+              <div className="h-48 md:h-64 flex items-end gap-1">
+                {data.monthlyTrend.slice(-12).map((item, i) => {
+                  const maxRevenue = Math.max(...data.monthlyTrend.map(d => d.revenue), 1);
+                  const height = Math.max((item.revenue / maxRevenue) * 100, item.revenue > 0 ? 5 : 0);
+                  return (
+                    <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                      <div
+                        className="w-full rounded-t bg-gradient-to-t from-primary to-primary/60 hover:opacity-80 transition-colors cursor-pointer"
+                        style={{ height: `${height || 2}%`, minHeight: '2px' }}
+                        title={`${item.month}: ${formatCurrency(item.revenue)} (${item.orders} orders)`}
+                      />
+                      <span className="text-[8px] md:text-[10px] text-muted-foreground rotate-45 origin-left truncate">
+                        {item.month?.slice(0, 3)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Payment Methods Breakdown */}
+        <Card>
+          <CardHeader className="p-4 md:p-6">
+            <CardTitle className="text-base md:text-lg flex items-center gap-2">
+              <CreditCard className="h-5 w-5" />
+              Payment Methods
+            </CardTitle>
+            <CardDescription className="text-xs md:text-sm">All-time payment distribution</CardDescription>
+          </CardHeader>
+          <CardContent className="p-4 md:p-6 pt-0">
+            {data.paymentMethods.length === 0 ? (
+              <div className="h-48 flex items-center justify-center text-muted-foreground">
+                <p className="text-sm">No payment data available</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {data.paymentMethods.map((method, i) => {
+                  const total = data.paymentMethods.reduce((sum, m) => sum + m.total, 0);
+                  const percentage = total > 0 ? (method.total / total) * 100 : 0;
+                  const colors = ['bg-green-500', 'bg-blue-500', 'bg-purple-500', 'bg-orange-500'];
+                  return (
+                    <div key={i} className="space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-3 h-3 rounded-full ${colors[i % colors.length]}`} />
+                          <span className="font-medium">{method.method}</span>
+                        </div>
+                        <span className="text-muted-foreground">{percentage.toFixed(1)}%</span>
+                      </div>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className={`h-full ${colors[i % colors.length]} rounded-full transition-all`}
+                          style={{ width: `${percentage}%` }}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>{method.count.toLocaleString()} transactions</span>
+                        <span>{formatCurrency(method.total)}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Top Products */}
+      <Card className="mb-6">
+        <CardHeader className="p-4 md:p-6">
+          <CardTitle className="text-base md:text-lg flex items-center gap-2">
+            <Award className="h-5 w-5" />
+            All-Time Best Sellers
+          </CardTitle>
+          <CardDescription className="text-xs md:text-sm">Products that have generated the most revenue</CardDescription>
+        </CardHeader>
+        <CardContent className="p-4 md:p-6 pt-0">
+          {data.topSellingProducts.length === 0 ? (
+            <div className="h-32 flex items-center justify-center text-muted-foreground">
+              <p className="text-sm">No product data available</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {data.topSellingProducts.slice(0, 6).map((product, i) => {
+                const maxRevenue = Math.max(...data.topSellingProducts.map(p => p.revenue));
+                const width = maxRevenue > 0 ? (product.revenue / maxRevenue) * 100 : 0;
+                return (
+                  <div key={i} className="p-4 border rounded-lg hover:shadow-md transition-shadow">
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                          i === 0 ? 'bg-yellow-100 text-yellow-700' :
+                          i === 1 ? 'bg-gray-100 text-gray-700' :
+                          i === 2 ? 'bg-orange-100 text-orange-700' :
+                          'bg-muted text-muted-foreground'
+                        }`}>
+                          {i + 1}
+                        </span>
+                        <span className="font-medium text-sm truncate flex-1">{product.name}</span>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-primary to-primary/60 rounded-full"
+                          style={{ width: `${width}%` }}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>{product.quantity.toLocaleString()} sold</span>
+                        <span className="font-semibold text-foreground">{formatCurrency(product.revenue)}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Quick Actions */}
+      <div className="flex flex-wrap gap-3">
+        <Button variant="outline" onClick={() => router.push('/admin/analytics/sales')}>
+          <TrendingUp className="h-4 w-4 mr-2" />
+          Daily Sales
+        </Button>
+        <Button variant="outline" onClick={() => router.push('/admin/analytics/orders')}>
+          <ShoppingCart className="h-4 w-4 mr-2" />
+          Orders
+        </Button>
+        <Button variant="outline" onClick={() => router.push('/admin/analytics/inventory')}>
+          <Package className="h-4 w-4 mr-2" />
+          Inventory
+        </Button>
+        <Button variant="outline" onClick={() => router.push('/reports')}>
+          <BarChart3 className="h-4 w-4 mr-2" />
+          Full Reports
+        </Button>
+      </div>
+    </div>
+  );
+}

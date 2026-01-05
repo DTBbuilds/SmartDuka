@@ -78,6 +78,8 @@ import { ReceiptsHistoryModal, type StoredReceipt } from "@/components/receipts-
 import { PaymentMethodModal } from "@/components/payment-method-modal";
 import { MpesaPaymentFlowEnhanced } from "@/components/mpesa-payment-flow-enhanced";
 import { KeyboardShortcutsHelp } from "@/components/keyboard-shortcuts-help";
+import { useBarcodeScanner } from "@/hooks/use-barcode-scanner";
+import { ScannerStatusIndicator } from "@/components/scanner-status-indicator";
 
 type Product = {
   _id: string;
@@ -177,6 +179,12 @@ function POSContent() {
   } | null>(null);
   const [showMobileCart, setShowMobileCart] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  
+  // Barcode scanning state - prevent race conditions
+  const [isProcessingBarcode, setIsProcessingBarcode] = useState(false);
+  const lastProcessedBarcodeRef = useRef<string>('');
+  const lastProcessedTimeRef = useRef<number>(0);
+  const BARCODE_DEBOUNCE_MS = 1500; // Prevent same barcode within 1.5 seconds
 
   const { user, shop, token, logout } = useAuth();
   const { toasts, toast, dismiss } = useToast();
@@ -752,18 +760,36 @@ function POSContent() {
     return stocks;
   }, [products]);
 
-  const handleAddToCart = (product: Product) => {
-    // Check if adding would exceed available stock
-    const currentInCart = cartQuantities[product._id] || 0;
-    const availableStock = (product.stock ?? 0) - currentInCart;
+  const handleAddToCart = useCallback((product: Product, options?: { fromBarcode?: boolean; showFeedback?: boolean }) => {
+    const { fromBarcode = false, showFeedback = true } = options || {};
     
-    if (availableStock <= 0) {
-      toast({ type: 'error', title: 'Out of stock', message: `${product.name} has no more available stock` });
-      return;
-    }
+    // Use functional update to get current cart state and avoid stale closures
     setCartItems((prev) => {
-      const existing = prev.find((item) => item.productId === product._id);
-      if (existing) {
+      // Check current quantity in cart
+      const existingItem = prev.find((item) => item.productId === product._id);
+      const currentInCart = existingItem?.quantity || 0;
+      const availableStock = (product.stock ?? 0) - currentInCart;
+      
+      if (availableStock <= 0) {
+        // Schedule toast outside of setState to avoid state update during render
+        setTimeout(() => {
+          toast({ type: 'error', title: 'Out of stock', message: `${product.name} has no more available stock` });
+        }, 0);
+        return prev; // Return unchanged
+      }
+      
+      // Show success feedback for barcode scans
+      if (fromBarcode && showFeedback) {
+        setTimeout(() => {
+          toast({ 
+            type: 'success', 
+            title: '✓ Added to cart', 
+            message: `${product.name}${existingItem ? ` (${currentInCart + 1})` : ''}` 
+          });
+        }, 0);
+      }
+      
+      if (existingItem) {
         return prev.map((item) =>
           item.productId === product._id
             ? { ...item, quantity: item.quantity + 1 }
@@ -780,27 +806,50 @@ function POSContent() {
         },
       ];
     });
-  };
+  }, [toast]);
 
-  const handleBarcodeScanned = async (barcode: string) => {
+  const handleBarcodeScanned = useCallback(async (barcode: string) => {
     const trimmedBarcode = barcode.trim();
     if (!trimmedBarcode) return;
-
-    // First, try to find in already loaded products (fastest)
-    const localProduct = products.find((p) => 
-      p.barcode === trimmedBarcode || 
-      p.barcode === trimmedBarcode.replace(/^0+/, '') || // Try without leading zeros
-      (trimmedBarcode.length === 12 && p.barcode === '0' + trimmedBarcode) // EAN-13 conversion
-    );
     
-    if (localProduct) {
-      handleAddToCart(localProduct);
-      toast({ type: 'success', title: 'Added to cart', message: localProduct.name });
+    const now = Date.now();
+    
+    // RACE CONDITION FIX 1: Debounce duplicate scans of same barcode
+    if (
+      trimmedBarcode === lastProcessedBarcodeRef.current &&
+      now - lastProcessedTimeRef.current < BARCODE_DEBOUNCE_MS
+    ) {
+      console.log(`[Barcode] Debounced duplicate scan: ${trimmedBarcode}`);
       return;
     }
+    
+    // RACE CONDITION FIX 2: Prevent concurrent processing
+    if (isProcessingBarcode) {
+      console.log(`[Barcode] Already processing, queuing: ${trimmedBarcode}`);
+      // Could queue here, but for simplicity we'll just ignore rapid scans
+      toast({ type: 'info', title: 'Please wait', message: 'Processing previous scan...' });
+      return;
+    }
+    
+    // Update tracking refs
+    lastProcessedBarcodeRef.current = trimmedBarcode;
+    lastProcessedTimeRef.current = now;
+    setIsProcessingBarcode(true);
 
-    // If not found locally, query the API for exact barcode match
     try {
+      // First, try to find in already loaded products (fastest)
+      const localProduct = products.find((p) => 
+        p.barcode === trimmedBarcode || 
+        p.barcode === trimmedBarcode.replace(/^0+/, '') || // Try without leading zeros
+        (trimmedBarcode.length === 12 && p.barcode === '0' + trimmedBarcode) // EAN-13 conversion
+      );
+      
+      if (localProduct) {
+        handleAddToCart(localProduct, { fromBarcode: true });
+        return;
+      }
+
+      // If not found locally, query the API for exact barcode match
       toast({ type: 'info', title: 'Searching...', message: `Barcode: ${trimmedBarcode}` });
       
       const res = await fetch(`${config.apiUrl}/inventory/products/barcode/${encodeURIComponent(trimmedBarcode)}`, {
@@ -811,8 +860,7 @@ function POSContent() {
         const barcodeText = await res.text();
         const data = barcodeText ? JSON.parse(barcodeText) : {};
         if (data.found && data.product) {
-          handleAddToCart(data.product);
-          toast({ type: 'success', title: 'Added to cart', message: data.product.name });
+          handleAddToCart(data.product, { fromBarcode: true });
           return;
         }
       }
@@ -830,8 +878,24 @@ function POSContent() {
         title: 'Search failed', 
         message: 'Could not search for product. Please try again.' 
       });
+    } finally {
+      // Small delay before allowing next scan to prevent rapid-fire issues
+      setTimeout(() => {
+        setIsProcessingBarcode(false);
+      }, 300);
     }
-  };
+  }, [products, token, handleAddToCart, toast, isProcessingBarcode]);
+
+  // Hardware barcode scanner integration - works without opening camera modal
+  // Must be after handleBarcodeScanned is defined
+  const hardwareScanner = useBarcodeScanner({
+    enabled: !isScannerOpen && !showPaymentMethodModal && !showMpesaFlow, // Disable when modals are open
+    onBarcodeScanned: handleBarcodeScanned,
+    minLength: 4,
+    maxLength: 50,
+    scanTimeout: 150,
+    allowAlphanumeric: true,
+  });
 
   // New checkout flow: clicking checkout opens payment method selection
   const handleCheckout = async () => {
@@ -1527,6 +1591,15 @@ function POSContent() {
 
             {/* Right: Minimal on mobile */}
             <div className="flex items-center gap-1.5 flex-shrink-0">
+              {/* Scanner Status Indicator - shows hardware scanner status */}
+              <ScannerStatusIndicator
+                isHardwareScannerConnected={hardwareScanner.isConnected}
+                isScanning={hardwareScanner.isScanning || isProcessingBarcode}
+                lastScanTime={hardwareScanner.lastBarcode?.timestamp}
+                onOpenScanner={() => setIsScannerOpen(true)}
+                compact
+              />
+                
               {/* Pending count badge */}
               {pendingCount > 0 && (
                 <div className="flex items-center gap-0.5 rounded-full border border-dashed border-orange-400 bg-orange-50 dark:bg-orange-950/30 px-1.5 py-0.5 text-xs text-orange-600 dark:text-orange-400">

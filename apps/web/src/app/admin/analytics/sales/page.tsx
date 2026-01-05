@@ -20,6 +20,8 @@ import {
   Clock,
   Target,
   Percent,
+  ChevronRight,
+  BarChart3,
 } from 'lucide-react';
 import { Button } from '@smartduka/ui';
 import { useAuth } from '@/lib/auth-context';
@@ -159,8 +161,44 @@ export default function SalesAnalyticsPage() {
 
       {salesData && (
         <>
+          {/* All Time Card - Clickable Hero Card */}
+          <Card 
+            className="mb-6 bg-gradient-to-br from-orange-500/10 via-amber-500/5 to-yellow-500/10 border-orange-500/20 cursor-pointer hover:shadow-lg hover:border-orange-500/40 transition-all group"
+            onClick={() => router.push('/admin/analytics/all-time')}
+          >
+            <CardContent className="p-4 md:p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 md:p-4 rounded-full bg-orange-500/20">
+                    <BarChart3 className="h-6 w-6 md:h-8 md:w-8 text-orange-600" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm md:text-base text-muted-foreground font-medium">All-Time Performance</p>
+                      <span className="text-xs px-2 py-0.5 bg-orange-500/20 text-orange-700 dark:text-orange-400 rounded-full">
+                        Click for details
+                      </span>
+                    </div>
+                    <div className="flex items-baseline gap-3 mt-1">
+                      <p className="text-2xl md:text-4xl font-bold text-orange-700 dark:text-orange-400">
+                        Ksh {(salesData.totalRevenue / 1000000).toFixed(2)}M
+                      </p>
+                      <span className="text-sm md:text-base text-muted-foreground">
+                        • {salesData.totalOrders.toLocaleString()} orders
+                      </span>
+                    </div>
+                    <p className="text-xs md:text-sm text-muted-foreground mt-1">
+                      View detailed all-time analytics, trends, and insights →
+                    </p>
+                  </div>
+                </div>
+                <ChevronRight className="h-6 w-6 text-orange-500 group-hover:translate-x-1 transition-transform" />
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Key Metrics - Compact on mobile */}
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4 mb-6 md:mb-8">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4 mb-6 md:mb-8">
             <Card className="bg-gradient-to-br from-green-500/10 to-green-600/5 border-green-500/20">
               <CardContent className="p-3 md:pt-6 md:p-6">
                 <div className="flex items-start justify-between">
@@ -185,7 +223,7 @@ export default function SalesAnalyticsPage() {
               <CardContent className="p-3 md:pt-6 md:p-6">
                 <div className="flex items-start justify-between">
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs md:text-sm text-muted-foreground">Orders</p>
+                    <p className="text-xs md:text-sm text-muted-foreground">Today's Orders</p>
                     <p className="text-lg md:text-2xl font-bold">{salesData.todayOrders}</p>
                     <p className="text-xs text-muted-foreground mt-1 truncate">
                       Avg: Ksh {salesData.averageOrderValue.toLocaleString()}
@@ -198,7 +236,7 @@ export default function SalesAnalyticsPage() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="col-span-2 md:col-span-1">
               <CardContent className="p-3 md:pt-6 md:p-6">
                 <div className="flex items-start justify-between">
                   <div className="min-w-0 flex-1">
@@ -212,25 +250,6 @@ export default function SalesAnalyticsPage() {
                   </div>
                   <div className="p-2 md:p-3 rounded-full bg-purple-500/10 flex-shrink-0">
                     <Calendar className="h-4 w-4 md:h-6 md:w-6 text-purple-600" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-3 md:pt-6 md:p-6">
-                <div className="flex items-start justify-between">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs md:text-sm text-muted-foreground">All Time</p>
-                    <p className="text-lg md:text-2xl font-bold truncate">
-                      Ksh {(salesData.totalRevenue / 1000000).toFixed(1)}M
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {salesData.totalOrders.toLocaleString()} orders
-                    </p>
-                  </div>
-                  <div className="p-2 md:p-3 rounded-full bg-orange-500/10 flex-shrink-0">
-                    <Target className="h-4 w-4 md:h-6 md:w-6 text-orange-600" />
                   </div>
                 </div>
               </CardContent>

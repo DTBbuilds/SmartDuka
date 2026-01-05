@@ -10,6 +10,7 @@ import { Response, Request } from 'express';
 export class CookieService {
   private readonly isProduction: boolean;
   private readonly cookieDomain: string | undefined;
+  private readonly isCrossOrigin: boolean;
 
   // Cookie names
   static readonly ACCESS_TOKEN_COOKIE = 'smartduka_access';
@@ -25,6 +26,9 @@ export class CookieService {
     this.cookieDomain = this.isProduction 
       ? configService.get('COOKIE_DOMAIN') 
       : undefined;
+    // Check if frontend and backend are on different domains (cross-origin)
+    // In production, if no COOKIE_DOMAIN is set, assume cross-origin setup
+    this.isCrossOrigin = this.isProduction && !this.cookieDomain;
   }
 
   /**
@@ -34,7 +38,9 @@ export class CookieService {
     res.cookie(CookieService.ACCESS_TOKEN_COOKIE, token, {
       httpOnly: true,
       secure: this.isProduction,
-      sameSite: 'lax',
+      // For cross-origin (different domains), must use 'none' with secure
+      // For same-origin or same-site, use 'lax' for better security
+      sameSite: this.isCrossOrigin ? 'none' : 'lax',
       maxAge: this.ACCESS_TOKEN_MAX_AGE,
       path: '/',
       domain: this.cookieDomain,
@@ -49,7 +55,9 @@ export class CookieService {
     res.cookie(CookieService.REFRESH_TOKEN_COOKIE, token, {
       httpOnly: true,
       secure: this.isProduction,
-      sameSite: 'strict',
+      // For cross-origin, must use 'none' - 'strict' blocks cross-origin requests entirely
+      // This is the root cause of "No refresh token provided" errors in production
+      sameSite: this.isCrossOrigin ? 'none' : 'strict',
       maxAge: this.REFRESH_TOKEN_MAX_AGE,
       path: '/api/v1/auth', // Only accessible by auth endpoints
       domain: this.cookieDomain,
@@ -63,7 +71,7 @@ export class CookieService {
     res.cookie(CookieService.CSRF_TOKEN_COOKIE, token, {
       httpOnly: false, // Must be readable by JavaScript
       secure: this.isProduction,
-      sameSite: 'lax',
+      sameSite: this.isCrossOrigin ? 'none' : 'lax',
       maxAge: this.ACCESS_TOKEN_MAX_AGE,
       path: '/',
       domain: this.cookieDomain,
@@ -91,7 +99,7 @@ export class CookieService {
     const clearOptions = {
       httpOnly: true,
       secure: this.isProduction,
-      sameSite: 'lax' as const,
+      sameSite: (this.isCrossOrigin ? 'none' : 'lax') as 'none' | 'lax',
       path: '/',
       domain: this.cookieDomain,
     };
@@ -99,7 +107,7 @@ export class CookieService {
     res.clearCookie(CookieService.ACCESS_TOKEN_COOKIE, clearOptions);
     res.clearCookie(CookieService.REFRESH_TOKEN_COOKIE, {
       ...clearOptions,
-      sameSite: 'strict' as const,
+      sameSite: (this.isCrossOrigin ? 'none' : 'strict') as 'none' | 'strict',
       path: '/api/v1/auth',
     });
     res.clearCookie(CookieService.CSRF_TOKEN_COOKIE, {

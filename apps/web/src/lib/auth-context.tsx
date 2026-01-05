@@ -8,7 +8,7 @@ import { clearAllLocalData } from './db';
 import { clearAllCache } from './data-cache';
 import { hotDataManager } from './hot-data-manager';
 import { recordShopLogin, getPreferredShop, getRecentShops, getDeviceId, type RecentShop } from './device-memory';
-import { storeToken, storeShop, storeUser, clearSession, validateSessionIntegrity, shouldRefreshToken, refreshToken as refreshAuthToken, storeCsrfToken, getCsrfToken } from './secure-session';
+import { storeToken, storeShop, storeUser, clearSession, validateSessionIntegrity, shouldRefreshToken, refreshToken as refreshAuthToken, storeCsrfToken, getCsrfToken, resetRefreshAttempts } from './secure-session';
 
 export type AuthUser = {
   sub: string;
@@ -238,6 +238,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     storeToken(authToken, tokens?.sessionId, tokens?.expiresIn);
     storeShop(shopData);
     storeUser(userData);
+    resetRefreshAttempts(); // Reset refresh counter on successful login
     
     // Store CSRF token for future requests
     if (tokens?.csrfToken) {
@@ -302,6 +303,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     storeToken(authToken, tokens?.sessionId, tokens?.expiresIn);
     storeShop(shopInfo);
     storeUser(userData);
+    resetRefreshAttempts(); // Reset refresh counter on successful login
     
     // Store CSRF token
     if (tokens?.csrfToken) {
@@ -411,6 +413,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     storeToken(authToken, tokens?.sessionId, tokens?.expiresIn);
     storeShop(shopInfo);
     storeUser(userData);
+    resetRefreshAttempts(); // Reset refresh counter on successful login
     
     if (tokens?.csrfToken) {
       storeCsrfToken(tokens.csrfToken);
@@ -456,8 +459,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     storeToken(authToken, tokens?.sessionId, tokens?.expiresIn);
     storeShop(shopInfo);
     storeUser(userData);
+    resetRefreshAttempts(); // Reset refresh counter on successful login
     
     if (tokens?.csrfToken) {
+      storeCsrfToken(tokens.csrfToken);
+    }
+
+    // Initialize activity tracking and status manager
+    activityTracker.setToken(authToken, decoded.role);
+    statusManager.initialize(authToken, decoded.sub, decoded.shopId);
+  };
+
+  const setAuthFromTokens = (
+    tokens: { accessToken: string; csrfToken?: string; sessionId?: string; expiresIn?: number },
+    userData: any,
+    shopData: any
+  ) => {
+    const authToken = tokens.accessToken;
+    if (!authToken) return;
+
+    const decoded = JSON.parse(atob(authToken.split('.')[1]));
+    setUser(decoded);
+    setToken(authToken);
+    
+    const shopInfo: Shop = {
+      id: shopData?.id || decoded.shopId,
+      name: shopData?.name || 'Shop',
+      status: shopData?.status || 'active',
+    };
+    setShop(shopInfo);
+
+    storeToken(authToken, tokens.sessionId, tokens.expiresIn);
+    storeShop(shopInfo);
+    storeUser(userData);
+    resetRefreshAttempts(); // Reset refresh counter on successful login
+    
+    if (tokens.csrfToken) {
       storeCsrfToken(tokens.csrfToken);
     }
 
@@ -523,41 +560,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const updatedShop = { ...shop, ...shopData };
     setShop(updatedShop);
     window.localStorage.setItem('smartduka:shop', JSON.stringify(updatedShop));
-  };
-
-  /**
-   * Set auth state from tokens (used by cashier Google signup)
-   */
-  const setAuthFromTokens = (
-    tokens: { accessToken: string; csrfToken?: string; sessionId?: string; expiresIn?: number },
-    userData: any,
-    shopData: any
-  ) => {
-    const authToken = tokens.accessToken;
-    if (!authToken) return;
-
-    const decoded = JSON.parse(atob(authToken.split('.')[1]));
-    setUser(decoded);
-    setToken(authToken);
-    
-    const shopInfo: Shop = {
-      id: shopData?.id || decoded.shopId,
-      name: shopData?.name || 'Shop',
-      status: shopData?.status || 'active',
-    };
-    setShop(shopInfo);
-
-    storeToken(authToken, tokens.sessionId, tokens.expiresIn);
-    storeShop(shopInfo);
-    storeUser(userData);
-    
-    if (tokens.csrfToken) {
-      storeCsrfToken(tokens.csrfToken);
-    }
-
-    // Initialize activity tracking and status manager
-    activityTracker.setToken(authToken, decoded.role);
-    statusManager.initialize(authToken, decoded.sub, decoded.shopId);
   };
 
   return (

@@ -5,7 +5,8 @@ import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { config } from "@/lib/config";
 import { Button, Card, CardContent, CardHeader, CardTitle, Input, Label, Textarea } from "@smartduka/ui";
-import { ArrowLeft, Package } from "lucide-react";
+import { ArrowLeft, Package, Building2, Truck, Plus } from "lucide-react";
+import Link from "next/link";
 import { TableSkeleton } from "@/components/shared/loading-skeleton";
 import { CategorySelectWithCreate } from "@/components/category-select-with-create";
 
@@ -30,6 +31,14 @@ interface Category {
   slug: string;
 }
 
+interface Supplier {
+  _id: string;
+  name: string;
+  phone?: string;
+  email?: string;
+  status: 'active' | 'inactive';
+}
+
 export default function EditProductPage() {
   const { token } = useAuth();
   const router = useRouter();
@@ -38,6 +47,7 @@ export default function EditProductPage() {
 
   const [product, setProduct] = useState<Product | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -47,6 +57,10 @@ export default function EditProductPage() {
     barcode: "",
     description: "",
     categoryId: "",
+    preferredSupplierId: "",
+    reorderPoint: 0,
+    reorderQuantity: 0,
+    leadTimeDays: 0,
     price: 0,
     cost: 0,
     stock: 0,
@@ -58,6 +72,7 @@ export default function EditProductPage() {
   useEffect(() => {
     fetchProduct();
     fetchCategories();
+    fetchSuppliers();
   }, [productId]);
 
   const fetchProduct = async () => {
@@ -78,6 +93,10 @@ export default function EditProductPage() {
           barcode: data.barcode || "",
           description: data.description || "",
           categoryId: data.categoryId || "",
+          preferredSupplierId: data.preferredSupplierId || "",
+          reorderPoint: data.reorderPoint || 0,
+          reorderQuantity: data.reorderQuantity || 0,
+          leadTimeDays: data.leadTimeDays || 0,
           price: data.price || 0,
           cost: data.cost || 0,
           stock: data.stock || 0,
@@ -111,6 +130,24 @@ export default function EditProductPage() {
     }
   };
 
+  const fetchSuppliers = async () => {
+    try {
+      const apiUrl = config.apiUrl;
+      const res = await fetch(`${apiUrl}/suppliers`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const supText = await res.text();
+      const supData = supText ? JSON.parse(supText) : [];
+      
+      if (res.ok) {
+        setSuppliers(supData.filter((s: Supplier) => s.status === 'active'));
+      }
+    } catch (error) {
+      console.error("Failed to fetch suppliers:", error);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
@@ -118,10 +155,11 @@ export default function EditProductPage() {
     try {
       const apiUrl = config.apiUrl;
       
-      // Clean up form data - remove empty categoryId
+      // Clean up form data - remove empty IDs
       const payload = {
         ...formData,
         categoryId: formData.categoryId || undefined,
+        preferredSupplierId: formData.preferredSupplierId || undefined,
       };
       
       const res = await fetch(`${apiUrl}/inventory/products/${productId}`, {
@@ -248,6 +286,110 @@ export default function EditProductPage() {
                 rows={3}
               />
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Supplier & Reorder Settings */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Truck className="h-5 w-5" />
+              Supplier & Reorder Settings
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="preferredSupplierId">Preferred Supplier</Label>
+                <div className="flex gap-2">
+                  <select
+                    id="preferredSupplierId"
+                    value={formData.preferredSupplierId}
+                    onChange={(e) => setFormData({ ...formData, preferredSupplierId: e.target.value })}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  >
+                    <option value="">No supplier selected</option>
+                    {suppliers.map((supplier) => (
+                      <option key={supplier._id} value={supplier._id}>
+                        {supplier.name}
+                      </option>
+                    ))}
+                  </select>
+                  <Link href="/admin/suppliers">
+                    <Button type="button" variant="outline" size="icon" title="Manage Suppliers">
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </Link>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Default supplier for purchase orders
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="leadTimeDays">Lead Time (Days)</Label>
+                <Input
+                  id="leadTimeDays"
+                  type="number"
+                  min="0"
+                  value={formData.leadTimeDays}
+                  onChange={(e) =>
+                    setFormData({ ...formData, leadTimeDays: parseInt(e.target.value) || 0 })
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  Expected delivery time from supplier
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="reorderPoint">Reorder Point</Label>
+                <Input
+                  id="reorderPoint"
+                  type="number"
+                  min="0"
+                  value={formData.reorderPoint}
+                  onChange={(e) =>
+                    setFormData({ ...formData, reorderPoint: parseInt(e.target.value) || 0 })
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  Minimum stock level to trigger reorder alert
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="reorderQuantity">Reorder Quantity</Label>
+                <Input
+                  id="reorderQuantity"
+                  type="number"
+                  min="0"
+                  value={formData.reorderQuantity}
+                  onChange={(e) =>
+                    setFormData({ ...formData, reorderQuantity: parseInt(e.target.value) || 0 })
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  Suggested quantity for purchase orders
+                </p>
+              </div>
+            </div>
+
+            {formData.preferredSupplierId && (
+              <div className="p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg">
+                <div className="flex items-center gap-2 text-sm text-blue-700 dark:text-blue-400">
+                  <Building2 className="h-4 w-4" />
+                  <span>
+                    Supplier: <strong>{suppliers.find(s => s._id === formData.preferredSupplierId)?.name}</strong>
+                  </span>
+                </div>
+                <p className="text-xs text-blue-600 dark:text-blue-500 mt-1">
+                  This supplier will be pre-selected when creating purchase orders for this product.
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
 
