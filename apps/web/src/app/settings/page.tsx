@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { config } from "@/lib/config";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Tabs, TabsContent, TabsList, TabsTrigger, Input, Label, Button, Textarea, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@smartduka/ui";
-import { Store, User, Lock, Settings as SettingsIcon, ShieldAlert, CreditCard, Crown, TrendingUp, Users, Package, Receipt, AlertCircle, Check, Clock, X, Phone, Loader2, Smartphone, ChevronRight, Menu } from "lucide-react";
+import { Store, User, Lock, Settings as SettingsIcon, ShieldAlert, CreditCard, Crown, TrendingUp, Users, Package, Receipt, AlertCircle, Check, Clock, X, Phone, Loader2, Smartphone, ChevronRight, ChevronLeft, Menu, FileText, Calendar, CreditCard as CardIcon, CheckCircle2, XCircle, ArrowRight, Info, Shield, Zap, Eye, Download, RefreshCw, ExternalLink, Copy, Banknote } from "lucide-react";
 import { TableSkeleton } from "@/components/shared/loading-skeleton";
 import { useSubscription, useSubscriptionPlans, useBillingHistory, type BillingCycle, type SubscriptionPlan } from "@/hooks/use-subscription";
 import { MpesaSettings } from "@/components/settings/mpesa-settings";
@@ -575,15 +575,21 @@ export default function SettingsPage() {
 function SubscriptionSettingsTab() {
   const { subscription, loading: subLoading, changePlan, cancelSubscription, reactivateSubscription } = useSubscription();
   const { plans, loading: plansLoading } = useSubscriptionPlans();
-  const { invoices, pendingInvoices, loading: billingLoading, initiatePayment } = useBillingHistory();
+  const { invoices, pendingInvoices, loading: billingLoading, initiatePayment, getPaymentSummary, checkStkStatus } = useBillingHistory();
   
   const [billingCycle, setBillingCycle] = useState<BillingCycle>('monthly');
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showInvoiceDetails, setShowInvoiceDetails] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<string | null>(null);
+  const [selectedInvoiceData, setSelectedInvoiceData] = useState<any>(null);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [processing, setProcessing] = useState(false);
+  const [paymentStep, setPaymentStep] = useState<'details' | 'phone' | 'processing' | 'success'>('details');
+  const [paymentSummary, setPaymentSummary] = useState<any>(null);
+  const [checkoutRequestId, setCheckoutRequestId] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const loading = subLoading || plansLoading || billingLoading;
 
@@ -593,6 +599,7 @@ function SubscriptionSettingsTab() {
     green: { bg: 'bg-white', border: 'border-emerald-300', badge: 'bg-emerald-600', iconBg: 'bg-emerald-100', iconColor: 'text-emerald-700', headerGradient: 'from-emerald-600 to-emerald-700' },
     purple: { bg: 'bg-white', border: 'border-violet-300', badge: 'bg-violet-600', iconBg: 'bg-violet-100', iconColor: 'text-violet-700', headerGradient: 'from-violet-600 to-violet-700' },
     gold: { bg: 'bg-amber-50', border: 'border-amber-400', badge: 'bg-amber-600', iconBg: 'bg-amber-200', iconColor: 'text-amber-800', headerGradient: 'from-amber-500 to-orange-600' },
+    gray: { bg: 'bg-gray-50', border: 'border-gray-300', badge: 'bg-gray-600', iconBg: 'bg-gray-100', iconColor: 'text-gray-700', headerGradient: 'from-gray-500 to-gray-600' },
   };
 
   // Status colors - high contrast
@@ -619,25 +626,122 @@ function SubscriptionSettingsTab() {
     }
   };
 
+  // Open invoice details modal
+  const openInvoiceDetails = async (invoice: any) => {
+    setSelectedInvoiceData(invoice);
+    setSelectedInvoice(invoice.id);
+    setShowInvoiceDetails(true);
+    setPaymentStep('details');
+    
+    // Fetch payment summary
+    try {
+      const summary = await getPaymentSummary(invoice.id);
+      setPaymentSummary(summary);
+    } catch (error) {
+      console.error('Failed to get payment summary:', error);
+    }
+  };
+
+  // Start payment flow
+  const startPaymentFlow = () => {
+    setShowInvoiceDetails(false);
+    setShowPaymentModal(true);
+    setPaymentStep('phone');
+  };
+
+  // Handle M-Pesa payment
   const handlePayment = async () => {
     if (!selectedInvoice || !phoneNumber) return;
     setProcessing(true);
+    setPaymentStep('processing');
+    
     try {
       const result = await initiatePayment(selectedInvoice, phoneNumber);
       if (result.success) {
-        alert(result.message);
-        setShowPaymentModal(false);
-        setSelectedInvoice(null);
-        setPhoneNumber('');
+        setCheckoutRequestId(result.checkoutRequestId || null);
+        // Poll for status
+        if (result.checkoutRequestId) {
+          pollPaymentStatus(result.checkoutRequestId);
+        }
       } else {
         alert(result.message);
+        setPaymentStep('phone');
       }
     } catch (error: any) {
       alert(error.message);
+      setPaymentStep('phone');
     } finally {
       setProcessing(false);
     }
   };
+
+  // Poll payment status
+  const pollPaymentStatus = async (checkoutId: string) => {
+    let attempts = 0;
+    const maxAttempts = 40; // 2 minutes with 3-second intervals
+    
+    const poll = async () => {
+      if (attempts >= maxAttempts) {
+        setPaymentStep('phone');
+        alert('Payment timeout. Please check your M-Pesa messages or try again.');
+        return;
+      }
+      
+      try {
+        const status = await checkStkStatus(checkoutId);
+        if (status.success && status.resultCode === 0) {
+          setPaymentStep('success');
+          setTimeout(() => {
+            resetPaymentModal();
+            window.location.reload();
+          }, 3000);
+          return;
+        } else if (status.resultCode && status.resultCode !== 0) {
+          setPaymentStep('phone');
+          alert(status.resultDesc || 'Payment failed. Please try again.');
+          return;
+        }
+      } catch (error) {
+        // Continue polling
+      }
+      
+      attempts++;
+      setTimeout(poll, 3000);
+    };
+    
+    poll();
+  };
+
+  // Reset payment modal
+  const resetPaymentModal = () => {
+    setShowPaymentModal(false);
+    setShowInvoiceDetails(false);
+    setSelectedInvoice(null);
+    setSelectedInvoiceData(null);
+    setPhoneNumber('');
+    setPaymentStep('details');
+    setPaymentSummary(null);
+    setCheckoutRequestId(null);
+  };
+
+  // Copy to clipboard
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  // Format date
+  const formatDate = (dateStr: string) => {
+    return new Date(dateStr).toLocaleDateString('en-KE', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  };
+
+  // Get total pending amount
+  const totalPendingAmount = pendingInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
 
   if (loading) {
     return (
@@ -651,98 +755,124 @@ function SubscriptionSettingsTab() {
 
   return (
     <div className="space-y-6">
-      {/* Current Subscription Card */}
+      {/* Current Subscription Card - Modern Design */}
       {subscription ? (
-        <Card>
-          <CardHeader>
+        <Card className="overflow-hidden border-0 shadow-xl">
+          {/* Gradient Header */}
+          <div className={`bg-gradient-to-r ${planColors[subscription.planCode === 'trial' ? 'gray' : subscription.planCode === 'starter' ? 'blue' : subscription.planCode === 'professional' ? 'green' : subscription.planCode === 'business' ? 'purple' : 'gold']?.headerGradient || 'from-primary to-primary/80'} px-6 py-6 text-white`}>
             <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <Crown className="h-5 w-5 text-amber-500" />
-                  {subscription.planName} Plan
-                </CardTitle>
-                <CardDescription>
-                  {subscription.billingCycle === 'annual' ? 'Annual' : 'Monthly'} billing • 
-                  KES {subscription.currentPrice.toLocaleString()}/{subscription.billingCycle === 'annual' ? 'year' : 'month'}
-                </CardDescription>
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm">
+                  <Crown className="h-8 w-8" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold">{subscription.planName} Plan</h2>
+                  <p className="text-white/80 flex items-center gap-2 mt-1">
+                    <span className="text-lg font-semibold">KES {subscription.currentPrice.toLocaleString()}</span>
+                    <span className="text-white/60">/ {subscription.billingCycle === 'annual' ? 'year' : 'month'}</span>
+                    <span className="px-2 py-0.5 bg-white/20 rounded-full text-xs font-medium ml-2">
+                      {subscription.billingCycle === 'annual' ? 'Annual' : 'Monthly'}
+                    </span>
+                  </p>
+                </div>
               </div>
-              <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-bold border ${statusColors[subscription.status]?.bg} ${statusColors[subscription.status]?.text} ${statusColors[subscription.status]?.border}`}>
-                {statusColors[subscription.status]?.icon}
-                {subscription.status.replace('_', ' ').toUpperCase()}
-              </span>
+              <div className="text-right">
+                <span className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold shadow-lg ${
+                  subscription.status === 'active' ? 'bg-white text-emerald-700' :
+                  subscription.status === 'trial' ? 'bg-white text-blue-700' :
+                  subscription.status === 'past_due' ? 'bg-amber-100 text-amber-800' :
+                  'bg-white/20 text-white'
+                }`}>
+                  {statusColors[subscription.status]?.icon}
+                  {subscription.status.replace('_', ' ').toUpperCase()}
+                </span>
+              </div>
             </div>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Period Info */}
+          </div>
+
+          <CardContent className="p-6 space-y-6">
+            {/* Period Info - Modern Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-muted/50 rounded-lg p-3">
-                <p className="text-sm text-muted-foreground">Started</p>
-                <p className="font-medium">{new Date(subscription.startDate).toLocaleDateString()}</p>
+              <div className="bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-xl p-4 border border-blue-100">
+                <div className="flex items-center gap-2 text-blue-600 mb-2">
+                  <Calendar className="h-4 w-4" />
+                  <span className="text-xs font-semibold uppercase tracking-wide">Started</span>
+                </div>
+                <p className="text-lg font-bold text-gray-900">{new Date(subscription.startDate).toLocaleDateString()}</p>
               </div>
-              <div className="bg-muted/50 rounded-lg p-3">
-                <p className="text-sm text-muted-foreground">Current Period</p>
-                <p className="font-medium">{new Date(subscription.currentPeriodEnd).toLocaleDateString()}</p>
+              <div className="bg-gradient-to-br from-emerald-50 to-emerald-100/50 rounded-xl p-4 border border-emerald-100">
+                <div className="flex items-center gap-2 text-emerald-600 mb-2">
+                  <Calendar className="h-4 w-4" />
+                  <span className="text-xs font-semibold uppercase tracking-wide">Period Ends</span>
+                </div>
+                <p className="text-lg font-bold text-gray-900">{new Date(subscription.currentPeriodEnd).toLocaleDateString()}</p>
               </div>
-              <div className="bg-muted/50 rounded-lg p-3">
-                <p className="text-sm text-muted-foreground">Days Remaining</p>
-                <p className="font-medium text-primary">{subscription.daysRemaining} days</p>
+              <div className="bg-gradient-to-br from-amber-50 to-amber-100/50 rounded-xl p-4 border border-amber-100">
+                <div className="flex items-center gap-2 text-amber-600 mb-2">
+                  <Clock className="h-4 w-4" />
+                  <span className="text-xs font-semibold uppercase tracking-wide">Days Left</span>
+                </div>
+                <p className="text-lg font-bold text-gray-900">{subscription.daysRemaining} <span className="text-sm font-normal text-gray-500">days</span></p>
               </div>
-              <div className="bg-muted/50 rounded-lg p-3">
-                <p className="text-sm text-muted-foreground">Auto Renew</p>
-                <p className="font-medium">{subscription.autoRenew ? 'Yes' : 'No'}</p>
+              <div className="bg-gradient-to-br from-violet-50 to-violet-100/50 rounded-xl p-4 border border-violet-100">
+                <div className="flex items-center gap-2 text-violet-600 mb-2">
+                  <RefreshCw className="h-4 w-4" />
+                  <span className="text-xs font-semibold uppercase tracking-wide">Auto Renew</span>
+                </div>
+                <p className="text-lg font-bold text-gray-900">{subscription.autoRenew ? 'Enabled' : 'Disabled'}</p>
               </div>
             </div>
 
-            {/* Usage Stats */}
+            {/* Usage Stats - Modern Progress Cards */}
             <div>
-              <h4 className="font-medium mb-3">Usage</h4>
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="text-lg font-semibold text-gray-900">Resource Usage</h4>
+                <span className="text-sm text-muted-foreground">Current billing period</span>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="border rounded-lg p-4">
-                  <div className="flex items-center gap-2 text-muted-foreground mb-2">
-                    <Store className="h-4 w-4" />
-                    <span className="text-sm">Shops/Branches</span>
+                <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-5 text-white shadow-lg shadow-blue-500/20">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="p-2 bg-white/20 rounded-lg">
+                      <Store className="h-5 w-5" />
+                    </div>
+                    <span className="text-3xl font-bold">{subscription.usage.shops.current}<span className="text-lg font-normal text-white/70">/{subscription.usage.shops.limit}</span></span>
                   </div>
-                  <div className="flex items-end gap-2">
-                    <span className="text-2xl font-bold">{subscription.usage.shops.current}</span>
-                    <span className="text-muted-foreground text-sm">/ {subscription.usage.shops.limit}</span>
-                  </div>
-                  <div className="mt-2 h-2 bg-muted rounded-full overflow-hidden">
+                  <p className="text-white/80 text-sm font-medium mb-2">Shops / Branches</p>
+                  <div className="h-2 bg-white/20 rounded-full overflow-hidden">
                     <div 
-                      className="h-full bg-blue-500 rounded-full"
+                      className="h-full bg-white rounded-full transition-all duration-500"
                       style={{ width: `${Math.min((subscription.usage.shops.current / subscription.usage.shops.limit) * 100, 100)}%` }}
                     />
                   </div>
                 </div>
 
-                <div className="border rounded-lg p-4">
-                  <div className="flex items-center gap-2 text-muted-foreground mb-2">
-                    <Users className="h-4 w-4" />
-                    <span className="text-sm">Employees</span>
+                <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-xl p-5 text-white shadow-lg shadow-emerald-500/20">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="p-2 bg-white/20 rounded-lg">
+                      <Users className="h-5 w-5" />
+                    </div>
+                    <span className="text-3xl font-bold">{subscription.usage.employees.current}<span className="text-lg font-normal text-white/70">/{subscription.usage.employees.limit}</span></span>
                   </div>
-                  <div className="flex items-end gap-2">
-                    <span className="text-2xl font-bold">{subscription.usage.employees.current}</span>
-                    <span className="text-muted-foreground text-sm">/ {subscription.usage.employees.limit}</span>
-                  </div>
-                  <div className="mt-2 h-2 bg-muted rounded-full overflow-hidden">
+                  <p className="text-white/80 text-sm font-medium mb-2">Employees</p>
+                  <div className="h-2 bg-white/20 rounded-full overflow-hidden">
                     <div 
-                      className="h-full bg-green-500 rounded-full"
+                      className="h-full bg-white rounded-full transition-all duration-500"
                       style={{ width: `${Math.min((subscription.usage.employees.current / subscription.usage.employees.limit) * 100, 100)}%` }}
                     />
                   </div>
                 </div>
 
-                <div className="border rounded-lg p-4">
-                  <div className="flex items-center gap-2 text-muted-foreground mb-2">
-                    <Package className="h-4 w-4" />
-                    <span className="text-sm">Products</span>
+                <div className="bg-gradient-to-br from-violet-500 to-violet-600 rounded-xl p-5 text-white shadow-lg shadow-violet-500/20">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="p-2 bg-white/20 rounded-lg">
+                      <Package className="h-5 w-5" />
+                    </div>
+                    <span className="text-3xl font-bold">{subscription.usage.products.current.toLocaleString()}<span className="text-lg font-normal text-white/70">/{subscription.usage.products.limit.toLocaleString()}</span></span>
                   </div>
-                  <div className="flex items-end gap-2">
-                    <span className="text-2xl font-bold">{subscription.usage.products.current}</span>
-                    <span className="text-muted-foreground text-sm">/ {subscription.usage.products.limit}</span>
-                  </div>
-                  <div className="mt-2 h-2 bg-muted rounded-full overflow-hidden">
+                  <p className="text-white/80 text-sm font-medium mb-2">Products</p>
+                  <div className="h-2 bg-white/20 rounded-full overflow-hidden">
                     <div 
-                      className="h-full bg-purple-500 rounded-full"
+                      className="h-full bg-white rounded-full transition-all duration-500"
                       style={{ width: `${Math.min((subscription.usage.products.current / subscription.usage.products.limit) * 100, 100)}%` }}
                     />
                   </div>
@@ -750,21 +880,28 @@ function SubscriptionSettingsTab() {
               </div>
             </div>
 
-            {/* Actions */}
-            <div className="flex gap-3 pt-4 border-t">
-              <Button onClick={() => setShowUpgradeModal(true)}>
-                <TrendingUp className="h-4 w-4 mr-2" />
+            {/* Actions - Modern Buttons */}
+            <div className="flex flex-wrap gap-3 pt-6 border-t">
+              <Button 
+                onClick={() => setShowUpgradeModal(true)}
+                className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg shadow-primary/25"
+                size="lg"
+              >
+                <TrendingUp className="h-5 w-5 mr-2" />
                 Upgrade Plan
               </Button>
               {subscription.status === 'cancelled' || subscription.status === 'expired' ? (
-                <Button variant="outline" onClick={() => reactivateSubscription()}>
+                <Button variant="outline" size="lg" onClick={() => reactivateSubscription()}>
+                  <RefreshCw className="h-5 w-5 mr-2" />
                   Reactivate Subscription
                 </Button>
               ) : (
                 <Button 
                   variant="outline" 
+                  size="lg"
+                  className="text-muted-foreground hover:text-destructive hover:border-destructive"
                   onClick={() => {
-                    if (confirm('Are you sure you want to cancel your subscription?')) {
+                    if (confirm('Are you sure you want to cancel your subscription? You will lose access to premium features.')) {
                       cancelSubscription('User requested cancellation');
                     }
                   }}
@@ -776,260 +913,750 @@ function SubscriptionSettingsTab() {
           </CardContent>
         </Card>
       ) : (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <Crown className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+        <Card className="overflow-hidden border-0 shadow-xl">
+          <div className="bg-gradient-to-r from-gray-100 to-gray-200 px-6 py-12 text-center">
+            <div className="p-4 bg-white rounded-2xl shadow-lg inline-block mb-4">
+              <Crown className="h-12 w-12 text-amber-500" />
+            </div>
             <h3 className="text-lg font-semibold mb-2">No Active Subscription</h3>
-            <p className="text-muted-foreground mb-4">Choose a plan below to get started with SmartDuka</p>
-          </CardContent>
+            <p className="text-muted-foreground mb-4">Choose a plan to get started with SmartDuka</p>
+            <Button onClick={() => setShowUpgradeModal(true)} size="lg" className="bg-gradient-to-r from-primary to-primary/80">
+              <Crown className="h-5 w-5 mr-2" />
+              View Plans
+            </Button>
+          </div>
         </Card>
       )}
 
-      {/* Pending Invoices Alert */}
+      {/* Pending Invoices - Improved */}
       {pendingInvoices.length > 0 && (
-        <Card className="border-yellow-200 bg-yellow-50">
-          <CardContent className="py-4">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5" />
-              <div className="flex-1">
-                <h3 className="font-medium text-yellow-800">Payment Required</h3>
-                <p className="text-yellow-700 text-sm mt-1">
-                  You have {pendingInvoices.length} pending invoice(s) totaling KES{' '}
-                  {pendingInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0).toLocaleString()}
-                </p>
-                <Button
-                  size="sm"
-                  className="mt-2 bg-yellow-600 hover:bg-yellow-700"
-                  onClick={() => {
-                    setSelectedInvoice(pendingInvoices[0]?.id);
-                    setShowPaymentModal(true);
-                  }}
-                >
-                  Pay Now
-                </Button>
+        <Card className="border-amber-300 bg-gradient-to-br from-amber-50 to-orange-50 shadow-lg">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-amber-100 rounded-xl">
+                  <AlertCircle className="h-6 w-6 text-amber-600" />
+                </div>
+                <div>
+                  <CardTitle className="text-amber-900">Payment Required</CardTitle>
+                  <CardDescription className="text-amber-700">
+                    {pendingInvoices.length} pending invoice{pendingInvoices.length > 1 ? 's' : ''} awaiting payment
+                  </CardDescription>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-sm text-amber-700">Total Due</p>
+                <p className="text-2xl font-bold text-amber-900">KES {totalPendingAmount.toLocaleString()}</p>
               </div>
             </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Available Plans */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Available Plans</CardTitle>
-            <div className="flex items-center gap-2 bg-muted rounded-lg p-1">
-              <button
-                onClick={() => setBillingCycle('monthly')}
-                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                  billingCycle === 'monthly' ? 'bg-background shadow text-foreground' : 'text-muted-foreground'
-                }`}
-              >
-                Monthly
-              </button>
-              <button
-                onClick={() => setBillingCycle('annual')}
-                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                  billingCycle === 'annual' ? 'bg-background shadow text-foreground' : 'text-muted-foreground'
-                }`}
-              >
-                Annual (Save 17%)
-              </button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-            {plans.map((plan) => {
-              const colors = planColors[plan.colorTheme || 'blue'];
-              const isCurrentPlan = subscription?.planCode === plan.code;
-              const price = billingCycle === 'annual' ? plan.annualPrice : plan.monthlyPrice;
-
-              return (
-                <div
-                  key={plan.code}
-                  className={`relative rounded-xl border-2 overflow-hidden shadow-md hover:shadow-lg transition-all ${colors.border} ${colors.bg} ${
-                    isCurrentPlan ? 'ring-2 ring-primary ring-offset-2' : ''
-                  }`}
+          </CardHeader>
+          <CardContent className="pt-2">
+            <div className="space-y-3">
+              {pendingInvoices.map((invoice) => (
+                <div 
+                  key={invoice.id} 
+                  className="bg-white/80 backdrop-blur rounded-xl p-4 border border-amber-200 hover:border-amber-400 transition-all cursor-pointer group"
+                  onClick={() => openInvoiceDetails(invoice)}
                 >
-                  {/* Header with gradient */}
-                  <div className={`bg-gradient-to-br ${colors.headerGradient} px-5 py-4`}>
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-lg font-bold text-white">{plan.name}</h3>
-                      {plan.badge && (
-                        <span className="px-2.5 py-1 text-xs font-bold text-white bg-white/20 rounded-full backdrop-blur-sm">
-                          {plan.badge}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-amber-100 rounded-lg group-hover:bg-amber-200 transition-colors">
+                        <FileText className="h-5 w-5 text-amber-700" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-900">{invoice.description}</p>
+                        <div className="flex items-center gap-2 text-sm text-gray-600">
+                          <span className="font-mono">{invoice.invoiceNumber}</span>
+                          <span>•</span>
+                          <span>Due: {formatDate(invoice.dueDate)}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right">
+                        <p className="text-lg font-bold text-gray-900">KES {invoice.totalAmount.toLocaleString()}</p>
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
+                          {invoice.status === 'pending' ? 'PENDING' : invoice.status.toUpperCase()}
                         </span>
-                      )}
-                    </div>
-                    {isCurrentPlan && (
-                      <span className="inline-block mt-2 px-2.5 py-0.5 text-xs font-bold text-white bg-white/30 rounded-full">
-                        Current Plan
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Price */}
-                  <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-b from-gray-50 to-white">
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-sm font-semibold text-gray-600">KES</span>
-                      <span className="text-3xl font-extrabold text-gray-900">{price.toLocaleString()}</span>
-                      <span className="text-gray-600 font-medium">/{billingCycle === 'annual' ? 'yr' : 'mo'}</span>
-                    </div>
-                  </div>
-
-                  {/* Limits */}
-                  <div className="px-5 py-4 space-y-3">
-                    <div className="flex items-center gap-3">
-                      <div className={`p-2 ${colors.iconBg} rounded-lg`}>
-                        <Store className={`h-4 w-4 ${colors.iconColor}`} />
                       </div>
-                      <span className="font-semibold text-gray-900">{plan.maxShops} Shop{plan.maxShops > 1 ? 's' : ''}</span>
+                      <Button 
+                        size="sm" 
+                        className="bg-amber-600 hover:bg-amber-700 text-white shadow-md hover:shadow-lg transition-all"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openInvoiceDetails(invoice);
+                        }}
+                      >
+                        <Eye className="h-4 w-4 mr-1.5" />
+                        View & Pay
+                      </Button>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <div className={`p-2 ${colors.iconBg} rounded-lg`}>
-                        <Users className={`h-4 w-4 ${colors.iconColor}`} />
-                      </div>
-                      <span className="font-semibold text-gray-900">{plan.maxEmployees} Employees</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className={`p-2 ${colors.iconBg} rounded-lg`}>
-                        <Package className={`h-4 w-4 ${colors.iconColor}`} />
-                      </div>
-                      <span className="font-semibold text-gray-900">{plan.maxProducts.toLocaleString()} Products</span>
-                    </div>
-                  </div>
-
-                  {/* CTA */}
-                  <div className="px-5 pb-5">
-                    <Button
-                      className="w-full font-bold shadow-sm"
-                      variant={isCurrentPlan ? "outline" : "default"}
-                      disabled={isCurrentPlan}
-                      onClick={() => {
-                        setSelectedPlan(plan);
-                        setShowUpgradeModal(true);
-                      }}
-                    >
-                      {isCurrentPlan ? 'Current Plan' : 'Select Plan'}
-                    </Button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Billing History */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Receipt className="h-5 w-5" />
-            Billing History
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {invoices.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">No billing history yet</p>
-          ) : (
-            <div className="divide-y">
-              {invoices.slice(0, 5).map((invoice) => (
-                <div key={invoice.id} className="py-3 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-lg ${invoice.status === 'paid' ? 'bg-green-100' : 'bg-yellow-100'}`}>
-                      <Receipt className={`h-4 w-4 ${invoice.status === 'paid' ? 'text-green-600' : 'text-yellow-600'}`} />
-                    </div>
-                    <div>
-                      <p className="font-medium text-sm">{invoice.description}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {invoice.invoiceNumber} • {new Date(invoice.createdAt).toLocaleDateString()}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-semibold text-sm">KES {invoice.totalAmount.toLocaleString()}</p>
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                      invoice.status === 'paid' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                    }`}>
-                      {invoice.status.toUpperCase()}
-                    </span>
                   </div>
                 </div>
               ))}
+            </div>
+            
+            {/* Quick Pay All Button */}
+            {pendingInvoices.length > 1 && (
+              <div className="mt-4 pt-4 border-t border-amber-200">
+                <Button 
+                  className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-semibold py-3 shadow-lg hover:shadow-xl transition-all"
+                  onClick={() => openInvoiceDetails(pendingInvoices[0])}
+                >
+                  <Banknote className="h-5 w-5 mr-2" />
+                  Pay All Invoices - KES {totalPendingAmount.toLocaleString()}
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Billing History - Improved */}
+      <Card className="shadow-md">
+        <CardHeader className="border-b">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-primary/10 rounded-lg">
+                <Receipt className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <CardTitle>Billing History</CardTitle>
+                <CardDescription>Your payment history and invoices</CardDescription>
+              </div>
+            </div>
+            {invoices.length > 5 && (
+              <Button variant="outline" size="sm" className="gap-1.5">
+                View All
+                <ExternalLink className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          {invoices.length === 0 ? (
+            <div className="py-12 text-center">
+              <Receipt className="h-12 w-12 mx-auto text-muted-foreground/50 mb-3" />
+              <p className="text-muted-foreground">No billing history yet</p>
+              <p className="text-sm text-muted-foreground/70 mt-1">Your invoices and payments will appear here</p>
+            </div>
+          ) : (
+            <div className="divide-y">
+              {invoices.slice(0, 10).map((invoice) => {
+                const isPaid = invoice.status === 'paid';
+                const isPending = invoice.status === 'pending';
+                
+                return (
+                  <div 
+                    key={invoice.id} 
+                    className="p-4 hover:bg-muted/50 transition-colors cursor-pointer group"
+                    onClick={() => openInvoiceDetails(invoice)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className={`p-2.5 rounded-xl ${
+                          isPaid ? 'bg-emerald-100' : isPending ? 'bg-amber-100' : 'bg-gray-100'
+                        }`}>
+                          {isPaid ? (
+                            <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                          ) : isPending ? (
+                            <Clock className="h-5 w-5 text-amber-600" />
+                          ) : (
+                            <XCircle className="h-5 w-5 text-gray-500" />
+                          )}
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-900">{invoice.description}</p>
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground mt-0.5">
+                            <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">{invoice.invoiceNumber}</span>
+                            <span>•</span>
+                            <Calendar className="h-3.5 w-3.5" />
+                            <span>{formatDate(invoice.createdAt)}</span>
+                            {invoice.paidAt && (
+                              <>
+                                <span>•</span>
+                                <span className="text-emerald-600">Paid {formatDate(invoice.paidAt)}</span>
+                              </>
+                            )}
+                          </div>
+                          {invoice.mpesaReceiptNumber && (
+                            <div className="flex items-center gap-1.5 mt-1 text-xs text-emerald-600">
+                              <CheckCircle2 className="h-3 w-3" />
+                              <span>M-Pesa: {invoice.mpesaReceiptNumber}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <p className="text-lg font-bold text-gray-900">KES {invoice.totalAmount.toLocaleString()}</p>
+                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
+                            isPaid 
+                              ? 'bg-emerald-100 text-emerald-800' 
+                              : isPending 
+                                ? 'bg-amber-100 text-amber-800' 
+                                : 'bg-gray-100 text-gray-700'
+                          }`}>
+                            {isPaid && <CheckCircle2 className="h-3 w-3 mr-1" />}
+                            {invoice.status.toUpperCase()}
+                          </span>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant={isPaid ? "outline" : "default"}
+                          className={`min-w-[100px] ${
+                            isPending 
+                              ? 'bg-amber-600 hover:bg-amber-700 text-white' 
+                              : ''
+                          }`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openInvoiceDetails(invoice);
+                          }}
+                        >
+                          <Eye className="h-4 w-4 mr-1.5" />
+                          {isPaid ? 'View' : 'Pay Now'}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Upgrade Modal */}
-      {showUpgradeModal && selectedPlan && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-background rounded-xl max-w-md w-full p-6">
-            <h3 className="text-lg font-semibold">
-              {subscription ? 'Change to' : 'Subscribe to'} {selectedPlan.name}
-            </h3>
-            <p className="text-muted-foreground mt-2">
-              KES {(billingCycle === 'annual' ? selectedPlan.annualPrice : selectedPlan.monthlyPrice).toLocaleString()}
-              /{billingCycle === 'annual' ? 'year' : 'month'}
-            </p>
-
-            <div className="mt-4 p-4 bg-muted rounded-lg">
-              <h4 className="font-medium mb-2">Includes:</h4>
-              <ul className="space-y-1 text-sm text-muted-foreground">
-                <li>• {selectedPlan.maxShops} Shop(s)</li>
-                <li>• Up to {selectedPlan.maxEmployees} Employees</li>
-                <li>• Up to {selectedPlan.maxProducts.toLocaleString()} Products</li>
-              </ul>
+      {/* Upgrade Modal - Full Plan Selection */}
+      {showUpgradeModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-background rounded-2xl max-w-5xl w-full shadow-2xl overflow-hidden my-4">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-primary to-primary/80 px-6 py-5 text-white">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-white/20 rounded-lg">
+                    <Crown className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold">Choose Your Plan</h3>
+                    <p className="text-white/80 text-sm">Select the plan that best fits your business needs</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => { setShowUpgradeModal(false); setSelectedPlan(null); }}
+                  className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
             </div>
 
-            <div className="flex gap-3 mt-6">
-              <Button variant="outline" className="flex-1" onClick={() => { setShowUpgradeModal(false); setSelectedPlan(null); }}>
-                Cancel
-              </Button>
-              <Button className="flex-1" onClick={() => handleUpgrade(selectedPlan)} disabled={processing}>
-                {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirm'}
-              </Button>
+            {/* Billing Cycle Toggle */}
+            <div className="px-6 py-4 border-b bg-muted/30">
+              <div className="flex items-center justify-center gap-4">
+                <span className={`text-sm font-medium ${billingCycle === 'monthly' ? 'text-foreground' : 'text-muted-foreground'}`}>Monthly</span>
+                <button
+                  onClick={() => setBillingCycle(billingCycle === 'monthly' ? 'annual' : 'monthly')}
+                  className={`relative w-14 h-7 rounded-full transition-colors ${billingCycle === 'annual' ? 'bg-primary' : 'bg-muted-foreground/30'}`}
+                >
+                  <div className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow transition-transform ${billingCycle === 'annual' ? 'translate-x-8' : 'translate-x-1'}`} />
+                </button>
+                <div className="flex items-center gap-2">
+                  <span className={`text-sm font-medium ${billingCycle === 'annual' ? 'text-foreground' : 'text-muted-foreground'}`}>Annual</span>
+                  <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-bold rounded-full">Save 17%</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Plans Grid */}
+            <div className="p-6">
+              {selectedPlan ? (
+                /* Plan Confirmation View */
+                <div className="max-w-lg mx-auto">
+                  <div className="text-center mb-6">
+                    <h4 className="text-lg font-semibold">Confirm Your Selection</h4>
+                    <p className="text-muted-foreground">You're about to {subscription ? 'switch to' : 'subscribe to'} the {selectedPlan.name} plan</p>
+                  </div>
+                  
+                  <div className={`border-2 rounded-xl p-6 ${planColors[selectedPlan.colorTheme || 'blue']?.border}`}>
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-xl font-bold">{selectedPlan.name}</h3>
+                      {selectedPlan.badge && (
+                        <span className={`px-3 py-1 text-xs font-bold text-white rounded-full ${planColors[selectedPlan.colorTheme || 'blue']?.badge}`}>
+                          {selectedPlan.badge}
+                        </span>
+                      )}
+                    </div>
+                    
+                    <div className="flex items-baseline gap-1 mb-4">
+                      <span className="text-sm font-semibold text-muted-foreground">KES</span>
+                      <span className="text-4xl font-extrabold">
+                        {(billingCycle === 'annual' ? selectedPlan.annualPrice : selectedPlan.monthlyPrice).toLocaleString()}
+                      </span>
+                      <span className="text-muted-foreground">/{billingCycle === 'annual' ? 'year' : 'month'}</span>
+                    </div>
+
+                    <div className="space-y-3 mb-6">
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-lg ${planColors[selectedPlan.colorTheme || 'blue']?.iconBg}`}>
+                          <Store className={`h-4 w-4 ${planColors[selectedPlan.colorTheme || 'blue']?.iconColor}`} />
+                        </div>
+                        <span className="font-medium">{selectedPlan.maxShops} Shop{selectedPlan.maxShops > 1 ? 's' : ''}</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-lg ${planColors[selectedPlan.colorTheme || 'blue']?.iconBg}`}>
+                          <Users className={`h-4 w-4 ${planColors[selectedPlan.colorTheme || 'blue']?.iconColor}`} />
+                        </div>
+                        <span className="font-medium">Up to {selectedPlan.maxEmployees} Employees</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-lg ${planColors[selectedPlan.colorTheme || 'blue']?.iconBg}`}>
+                          <Package className={`h-4 w-4 ${planColors[selectedPlan.colorTheme || 'blue']?.iconColor}`} />
+                        </div>
+                        <span className="font-medium">Up to {selectedPlan.maxProducts.toLocaleString()} Products</span>
+                      </div>
+                    </div>
+
+                    {selectedPlan.features && selectedPlan.features.length > 0 && (
+                      <div className="border-t pt-4">
+                        <h5 className="text-sm font-semibold mb-2">Features Included:</h5>
+                        <ul className="space-y-1">
+                          {selectedPlan.features.slice(0, 5).map((feature: string, idx: number) => (
+                            <li key={idx} className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                              {feature}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex gap-3 mt-6">
+                    <Button variant="outline" className="flex-1" onClick={() => setSelectedPlan(null)}>
+                      <ChevronLeft className="h-4 w-4 mr-1" />
+                      Back to Plans
+                    </Button>
+                    <Button 
+                      className="flex-1 bg-gradient-to-r from-primary to-primary/80" 
+                      onClick={() => handleUpgrade(selectedPlan)} 
+                      disabled={processing}
+                    >
+                      {processing ? (
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      ) : (
+                        <Smartphone className="h-4 w-4 mr-2" />
+                      )}
+                      {selectedPlan.monthlyPrice === 0 ? 'Activate Free Plan' : 'Continue to Payment'}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                /* Plans Grid View */
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                  {plans.map((plan) => {
+                    const colors = planColors[plan.colorTheme || 'blue'];
+                    const isCurrentPlan = subscription?.planCode === plan.code;
+                    const price = billingCycle === 'annual' ? plan.annualPrice : plan.monthlyPrice;
+
+                    return (
+                      <div
+                        key={plan.code}
+                        className={`relative rounded-xl border-2 overflow-hidden shadow-md hover:shadow-lg transition-all ${colors?.border || 'border-gray-300'} ${colors?.bg || 'bg-white'} ${
+                          isCurrentPlan ? 'ring-2 ring-primary ring-offset-2' : ''
+                        }`}
+                      >
+                        {/* Header with gradient */}
+                        <div className={`bg-gradient-to-br ${colors?.headerGradient || 'from-gray-600 to-gray-700'} px-5 py-4`}>
+                          <div className="flex items-center justify-between">
+                            <h3 className="text-lg font-bold text-white">{plan.name}</h3>
+                            {plan.badge && (
+                              <span className="px-2.5 py-1 text-xs font-bold text-white bg-white/20 rounded-full backdrop-blur-sm">
+                                {plan.badge}
+                              </span>
+                            )}
+                          </div>
+                          {isCurrentPlan && (
+                            <span className="inline-block mt-2 px-2.5 py-0.5 text-xs font-bold text-white bg-white/30 rounded-full">
+                              Current Plan
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Price */}
+                        <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-b from-gray-50 to-white">
+                          <div className="flex items-baseline gap-1">
+                            {price === 0 ? (
+                              <span className="text-3xl font-extrabold text-gray-900">FREE</span>
+                            ) : (
+                              <>
+                                <span className="text-sm font-semibold text-gray-600">KES</span>
+                                <span className="text-3xl font-extrabold text-gray-900">{price.toLocaleString()}</span>
+                                <span className="text-gray-600 font-medium">/{billingCycle === 'annual' ? 'yr' : 'mo'}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Limits */}
+                        <div className="px-5 py-4 space-y-3">
+                          <div className="flex items-center gap-3">
+                            <div className={`p-2 ${colors?.iconBg || 'bg-gray-100'} rounded-lg`}>
+                              <Store className={`h-4 w-4 ${colors?.iconColor || 'text-gray-700'}`} />
+                            </div>
+                            <span className="font-semibold text-gray-900">{plan.maxShops} Shop{plan.maxShops > 1 ? 's' : ''}</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <div className={`p-2 ${colors?.iconBg || 'bg-gray-100'} rounded-lg`}>
+                              <Users className={`h-4 w-4 ${colors?.iconColor || 'text-gray-700'}`} />
+                            </div>
+                            <span className="font-semibold text-gray-900">{plan.maxEmployees} Employees</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <div className={`p-2 ${colors?.iconBg || 'bg-gray-100'} rounded-lg`}>
+                              <Package className={`h-4 w-4 ${colors?.iconColor || 'text-gray-700'}`} />
+                            </div>
+                            <span className="font-semibold text-gray-900">{plan.maxProducts.toLocaleString()} Products</span>
+                          </div>
+                        </div>
+
+                        {/* CTA */}
+                        <div className="px-5 pb-5">
+                          <Button
+                            className="w-full font-bold shadow-sm"
+                            variant={isCurrentPlan ? "outline" : "default"}
+                            disabled={isCurrentPlan}
+                            onClick={() => setSelectedPlan(plan)}
+                          >
+                            {isCurrentPlan ? 'Current Plan' : 'Select Plan'}
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </div>
       )}
 
-      {/* Payment Modal */}
-      {showPaymentModal && selectedInvoice && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-background rounded-xl max-w-md w-full p-6">
-            <h3 className="text-lg font-semibold">Pay with M-Pesa</h3>
-            <p className="text-muted-foreground mt-2">
-              Enter your M-Pesa phone number to receive the payment prompt.
-            </p>
-
-            <div className="mt-4">
-              <Label htmlFor="mpesaPhone">Phone Number</Label>
-              <div className="relative mt-1">
-                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="mpesaPhone"
-                  type="tel"
-                  value={phoneNumber}
-                  onChange={(e) => setPhoneNumber(e.target.value)}
-                  placeholder="0712345678"
-                  className="pl-10"
-                />
+      {/* Invoice Details Modal */}
+      {showInvoiceDetails && selectedInvoiceData && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-background rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-primary to-primary/80 px-6 py-5 text-white">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-white/20 rounded-lg">
+                    <FileText className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold">Invoice Details</h3>
+                    <p className="text-white/80 text-sm font-mono">{selectedInvoiceData.invoiceNumber}</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={resetPaymentModal}
+                  className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                >
+                  <X className="h-5 w-5" />
+                </button>
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Format: 07XX XXX XXX or 01XX XXX XXX
-              </p>
             </div>
 
-            <div className="flex gap-3 mt-6">
-              <Button variant="outline" className="flex-1" onClick={() => { setShowPaymentModal(false); setSelectedInvoice(null); setPhoneNumber(''); }}>
-                Cancel
-              </Button>
-              <Button className="flex-1" onClick={handlePayment} disabled={processing || !phoneNumber}>
-                {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Send M-Pesa Prompt'}
-              </Button>
+            {/* Content */}
+            <div className="p-6 space-y-5">
+              {/* Invoice Summary */}
+              <div className="bg-muted/50 rounded-xl p-4 space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">Description</span>
+                  <span className="font-semibold">{selectedInvoiceData.description}</span>
+                </div>
+                {selectedInvoiceData.periodStart && selectedInvoiceData.periodEnd && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">Period</span>
+                    <span className="text-sm">{formatDate(selectedInvoiceData.periodStart)} - {formatDate(selectedInvoiceData.periodEnd)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">Due Date</span>
+                  <span className="font-medium">{formatDate(selectedInvoiceData.dueDate)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">Status</span>
+                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
+                    selectedInvoiceData.status === 'paid' 
+                      ? 'bg-emerald-100 text-emerald-800' 
+                      : 'bg-amber-100 text-amber-800'
+                  }`}>
+                    {selectedInvoiceData.status === 'paid' && <CheckCircle2 className="h-3 w-3 mr-1" />}
+                    {selectedInvoiceData.status.toUpperCase()}
+                  </span>
+                </div>
+              </div>
+
+              {/* Amount Breakdown */}
+              <div className="border rounded-xl overflow-hidden">
+                <div className="bg-muted/30 px-4 py-2 border-b">
+                  <h4 className="font-semibold text-sm">Amount Breakdown</h4>
+                </div>
+                <div className="p-4 space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Subtotal</span>
+                    <span>KES {selectedInvoiceData.amount?.toLocaleString() || selectedInvoiceData.totalAmount?.toLocaleString()}</span>
+                  </div>
+                  {selectedInvoiceData.discount > 0 && (
+                    <div className="flex justify-between text-sm text-emerald-600">
+                      <span>Discount</span>
+                      <span>- KES {selectedInvoiceData.discount.toLocaleString()}</span>
+                    </div>
+                  )}
+                  {selectedInvoiceData.tax > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Tax</span>
+                      <span>KES {selectedInvoiceData.tax.toLocaleString()}</span>
+                    </div>
+                  )}
+                  <div className="border-t pt-2 mt-2">
+                    <div className="flex justify-between items-center">
+                      <span className="font-semibold">Total Amount</span>
+                      <span className="text-2xl font-bold text-primary">KES {selectedInvoiceData.totalAmount.toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Payment Info (if paid) */}
+              {selectedInvoiceData.status === 'paid' && selectedInvoiceData.mpesaReceiptNumber && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+                  <div className="flex items-center gap-2 text-emerald-800 mb-2">
+                    <CheckCircle2 className="h-5 w-5" />
+                    <span className="font-semibold">Payment Confirmed</span>
+                  </div>
+                  <div className="space-y-1 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-emerald-700">M-Pesa Receipt</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-semibold">{selectedInvoiceData.mpesaReceiptNumber}</span>
+                        <button 
+                          onClick={() => copyToClipboard(selectedInvoiceData.mpesaReceiptNumber)}
+                          className="p-1 hover:bg-emerald-200 rounded transition-colors"
+                        >
+                          {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                        </button>
+                      </div>
+                    </div>
+                    {selectedInvoiceData.paidAt && (
+                      <div className="flex justify-between">
+                        <span className="text-emerald-700">Paid On</span>
+                        <span>{formatDate(selectedInvoiceData.paidAt)}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Trust Indicators */}
+              {selectedInvoiceData.status !== 'paid' && (
+                <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-1.5">
+                    <Shield className="h-4 w-4 text-emerald-600" />
+                    <span>Secure Payment</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Zap className="h-4 w-4 text-amber-500" />
+                    <span>Instant Activation</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <RefreshCw className="h-4 w-4 text-blue-500" />
+                    <span>Auto-Renewal</span>
+                  </div>
+                </div>
+              )}
             </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 bg-muted/30 border-t">
+              {selectedInvoiceData.status === 'paid' ? (
+                <Button className="w-full" variant="outline" onClick={resetPaymentModal}>
+                  Close
+                </Button>
+              ) : (
+                <div className="flex gap-3">
+                  <Button variant="outline" className="flex-1" onClick={resetPaymentModal}>
+                    Cancel
+                  </Button>
+                  <Button 
+                    className="flex-1 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-semibold shadow-lg"
+                    onClick={startPaymentFlow}
+                  >
+                    <Smartphone className="h-4 w-4 mr-2" />
+                    Pay with M-Pesa
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* M-Pesa Payment Modal */}
+      {showPaymentModal && selectedInvoiceData && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-background rounded-2xl max-w-md w-full shadow-2xl overflow-hidden">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 px-6 py-5 text-white">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-white/20 rounded-lg">
+                    <Smartphone className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold">M-Pesa Payment</h3>
+                    <p className="text-white/80 text-sm">KES {selectedInvoiceData.totalAmount.toLocaleString()}</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={resetPaymentModal}
+                  className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                  disabled={paymentStep === 'processing'}
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="p-6">
+              {paymentStep === 'phone' && (
+                <div className="space-y-5">
+                  {/* Invoice Summary */}
+                  <div className="bg-muted/50 rounded-xl p-4">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">Paying for</span>
+                      <span className="font-semibold">{selectedInvoiceData.description}</span>
+                    </div>
+                    <div className="flex justify-between items-center mt-2">
+                      <span className="text-sm text-muted-foreground">Amount</span>
+                      <span className="text-xl font-bold text-emerald-600">KES {selectedInvoiceData.totalAmount.toLocaleString()}</span>
+                    </div>
+                  </div>
+
+                  {/* Phone Input */}
+                  <div>
+                    <Label htmlFor="mpesaPhone" className="text-sm font-semibold">M-Pesa Phone Number</Label>
+                    <div className="relative mt-2">
+                      <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-muted-foreground">
+                        <Phone className="h-4 w-4" />
+                        <span className="text-sm font-medium">+254</span>
+                      </div>
+                      <Input
+                        id="mpesaPhone"
+                        type="tel"
+                        value={phoneNumber}
+                        onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                        placeholder="712345678"
+                        className="pl-20 h-12 text-lg font-mono"
+                        maxLength={10}
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Enter the phone number registered with M-Pesa
+                    </p>
+                  </div>
+
+                  {/* Quick Select */}
+                  <div className="flex gap-2">
+                    {['07', '01'].map((prefix) => (
+                      <button
+                        key={prefix}
+                        onClick={() => setPhoneNumber(prefix)}
+                        className="px-3 py-1.5 text-xs font-medium bg-muted hover:bg-muted/80 rounded-lg transition-colors"
+                      >
+                        {prefix}XX XXX XXX
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Security Note */}
+                  <div className="flex items-start gap-3 p-3 bg-blue-50 rounded-xl text-sm">
+                    <Info className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                    <div className="text-blue-800">
+                      <p className="font-medium">How it works:</p>
+                      <ol className="mt-1 space-y-1 text-blue-700">
+                        <li>1. You'll receive an M-Pesa prompt on your phone</li>
+                        <li>2. Enter your M-Pesa PIN to confirm</li>
+                        <li>3. Your subscription activates instantly</li>
+                      </ol>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {paymentStep === 'processing' && (
+                <div className="py-8 text-center space-y-4">
+                  <div className="relative mx-auto w-20 h-20">
+                    <div className="absolute inset-0 rounded-full border-4 border-emerald-200"></div>
+                    <div className="absolute inset-0 rounded-full border-4 border-emerald-500 border-t-transparent animate-spin"></div>
+                    <Smartphone className="absolute inset-0 m-auto h-8 w-8 text-emerald-600" />
+                  </div>
+                  <div>
+                    <h4 className="text-lg font-semibold">Check Your Phone</h4>
+                    <p className="text-muted-foreground mt-1">
+                      An M-Pesa prompt has been sent to<br />
+                      <span className="font-mono font-semibold">+254 {phoneNumber}</span>
+                    </p>
+                  </div>
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-800">
+                    <p className="font-medium">Enter your M-Pesa PIN to complete payment</p>
+                    <p className="text-amber-600 mt-1">Do not share your PIN with anyone</p>
+                  </div>
+                </div>
+              )}
+
+              {paymentStep === 'success' && (
+                <div className="py-8 text-center space-y-4">
+                  <div className="mx-auto w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center">
+                    <CheckCircle2 className="h-12 w-12 text-emerald-600" />
+                  </div>
+                  <div>
+                    <h4 className="text-lg font-semibold text-emerald-800">Payment Successful!</h4>
+                    <p className="text-muted-foreground mt-1">
+                      Your subscription has been activated
+                    </p>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Redirecting...
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            {paymentStep === 'phone' && (
+              <div className="px-6 py-4 bg-muted/30 border-t">
+                <div className="flex gap-3">
+                  <Button variant="outline" className="flex-1" onClick={resetPaymentModal}>
+                    Back
+                  </Button>
+                  <Button 
+                    className="flex-1 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-semibold"
+                    onClick={handlePayment}
+                    disabled={processing || phoneNumber.length < 9}
+                  >
+                    {processing ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    ) : (
+                      <ArrowRight className="h-4 w-4 mr-2" />
+                    )}
+                    Send M-Pesa Prompt
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

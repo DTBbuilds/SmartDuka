@@ -972,6 +972,286 @@ export const EMAIL_TEMPLATES = {
     `, `Update on your SmartDuka shop application for ${vars.shopName || ''}.`),
   },
 
+  // ============================================
+  // DUNNING EMAIL TEMPLATES (Payment Recovery)
+  // ============================================
+
+  subscription_expiring_7days: {
+    name: 'subscription_expiring_7days',
+    subject: '⏰ Your SmartDuka subscription expires in 7 days',
+    description: 'Sent 7 days before subscription expires',
+    variables: ['shopName', 'userName', 'planName', 'expiryDate', 'renewUrl', 'amount'],
+    getHtml: (vars: Record<string, any>) => getEmailWrapper(`
+      <p class="greeting">Hello <strong>${vars.userName || '{{userName}}'}</strong>,</p>
+      
+      <p class="main-text">
+        Your <strong>${vars.planName || '{{planName}}'}</strong> subscription for <strong>${vars.shopName || '{{shopName}}'}</strong> 
+        will expire on <strong>${vars.expiryDate || '{{expiryDate}}'}</strong>.
+      </p>
+      
+      <div class="warning-box" style="text-align: center;">
+        <p style="margin: 0; font-size: 48px;">⏰</p>
+        <p style="margin: 12px 0 0; font-size: 24px; font-weight: 700; color: #92400e;">7 Days Remaining</p>
+        <p style="margin: 8px 0 0; color: #78350f; font-size: 14px;">Renew now to avoid service interruption</p>
+      </div>
+      
+      <p class="main-text">
+        To continue enjoying uninterrupted access to SmartDuka's features, please renew your subscription before it expires.
+      </p>
+      
+      <div class="info-box">
+        <p style="margin: 0 0 12px; font-weight: 600; color: #ea580c;">💡 What happens if you don't renew?</p>
+        <ul style="margin: 0; padding-left: 20px; color: #9a3412;">
+          <li style="margin: 4px 0;">You'll lose access to the POS system</li>
+          <li style="margin: 4px 0;">Sales and inventory management will be disabled</li>
+          <li style="margin: 4px 0;">Your data will be preserved for 30 days</li>
+        </ul>
+      </div>
+      
+      <div class="button-container">
+        <a href="${vars.renewUrl || '{{renewUrl}}'}" class="primary-button">🔄 Renew Now - KES ${vars.amount || '{{amount}}'}</a>
+      </div>
+      
+      <p style="color: #6b7280; font-size: 14px; text-align: center;">
+        Questions? Contact us at <a href="mailto:smartdukainfo@gmail.com" style="color: #f97316;">smartdukainfo@gmail.com</a>
+      </p>
+    `, `Your SmartDuka subscription expires in 7 days. Renew now to avoid interruption.`),
+  },
+
+  subscription_expiring_3days: {
+    name: 'subscription_expiring_3days',
+    subject: '⚠️ URGENT: Your SmartDuka subscription expires in 3 days',
+    description: 'Sent 3 days before subscription expires',
+    variables: ['shopName', 'userName', 'planName', 'expiryDate', 'renewUrl', 'amount'],
+    getHtml: (vars: Record<string, any>) => getEmailWrapper(`
+      <p class="greeting">Hello <strong>${vars.userName || '{{userName}}'}</strong>,</p>
+      
+      <p class="main-text">
+        <strong>Urgent:</strong> Your subscription for <strong>${vars.shopName || '{{shopName}}'}</strong> 
+        expires in just <strong>3 days</strong> on ${vars.expiryDate || '{{expiryDate}}'}.
+      </p>
+      
+      <div class="error-box" style="text-align: center;">
+        <p style="margin: 0; font-size: 48px;">⚠️</p>
+        <p style="margin: 12px 0 0; font-size: 24px; font-weight: 700; color: #dc2626;">3 Days Left!</p>
+        <p style="margin: 8px 0 0; color: #991b1b; font-size: 14px;">Act now to keep your business running</p>
+      </div>
+      
+      <p class="main-text">
+        Don't let your business operations come to a halt. Renew your ${vars.planName || '{{planName}}'} subscription today.
+      </p>
+      
+      <div class="button-container">
+        <a href="${vars.renewUrl || '{{renewUrl}}'}" class="primary-button">🔄 Renew Now - KES ${vars.amount || '{{amount}}'}</a>
+      </div>
+      
+      <p style="color: #6b7280; font-size: 14px; text-align: center;">
+        Need help? Call us at <a href="tel:+254729983567" style="color: #f97316;">0729 983 567</a>
+      </p>
+    `, `URGENT: Your SmartDuka subscription expires in 3 days!`),
+  },
+
+  subscription_expiring_1day: {
+    name: 'subscription_expiring_1day',
+    subject: '🚨 FINAL NOTICE: Your SmartDuka subscription expires TOMORROW',
+    description: 'Sent 1 day before subscription expires',
+    variables: ['shopName', 'userName', 'planName', 'expiryDate', 'renewUrl', 'amount'],
+    getHtml: (vars: Record<string, any>) => getEmailWrapper(`
+      <p class="greeting">Hello <strong>${vars.userName || '{{userName}}'}</strong>,</p>
+      
+      <p class="main-text">
+        <strong>FINAL NOTICE:</strong> Your subscription for <strong>${vars.shopName || '{{shopName}}'}</strong> 
+        expires <strong>TOMORROW</strong>.
+      </p>
+      
+      <div class="error-box" style="text-align: center; background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);">
+        <p style="margin: 0; font-size: 64px;">🚨</p>
+        <p style="margin: 12px 0 0; font-size: 28px; font-weight: 700; color: #dc2626;">EXPIRES TOMORROW</p>
+        <p style="margin: 8px 0 0; color: #991b1b; font-size: 16px;">Your shop will be disabled if you don't renew</p>
+      </div>
+      
+      <p class="main-text" style="font-weight: 600; color: #dc2626;">
+        This is your last chance to renew before losing access to your POS system, sales data, and inventory management.
+      </p>
+      
+      <div class="button-container">
+        <a href="${vars.renewUrl || '{{renewUrl}}'}" class="primary-button" style="background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%); box-shadow: 0 4px 14px rgba(220, 38, 38, 0.4);">
+          🔄 RENEW NOW - KES ${vars.amount || '{{amount}}'}
+        </a>
+      </div>
+      
+      <p style="color: #6b7280; font-size: 14px; text-align: center;">
+        Need immediate help? Call us NOW at <a href="tel:+254729983567" style="color: #f97316; font-weight: 600;">0729 983 567</a>
+      </p>
+    `, `FINAL NOTICE: Your SmartDuka subscription expires TOMORROW!`),
+  },
+
+  subscription_past_due_day1: {
+    name: 'subscription_past_due_day1',
+    subject: '🔴 Payment Overdue - Your SmartDuka access is limited',
+    description: 'Sent on day 1 of grace period',
+    variables: ['shopName', 'userName', 'planName', 'amount', 'daysUntilSuspension', 'payUrl'],
+    getHtml: (vars: Record<string, any>) => getEmailWrapper(`
+      <p class="greeting">Hello <strong>${vars.userName || '{{userName}}'}</strong>,</p>
+      
+      <p class="main-text">
+        Your subscription payment for <strong>${vars.shopName || '{{shopName}}'}</strong> is now overdue. 
+        Your account has been placed in <strong>read-only mode</strong>.
+      </p>
+      
+      <div class="error-box" style="text-align: center;">
+        <p style="margin: 0; font-size: 48px;">🔴</p>
+        <p style="margin: 12px 0 0; font-size: 20px; font-weight: 700; color: #dc2626;">Payment Overdue</p>
+        <p style="margin: 8px 0 0; color: #991b1b; font-size: 14px;">
+          ${vars.daysUntilSuspension || '{{daysUntilSuspension}}'} days until full suspension
+        </p>
+      </div>
+      
+      <div class="warning-box">
+        <p style="margin: 0 0 8px; font-weight: 600; color: #92400e;">⚠️ Current Restrictions:</p>
+        <ul style="margin: 0; padding-left: 20px; color: #78350f;">
+          <li style="margin: 4px 0;">You can view your data but cannot make sales</li>
+          <li style="margin: 4px 0;">POS system is disabled</li>
+          <li style="margin: 4px 0;">Cannot add new products or employees</li>
+        </ul>
+      </div>
+      
+      <p class="main-text">
+        Pay now to restore full access immediately.
+      </p>
+      
+      <div class="button-container">
+        <a href="${vars.payUrl || '{{payUrl}}'}" class="primary-button">💳 Pay KES ${vars.amount || '{{amount}}'} Now</a>
+      </div>
+    `, `Payment overdue for ${vars.shopName || ''}. Your account is in read-only mode.`),
+  },
+
+  subscription_past_due_day5: {
+    name: 'subscription_past_due_day5',
+    subject: '⚠️ URGENT: 2 days until your SmartDuka account is suspended',
+    description: 'Sent on day 5 of grace period (2 days before suspension)',
+    variables: ['shopName', 'userName', 'planName', 'amount', 'suspensionDate', 'payUrl'],
+    getHtml: (vars: Record<string, any>) => getEmailWrapper(`
+      <p class="greeting">Hello <strong>${vars.userName || '{{userName}}'}</strong>,</p>
+      
+      <p class="main-text">
+        <strong>URGENT:</strong> Your SmartDuka account for <strong>${vars.shopName || '{{shopName}}'}</strong> 
+        will be <strong>fully suspended</strong> on ${vars.suspensionDate || '{{suspensionDate}}'} if payment is not received.
+      </p>
+      
+      <div class="error-box" style="text-align: center; background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);">
+        <p style="margin: 0; font-size: 64px;">⚠️</p>
+        <p style="margin: 12px 0 0; font-size: 24px; font-weight: 700; color: #dc2626;">2 DAYS LEFT</p>
+        <p style="margin: 8px 0 0; color: #991b1b; font-size: 14px;">Before full account suspension</p>
+      </div>
+      
+      <p class="main-text" style="color: #dc2626; font-weight: 600;">
+        After suspension, you will completely lose access to your shop data, sales history, and inventory until payment is made.
+      </p>
+      
+      <div class="button-container">
+        <a href="${vars.payUrl || '{{payUrl}}'}" class="primary-button" style="background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);">
+          💳 PAY KES ${vars.amount || '{{amount}}'} NOW
+        </a>
+      </div>
+      
+      <p style="color: #6b7280; font-size: 14px; text-align: center;">
+        Having trouble paying? Contact us immediately at <a href="tel:+254729983567" style="color: #f97316;">0729 983 567</a>
+      </p>
+    `, `URGENT: 2 days until your SmartDuka account is suspended!`),
+  },
+
+  subscription_suspended_notice: {
+    name: 'subscription_suspended_notice',
+    subject: '🚫 Your SmartDuka account has been suspended',
+    description: 'Sent when subscription is suspended due to non-payment',
+    variables: ['shopName', 'userName', 'planName', 'amount', 'payUrl', 'dataRetentionDays'],
+    getHtml: (vars: Record<string, any>) => getEmailWrapper(`
+      <p class="greeting">Hello <strong>${vars.userName || '{{userName}}'}</strong>,</p>
+      
+      <p class="main-text">
+        Your SmartDuka account for <strong>${vars.shopName || '{{shopName}}'}</strong> has been 
+        <strong>suspended</strong> due to non-payment.
+      </p>
+      
+      <div class="error-box" style="text-align: center; background: linear-gradient(135deg, #1f2937 0%, #111827 100%); border-color: #374151;">
+        <p style="margin: 0; font-size: 64px;">🚫</p>
+        <p style="margin: 12px 0 0; font-size: 24px; font-weight: 700; color: #f87171;">ACCOUNT SUSPENDED</p>
+        <p style="margin: 8px 0 0; color: #9ca3af; font-size: 14px;">All shop operations are disabled</p>
+      </div>
+      
+      <div class="warning-box">
+        <p style="margin: 0 0 8px; font-weight: 600; color: #92400e;">📋 What this means:</p>
+        <ul style="margin: 0; padding-left: 20px; color: #78350f;">
+          <li style="margin: 4px 0;">❌ No access to POS system</li>
+          <li style="margin: 4px 0;">❌ Cannot view sales or inventory</li>
+          <li style="margin: 4px 0;">❌ All shop operations disabled</li>
+          <li style="margin: 4px 0;">⏳ Data will be retained for ${vars.dataRetentionDays || '{{dataRetentionDays}}'} days</li>
+        </ul>
+      </div>
+      
+      <p class="main-text">
+        <strong>Good news:</strong> You can restore your account immediately by paying your outstanding balance.
+      </p>
+      
+      <div class="button-container">
+        <a href="${vars.payUrl || '{{payUrl}}'}" class="primary-button" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); box-shadow: 0 4px 14px rgba(16, 185, 129, 0.4);">
+          ✅ RESTORE ACCOUNT - Pay KES ${vars.amount || '{{amount}}'}
+        </a>
+      </div>
+      
+      <p style="color: #6b7280; font-size: 14px; text-align: center;">
+        Need help? Contact us at <a href="tel:+254729983567" style="color: #f97316;">0729 983 567</a> or 
+        <a href="mailto:smartdukainfo@gmail.com" style="color: #f97316;">smartdukainfo@gmail.com</a>
+      </p>
+    `, `Your SmartDuka account has been suspended. Pay now to restore access.`),
+  },
+
+  subscription_reactivated: {
+    name: 'subscription_reactivated',
+    subject: '✅ Your SmartDuka subscription has been reactivated!',
+    description: 'Sent when subscription is reactivated after payment',
+    variables: ['shopName', 'userName', 'planName', 'nextBillingDate', 'dashboardUrl'],
+    getHtml: (vars: Record<string, any>) => getEmailWrapper(`
+      <p class="greeting">Hello <strong>${vars.userName || '{{userName}}'}</strong>,</p>
+      
+      <p class="main-text">
+        Great news! Your SmartDuka subscription for <strong>${vars.shopName || '{{shopName}}'}</strong> 
+        has been successfully reactivated.
+      </p>
+      
+      <div class="success-box" style="text-align: center;">
+        <p style="margin: 0; font-size: 64px;">🎉</p>
+        <p style="margin: 12px 0 0; font-size: 24px; font-weight: 700; color: #047857;">SUBSCRIPTION ACTIVE</p>
+        <p style="margin: 8px 0 0; color: #059669; font-size: 14px;">Welcome back!</p>
+      </div>
+      
+      <div class="info-box">
+        <p style="margin: 0 0 12px; font-weight: 600; color: #ea580c;">📋 Your Subscription Details:</p>
+        <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #fed7aa;">
+          <span style="color: #9a3412;">Plan</span>
+          <strong style="color: #7c2d12;">${vars.planName || '{{planName}}'}</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between; padding: 8px 0;">
+          <span style="color: #9a3412;">Next Billing Date</span>
+          <strong style="color: #7c2d12;">${vars.nextBillingDate || '{{nextBillingDate}}'}</strong>
+        </div>
+      </div>
+      
+      <p class="main-text">
+        You now have full access to all SmartDuka features. Get back to business!
+      </p>
+      
+      <div class="button-container">
+        <a href="${vars.dashboardUrl || '{{dashboardUrl}}'}" class="primary-button">🚀 Go to Dashboard</a>
+      </div>
+      
+      <p style="color: #6b7280; font-size: 14px; text-align: center;">
+        Thank you for your continued trust in SmartDuka!
+      </p>
+    `, `Your SmartDuka subscription has been reactivated. Welcome back!`),
+  },
+
   shop_suspended: {
     name: 'shop_suspended',
     subject: '⚠️ Your SmartDuka shop has been suspended',

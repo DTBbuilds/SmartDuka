@@ -1,10 +1,12 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ConfigModule } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { SubscriptionStatusGuard } from './auth/guards/subscription-status.guard';
+import { Subscription, SubscriptionSchema } from './subscriptions/schemas/subscription.schema';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
@@ -51,6 +53,10 @@ import { WhatsAppModule } from './whatsapp/whatsapp.module';
       envFilePath: ['.env.local', '.env'],
     }),
     MongooseModule.forRoot(process.env.MONGODB_URI ?? 'mongodb://localhost:27017/smartduka'),
+    // Import Subscription schema for global SubscriptionStatusGuard
+    MongooseModule.forFeature([
+      { name: Subscription.name, schema: SubscriptionSchema },
+    ]),
     ScheduleModule.forRoot(),
     // Global rate limiting: 100 requests per minute per IP
     ThrottlerModule.forRoot([
@@ -111,6 +117,12 @@ import { WhatsAppModule } from './whatsapp/whatsapp.module';
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
+    },
+    // Enable global subscription status checking
+    // This guard runs after JwtAuthGuard and checks subscription status
+    {
+      provide: APP_GUARD,
+      useClass: SubscriptionStatusGuard,
     },
   ],
 })

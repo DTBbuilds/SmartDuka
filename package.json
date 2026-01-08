@@ -26,7 +26,7 @@
     "start:prod:win": "powershell -ExecutionPolicy Bypass -File scripts/start-production.ps1"
   },
   "devDependencies": {
-    "baseline-browser-mapping": "^2.9.4",
+    "baseline-browser-mapping": "^2.9.11",
     "turbo": "^2.1.4"
   },
   "workspaces": [

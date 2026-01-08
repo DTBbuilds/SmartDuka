@@ -23,7 +23,6 @@ import {
   Boxes,
   Receipt,
   FlaskConical,
-  Crown,
   Inbox,
   Target,
   Building2,
@@ -107,7 +106,6 @@ const adminNavSections: NavSection[] = [
 // Bottom navigation items
 const bottomNavItems: NavItem[] = [
   { name: 'Inbox', href: '/inbox', icon: Inbox },
-  { name: 'Subscription', href: '/admin/subscription', icon: Crown },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];
 

@@ -26,8 +26,8 @@ export class CookieService {
     this.cookieDomain = this.isProduction 
       ? configService.get('COOKIE_DOMAIN') 
       : undefined;
-    // Check if frontend and backend are on different domains (cross-origin)
-    // In production, if no COOKIE_DOMAIN is set, assume cross-origin setup
+    // In production with no shared domain, we need sameSite=none + secure
+    // In development, we use sameSite=lax which works for same-site (localhost)
     this.isCrossOrigin = this.isProduction && !this.cookieDomain;
   }
 
@@ -38,8 +38,8 @@ export class CookieService {
     res.cookie(CookieService.ACCESS_TOKEN_COOKIE, token, {
       httpOnly: true,
       secure: this.isProduction,
-      // For cross-origin (different domains), must use 'none' with secure
-      // For same-origin or same-site, use 'lax' for better security
+      // In dev: 'lax' works for localhost cross-port requests
+      // In prod with cross-origin: 'none' + secure required
       sameSite: this.isCrossOrigin ? 'none' : 'lax',
       maxAge: this.ACCESS_TOKEN_MAX_AGE,
       path: '/',
@@ -49,17 +49,22 @@ export class CookieService {
 
   /**
    * Set refresh token as httpOnly cookie
-   * More restrictive path - only accessible by refresh endpoint
+   * In development, use root path for cross-port compatibility
+   * In production, restrict to auth endpoints
    */
   setRefreshTokenCookie(res: Response, token: string): void {
     res.cookie(CookieService.REFRESH_TOKEN_COOKIE, token, {
       httpOnly: true,
       secure: this.isProduction,
-      // For cross-origin, must use 'none' - 'strict' blocks cross-origin requests entirely
-      // This is the root cause of "No refresh token provided" errors in production
-      sameSite: this.isCrossOrigin ? 'none' : 'strict',
+      // IMPORTANT: In development, use 'lax' not 'strict'
+      // 'strict' blocks cookies on cross-origin requests even on localhost
+      // 'lax' allows cookies for same-site navigation and top-level GET
+      // In prod with cross-origin: 'none' + secure required
+      sameSite: this.isCrossOrigin ? 'none' : 'lax',
       maxAge: this.REFRESH_TOKEN_MAX_AGE,
-      path: '/api/v1/auth', // Only accessible by auth endpoints
+      // In development, use root path for cross-port cookie sharing
+      // In production, restrict to auth endpoints for security
+      path: this.isProduction ? '/api/v1/auth' : '/',
       domain: this.cookieDomain,
     });
   }
@@ -107,8 +112,8 @@ export class CookieService {
     res.clearCookie(CookieService.ACCESS_TOKEN_COOKIE, clearOptions);
     res.clearCookie(CookieService.REFRESH_TOKEN_COOKIE, {
       ...clearOptions,
-      sameSite: (this.isCrossOrigin ? 'none' : 'strict') as 'none' | 'strict',
-      path: '/api/v1/auth',
+      sameSite: (this.isCrossOrigin ? 'none' : 'lax') as 'none' | 'lax',
+      path: this.isProduction ? '/api/v1/auth' : '/',
     });
     res.clearCookie(CookieService.CSRF_TOKEN_COOKIE, {
       ...clearOptions,

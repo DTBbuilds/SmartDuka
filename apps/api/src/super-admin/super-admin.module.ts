@@ -3,6 +3,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { Shop, ShopSchema } from '../shops/schemas/shop.schema';
 import { ShopAuditLog, ShopAuditLogSchema } from '../shops/schemas/shop-audit-log.schema';
 import { Subscription, SubscriptionSchema } from '../subscriptions/schemas/subscription.schema';
+import { SubscriptionPlan, SubscriptionPlanSchema } from '../subscriptions/schemas/subscription-plan.schema';
 import { SubscriptionInvoice, SubscriptionInvoiceSchema } from '../subscriptions/schemas/subscription-invoice.schema';
 import { PaymentTransaction, PaymentTransactionSchema } from '../payments/schemas/payment-transaction.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
@@ -31,6 +32,7 @@ import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
       { name: Shop.name, schema: ShopSchema },
       { name: ShopAuditLog.name, schema: ShopAuditLogSchema },
       { name: Subscription.name, schema: SubscriptionSchema },
+      { name: SubscriptionPlan.name, schema: SubscriptionPlanSchema },
       { name: SubscriptionInvoice.name, schema: SubscriptionInvoiceSchema },
       { name: PaymentTransaction.name, schema: PaymentTransactionSchema },
       { name: User.name, schema: UserSchema },

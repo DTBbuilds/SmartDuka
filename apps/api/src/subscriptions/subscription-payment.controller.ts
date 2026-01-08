@@ -17,6 +17,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { SkipSubscriptionCheck } from '../auth/guards/subscription-status.guard';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { SubscriptionPaymentDto } from './dto/subscription.dto';
 
@@ -29,6 +30,7 @@ import { SubscriptionPaymentDto } from './dto/subscription.dto';
  * 2. Send Money - Manual payment to 0729983567
  */
 @Controller('subscriptions/payments')
+@SkipSubscriptionCheck() // Payment routes must be accessible even when subscription is expired
 export class SubscriptionPaymentController {
   private readonly logger = new Logger(SubscriptionPaymentController.name);
 

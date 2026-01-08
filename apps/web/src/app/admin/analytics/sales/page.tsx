@@ -14,7 +14,6 @@ import {
   TrendingDown,
   DollarSign,
   Calendar,
-  ArrowLeft,
   ShoppingCart,
   Users,
   Clock,
@@ -27,6 +26,7 @@ import { Button } from '@smartduka/ui';
 import { useAuth } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
 import { config } from '@/lib/config';
+import { BackButton } from '@/components/back-button';
 
 type SalesData = {
   todayRevenue: number;
@@ -110,9 +110,7 @@ export default function SalesAnalyticsPage() {
     return (
       <div className="container py-8">
         <div className="flex items-center gap-4 mb-8">
-          <Button variant="ghost" size="icon" onClick={() => router.back()}>
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
+          <BackButton fallbackRoute="/admin/analytics" iconOnly />
           <div>
             <h1 className="text-3xl font-bold">Sales Analytics</h1>
             <p className="text-muted-foreground">Detailed sales performance and trends</p>
@@ -135,9 +133,7 @@ export default function SalesAnalyticsPage() {
       {/* Header - Mobile optimized */}
       <div className="flex flex-col gap-4 mb-6 md:mb-8">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => router.back()} className="h-9 w-9">
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
+          <BackButton fallbackRoute="/admin/analytics" iconOnly />
           <div>
             <h1 className="text-xl md:text-3xl font-bold">Sales Analytics</h1>
             <p className="text-sm text-muted-foreground hidden md:block">Detailed sales performance and trends</p>

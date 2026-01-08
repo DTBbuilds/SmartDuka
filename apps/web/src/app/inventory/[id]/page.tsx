@@ -19,7 +19,6 @@ import {
   DialogFooter,
 } from "@smartduka/ui";
 import {
-  ArrowLeft,
   Package,
   Edit2,
   Trash2,
@@ -35,6 +34,7 @@ import {
 import { TableSkeleton } from "@/components/shared/loading-skeleton";
 import { useToast } from "@/lib/use-toast";
 import { ToastContainer } from "@/components/toast-container";
+import { BackButton } from "@/components/back-button";
 
 interface Product {
   _id: string;
@@ -201,10 +201,7 @@ export default function ProductDetailsPage() {
       <div className="container">
         {/* Header */}
         <div className="mb-6">
-          <Button variant="ghost" onClick={() => router.back()} className="mb-4">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back
-          </Button>
+          <BackButton fallbackRoute="/admin/products" className="mb-4" />
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
               <div className="flex items-center gap-3">

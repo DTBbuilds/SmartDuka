@@ -195,49 +195,63 @@ function InboxContent() {
     return date.toLocaleDateString();
   };
 
+  // On mobile, show chat view when conversation is selected
+  const showMobileChat = selectedConversation !== null;
+
   return (
     <main className="bg-background min-h-screen">
       <ToastContainer toasts={toasts} onDismiss={dismiss} />
       
-      <div className="container py-6">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary/10">
-              <Inbox className="h-6 w-6 text-primary" />
+      <div className="container px-3 sm:px-6 py-4 sm:py-6">
+        {/* Header - Hidden on mobile when viewing chat */}
+        <div className={cn(
+          "flex items-center justify-between mb-4 sm:mb-6",
+          showMobileChat && "hidden sm:flex"
+        )}>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="p-1.5 sm:p-2 rounded-lg bg-primary/10">
+              <Inbox className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold">Support Inbox</h1>
-              <p className="text-sm text-muted-foreground">
+              <h1 className="text-xl sm:text-2xl font-bold">Support Inbox</h1>
+              <p className="text-xs sm:text-sm text-muted-foreground hidden sm:block">
                 Chat with SmartDuka support team
               </p>
             </div>
           </div>
-          <Button onClick={() => setShowNewConversation(true)} className="gap-2">
+          <Button 
+            onClick={() => setShowNewConversation(true)} 
+            className="gap-2 h-9 sm:h-10 text-sm"
+            size="sm"
+          >
             <Plus className="h-4 w-4" />
-            New Conversation
+            <span className="hidden sm:inline">New Conversation</span>
+            <span className="sm:hidden">New</span>
           </Button>
         </div>
 
         {/* Main Content */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-200px)]">
-          {/* Conversations List */}
-          <Card className="lg:col-span-1 flex flex-col overflow-hidden">
-            <CardHeader className="pb-3 flex-shrink-0">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 h-[calc(100vh-140px)] sm:h-[calc(100vh-200px)]">
+          {/* Conversations List - Hidden on mobile when chat is open */}
+          <Card className={cn(
+            "lg:col-span-1 flex flex-col overflow-hidden",
+            showMobileChat ? "hidden lg:flex" : "flex"
+          )}>
+            <CardHeader className="p-3 sm:p-6 sm:pb-3 flex-shrink-0">
               <div className="flex items-center gap-2">
                 <div className="flex-1 relative">
                   <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
-                    placeholder="Search conversations..."
+                    placeholder="Search..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10"
+                    className="pl-10 h-9 sm:h-10 text-sm"
                   />
                 </div>
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
-                  className="px-3 py-2 border rounded-md text-sm bg-background"
+                  className="px-2 sm:px-3 py-2 border rounded-md text-sm bg-background h-9 sm:h-10"
                 >
                   <option value="all">All</option>
                   <option value="open">Open</option>
@@ -250,13 +264,13 @@ function InboxContent() {
               {loading ? (
                 <div className="p-4 text-center text-muted-foreground">Loading...</div>
               ) : filteredConversations.length === 0 ? (
-                <div className="p-8 text-center">
-                  <MessageCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-muted-foreground">No conversations yet</p>
+                <div className="p-6 sm:p-8 text-center">
+                  <MessageCircle className="h-10 w-10 sm:h-12 sm:w-12 text-muted-foreground mx-auto mb-3 sm:mb-4" />
+                  <p className="text-muted-foreground text-sm sm:text-base">No conversations yet</p>
                   <Button
                     variant="outline"
                     size="sm"
-                    className="mt-4"
+                    className="mt-3 sm:mt-4"
                     onClick={() => setShowNewConversation(true)}
                   >
                     Start a conversation
@@ -269,22 +283,22 @@ function InboxContent() {
                       key={conversation._id}
                       onClick={() => setSelectedConversation(conversation)}
                       className={cn(
-                        'w-full p-4 text-left hover:bg-accent transition-colors',
+                        'w-full p-3 sm:p-4 text-left hover:bg-accent transition-colors active:bg-accent/80',
                         selectedConversation?._id === conversation._id && 'bg-accent'
                       )}
                     >
-                      <div className="flex items-start gap-3">
-                        <div className={cn('w-2 h-2 rounded-full mt-2', getStatusColor(conversation.status))} />
+                      <div className="flex items-start gap-2 sm:gap-3">
+                        <div className={cn('w-2 h-2 rounded-full mt-1.5 sm:mt-2 flex-shrink-0', getStatusColor(conversation.status))} />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-2">
-                            <p className="font-medium truncate">{conversation.subject}</p>
+                            <p className="font-medium truncate text-sm sm:text-base">{conversation.subject}</p>
                             {conversation.unreadCountAdmin > 0 && (
-                              <Badge variant="destructive" className="h-5 w-5 p-0 text-xs flex items-center justify-center">
+                              <Badge variant="destructive" className="h-5 min-w-[20px] px-1.5 text-xs flex items-center justify-center flex-shrink-0">
                                 {conversation.unreadCountAdmin}
                               </Badge>
                             )}
                           </div>
-                          <p className="text-sm text-muted-foreground truncate">
+                          <p className="text-xs sm:text-sm text-muted-foreground truncate mt-0.5">
                             {conversation.lastMessagePreview || 'No messages yet'}
                           </p>
                           <div className="flex items-center gap-2 mt-1">
@@ -302,41 +316,44 @@ function InboxContent() {
             </CardContent>
           </Card>
 
-          {/* Chat Area */}
-          <Card className="lg:col-span-2 flex flex-col overflow-hidden">
+          {/* Chat Area - Full screen on mobile when conversation selected */}
+          <Card className={cn(
+            "lg:col-span-2 flex flex-col overflow-hidden",
+            showMobileChat ? "flex" : "hidden lg:flex"
+          )}>
             {selectedConversation ? (
               <>
                 {/* Chat Header */}
-                <CardHeader className="pb-3 flex-shrink-0 border-b">
-                  <div className="flex items-center gap-3">
+                <CardHeader className="p-3 sm:p-6 sm:pb-3 flex-shrink-0 border-b">
+                  <div className="flex items-center gap-2 sm:gap-3">
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="lg:hidden"
+                      className="lg:hidden h-8 w-8 sm:h-9 sm:w-9 flex-shrink-0"
                       onClick={() => setSelectedConversation(null)}
                     >
                       <ArrowLeft className="h-4 w-4" />
                     </Button>
-                    <div className="flex-1">
-                      <CardTitle className="text-lg">{selectedConversation.subject}</CardTitle>
-                      <CardDescription className="flex items-center gap-2">
-                        <span className={cn('w-2 h-2 rounded-full', getStatusColor(selectedConversation.status))} />
+                    <div className="flex-1 min-w-0">
+                      <CardTitle className="text-base sm:text-lg truncate">{selectedConversation.subject}</CardTitle>
+                      <CardDescription className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm">
+                        <span className={cn('w-2 h-2 rounded-full flex-shrink-0', getStatusColor(selectedConversation.status))} />
                         <span className="capitalize">{selectedConversation.status}</span>
                         <span>•</span>
-                        <span className="capitalize">{selectedConversation.type}</span>
+                        <span className="capitalize truncate">{selectedConversation.type}</span>
                       </CardDescription>
                     </div>
                   </div>
                 </CardHeader>
 
                 {/* Messages */}
-                <CardContent className="flex-1 overflow-y-auto p-4 space-y-4">
+                <CardContent className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 sm:space-y-4">
                   {messagesLoading ? (
-                    <div className="text-center text-muted-foreground py-8">Loading messages...</div>
+                    <div className="text-center text-muted-foreground py-6 sm:py-8 text-sm">Loading messages...</div>
                   ) : messages.length === 0 ? (
-                    <div className="text-center text-muted-foreground py-8">
-                      <MessageCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                      <p>No messages yet. Start the conversation!</p>
+                    <div className="text-center text-muted-foreground py-6 sm:py-8">
+                      <MessageCircle className="h-10 w-10 sm:h-12 sm:w-12 mx-auto mb-3 sm:mb-4 opacity-50" />
+                      <p className="text-sm sm:text-base">No messages yet. Start the conversation!</p>
                     </div>
                   ) : (
                     messages.map((message) => (
@@ -349,18 +366,18 @@ function InboxContent() {
                       >
                         <div
                           className={cn(
-                            'max-w-[80%] rounded-lg px-4 py-2',
+                            'max-w-[85%] sm:max-w-[80%] rounded-2xl sm:rounded-lg px-3 sm:px-4 py-2',
                             message.senderType === 'admin'
-                              ? 'bg-primary text-primary-foreground'
+                              ? 'bg-primary text-primary-foreground rounded-br-md'
                               : message.senderType === 'system'
-                              ? 'bg-muted text-muted-foreground text-center w-full'
-                              : 'bg-accent'
+                              ? 'bg-muted text-muted-foreground text-center w-full rounded-lg'
+                              : 'bg-accent rounded-bl-md'
                           )}
                         >
                           {message.senderType === 'super_admin' && (
                             <p className="text-xs font-medium mb-1 text-primary">SmartDuka Support</p>
                           )}
-                          <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                          <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
                           <div className="flex items-center justify-end gap-1 mt-1">
                             <span className="text-xs opacity-70">
                               {formatTime(message.createdAt)}
@@ -377,7 +394,7 @@ function InboxContent() {
                 </CardContent>
 
                 {/* Message Input */}
-                <div className="p-4 border-t flex-shrink-0">
+                <div className="p-3 sm:p-4 border-t flex-shrink-0">
                   <div className="flex gap-2">
                     <Input
                       ref={inputRef}
@@ -386,10 +403,13 @@ function InboxContent() {
                       onChange={(e) => setNewMessage(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
                       disabled={sending || selectedConversation.status === 'closed'}
+                      className="h-10 sm:h-10 text-sm"
                     />
                     <Button
                       onClick={handleSendMessage}
                       disabled={!newMessage.trim() || sending || selectedConversation.status === 'closed'}
+                      size="icon"
+                      className="h-10 w-10 flex-shrink-0"
                     >
                       <Send className="h-4 w-4" />
                     </Button>
@@ -416,19 +436,20 @@ function InboxContent() {
 
       {/* New Conversation Modal */}
       {showNewConversation && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <Card className="w-full max-w-md">
-            <CardHeader>
-              <CardTitle>New Conversation</CardTitle>
-              <CardDescription>Start a new support conversation</CardDescription>
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <Card className="w-full sm:max-w-md rounded-t-2xl sm:rounded-lg max-h-[90vh] overflow-y-auto">
+            <CardHeader className="p-4 sm:p-6">
+              <CardTitle className="text-lg sm:text-xl">New Conversation</CardTitle>
+              <CardDescription className="text-sm">Start a new support conversation</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 p-4 sm:p-6 pt-0 sm:pt-0">
               <div>
                 <label className="text-sm font-medium">Subject</label>
                 <Input
                   placeholder="What do you need help with?"
                   value={newSubject}
                   onChange={(e) => setNewSubject(e.target.value)}
+                  className="h-10 text-sm mt-1"
                 />
               </div>
               <div>
@@ -436,7 +457,7 @@ function InboxContent() {
                 <select
                   value={newType}
                   onChange={(e) => setNewType(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-md text-sm bg-background"
+                  className="w-full px-3 py-2 border rounded-md text-sm bg-background h-10 mt-1"
                 >
                   <option value="general">General Inquiry</option>
                   <option value="support">Technical Support</option>
@@ -450,14 +471,14 @@ function InboxContent() {
                   placeholder="Describe your issue or question..."
                   value={newInitialMessage}
                   onChange={(e) => setNewInitialMessage(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-md text-sm bg-background min-h-[100px]"
+                  className="w-full px-3 py-2 border rounded-md text-sm bg-background min-h-[100px] mt-1"
                 />
               </div>
-              <div className="flex gap-2 justify-end">
-                <Button variant="outline" onClick={() => setShowNewConversation(false)}>
+              <div className="flex gap-2 justify-end pt-2">
+                <Button variant="outline" onClick={() => setShowNewConversation(false)} size="sm" className="h-10">
                   Cancel
                 </Button>
-                <Button onClick={handleCreateConversation} disabled={!newSubject.trim()}>
+                <Button onClick={handleCreateConversation} disabled={!newSubject.trim()} size="sm" className="h-10">
                   Start Conversation
                 </Button>
               </div>

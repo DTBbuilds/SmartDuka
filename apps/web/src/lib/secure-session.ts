@@ -330,14 +330,17 @@ export async function refreshToken(): Promise<{ accessToken: string; csrfToken: 
       // Check if it's a "No refresh token provided" error - this means cookies aren't being sent
       // This happens in cross-origin setups where sameSite cookies are blocked
       if (errorText.includes('No refresh token provided')) {
-        console.error('[SecureSession] Refresh token cookie not sent - likely cross-origin cookie issue');
-        console.warn('[SecureSession] User needs to re-login to get new cookies');
+        console.warn('[SecureSession] Refresh token cookie not sent - cross-origin cookie issue or session expired');
+        // Don't spam the console - this is expected when session has expired
+        // User will be redirected to login
       }
       
-      // Clear session on auth failures
-      console.warn('[SecureSession] Refresh token invalid, clearing session');
-      clearSession();
-      refreshAttempts = 0; // Reset for next session
+      // Only clear session after max attempts to avoid premature logout
+      if (refreshAttempts >= MAX_REFRESH_ATTEMPTS) {
+        console.warn('[SecureSession] Refresh token invalid after max attempts, clearing session');
+        clearSession();
+        refreshAttempts = 0; // Reset for next session
+      }
     }
     // 403 = Forbidden (might be CSRF issue - don't clear, let user retry)
     // 5xx = Server error (don't clear, let user retry)

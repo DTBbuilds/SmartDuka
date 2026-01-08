@@ -16,6 +16,7 @@ interface QuickAddProductFormProps {
   onSubmit: (product: {
     name: string;
     sku: string;
+    barcode: string;
     price: number;
     cost: number;
     stock: number;
@@ -30,6 +31,7 @@ export function QuickAddProductForm({ categories, onSubmit, onCategoryCreated, t
   const [formData, setFormData] = useState({
     name: '',
     sku: '',
+    barcode: '',
     price: 0,
     cost: 0,
     stock: 0,
@@ -69,6 +71,7 @@ export function QuickAddProductForm({ categories, onSubmit, onCategoryCreated, t
       setFormData({
         name: '',
         sku: '',
+        barcode: '',
         price: 0,
         cost: 0,
         stock: 0,
@@ -120,10 +123,10 @@ export function QuickAddProductForm({ categories, onSubmit, onCategoryCreated, t
               />
             </div>
 
-            {/* SKU/Barcode */}
+            {/* SKU */}
             <div className="space-y-2">
               <Label htmlFor="product-sku" className="text-sm font-medium">
-                SKU/Barcode
+                SKU (Internal Code)
               </Label>
               <Input
                 id="product-sku"
@@ -132,6 +135,21 @@ export function QuickAddProductForm({ categories, onSubmit, onCategoryCreated, t
                 onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
                 disabled={isSubmitting || isLoading}
                 aria-label="Product SKU"
+              />
+            </div>
+
+            {/* Barcode */}
+            <div className="space-y-2">
+              <Label htmlFor="product-barcode" className="text-sm font-medium">
+                Barcode (Scannable)
+              </Label>
+              <Input
+                id="product-barcode"
+                placeholder="e.g., 5901234123457"
+                value={formData.barcode}
+                onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
+                disabled={isSubmitting || isLoading}
+                aria-label="Product Barcode"
               />
             </div>
 

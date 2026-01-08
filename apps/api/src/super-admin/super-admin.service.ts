@@ -2,8 +2,15 @@ import { Injectable, Logger, BadRequestException, NotFoundException, Optional } 
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Shop, ShopDocument } from '../shops/schemas/shop.schema';
+import { User, UserDocument } from '../users/schemas/user.schema';
+import { Subscription, SubscriptionDocument, SubscriptionStatus } from '../subscriptions/schemas/subscription.schema';
+import { SubscriptionPlan, SubscriptionPlanDocument } from '../subscriptions/schemas/subscription-plan.schema';
 import { ShopAuditLogService } from '../shops/services/shop-audit-log.service';
 import { EmailService } from '../notifications/email.service';
+import { EMAIL_TEMPLATES } from '../notifications/email-templates';
+
+const GRACE_PERIOD_DAYS = 7;
+const FRONTEND_URL = process.env.FRONTEND_URL || 'https://smartduka.co.ke';
 
 @Injectable()
 export class SuperAdminService {
@@ -11,6 +18,9 @@ export class SuperAdminService {
 
   constructor(
     @InjectModel(Shop.name) private readonly shopModel: Model<ShopDocument>,
+    @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
+    @InjectModel(Subscription.name) private readonly subscriptionModel: Model<SubscriptionDocument>,
+    @InjectModel(SubscriptionPlan.name) private readonly planModel: Model<SubscriptionPlanDocument>,
     private readonly auditLogService: ShopAuditLogService,
     @Optional() private readonly emailService?: EmailService,
   ) {}
@@ -670,5 +680,191 @@ export class SuperAdminService {
    */
   async getDeletedShopsCount(): Promise<number> {
     return this.shopModel.countDocuments({ deletedAt: { $ne: null } });
+  }
+
+  /**
+   * Get subscription statistics
+   */
+  async getSubscriptionStats() {
+    const [
+      totalSubscriptions,
+      activeCount,
+      trialCount,
+      pastDueCount,
+      suspendedCount,
+      expiredCount,
+      cancelledCount,
+    ] = await Promise.all([
+      this.subscriptionModel.countDocuments(),
+      this.subscriptionModel.countDocuments({ status: SubscriptionStatus.ACTIVE }),
+      this.subscriptionModel.countDocuments({ status: SubscriptionStatus.TRIAL }),
+      this.subscriptionModel.countDocuments({ status: SubscriptionStatus.PAST_DUE }),
+      this.subscriptionModel.countDocuments({ status: SubscriptionStatus.SUSPENDED }),
+      this.subscriptionModel.countDocuments({ status: SubscriptionStatus.EXPIRED }),
+      this.subscriptionModel.countDocuments({ status: SubscriptionStatus.CANCELLED }),
+    ]);
+
+    return {
+      total: totalSubscriptions,
+      active: activeCount,
+      trial: trialCount,
+      pastDue: pastDueCount,
+      suspended: suspendedCount,
+      expired: expiredCount,
+      cancelled: cancelledCount,
+      healthy: activeCount + trialCount,
+      atRisk: pastDueCount,
+      blocked: suspendedCount + expiredCount + cancelledCount,
+    };
+  }
+
+  /**
+   * Process all expired subscriptions
+   * Updates status and sends reminder emails
+   */
+  async processExpiredSubscriptions(superAdminId: string) {
+    const now = new Date();
+    const results = {
+      processed: 0,
+      expired: 0,
+      pastDue: 0,
+      suspended: 0,
+      emailsSent: 0,
+      errors: [] as string[],
+    };
+
+    this.logger.log(`Processing expired subscriptions triggered by ${superAdminId}`);
+
+    try {
+      // 1. Expire subscriptions (no auto-renew, period ended)
+      const toExpire = await this.subscriptionModel.find({
+        status: { $in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIAL] },
+        currentPeriodEnd: { $lt: now },
+        autoRenew: false,
+      });
+
+      for (const sub of toExpire) {
+        sub.status = SubscriptionStatus.EXPIRED;
+        await sub.save();
+        results.expired++;
+        await this.sendSubscriptionEmail(sub, 'expired');
+        results.emailsSent++;
+      }
+
+      // 2. Set to PAST_DUE (auto-renew, period ended)
+      const toPastDue = await this.subscriptionModel.find({
+        status: { $in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIAL] },
+        currentPeriodEnd: { $lt: now },
+        autoRenew: true,
+      });
+
+      for (const sub of toPastDue) {
+        sub.status = SubscriptionStatus.PAST_DUE;
+        sub.gracePeriodEndDate = new Date(now.getTime() + GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000);
+        await sub.save();
+        results.pastDue++;
+        await this.sendSubscriptionEmail(sub, 'past_due');
+        results.emailsSent++;
+      }
+
+      // 3. Suspend (grace period ended)
+      const toSuspend = await this.subscriptionModel.find({
+        status: SubscriptionStatus.PAST_DUE,
+        gracePeriodEndDate: { $lt: now },
+      });
+
+      for (const sub of toSuspend) {
+        sub.status = SubscriptionStatus.SUSPENDED;
+        await sub.save();
+        results.suspended++;
+        await this.sendSubscriptionEmail(sub, 'suspended');
+        results.emailsSent++;
+      }
+
+      // 4. Send reminders to existing PAST_DUE, SUSPENDED, EXPIRED
+      const needReminders = await this.subscriptionModel.find({
+        status: { $in: [SubscriptionStatus.PAST_DUE, SubscriptionStatus.SUSPENDED, SubscriptionStatus.EXPIRED] },
+      });
+
+      for (const sub of needReminders) {
+        // Skip if we already processed this subscription above
+        if (toExpire.some(s => s._id.equals(sub._id)) ||
+            toPastDue.some(s => s._id.equals(sub._id)) ||
+            toSuspend.some(s => s._id.equals(sub._id))) {
+          continue;
+        }
+        await this.sendSubscriptionEmail(sub, sub.status);
+        results.emailsSent++;
+      }
+
+      results.processed = toExpire.length + toPastDue.length + toSuspend.length + needReminders.length;
+
+    } catch (error: any) {
+      this.logger.error('Error processing subscriptions:', error);
+      results.errors.push(error.message);
+    }
+
+    this.logger.log(`Subscription processing complete: ${JSON.stringify(results)}`);
+    return results;
+  }
+
+  /**
+   * Send subscription status email
+   */
+  private async sendSubscriptionEmail(subscription: SubscriptionDocument, status: string): Promise<boolean> {
+    if (!this.emailService) return false;
+
+    const shop = await this.shopModel.findById(subscription.shopId);
+    const admin = await this.userModel.findOne({ shopId: subscription.shopId, role: 'admin' });
+    const plan = await this.planModel.findById(subscription.planId);
+
+    if (!shop || !admin?.email) return false;
+
+    let template: any;
+    let vars: Record<string, any> = {
+      shopName: shop.name,
+      userName: admin.name || admin.email,
+      planName: plan?.name || subscription.planCode,
+      amount: subscription.currentPrice.toLocaleString(),
+      payUrl: `${FRONTEND_URL}/admin/subscription`,
+      renewUrl: `${FRONTEND_URL}/admin/subscription`,
+    };
+
+    switch (status) {
+      case SubscriptionStatus.EXPIRED:
+      case 'expired':
+        template = EMAIL_TEMPLATES.subscription_expired;
+        vars.gracePeriodDays = '30';
+        break;
+      case SubscriptionStatus.PAST_DUE:
+      case 'past_due':
+        template = EMAIL_TEMPLATES.subscription_past_due_day1;
+        const daysUntil = subscription.gracePeriodEndDate
+          ? Math.ceil((subscription.gracePeriodEndDate.getTime() - Date.now()) / (24 * 60 * 60 * 1000))
+          : GRACE_PERIOD_DAYS;
+        vars.daysUntilSuspension = daysUntil.toString();
+        break;
+      case SubscriptionStatus.SUSPENDED:
+      case 'suspended':
+        template = EMAIL_TEMPLATES.subscription_suspended_notice;
+        vars.dataRetentionDays = '30';
+        break;
+      default:
+        return false;
+    }
+
+    if (!template) return false;
+
+    try {
+      const result = await this.emailService.sendEmail({
+        to: admin.email,
+        subject: template.subject.replace('{{shopName}}', shop.name),
+        html: template.getHtml(vars),
+      });
+      return result.success;
+    } catch (error) {
+      this.logger.error(`Failed to send email to ${admin.email}:`, error);
+      return false;
+    }
   }
 }

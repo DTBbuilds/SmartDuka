@@ -128,6 +128,13 @@ export class InventoryController {
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
+  @Post('categories/sync-counts')
+  syncCategoryProductCounts(@CurrentUser() user: any) {
+    return this.inventoryService.syncCategoryProductCounts(user.shopId);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   @Post('stock/update')
   updateStock(@Body() dto: { productId: string; quantityChange: number }, @CurrentUser() user: any) {
     return this.inventoryService.updateStock(user.shopId, dto.productId, dto.quantityChange);

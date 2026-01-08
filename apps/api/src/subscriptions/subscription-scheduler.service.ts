@@ -1,13 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { SubscriptionsService } from './subscriptions.service';
+import { SubscriptionDunningService } from './subscription-dunning.service';
 
 /**
  * Subscription Scheduler Service
  * 
  * Handles all scheduled tasks related to subscriptions:
  * - Processing expiring subscriptions
- * - Sending renewal reminders
+ * - Sending renewal reminders (dunning)
  * - Suspending overdue subscriptions
  * - Generating recurring invoices
  */
@@ -17,6 +18,7 @@ export class SubscriptionSchedulerService {
 
   constructor(
     private readonly subscriptionsService: SubscriptionsService,
+    private readonly dunningService: SubscriptionDunningService,
   ) {}
 
   /**
@@ -40,37 +42,30 @@ export class SubscriptionSchedulerService {
   }
 
   /**
-   * Send payment reminders for past due subscriptions (runs daily at 10 AM)
+   * Send dunning notifications (runs daily at 10 AM)
+   * This handles:
+   * - Expiry warnings (7, 3, 1 days before)
+   * - Grace period reminders (day 1, 3, 5)
+   * - Suspension notices
    */
   @Cron('0 10 * * *')
-  async sendPaymentReminders(): Promise<void> {
-    this.logger.log('Sending payment reminders for past due subscriptions...');
+  async sendDunningNotifications(): Promise<void> {
+    this.logger.log('Processing dunning notifications...');
     
     try {
-      // Get all past due subscriptions
-      const pastDueSubscriptions = await this.subscriptionsService.getPastDueSubscriptions();
+      const results = await this.dunningService.processDunningNotifications();
       
-      for (const subscription of pastDueSubscriptions) {
-        // Calculate days until suspension
-        const now = new Date();
-        const gracePeriodEnd = subscription.gracePeriodEndDate;
-        
-        if (gracePeriodEnd) {
-          const daysUntilSuspension = Math.ceil(
-            (gracePeriodEnd.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)
-          );
-          
-          // Send reminder at 5 days, 3 days, and 1 day before suspension
-          if ([5, 3, 1].includes(daysUntilSuspension)) {
-            this.logger.log(
-              `Sending payment reminder to shop ${subscription.shopId}: ${daysUntilSuspension} days until suspension`
-            );
-            // TODO: Send email notification
-          }
-        }
-      }
+      const successful = results.filter(r => r.success).length;
+      const failed = results.filter(r => !r.success).length;
+      
+      this.logger.log(`Dunning notifications completed: ${successful} successful, ${failed} failed`);
+      
+      // Log any failures
+      results.filter(r => !r.success).forEach(r => {
+        this.logger.warn(`Failed dunning for ${r.shopName}: ${r.action} - ${r.error}`);
+      });
     } catch (error) {
-      this.logger.error('Failed to send payment reminders:', error);
+      this.logger.error('Failed to process dunning notifications:', error);
     }
   }
 

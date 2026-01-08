@@ -6,8 +6,11 @@ import { SubscriptionGuardService } from './subscription-guard.service';
 import { SubscriptionMpesaService } from './subscription-mpesa.service';
 import { SubscriptionSchedulerService } from './subscription-scheduler.service';
 import { SubscriptionMigrationService } from './subscription-migration.service';
+import { SubscriptionEnforcementService } from './subscription-enforcement.service';
+import { SubscriptionDunningService } from './subscription-dunning.service';
 import { SubscriptionsController } from './subscriptions.controller';
 import { SubscriptionPaymentController } from './subscription-payment.controller';
+import { SubscriptionEnforcementController } from './subscription-enforcement.controller';
 import { Subscription, SubscriptionSchema } from './schemas/subscription.schema';
 import { SubscriptionPlan, SubscriptionPlanSchema } from './schemas/subscription-plan.schema';
 import { SubscriptionInvoice, SubscriptionInvoiceSchema } from './schemas/subscription-invoice.schema';
@@ -20,6 +23,7 @@ import { User, UserSchema } from '../users/schemas/user.schema';
 import { Product, ProductSchema } from '../inventory/schemas/product.schema';
 import { SystemConfig, SystemConfigSchema } from '../super-admin/schemas/system-config.schema';
 import { PaymentsModule } from '../payments/payments.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -36,18 +40,30 @@ import { PaymentsModule } from '../payments/payments.module';
       { name: ActivityLog.name, schema: ActivityLogSchema },
     ]),
     PaymentsModule,
+    NotificationsModule,
   ],
-  controllers: [SubscriptionsController, SubscriptionPaymentController],
+  controllers: [SubscriptionsController, SubscriptionPaymentController, SubscriptionEnforcementController],
   providers: [
     SubscriptionsService, 
     SubscriptionGuardService, 
     SubscriptionMpesaService,
     SubscriptionSchedulerService,
     SubscriptionMigrationService,
+    SubscriptionEnforcementService,
+    SubscriptionDunningService,
     PaymentAttemptService,
     ActivityLogService,
   ],
-  exports: [SubscriptionsService, SubscriptionGuardService, SubscriptionMpesaService, SubscriptionMigrationService, PaymentAttemptService, ActivityLogService],
+  exports: [
+    SubscriptionsService, 
+    SubscriptionGuardService, 
+    SubscriptionMpesaService, 
+    SubscriptionMigrationService, 
+    SubscriptionEnforcementService,
+    SubscriptionDunningService,
+    PaymentAttemptService, 
+    ActivityLogService,
+  ],
 })
 export class SubscriptionsModule implements OnModuleInit {
   constructor(private readonly subscriptionsService: SubscriptionsService) {}

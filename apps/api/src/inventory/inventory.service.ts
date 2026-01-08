@@ -368,32 +368,48 @@ export class InventoryService implements OnModuleInit {
   /**
    * Find product by exact barcode match
    * Used for barcode scanner - returns single product or null
+   * Also checks SKU as fallback for backwards compatibility
    */
   async findByBarcode(shopId: string, barcode: string): Promise<ProductDocument | null> {
     const trimmedBarcode = barcode.trim();
+    const shopObjId = new Types.ObjectId(shopId);
     
-    // Try exact match first
+    // Try exact barcode match first
     let product = await this.productModel.findOne({
-      shopId: new Types.ObjectId(shopId),
+      shopId: shopObjId,
       barcode: trimmedBarcode,
       status: 'active',
+      deletedAt: { $exists: false },
     }).exec();
     
     // If not found, try with leading zeros removed (some scanners add/remove leading zeros)
     if (!product && trimmedBarcode.startsWith('0')) {
       product = await this.productModel.findOne({
-        shopId: new Types.ObjectId(shopId),
+        shopId: shopObjId,
         barcode: trimmedBarcode.replace(/^0+/, ''),
         status: 'active',
+        deletedAt: { $exists: false },
       }).exec();
     }
     
     // If still not found, try adding leading zero (EAN-13 vs UPC-A conversion)
     if (!product && trimmedBarcode.length === 12) {
       product = await this.productModel.findOne({
-        shopId: new Types.ObjectId(shopId),
+        shopId: shopObjId,
         barcode: '0' + trimmedBarcode,
         status: 'active',
+        deletedAt: { $exists: false },
+      }).exec();
+    }
+    
+    // FALLBACK: Check SKU field for backwards compatibility
+    // (products created before barcode/SKU separation)
+    if (!product) {
+      product = await this.productModel.findOne({
+        shopId: shopObjId,
+        sku: trimmedBarcode,
+        status: 'active',
+        deletedAt: { $exists: false },
       }).exec();
     }
     
@@ -454,11 +470,80 @@ export class InventoryService implements OnModuleInit {
     }).limit(limit).exec();
   }
 
-  async listCategories(shopId: string): Promise<CategoryDocument[]> {
-    return this.categoryModel
+  async listCategories(shopId: string): Promise<any[]> {
+    const categories = await this.categoryModel
       .find({ shopId: new Types.ObjectId(shopId) })
       .sort({ order: 1, name: 1 })
+      .lean()
       .exec();
+
+    // Get accurate product counts using aggregation (excludes soft-deleted products)
+    const productCounts = await this.productModel.aggregate([
+      { 
+        $match: { 
+          shopId: new Types.ObjectId(shopId),
+          deletedAt: { $exists: false },
+        } 
+      },
+      { $group: { _id: '$categoryId', count: { $sum: 1 } } },
+    ]);
+
+    // Create a map for quick lookup
+    const countMap = new Map<string, number>();
+    productCounts.forEach((pc) => {
+      if (pc._id) {
+        countMap.set(pc._id.toString(), pc.count);
+      }
+    });
+
+    // Merge counts into categories
+    return categories.map((cat) => ({
+      ...cat,
+      productCount: countMap.get(cat._id.toString()) || 0,
+    }));
+  }
+
+  /**
+   * Sync all category product counts for a shop
+   * This fixes any stale productCount values in the database
+   */
+  async syncCategoryProductCounts(shopId: string): Promise<{ synced: number; updated: number }> {
+    const shopObjId = new Types.ObjectId(shopId);
+    
+    // Get accurate counts using aggregation (excludes soft-deleted products)
+    const productCounts = await this.productModel.aggregate([
+      { 
+        $match: { 
+          shopId: shopObjId,
+          deletedAt: { $exists: false },
+        } 
+      },
+      { $group: { _id: '$categoryId', count: { $sum: 1 } } },
+    ]);
+
+    // Create a map for quick lookup
+    const countMap = new Map<string, number>();
+    productCounts.forEach((pc) => {
+      if (pc._id) {
+        countMap.set(pc._id.toString(), pc.count);
+      }
+    });
+
+    // Get all categories for this shop
+    const categories = await this.categoryModel.find({ shopId: shopObjId });
+    
+    let updated = 0;
+    for (const category of categories) {
+      const actualCount = countMap.get(category._id.toString()) || 0;
+      if (category.productCount !== actualCount) {
+        category.productCount = actualCount;
+        await category.save();
+        updated++;
+      }
+    }
+
+    this.logger.log(`Synced category counts for shop ${shopId}: ${categories.length} categories, ${updated} updated`);
+    return { synced: categories.length, updated };
   }
 
   async createCategory(shopId: string, dto: CreateCategoryDto): Promise<CategoryDocument> {

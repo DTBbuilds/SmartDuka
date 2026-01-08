@@ -19,6 +19,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { SkipSubscriptionCheck } from '../auth/guards/subscription-status.guard';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 import {
   CreateSubscriptionDto,
@@ -31,6 +32,7 @@ import {
 } from './dto/subscription.dto';
 
 @Controller('subscriptions')
+@SkipSubscriptionCheck() // Subscription management routes should always be accessible
 export class SubscriptionsController {
   private readonly logger = new Logger(SubscriptionsController.name);
 

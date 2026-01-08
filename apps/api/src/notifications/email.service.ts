@@ -70,17 +70,33 @@ export class EmailService {
         },
       });
 
+      // Skip verification in development if using placeholder credentials
+      const isPlaceholder = user?.includes('your-email') || pass?.includes('your-app');
+      if (isPlaceholder) {
+        this.logger.warn('⚠️  SMTP using placeholder credentials - email sending will fail. Update SMTP_USER and SMTP_PASS in .env');
+        return;
+      }
+
       // Verify connection asynchronously - don't block startup
+      // Use a shorter timeout for verification to fail fast
+      const verifyTimeout = setTimeout(() => {
+        this.logger.warn('⚠️  SMTP verification skipped (timeout) - emails will be sent on-demand');
+      }, 5000);
+
       this.transporter.verify((error) => {
+        clearTimeout(verifyTimeout);
         if (error) {
-          this.logger.error(`❌ SMTP connection failed: ${error.message}`);
-          // Don't spam logs with detailed errors - just log the key issue
-          if (error.message.includes('timeout')) {
-            this.logger.warn('SMTP timeout - check if SMTP server is reachable from this network');
-          } else if (error.message.includes('auth')) {
-            this.logger.warn('SMTP auth failed - verify credentials (use App Password for Gmail)');
+          this.logger.warn(`⚠️  SMTP verification failed: ${error.message}`);
+          // Provide helpful hints based on error type
+          if (error.message.includes('timeout') || error.message.includes('ETIMEDOUT')) {
+            this.logger.warn('   → Check: Firewall blocking port 587? VPN interfering? SMTP server down?');
+          } else if (error.message.includes('auth') || error.message.includes('535')) {
+            this.logger.warn('   → Check: For Gmail, use App Password (not regular password)');
+          } else if (error.message.includes('certificate') || error.message.includes('TLS')) {
+            this.logger.warn('   → Check: TLS/SSL certificate issue with SMTP server');
           }
-          // Keep transporter alive - it may work later when sending
+          // Keep transporter - emails may still work when actually sending
+          this.logger.log('   → Email sending will be attempted on-demand');
         } else {
           this.logger.log(`✅ SMTP connected: ${host}:${port}`);
         }

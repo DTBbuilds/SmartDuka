@@ -270,4 +270,21 @@ export class SuperAdminController {
     const count = await this.superAdminService.getDeletedShopsCount();
     return { shops, count };
   }
+
+  /**
+   * Process expired subscriptions
+   * Updates status and sends reminder emails to all expired/suspended shops
+   */
+  @Post('subscriptions/process-expired')
+  async processExpiredSubscriptions(@CurrentUser() user: any) {
+    return this.superAdminService.processExpiredSubscriptions(user.sub);
+  }
+
+  /**
+   * Get subscription statistics
+   */
+  @Get('subscriptions/stats')
+  async getSubscriptionStats() {
+    return this.superAdminService.getSubscriptionStats();
+  }
 }

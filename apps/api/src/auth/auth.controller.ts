@@ -10,12 +10,14 @@ import { RefreshTokenGuard } from './guards/refresh-token.guard';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { PinRateLimitGuard } from './guards/pin-rate-limit.guard';
 import { SkipCsrf } from './guards/csrf.guard';
+import { SkipSubscriptionCheck } from './guards/subscription-status.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { ConfigService } from '@nestjs/config';
 import { CookieService } from './services/cookie.service';
 import { Throttle } from '@nestjs/throttler';
 
 @Controller('auth')
+@SkipSubscriptionCheck() // All auth routes should bypass subscription check
 export class AuthController {
   constructor(
     private readonly authService: AuthService,

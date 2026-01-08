@@ -44,10 +44,10 @@ class SessionMonitor {
   private autoRefreshEnabled = true;
 
   // Thresholds - Intelligent timing
-  private readonly EXPIRY_WARNING_SECONDS = 300; // 5 minutes - show warning
-  private readonly AUTO_REFRESH_SECONDS = 180; // 3 minutes - auto refresh if active
-  private readonly CHECK_INTERVAL_MS = 15000; // 15 seconds - more frequent checks
-  private readonly ACTIVITY_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes - consider inactive
+  private readonly EXPIRY_WARNING_SECONDS = 300; // 5 minutes - show warning to INACTIVE users
+  private readonly AUTO_REFRESH_SECONDS = 600; // 10 minutes - auto refresh if active (before warning threshold)
+  private readonly CHECK_INTERVAL_MS = 10000; // 10 seconds - frequent checks for better UX
+  private readonly ACTIVITY_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes - consider inactive after 2 min no activity
   private readonly MAX_REFRESH_ATTEMPTS = 3;
 
   subscribe(listener: SessionListener): () => void {
@@ -196,6 +196,7 @@ class SessionMonitor {
 
   /**
    * Intelligent auto-refresh based on activity and token expiry
+   * Key principle: Active users should NEVER see session warnings
    */
   private async checkAndAutoRefresh() {
     if (!this.autoRefreshEnabled || !this.currentToken) return;
@@ -205,9 +206,10 @@ class SessionMonitor {
     const timeUntilExpiry = this.state.timeUntilExpiry;
     if (timeUntilExpiry === null) return;
 
-    // If token is expiring soon and user is active, auto-refresh
+    // If token is expiring within 10 minutes and user is active, auto-refresh silently
+    // This ensures active users never see the session warning
     if (timeUntilExpiry <= this.AUTO_REFRESH_SECONDS && this.isUserActive()) {
-      console.log('[SessionMonitor] Auto-refreshing token for active user');
+      console.log(`[SessionMonitor] Auto-refreshing token for active user (${timeUntilExpiry}s until expiry)`);
       await this.performAutoRefresh();
     }
   }
@@ -221,33 +223,43 @@ class SessionMonitor {
     this.updateState({ isRefreshing: true });
 
     try {
-      const { refreshToken } = await import('./secure-session');
+      const { refreshToken, resetRefreshAttempts, getToken } = await import('./secure-session');
+      
+      // Reset attempts before trying - auto-refresh is proactive, not a retry
+      resetRefreshAttempts();
+      
       const result = await refreshToken();
 
       if (result?.accessToken) {
         console.log('[SessionMonitor] Auto-refresh successful');
         this.currentToken = result.accessToken;
-        this.initialize(result.accessToken);
         
-        // Dispatch event for auth context
+        // Dispatch event for auth context BEFORE reinitializing
+        // This ensures auth context updates first
         window.dispatchEvent(new CustomEvent('token-refreshed', {
           detail: { accessToken: result.accessToken, csrfToken: result.csrfToken }
         }));
         
-        this.updateState({ refreshAttempts: 0 });
+        // Reinitialize with new token - this resets all state including refreshAttempts
+        this.initialize(result.accessToken);
       } else {
-        console.warn('[SessionMonitor] Auto-refresh failed');
-        this.updateState({ 
-          refreshAttempts: this.state.refreshAttempts + 1,
-          isRefreshing: false 
-        });
+        // Check if we still have a valid token - don't increment attempts if token still exists
+        const currentToken = getToken();
+        if (currentToken) {
+          console.warn('[SessionMonitor] Auto-refresh returned null but token still valid');
+          this.updateState({ isRefreshing: false });
+        } else {
+          console.warn('[SessionMonitor] Auto-refresh failed and no token');
+          this.updateState({ 
+            refreshAttempts: this.state.refreshAttempts + 1,
+            isRefreshing: false 
+          });
+        }
       }
     } catch (err) {
       console.error('[SessionMonitor] Auto-refresh error:', err);
-      this.updateState({ 
-        refreshAttempts: this.state.refreshAttempts + 1,
-        isRefreshing: false 
-      });
+      this.updateState({ isRefreshing: false });
+      // Don't increment attempts on network errors - user might just be offline temporarily
     }
   }
 
@@ -260,9 +272,17 @@ class SessionMonitor {
 
   private startMonitoring(token: string) {
     this.checkInterval = setInterval(() => {
-      const timeUntilExpiry = this.getTimeUntilExpiry(token);
+      // IMPORTANT: Use currentToken, not the parameter - token may have been refreshed
+      const tokenToCheck = this.currentToken || token;
+      const timeUntilExpiry = this.getTimeUntilExpiry(tokenToCheck);
       const isExpired = timeUntilExpiry !== null && timeUntilExpiry <= 0;
-      const isExpiringSoon = timeUntilExpiry !== null && timeUntilExpiry <= this.EXPIRY_WARNING_SECONDS;
+      
+      // Only show expiring warning if user is INACTIVE
+      // If user is active, we'll auto-refresh silently
+      const isUserCurrentlyActive = this.isUserActive();
+      const isExpiringSoon = timeUntilExpiry !== null && 
+        timeUntilExpiry <= this.EXPIRY_WARNING_SECONDS && 
+        !isUserCurrentlyActive; // Don't warn active users - we'll auto-refresh
 
       this.updateState({
         isValid: !isExpired,
@@ -270,6 +290,11 @@ class SessionMonitor {
         isExpiringSoon,
         isExpired,
       });
+
+      // If expiring soon and user is active, trigger auto-refresh proactively
+      if (timeUntilExpiry !== null && timeUntilExpiry <= this.AUTO_REFRESH_SECONDS && isUserCurrentlyActive) {
+        this.checkAndAutoRefresh();
+      }
 
       // Stop monitoring if expired
       if (isExpired) {

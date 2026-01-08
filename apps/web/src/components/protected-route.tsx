@@ -4,12 +4,39 @@ import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { LoadingScreen } from "./loading-screen";
+import { SubscriptionBlockedOverlay, SubscriptionReadOnlyBanner } from "./subscription-blocked-overlay";
+import { SubscriptionWarningBanner } from "./subscription-warning-banner";
+import { useSubscriptionEnforcement } from "@/hooks/use-subscription-enforcement";
+
+// Routes that should bypass subscription checks
+const SUBSCRIPTION_EXEMPT_ROUTES = [
+  '/admin/subscription',
+  '/select-plan',
+  '/pricing',
+  '/login',
+  '/register',
+  '/onboarding',
+  '/auth',
+];
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const [loadingMessage, setLoadingMessage] = useState("Checking authentication...");
+  
+  // Subscription enforcement
+  const { 
+    isBlocked, 
+    isReadOnly, 
+    loading: subscriptionLoading,
+    refetch: refetchSubscription,
+  } = useSubscriptionEnforcement();
+  
+  // Check if current route is exempt from subscription checks
+  const isExemptRoute = SUBSCRIPTION_EXEMPT_ROUTES.some(route => 
+    pathname?.startsWith(route)
+  );
 
   useEffect(() => {
     if (!loading && !user && pathname !== "/login" && pathname !== "/onboarding") {
@@ -36,7 +63,7 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return () => timeouts.forEach(clearTimeout);
   }, [loading]);
 
-  if (loading) {
+  if (loading || subscriptionLoading) {
     return (
       <LoadingScreen 
         title="SmartDuka" 
@@ -49,5 +76,27 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return null;
   }
 
-  return <>{children}</>;
+  // Show subscription blocked overlay if blocked and not on exempt route
+  if (isBlocked && !isExemptRoute && user) {
+    return (
+      <SubscriptionBlockedOverlay 
+        onPaymentSuccess={() => {
+          refetchSubscription();
+          router.refresh();
+        }}
+      />
+    );
+  }
+
+  return (
+    <>
+      {/* Show warning banner for expiring subscriptions */}
+      {!isExemptRoute && user && <SubscriptionWarningBanner />}
+      
+      {/* Show read-only banner during grace period */}
+      {isReadOnly && !isExemptRoute && user && <SubscriptionReadOnlyBanner />}
+      
+      {children}
+    </>
+  );
 }

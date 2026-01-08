@@ -5,7 +5,8 @@ import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { config } from "@/lib/config";
 import { Button, Card, CardContent, CardHeader, CardTitle, Input, Label, Textarea } from "@smartduka/ui";
-import { ArrowLeft, Package, Building2, Truck, Plus } from "lucide-react";
+import { Package, Building2, Truck, Plus } from "lucide-react";
+import { BackButton } from "@/components/back-button";
 import Link from "next/link";
 import { TableSkeleton } from "@/components/shared/loading-skeleton";
 import { CategorySelectWithCreate } from "@/components/category-select-with-create";
@@ -212,10 +213,7 @@ export default function EditProductPage() {
   return (
     <div className="container py-8">
       <div className="mb-8">
-        <Button variant="ghost" onClick={() => router.back()} className="mb-4">
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back
-        </Button>
+        <BackButton fallbackRoute={`/inventory/${productId}`} className="mb-4" />
         <h1 className="text-3xl font-bold">Edit Product</h1>
         <p className="text-muted-foreground">Update product information</p>
       </div>

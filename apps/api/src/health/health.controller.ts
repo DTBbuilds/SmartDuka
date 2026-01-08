@@ -6,8 +6,10 @@ import {
   MemoryHealthIndicator,
   DiskHealthIndicator,
 } from '@nestjs/terminus';
+import { SkipSubscriptionCheck } from '../auth/guards/subscription-status.guard';
 
 @Controller('health')
+@SkipSubscriptionCheck() // Health checks should always be accessible
 export class HealthController {
   constructor(
     private health: HealthCheckService,

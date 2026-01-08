@@ -1,4 +1,5 @@
-import { IsEnum, IsMongoId, IsNumber, IsOptional, IsString, Min, MinLength } from 'class-validator';
+import { IsEnum, IsMongoId, IsNumber, IsOptional, IsString, IsArray, IsDate, Min, MinLength } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class UpdateProductDto {
   @IsOptional()
@@ -54,4 +55,45 @@ export class UpdateProductDto {
   @IsOptional()
   @IsString()
   image?: string;
+
+  @IsOptional()
+  @IsString()
+  brand?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  tags?: string[];
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  reorderPoint?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  reorderQuantity?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  leadTimeDays?: number;
+
+  @IsOptional()
+  @IsMongoId()
+  preferredSupplierId?: string;
+
+  @IsOptional()
+  @Type(() => Date)
+  @IsDate()
+  expiryDate?: Date;
+
+  @IsOptional()
+  @IsString()
+  batchNumber?: string;
+
+  @IsOptional()
+  @IsString()
+  lotNumber?: string;
 }

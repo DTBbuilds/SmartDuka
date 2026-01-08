@@ -63,7 +63,11 @@ export function SessionExpiryWarning() {
     setExtending(true);
     try {
       // Use the secure-session refresh function which properly handles everything
-      const { refreshToken } = await import('@/lib/secure-session');
+      const { refreshToken, resetRefreshAttempts, getToken } = await import('@/lib/secure-session');
+      
+      // Reset refresh attempts before trying - this is a user-initiated action
+      resetRefreshAttempts();
+      
       console.log('[SessionExpiry] Attempting to extend session...');
       const result = await refreshToken();
       
@@ -81,23 +85,21 @@ export function SessionExpiryWarning() {
       } else {
         // Refresh returned null - could be network error or auth failure
         // Check if we still have a valid token before logging out
-        const currentToken = localStorage.getItem('smartduka:token');
+        const currentToken = getToken();
         if (!currentToken) {
-          // Session was cleared by refresh function (401 error)
+          // Session was cleared by refresh function (401 error after max attempts)
           console.warn('[SessionExpiry] Session expired, redirecting to login');
           logout();
           router.push('/login?expired=true');
         } else {
-          // Network/server error - don't logout, let user retry
+          // Network/server error or rate limited - don't logout, let user retry
           console.warn('[SessionExpiry] Refresh failed but session still valid, user can retry');
-          setDismissed(true);
+          // Don't dismiss - let user see the warning and try again
         }
       }
     } catch (error: any) {
       console.error('[SessionExpiry] Failed to extend session:', error);
       // Don't logout on errors - let user retry or manually logout
-      // Just dismiss the warning temporarily
-      setDismissed(true);
     } finally {
       setExtending(false);
     }
