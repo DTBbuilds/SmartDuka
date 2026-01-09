@@ -234,8 +234,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(authToken);
     setShop(shopData);
     
-    // Use secure session storage
-    storeToken(authToken, tokens?.sessionId, tokens?.expiresIn);
+    // Use secure session storage - include refresh token for cross-origin fallback
+    storeToken(authToken, tokens?.sessionId, tokens?.expiresIn, tokens?.refreshToken);
     storeShop(shopData);
     storeUser(userData);
     resetRefreshAttempts(); // Reset refresh counter on successful login
@@ -299,8 +299,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(authToken);
     setShop(shopInfo);
     
-    // Use secure session storage
-    storeToken(authToken, tokens?.sessionId, tokens?.expiresIn);
+    // Use secure session storage - include refresh token for cross-origin fallback
+    storeToken(authToken, tokens?.sessionId, tokens?.expiresIn, tokens?.refreshToken);
     storeShop(shopInfo);
     storeUser(userData);
     resetRefreshAttempts(); // Reset refresh counter on successful login
@@ -410,7 +410,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(authToken);
     setShop(shopInfo);
 
-    storeToken(authToken, tokens?.sessionId, tokens?.expiresIn);
+    // Include refresh token for cross-origin fallback
+    storeToken(authToken, tokens?.sessionId, tokens?.expiresIn, tokens?.refreshToken);
     storeShop(shopInfo);
     storeUser(userData);
     resetRefreshAttempts(); // Reset refresh counter on successful login
@@ -456,7 +457,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(authToken);
     setShop(shopInfo);
 
-    storeToken(authToken, tokens?.sessionId, tokens?.expiresIn);
+    // Include refresh token for cross-origin fallback
+    storeToken(authToken, tokens?.sessionId, tokens?.expiresIn, tokens?.refreshToken);
     storeShop(shopInfo);
     storeUser(userData);
     resetRefreshAttempts(); // Reset refresh counter on successful login

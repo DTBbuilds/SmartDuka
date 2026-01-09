@@ -1009,7 +1009,13 @@ export const EMAIL_TEMPLATES = {
       </div>
       
       <div class="button-container">
-        <a href="${vars.renewUrl || '{{renewUrl}}'}" class="primary-button">🔄 Renew Now - KES ${vars.amount || '{{amount}}'}</a>
+        <a href="${vars.renewUrl || '{{renewUrl}}'}?method=mpesa" class="primary-button">📱 Pay with M-Pesa - KES ${vars.amount || '{{amount}}'}</a>
+      </div>
+      
+      <div style="text-align: center; margin: 16px 0;">
+        <p style="color: #6b7280; font-size: 13px; margin-bottom: 12px;">Other payment options:</p>
+        <a href="${vars.renewUrl || '{{renewUrl}}'}?method=sendmoney" style="display: inline-block; padding: 10px 20px; background: #f97316; color: white; text-decoration: none; border-radius: 8px; font-size: 13px; margin: 4px;">💸 Send Money</a>
+        <a href="${vars.renewUrl || '{{renewUrl}}'}?method=card" style="display: inline-block; padding: 10px 20px; background: #6366f1; color: white; text-decoration: none; border-radius: 8px; font-size: 13px; margin: 4px;">💳 Card</a>
       </div>
       
       <p style="color: #6b7280; font-size: 14px; text-align: center;">
@@ -1042,7 +1048,12 @@ export const EMAIL_TEMPLATES = {
       </p>
       
       <div class="button-container">
-        <a href="${vars.renewUrl || '{{renewUrl}}'}" class="primary-button">🔄 Renew Now - KES ${vars.amount || '{{amount}}'}</a>
+        <a href="${vars.renewUrl || '{{renewUrl}}'}?method=mpesa" class="primary-button">📱 Pay with M-Pesa - KES ${vars.amount || '{{amount}}'}</a>
+      </div>
+      
+      <div style="text-align: center; margin: 16px 0;">
+        <a href="${vars.renewUrl || '{{renewUrl}}'}?method=sendmoney" style="display: inline-block; padding: 10px 20px; background: #f97316; color: white; text-decoration: none; border-radius: 8px; font-size: 13px; margin: 4px;">💸 Send Money</a>
+        <a href="${vars.renewUrl || '{{renewUrl}}'}?method=card" style="display: inline-block; padding: 10px 20px; background: #6366f1; color: white; text-decoration: none; border-radius: 8px; font-size: 13px; margin: 4px;">💳 Card</a>
       </div>
       
       <p style="color: #6b7280; font-size: 14px; text-align: center;">
@@ -1075,9 +1086,14 @@ export const EMAIL_TEMPLATES = {
       </p>
       
       <div class="button-container">
-        <a href="${vars.renewUrl || '{{renewUrl}}'}" class="primary-button" style="background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%); box-shadow: 0 4px 14px rgba(220, 38, 38, 0.4);">
-          🔄 RENEW NOW - KES ${vars.amount || '{{amount}}'}
+        <a href="${vars.renewUrl || '{{renewUrl}}'}?method=mpesa" class="primary-button" style="background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%); box-shadow: 0 4px 14px rgba(220, 38, 38, 0.4);">
+          📱 PAY NOW WITH M-PESA - KES ${vars.amount || '{{amount}}'}
         </a>
+      </div>
+      
+      <div style="text-align: center; margin: 16px 0;">
+        <a href="${vars.renewUrl || '{{renewUrl}}'}?method=sendmoney" style="display: inline-block; padding: 12px 24px; background: #f97316; color: white; text-decoration: none; border-radius: 8px; font-size: 14px; font-weight: 600; margin: 4px;">💸 Send Money</a>
+        <a href="${vars.renewUrl || '{{renewUrl}}'}?method=card" style="display: inline-block; padding: 12px 24px; background: #6366f1; color: white; text-decoration: none; border-radius: 8px; font-size: 14px; font-weight: 600; margin: 4px;">💳 Card</a>
       </div>
       
       <p style="color: #6b7280; font-size: 14px; text-align: center;">
@@ -1121,7 +1137,12 @@ export const EMAIL_TEMPLATES = {
       </p>
       
       <div class="button-container">
-        <a href="${vars.payUrl || '{{payUrl}}'}" class="primary-button">💳 Pay KES ${vars.amount || '{{amount}}'} Now</a>
+        <a href="${vars.payUrl || '{{payUrl}}'}?method=mpesa" class="primary-button">📱 Pay with M-Pesa - KES ${vars.amount || '{{amount}}'}</a>
+      </div>
+      
+      <div style="text-align: center; margin: 16px 0;">
+        <a href="${vars.payUrl || '{{payUrl}}'}?method=sendmoney" style="display: inline-block; padding: 10px 20px; background: #f97316; color: white; text-decoration: none; border-radius: 8px; font-size: 13px; margin: 4px;">💸 Send Money</a>
+        <a href="${vars.payUrl || '{{payUrl}}'}?method=card" style="display: inline-block; padding: 10px 20px; background: #6366f1; color: white; text-decoration: none; border-radius: 8px; font-size: 13px; margin: 4px;">💳 Card</a>
       </div>
     `, `Payment overdue for ${vars.shopName || ''}. Your account is in read-only mode.`),
   },
@@ -1150,9 +1171,14 @@ export const EMAIL_TEMPLATES = {
       </p>
       
       <div class="button-container">
-        <a href="${vars.payUrl || '{{payUrl}}'}" class="primary-button" style="background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);">
-          💳 PAY KES ${vars.amount || '{{amount}}'} NOW
+        <a href="${vars.payUrl || '{{payUrl}}'}?method=mpesa" class="primary-button" style="background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);">
+          📱 PAY NOW WITH M-PESA - KES ${vars.amount || '{{amount}}'}
         </a>
+      </div>
+      
+      <div style="text-align: center; margin: 16px 0;">
+        <a href="${vars.payUrl || '{{payUrl}}'}?method=sendmoney" style="display: inline-block; padding: 12px 24px; background: #f97316; color: white; text-decoration: none; border-radius: 8px; font-size: 14px; font-weight: 600; margin: 4px;">💸 Send Money</a>
+        <a href="${vars.payUrl || '{{payUrl}}'}?method=card" style="display: inline-block; padding: 12px 24px; background: #6366f1; color: white; text-decoration: none; border-radius: 8px; font-size: 14px; font-weight: 600; margin: 4px;">💳 Card</a>
       </div>
       
       <p style="color: #6b7280; font-size: 14px; text-align: center;">
@@ -1195,9 +1221,14 @@ export const EMAIL_TEMPLATES = {
       </p>
       
       <div class="button-container">
-        <a href="${vars.payUrl || '{{payUrl}}'}" class="primary-button" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); box-shadow: 0 4px 14px rgba(16, 185, 129, 0.4);">
-          ✅ RESTORE ACCOUNT - Pay KES ${vars.amount || '{{amount}}'}
+        <a href="${vars.payUrl || '{{payUrl}}'}?method=mpesa" class="primary-button" style="background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);">
+          📱 PAY NOW WITH M-PESA - KES ${vars.amount || '{{amount}}'}
         </a>
+      </div>
+      
+      <div style="text-align: center; margin: 16px 0;">
+        <a href="${vars.payUrl || '{{payUrl}}'}?method=sendmoney" style="display: inline-block; padding: 12px 24px; background: #f97316; color: white; text-decoration: none; border-radius: 8px; font-size: 14px; font-weight: 600; margin: 4px;">💸 Send Money</a>
+        <a href="${vars.payUrl || '{{payUrl}}'}?method=card" style="display: inline-block; padding: 12px 24px; background: #6366f1; color: white; text-decoration: none; border-radius: 8px; font-size: 14px; font-weight: 600; margin: 4px;">💳 Card</a>
       </div>
       
       <p style="color: #6b7280; font-size: 14px; text-align: center;">

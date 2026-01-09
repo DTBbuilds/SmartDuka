@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Put,
+  Delete,
   Query,
   Param,
   Body,
@@ -355,6 +356,14 @@ export class SystemManagementController {
       limit ? parseInt(limit) : 50,
       skip ? parseInt(skip) : 0,
     );
+  }
+
+  /**
+   * Delete an email log entry
+   */
+  @Delete('emails/:id')
+  async deleteEmailLog(@Param('id') emailId: string) {
+    return this.emailLogService.delete(emailId);
   }
 
   // ============================================

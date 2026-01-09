@@ -25,6 +25,7 @@ function AuthCallbackContent() {
     // Token in URL - used for cross-origin OAuth
     const urlToken = searchParams.get('token');
     const urlCsrf = searchParams.get('csrf');
+    const urlRefresh = searchParams.get('refresh'); // Refresh token for cross-origin fallback
 
     // Wait for searchParams to be populated - on initial render they may be empty
     // Only proceed if we have at least one expected parameter OR if URL has no query string
@@ -50,7 +51,7 @@ function AuthCallbackContent() {
     if (success === 'true') {
       if (urlToken) {
         setHasProcessed(true);
-        handleTokenFromUrl(urlToken, urlCsrf);
+        handleTokenFromUrl(urlToken, urlCsrf, urlRefresh);
         return;
       }
       // No token in URL - wait a moment in case params are still loading
@@ -71,7 +72,7 @@ function AuthCallbackContent() {
     // Direct token in URL (legacy or direct API usage)
     if (urlToken) {
       setHasProcessed(true);
-      handleTokenFromUrl(urlToken, urlCsrf);
+      handleTokenFromUrl(urlToken, urlCsrf, urlRefresh);
       return;
     }
 
@@ -87,12 +88,14 @@ function AuthCallbackContent() {
     }
   }, [searchParams, router, hasProcessed]);
 
-  const handleTokenFromUrl = async (token: string, csrfToken: string | null) => {
+  const handleTokenFromUrl = async (token: string, csrfToken: string | null, refreshToken: string | null) => {
     try {
       const decoded = JSON.parse(atob(token.split('.')[1]));
       
-      // Store token securely
-      storeToken(token);
+      // Store token securely - include refresh token for cross-origin fallback
+      // Note: In OAuth flow, refresh token may come from cookies set by backend
+      // or passed via URL for cross-origin scenarios
+      storeToken(token, undefined, undefined, refreshToken || undefined);
       
       // Store CSRF token if provided
       if (csrfToken) {
@@ -162,7 +165,7 @@ function AuthCallbackContent() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-orange-50 to-amber-50 flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
         <CardContent className="pt-6 flex flex-col items-center gap-4">
           {status === 'loading' && (
@@ -193,7 +196,7 @@ function AuthCallbackContent() {
 // Loading fallback for Suspense
 function AuthCallbackLoading() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-orange-50 to-amber-50 flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
         <CardContent className="pt-6 flex flex-col items-center gap-4">
           <Loader2 className="h-12 w-12 text-primary animate-spin" />

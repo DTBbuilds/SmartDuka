@@ -46,8 +46,10 @@ export class AuthController {
       shop: result.shop,
       user: result.user,
       // Include tokens for mobile/API clients that can't use cookies
+      // Also include refreshToken for cross-origin localStorage fallback
       tokens: {
         accessToken: result.tokens?.accessToken,
+        refreshToken: result.tokens?.refreshToken, // For localStorage fallback
         expiresIn: result.tokens?.expiresIn,
         csrfToken: result.tokens?.csrfToken,
       },
@@ -74,8 +76,10 @@ export class AuthController {
     return {
       user: result.user,
       shop: result.shop,
+      // Include refreshToken for cross-origin localStorage fallback
       tokens: {
         accessToken: result.tokens?.accessToken,
+        refreshToken: result.tokens?.refreshToken, // For localStorage fallback
         expiresIn: result.tokens?.expiresIn,
         csrfToken: result.tokens?.csrfToken,
       },
@@ -106,8 +110,10 @@ export class AuthController {
     return {
       user: result.user,
       shop: result.shop,
+      // Include refreshToken for cross-origin localStorage fallback
       tokens: {
         accessToken: result.tokens?.accessToken,
+        refreshToken: result.tokens?.refreshToken, // For localStorage fallback
         expiresIn: result.tokens?.expiresIn,
         csrfToken: result.tokens?.csrfToken,
       },
@@ -162,8 +168,10 @@ export class AuthController {
     return {
       user: result.user,
       shop: result.shop,
+      // Include refreshToken for cross-origin localStorage fallback
       tokens: {
         accessToken: result.tokens?.accessToken,
+        refreshToken: result.tokens?.refreshToken, // For localStorage fallback
         expiresIn: result.tokens?.expiresIn,
         csrfToken: result.tokens?.csrfToken,
       },
@@ -275,8 +283,9 @@ export class AuthController {
         // This is necessary because frontend (Vercel) and backend (Render) are on different domains
         // Cookies won't work cross-origin without SameSite=None which has browser compatibility issues
         // The token is short-lived (30min) and immediately stored client-side, then cleared from URL
+        // Include refresh token for localStorage fallback in cross-origin scenarios
         if (result.tokens) {
-          const tokenParam = `token=${encodeURIComponent(result.tokens.accessToken)}&csrf=${encodeURIComponent(result.tokens.csrfToken)}`;
+          const tokenParam = `token=${encodeURIComponent(result.tokens.accessToken)}&csrf=${encodeURIComponent(result.tokens.csrfToken)}&refresh=${encodeURIComponent(result.tokens.refreshToken)}`;
           res.redirect(`${frontendUrl}/auth/callback?success=true&${tokenParam}`);
         } else {
           res.redirect(`${frontendUrl}/login?error=${encodeURIComponent('Failed to generate authentication tokens')}`);
@@ -346,8 +355,10 @@ export class AuthController {
     return {
       user: result.user,
       shop: result.shop,
+      // Include refreshToken for cross-origin localStorage fallback
       tokens: {
         accessToken: result.tokens?.accessToken,
+        refreshToken: result.tokens?.refreshToken, // For localStorage fallback
         expiresIn: result.tokens?.expiresIn,
         csrfToken: result.tokens?.csrfToken,
       },

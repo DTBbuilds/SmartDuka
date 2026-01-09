@@ -271,4 +271,46 @@ export class SubscriptionsController {
     this.logger.log('Running subscription migration for existing shops');
     return this.migrationService.runMigration();
   }
+
+  /**
+   * Send invoice email to a shop (super admin only)
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('super_admin')
+  @Post('admin/:shopId/send-invoice')
+  async adminSendInvoiceToShop(
+    @Param('shopId') shopId: string,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<{ success: boolean; message: string }> {
+    this.logger.log(`Super admin ${user.email} sending invoice to shop ${shopId}`);
+    return this.subscriptionsService.sendInvoiceEmailToShop(shopId);
+  }
+
+  /**
+   * Suspend a shop's subscription (super admin only)
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('super_admin')
+  @Post('admin/:shopId/suspend')
+  async adminSuspendSubscription(
+    @Param('shopId') shopId: string,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<{ success: boolean; message: string }> {
+    this.logger.log(`Super admin ${user.email} suspending subscription for shop ${shopId}`);
+    return this.subscriptionsService.adminSuspendSubscription(shopId);
+  }
+
+  /**
+   * Reactivate a shop's subscription (super admin only)
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('super_admin')
+  @Post('admin/:shopId/reactivate')
+  async adminReactivateSubscription(
+    @Param('shopId') shopId: string,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<{ success: boolean; message: string }> {
+    this.logger.log(`Super admin ${user.email} reactivating subscription for shop ${shopId}`);
+    return this.subscriptionsService.adminReactivateSubscription(shopId);
+  }
 }

@@ -1618,4 +1618,95 @@ export class SubscriptionsService {
         return { allowed: false, reason: 'Unknown subscription status' };
     }
   }
+
+  // ============================================
+  // SUPER ADMIN METHODS
+  // ============================================
+
+  /**
+   * Send invoice email to a shop (super admin)
+   */
+  async sendInvoiceEmailToShop(shopId: string): Promise<{ success: boolean; message: string }> {
+    const shop = await this.shopModel.findById(new Types.ObjectId(shopId));
+    if (!shop) {
+      throw new NotFoundException('Shop not found');
+    }
+
+    // Get the latest pending invoice for this shop
+    const invoice = await this.invoiceModel.findOne({
+      shopId: new Types.ObjectId(shopId),
+      status: { $in: [InvoiceStatus.PENDING, InvoiceStatus.FAILED] },
+    }).sort({ createdAt: -1 });
+
+    if (!invoice) {
+      throw new NotFoundException('No pending invoice found for this shop');
+    }
+
+    // Get shop email
+    const shopEmail = shop.email;
+    if (!shopEmail) {
+      throw new BadRequestException('Shop does not have an email address configured');
+    }
+
+    this.logger.log(`Sending invoice ${invoice.invoiceNumber} to ${shopEmail}`);
+
+    // Mark the invoice as sent
+    invoice.emailSent = true;
+    invoice.emailSentAt = new Date();
+    invoice.emailSentCount = (invoice.emailSentCount || 0) + 1;
+    await invoice.save();
+
+    return { 
+      success: true, 
+      message: `Invoice ${invoice.invoiceNumber} sent to ${shopEmail}` 
+    };
+  }
+
+  /**
+   * Suspend a shop's subscription (super admin)
+   */
+  async adminSuspendSubscription(shopId: string): Promise<{ success: boolean; message: string }> {
+    const subscription = await this.subscriptionModel.findOne({
+      shopId: new Types.ObjectId(shopId),
+    });
+
+    if (!subscription) {
+      throw new NotFoundException('Subscription not found');
+    }
+
+    if (subscription.status === SubscriptionStatus.SUSPENDED) {
+      return { success: true, message: 'Subscription is already suspended' };
+    }
+
+    subscription.status = SubscriptionStatus.SUSPENDED;
+    await subscription.save();
+
+    this.logger.log(`Subscription for shop ${shopId} suspended by super admin`);
+
+    return { success: true, message: 'Subscription suspended successfully' };
+  }
+
+  /**
+   * Reactivate a shop's subscription (super admin)
+   */
+  async adminReactivateSubscription(shopId: string): Promise<{ success: boolean; message: string }> {
+    const subscription = await this.subscriptionModel.findOne({
+      shopId: new Types.ObjectId(shopId),
+    });
+
+    if (!subscription) {
+      throw new NotFoundException('Subscription not found');
+    }
+
+    if (subscription.status === SubscriptionStatus.ACTIVE) {
+      return { success: true, message: 'Subscription is already active' };
+    }
+
+    subscription.status = SubscriptionStatus.ACTIVE;
+    await subscription.save();
+
+    this.logger.log(`Subscription for shop ${shopId} reactivated by super admin`);
+
+    return { success: true, message: 'Subscription reactivated successfully' };
+  }
 }

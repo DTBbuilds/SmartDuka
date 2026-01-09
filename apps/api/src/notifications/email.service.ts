@@ -1,7 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { EmailTemplate, EmailTemplateDocument } from './email-template.schema';
+import { EmailLog, EmailLogDocument } from '../super-admin/schemas/email-log.schema';
 import * as nodemailer from 'nodemailer';
 import { getAllTemplatesForSeeding } from './email-templates';
 
@@ -17,6 +18,15 @@ export interface EmailOptions {
     content: Buffer | string;
     contentType?: string;
   }>;
+  // Logging metadata
+  shopId?: string;
+  shopName?: string;
+  userId?: string;
+  userName?: string;
+  category?: string;
+  templateName?: string;
+  templateVariables?: Record<string, any>;
+  triggeredBy?: string;
 }
 
 export interface TemplateEmailOptions {
@@ -34,6 +44,8 @@ export class EmailService {
   constructor(
     @InjectModel(EmailTemplate.name)
     private readonly templateModel: Model<EmailTemplateDocument>,
+    @InjectModel(EmailLog.name)
+    private readonly emailLogModel: Model<EmailLogDocument>,
   ) {
     this.initializeTransporter();
   }
@@ -107,18 +119,52 @@ export class EmailService {
     }
   }
 
-  async sendEmail(options: EmailOptions): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  async sendEmail(options: EmailOptions): Promise<{ success: boolean; messageId?: string; error?: string; emailLogId?: string }> {
+    const toAddress = Array.isArray(options.to) ? options.to.join(', ') : options.to;
+    const from = options.from || process.env.SMTP_FROM || 'SmartDuka <noreply@smartduka.co.ke>';
+    
+    // Create email log entry first
+    let emailLog: EmailLogDocument | null = null;
+    try {
+      emailLog = new this.emailLogModel({
+        to: toAddress,
+        subject: options.subject,
+        htmlContent: options.html?.substring(0, 1000), // Store first 1000 chars
+        textContent: options.text?.substring(0, 500),
+        from,
+        replyTo: options.replyTo,
+        shopId: options.shopId ? new Types.ObjectId(options.shopId) : undefined,
+        shopName: options.shopName,
+        userId: options.userId ? new Types.ObjectId(options.userId) : undefined,
+        userName: options.userName,
+        category: options.category || 'other',
+        templateName: options.templateName,
+        templateVariables: options.templateVariables,
+        triggeredBy: options.triggeredBy || 'system',
+        status: 'pending',
+      });
+      await emailLog.save();
+    } catch (logError: any) {
+      this.logger.warn(`Failed to create email log: ${logError.message}`);
+    }
+
     if (!this.transporter) {
       this.logger.warn('Email not sent - SMTP not configured');
-      return { success: false, error: 'SMTP not configured' };
+      // Update log to failed
+      if (emailLog) {
+        await this.emailLogModel.findByIdAndUpdate(emailLog._id, {
+          status: 'failed',
+          failedAt: new Date(),
+          errorMessage: 'SMTP not configured',
+        });
+      }
+      return { success: false, error: 'SMTP not configured', emailLogId: emailLog?._id?.toString() };
     }
 
     try {
-      const from = options.from || process.env.SMTP_FROM || 'SmartDuka <noreply@smartduka.co.ke>';
-      
       const result = await this.transporter.sendMail({
         from,
-        to: Array.isArray(options.to) ? options.to.join(', ') : options.to,
+        to: toAddress,
         subject: options.subject,
         html: options.html,
         text: options.text,
@@ -126,11 +172,33 @@ export class EmailService {
         attachments: options.attachments,
       });
 
-      this.logger.log(`Email sent to ${options.to}: ${result.messageId}`);
-      return { success: true, messageId: result.messageId };
+      this.logger.log(`Email sent to ${toAddress}: ${result.messageId}`);
+      
+      // Update log to sent
+      if (emailLog) {
+        await this.emailLogModel.findByIdAndUpdate(emailLog._id, {
+          status: 'sent',
+          sentAt: new Date(),
+          messageId: result.messageId,
+          provider: 'nodemailer',
+        });
+      }
+      
+      return { success: true, messageId: result.messageId, emailLogId: emailLog?._id?.toString() };
     } catch (error: any) {
-      this.logger.error(`Failed to send email to ${options.to}:`, error.message);
-      return { success: false, error: error.message };
+      this.logger.error(`Failed to send email to ${toAddress}:`, error.message);
+      
+      // Update log to failed
+      if (emailLog) {
+        await this.emailLogModel.findByIdAndUpdate(emailLog._id, {
+          status: 'failed',
+          failedAt: new Date(),
+          errorMessage: error.message,
+          errorCode: error.code,
+        });
+      }
+      
+      return { success: false, error: error.message, emailLogId: emailLog?._id?.toString() };
     }
   }
 

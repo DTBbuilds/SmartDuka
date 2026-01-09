@@ -314,8 +314,8 @@ export async function refreshToken(): Promise<{ accessToken: string; csrfToken: 
         // Reset refresh attempts on success
         refreshAttempts = 0;
         
-        // Store new tokens
-        storeToken(data.tokens.accessToken, data.tokens.sessionId, data.tokens.expiresIn);
+        // Store new tokens - include new refresh token for rotation
+        storeToken(data.tokens.accessToken, data.tokens.sessionId, data.tokens.expiresIn, data.tokens.refreshToken);
         if (data.tokens.csrfToken) {
           storeCsrfToken(data.tokens.csrfToken);
         }

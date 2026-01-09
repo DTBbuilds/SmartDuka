@@ -341,4 +341,25 @@ export class EmailLogService {
       { new: true },
     ).exec();
   }
+
+  /**
+   * Delete an email log entry
+   */
+  async delete(emailLogId: string): Promise<{ success: boolean; message: string }> {
+    try {
+      const result = await this.emailLogModel.findByIdAndDelete(
+        new Types.ObjectId(emailLogId)
+      ).exec();
+      
+      if (!result) {
+        return { success: false, message: 'Email log not found' };
+      }
+      
+      this.logger.log(`Deleted email log: ${emailLogId}`);
+      return { success: true, message: 'Email log deleted successfully' };
+    } catch (error: any) {
+      this.logger.error(`Failed to delete email log ${emailLogId}: ${error.message}`);
+      return { success: false, message: error.message };
+    }
+  }
 }

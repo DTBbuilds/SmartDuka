@@ -7,12 +7,14 @@ import { EmailAdminController } from './email-admin.controller';
 import { SystemEventManagerService } from './system-event-manager.service';
 import { Notification, NotificationSchema } from './notification.schema';
 import { EmailTemplate, EmailTemplateSchema } from './email-template.schema';
+import { EmailLog, EmailLogSchema } from '../super-admin/schemas/email-log.schema';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: Notification.name, schema: NotificationSchema },
       { name: EmailTemplate.name, schema: EmailTemplateSchema },
+      { name: EmailLog.name, schema: EmailLogSchema },
     ]),
   ],
   providers: [EmailService, NotificationsService, SystemEventManagerService],

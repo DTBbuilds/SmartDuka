@@ -97,7 +97,7 @@ export function AppStartupScreen({ onReady }: AppStartupScreenProps) {
   const isColdStart = state.isServerCold;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-blue-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-800">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-orange-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-800">
       {/* Background pattern */}
       <div className="absolute inset-0 opacity-[0.02] dark:opacity-[0.05]">
         <div className="absolute inset-0" style={{
@@ -110,14 +110,14 @@ export function AppStartupScreen({ onReady }: AppStartupScreenProps) {
         <div className="text-center mb-8">
           <div className="relative inline-block mb-6">
             {/* Outer ring with gradient */}
-            <div className="h-24 w-24 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 p-1 mx-auto shadow-lg shadow-blue-500/25">
+            <div className="h-24 w-24 rounded-full bg-gradient-to-br from-orange-500 to-amber-600 p-1 mx-auto shadow-lg shadow-orange-500/25">
               <div className="h-full w-full rounded-full bg-white dark:bg-slate-900 flex items-center justify-center">
                 {/* Animated spinner ring */}
                 {!isReady && !isError && (
-                  <div className="absolute inset-0 h-24 w-24 rounded-full border-4 border-transparent border-t-blue-500 animate-spin" />
+                  <div className="absolute inset-0 h-24 w-24 rounded-full border-4 border-transparent border-t-orange-500 animate-spin" />
                 )}
                 {/* Logo */}
-                <span className="text-4xl font-bold bg-gradient-to-br from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                <span className="text-4xl font-bold bg-gradient-to-br from-orange-600 to-amber-600 bg-clip-text text-transparent">
                   S
                 </span>
               </div>
@@ -128,7 +128,7 @@ export function AppStartupScreen({ onReady }: AppStartupScreenProps) {
               'absolute -bottom-1 -right-1 h-6 w-6 rounded-full border-4 border-white dark:border-slate-900 transition-colors duration-300',
               isReady && 'bg-green-500',
               isError && 'bg-red-500',
-              !isReady && !isError && 'bg-blue-500 animate-pulse',
+              !isReady && !isError && 'bg-orange-500 animate-pulse',
             )} />
           </div>
 
@@ -147,7 +147,7 @@ export function AppStartupScreen({ onReady }: AppStartupScreenProps) {
             <div 
               className={cn(
                 'h-full transition-all duration-500 ease-out',
-                isError ? 'bg-red-500' : 'bg-gradient-to-r from-blue-500 to-indigo-500',
+                isError ? 'bg-red-500' : 'bg-gradient-to-r from-orange-500 to-amber-500',
               )}
               style={{ width: `${state.progress}%` }}
             />
@@ -161,7 +161,7 @@ export function AppStartupScreen({ onReady }: AppStartupScreenProps) {
                   'h-10 w-10 rounded-full flex items-center justify-center transition-colors',
                   isReady && 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400',
                   isError && 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400',
-                  !isReady && !isError && 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400',
+                  !isReady && !isError && 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400',
                 )}>
                   {phaseMessages[state.phase].icon}
                 </div>
@@ -184,7 +184,7 @@ export function AppStartupScreen({ onReady }: AppStartupScreenProps) {
               <div className="text-right">
                 <span className={cn(
                   'text-2xl font-bold',
-                  isError ? 'text-red-500' : 'text-blue-600 dark:text-blue-400',
+                  isError ? 'text-red-500' : 'text-orange-600 dark:text-orange-400',
                 )}>
                   {state.progress}%
                 </span>
@@ -245,7 +245,7 @@ export function AppStartupScreen({ onReady }: AppStartupScreenProps) {
                 </div>
                 <button
                   onClick={handleRetry}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-medium hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg shadow-blue-500/25"
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-orange-600 to-amber-600 text-white rounded-xl font-medium hover:from-orange-700 hover:to-amber-700 transition-all shadow-lg shadow-orange-500/25"
                 >
                   <RefreshCw className="h-4 w-4" />
                   Try Again
@@ -289,7 +289,7 @@ export function AppStartupScreen({ onReady }: AppStartupScreenProps) {
             {[0, 1, 2].map((i) => (
               <div
                 key={i}
-                className="h-2 w-2 rounded-full bg-blue-500 animate-bounce"
+                className="h-2 w-2 rounded-full bg-orange-500 animate-bounce"
                 style={{ animationDelay: `${i * 150}ms` }}
               />
             ))}
@@ -314,7 +314,7 @@ function ProgressStep({
       <div className={cn(
         'h-8 w-8 rounded-full flex items-center justify-center border-2 transition-all duration-300',
         status === 'complete' && 'bg-green-500 border-green-500 text-white',
-        status === 'active' && 'border-blue-500 text-blue-500 animate-pulse',
+        status === 'active' && 'border-orange-500 text-orange-500 animate-pulse',
         status === 'pending' && 'border-slate-200 dark:border-slate-600 text-slate-300 dark:text-slate-600',
         status === 'error' && 'bg-red-500 border-red-500 text-white',
       )}>

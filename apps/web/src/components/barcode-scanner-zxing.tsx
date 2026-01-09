@@ -75,6 +75,9 @@ export function BarcodeScannerZXing({
   const [lastScannedBarcode, setLastScannedBarcode] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   const MAX_RETRIES = 3;
+  
+  // Flag to prevent multiple detections after successful scan
+  const scanCompletedRef = useRef(false);
 
   /**
    * Initialize ZXing-JS CodeReader
@@ -157,10 +160,17 @@ export function BarcodeScannerZXing({
         { video: videoConstraints },
         videoRef.current,
         (result, error) => {
+          // CRITICAL: Stop processing if scan already completed
+          if (scanCompletedRef.current) {
+            return;
+          }
+          
           if (result) {
             const barcode = result.getText();
             // Debounce: prevent duplicate scans of same barcode within 2 seconds
             if (barcode !== lastScannedBarcode) {
+              // Mark as completed BEFORE processing to prevent race conditions
+              scanCompletedRef.current = true;
               setLastScannedBarcode(barcode);
               handleBarcodeDetected(barcode);
             }
@@ -206,9 +216,16 @@ export function BarcodeScannerZXing({
             { video: { facingMode: 'environment' } }, // Minimal constraints
             videoRef.current!,
             (result) => {
+              // CRITICAL: Stop processing if scan already completed
+              if (scanCompletedRef.current) {
+                return;
+              }
+              
               if (result) {
                 const barcode = result.getText();
                 if (barcode !== lastScannedBarcode) {
+                  // Mark as completed BEFORE processing to prevent race conditions
+                  scanCompletedRef.current = true;
                   setLastScannedBarcode(barcode);
                   handleBarcodeDetected(barcode);
                 }
@@ -409,6 +426,9 @@ export function BarcodeScannerZXing({
    */
   useEffect(() => {
     if (isOpen && scanMode === "camera") {
+      // Reset scan completed flag when opening scanner
+      scanCompletedRef.current = false;
+      
       // Check if we need to request permission first (mobile-friendly approach)
       const initCamera = async () => {
         // If permission is not yet granted, request it first
@@ -464,6 +484,7 @@ export function BarcodeScannerZXing({
     setTorchSupported(false);
     setLastScannedBarcode(null);
     setRetryCount(0);
+    scanCompletedRef.current = false; // Reset for next scan session
     onClose();
   };
 
@@ -476,6 +497,7 @@ export function BarcodeScannerZXing({
     setScanStatus("idle");
     setError(null);
     setMessage("");
+    scanCompletedRef.current = false; // Reset for new scan mode
   };
 
   return (

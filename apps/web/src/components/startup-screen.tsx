@@ -120,7 +120,7 @@ export function StartupScreen({ onReady, minDisplayTime = 1000 }: StartupScreenP
       case 'slow':
         return <Clock className="h-5 w-5 text-yellow-500" />;
       case 'connecting':
-        return <RefreshCw className="h-5 w-5 text-blue-500 animate-spin" />;
+        return <RefreshCw className="h-5 w-5 text-orange-500 animate-spin" />;
       case 'offline':
         return <WifiOff className="h-5 w-5 text-red-500" />;
       case 'error':
@@ -154,7 +154,7 @@ export function StartupScreen({ onReady, minDisplayTime = 1000 }: StartupScreenP
       case 'slow':
         return 'text-yellow-600 dark:text-yellow-400';
       case 'connecting':
-        return 'text-blue-600 dark:text-blue-400';
+        return 'text-orange-600 dark:text-orange-400';
       case 'offline':
       case 'error':
         return 'text-red-600 dark:text-red-400';
@@ -164,7 +164,7 @@ export function StartupScreen({ onReady, minDisplayTime = 1000 }: StartupScreenP
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-background via-background to-primary/5">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-background via-background to-orange-500/5">
       <div className="w-full max-w-md px-6">
         {/* Logo and Brand */}
         <div className="text-center mb-8">
@@ -315,7 +315,7 @@ export function ConnectionStatusIndicator({ className }: { className?: string })
       case 'slow':
         return 'bg-yellow-500';
       case 'connecting':
-        return 'bg-blue-500 animate-pulse';
+        return 'bg-orange-500 animate-pulse';
       case 'offline':
       case 'error':
         return 'bg-red-500';

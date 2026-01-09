@@ -48,6 +48,15 @@ export class SuperAdminCommunicationsController {
   }
 
   /**
+   * Get shops missing email addresses
+   */
+  @Get('shops/missing-email')
+  async getShopsMissingEmail() {
+    this.logger.log('Fetching shops missing email addresses');
+    return this.communicationsService.getShopsMissingEmail();
+  }
+
+  /**
    * Send manual email to shop owners
    */
   @Post('email/send')

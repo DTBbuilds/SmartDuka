@@ -201,6 +201,25 @@ export class SuperAdminCommunicationsService {
   }
 
   /**
+   * Get shops missing email addresses
+   */
+  async getShopsMissingEmail(): Promise<Array<{ id: string; name: string; phone: string; status: string; createdAt: Date }>> {
+    const shops = await this.shopModel
+      .find({ $or: [{ email: { $exists: false } }, { email: '' }, { email: null }] })
+      .select('name phone status createdAt')
+      .sort({ createdAt: -1 })
+      .exec();
+
+    return shops.map(shop => ({
+      id: shop._id.toString(),
+      name: shop.name,
+      phone: shop.phone,
+      status: shop.status,
+      createdAt: (shop as any).createdAt,
+    }));
+  }
+
+  /**
    * Create a manual invoice for a shop
    */
   async createManualInvoice(
