@@ -119,10 +119,39 @@ export class MpesaMultiTenantService {
     lastTestedAt?: Date;
     message: string;
   }> {
+    // Handle missing shopId gracefully - return unconfigured status instead of error
+    if (!shopId) {
+      this.logger.warn('getMpesaConfigStatus called without shopId');
+      return {
+        isConfigured: false,
+        isVerified: false,
+        isEnabled: false,
+        message: 'No shop context available. Please log in again.',
+      };
+    }
+
+    // Validate ObjectId format to prevent CastError
+    if (!shopId.match(/^[0-9a-fA-F]{24}$/)) {
+      this.logger.warn(`getMpesaConfigStatus called with invalid shopId format: ${shopId}`);
+      return {
+        isConfigured: false,
+        isVerified: false,
+        isEnabled: false,
+        message: 'Invalid shop identifier. Please log in again.',
+      };
+    }
+
     const shop = await this.shopModel.findById(shopId).exec();
     
     if (!shop) {
-      throw new BadRequestException('Shop not found');
+      // Return unconfigured status instead of throwing error
+      this.logger.warn(`Shop not found for getMpesaConfigStatus: ${shopId}`);
+      return {
+        isConfigured: false,
+        isVerified: false,
+        isEnabled: false,
+        message: 'Shop not found. Please contact support if this persists.',
+      };
     }
 
     const mpesaConfig = shop.mpesaConfig;

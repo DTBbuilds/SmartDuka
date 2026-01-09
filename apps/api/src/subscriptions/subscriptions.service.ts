@@ -404,14 +404,29 @@ export class SubscriptionsService {
 
   /**
    * Get subscription for a shop
+   * If no subscription exists, auto-create a trial subscription
    */
   async getSubscription(shopId: string): Promise<SubscriptionResponseDto> {
-    const subscription = await this.subscriptionModel.findOne({
+    let subscription = await this.subscriptionModel.findOne({
       shopId: new Types.ObjectId(shopId),
     });
 
+    // If no subscription exists, auto-create a trial subscription
     if (!subscription) {
-      throw new NotFoundException('Subscription not found');
+      this.logger.log(`No subscription found for shop ${shopId}, creating trial subscription...`);
+      
+      const trialPlan = await this.getTrialPlan();
+      if (!trialPlan) {
+        // Ensure trial plan exists
+        await this.ensureTrialPlanExists();
+        const newTrialPlan = await this.getTrialPlan();
+        if (!newTrialPlan) {
+          throw new NotFoundException('Trial plan not available');
+        }
+        return this.createTrialSubscription(shopId, newTrialPlan);
+      }
+      
+      return this.createTrialSubscription(shopId, trialPlan);
     }
 
     const plan = await this.planModel.findById(subscription.planId);
@@ -428,6 +443,39 @@ export class SubscriptionsService {
     );
 
     return this.mapSubscriptionToResponse(subscription, plan, realTimeUsage);
+  }
+
+  /**
+   * Create a trial subscription for a shop (internal helper)
+   */
+  private async createTrialSubscription(shopId: string, trialPlan: SubscriptionPlanDocument): Promise<SubscriptionResponseDto> {
+    const now = new Date();
+    
+    // Trial has no end date (free forever with limits)
+    const subscription = new this.subscriptionModel({
+      shopId: new Types.ObjectId(shopId),
+      planId: trialPlan._id,
+      planCode: 'trial',
+      billingCycle: BillingCycle.MONTHLY,
+      status: SubscriptionStatus.ACTIVE,
+      startDate: now,
+      currentPeriodStart: now,
+      currentPeriodEnd: null, // No end for trial
+      nextBillingDate: null, // No billing for trial
+      currentPrice: 0,
+      usage: {
+        shops: 1,
+        employees: 1,
+        products: 0,
+        branches: 1,
+      },
+    });
+
+    await subscription.save();
+    this.logger.log(`Created trial subscription for shop ${shopId}`);
+
+    const realTimeUsage = await this.getUsageCounts(shopId);
+    return this.mapSubscriptionToResponse(subscription, trialPlan, realTimeUsage);
   }
 
   /**

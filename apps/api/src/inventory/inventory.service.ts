@@ -471,8 +471,10 @@ export class InventoryService implements OnModuleInit {
   }
 
   async listCategories(shopId: string): Promise<any[]> {
+    const shopObjId = new Types.ObjectId(shopId);
+    
     const categories = await this.categoryModel
-      .find({ shopId: new Types.ObjectId(shopId) })
+      .find({ shopId: shopObjId })
       .sort({ order: 1, name: 1 })
       .lean()
       .exec();
@@ -481,26 +483,53 @@ export class InventoryService implements OnModuleInit {
     const productCounts = await this.productModel.aggregate([
       { 
         $match: { 
-          shopId: new Types.ObjectId(shopId),
+          shopId: shopObjId,
           deletedAt: { $exists: false },
+          status: 'active',
         } 
       },
       { $group: { _id: '$categoryId', count: { $sum: 1 } } },
     ]);
 
+    // Get total product count for the shop
+    const totalProducts = await this.productModel.countDocuments({
+      shopId: shopObjId,
+      deletedAt: { $exists: false },
+      status: 'active',
+    });
+
     // Create a map for quick lookup
     const countMap = new Map<string, number>();
+    let categorizedCount = 0;
+    let uncategorizedCount = 0;
+    
     productCounts.forEach((pc) => {
       if (pc._id) {
         countMap.set(pc._id.toString(), pc.count);
+        categorizedCount += pc.count;
+      } else {
+        // Products without categoryId (null or undefined)
+        uncategorizedCount = pc.count;
       }
     });
 
-    // Merge counts into categories
-    return categories.map((cat) => ({
+    // Merge counts into categories and add metadata
+    const categoriesWithCounts = categories.map((cat) => ({
       ...cat,
       productCount: countMap.get(cat._id.toString()) || 0,
     }));
+
+    // Add metadata about uncategorized products
+    return {
+      categories: categoriesWithCounts,
+      meta: {
+        totalCategories: categories.length,
+        rootCategories: categories.filter(c => !c.parentId).length,
+        totalProducts,
+        categorizedProducts: categorizedCount,
+        uncategorizedProducts: uncategorizedCount,
+      }
+    } as any;
   }
 
   /**

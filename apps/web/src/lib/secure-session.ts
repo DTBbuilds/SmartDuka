@@ -19,6 +19,7 @@ const SHOP_KEY = 'smartduka:shop';
 const USER_KEY = 'smartduka:user';
 const SESSION_META_KEY = 'smartduka:session_meta';
 const CSRF_TOKEN_KEY = 'smartduka:csrf';
+const REFRESH_TOKEN_KEY = 'smartduka:refresh_fallback'; // Fallback for cross-origin issues
 
 export interface SessionMeta {
   createdAt: number;
@@ -36,12 +37,18 @@ export interface SessionMeta {
  * Access token stored in localStorage for client-side expiry checks
  * httpOnly cookies are set by the server - we don't set them here
  */
-export function storeToken(token: string, sessionId?: string, expiresIn?: number): void {
+export function storeToken(token: string, sessionId?: string, expiresIn?: number, refreshToken?: string): void {
   if (typeof window === 'undefined') return;
   
   // Store access token in localStorage for client-side access
   // The actual secure token is in httpOnly cookie set by server
   localStorage.setItem(TOKEN_KEY, token);
+  
+  // Store refresh token as fallback for cross-origin cookie issues
+  // This is less secure but necessary when cookies don't work
+  if (refreshToken) {
+    localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+  }
   
   // Store session metadata
   const meta: SessionMeta = {
@@ -279,16 +286,23 @@ export async function refreshToken(): Promise<{ accessToken: string; csrfToken: 
     
     console.log(`[SecureSession] Attempting token refresh (attempt ${refreshAttempts}/${MAX_REFRESH_ATTEMPTS})...`);
     
+    // Get fallback refresh token from localStorage (for cross-origin scenarios)
+    const fallbackRefreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
+    
     const response = await fetch(`${config.apiUrl}/auth/refresh`, {
       method: 'POST',
       credentials: 'include', // Important: sends httpOnly cookies
       headers: {
         'Content-Type': 'application/json',
         ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+        // Send refresh token in header as fallback
+        ...(fallbackRefreshToken ? { 'Authorization': `Bearer ${fallbackRefreshToken}` } : {}),
       },
       body: JSON.stringify({
         deviceId: getDeviceId(),
         deviceFingerprint: getDeviceFingerprint(),
+        // Also send in body as another fallback
+        refreshToken: fallbackRefreshToken || undefined,
       }),
     });
     
@@ -372,6 +386,7 @@ export function clearSession(): void {
   localStorage.removeItem(SHOP_KEY);
   localStorage.removeItem(SESSION_META_KEY);
   localStorage.removeItem(CSRF_TOKEN_KEY);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
   localStorage.removeItem('smartduka:lastActivity');
   
   // Clear client-side cookies (httpOnly cookies cleared by server on logout)

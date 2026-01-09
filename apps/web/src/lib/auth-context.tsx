@@ -471,7 +471,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const setAuthFromTokens = (
-    tokens: { accessToken: string; csrfToken?: string; sessionId?: string; expiresIn?: number },
+    tokens: { accessToken: string; refreshToken?: string; csrfToken?: string; sessionId?: string; expiresIn?: number },
     userData: any,
     shopData: any
   ) => {
@@ -489,7 +489,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
     setShop(shopInfo);
 
-    storeToken(authToken, tokens.sessionId, tokens.expiresIn);
+    // Store tokens including refresh token fallback for cross-origin scenarios
+    storeToken(authToken, tokens.sessionId, tokens.expiresIn, tokens.refreshToken);
     storeShop(shopInfo);
     storeUser(userData);
     resetRefreshAttempts(); // Reset refresh counter on successful login

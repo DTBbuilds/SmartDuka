@@ -176,11 +176,11 @@ export class StockTransfer {
 export const StockTransferSchema = SchemaFactory.createForClass(StockTransfer);
 
 // Indexes
+// Note: transferNumber already has unique: true in @Prop decorator, no need for duplicate index
 StockTransferSchema.index({ shopId: 1, status: 1 });
 StockTransferSchema.index({ shopId: 1, fromBranchId: 1 });
 StockTransferSchema.index({ shopId: 1, toBranchId: 1 });
 StockTransferSchema.index({ shopId: 1, createdAt: -1 });
-StockTransferSchema.index({ transferNumber: 1 }, { unique: true });
 
 // Virtual for total items count
 StockTransferSchema.virtual('totalItems').get(function() {

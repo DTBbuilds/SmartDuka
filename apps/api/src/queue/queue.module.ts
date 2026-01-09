@@ -19,6 +19,27 @@ const REDIS_URL = process.env.REDIS_URL;
  * 
  * Requires REDIS_URL environment variable.
  * When Redis is not configured, queues fall back to synchronous processing.
+ * 
+ * IMPORTANT: Redis Eviction Policy
+ * ================================
+ * BullMQ requires Redis to be configured with `maxmemory-policy noeviction`.
+ * If you see the warning "Eviction policy is volatile-lru. It should be noeviction",
+ * you need to configure your Redis instance:
+ * 
+ * For Redis CLI:
+ *   CONFIG SET maxmemory-policy noeviction
+ * 
+ * For redis.conf:
+ *   maxmemory-policy noeviction
+ * 
+ * For Render/Upstash Redis:
+ *   This is typically set in the dashboard under Redis settings.
+ *   Contact your Redis provider if you cannot change this setting.
+ * 
+ * Why noeviction?
+ *   BullMQ stores job data in Redis. If Redis evicts keys due to memory pressure,
+ *   jobs can be lost or corrupted. With noeviction, Redis will return errors when
+ *   memory is full rather than silently deleting data.
  */
 @Global()
 @Module({

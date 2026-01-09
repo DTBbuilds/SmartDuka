@@ -63,10 +63,18 @@ export class ShiftsController {
     return shift;
   }
 
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'cashier')
+  @UseGuards(JwtAuthGuard)
   @Get('current')
   async getCurrentShift(@CurrentUser() user: any) {
+    // Return null if user doesn't have required context
+    // Skip role check here - any authenticated user can check their shift status
+    if (!user.shopId || !user.sub) {
+      return null;
+    }
+    // Only admin and cashier roles can have shifts
+    if (user.role !== 'admin' && user.role !== 'cashier') {
+      return null;
+    }
     const shift = await this.shiftsService.getCurrentShift(user.shopId, user.sub);
     return shift || null;
   }

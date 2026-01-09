@@ -42,6 +42,14 @@ interface Category {
   updatedAt?: string;
 }
 
+interface CategoryMeta {
+  totalCategories: number;
+  rootCategories: number;
+  totalProducts: number;
+  categorizedProducts: number;
+  uncategorizedProducts: number;
+}
+
 interface CategoryFormData {
   name: string;
   description: string;
@@ -60,6 +68,7 @@ interface Product {
 export default function CategoriesPage() {
   const { token, user } = useAuth();
   const [categories, setCategories] = useState<Category[]>([]);
+  const [categoryMeta, setCategoryMeta] = useState<CategoryMeta | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [showModal, setShowModal] = useState(false);
@@ -109,7 +118,18 @@ export default function CategoriesPage() {
 
       const text = await res.text();
       const data = text ? JSON.parse(text) : [];
-      setCategories(Array.isArray(data) ? data : []);
+      
+      // Handle both old format (array) and new format (object with categories and meta)
+      if (Array.isArray(data)) {
+        setCategories(data);
+        setCategoryMeta(null);
+      } else if (data.categories) {
+        setCategories(data.categories);
+        setCategoryMeta(data.meta || null);
+      } else {
+        setCategories([]);
+        setCategoryMeta(null);
+      }
     } catch (err: any) {
       console.error("Error fetching categories:", err);
       setError(err.message || "Failed to load categories");
@@ -368,7 +388,7 @@ export default function CategoriesPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
@@ -377,7 +397,7 @@ export default function CategoriesPage() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Total Categories</p>
-                <p className="text-2xl font-bold">{categories.length}</p>
+                <p className="text-2xl font-bold">{categoryMeta?.totalCategories ?? categories.length}</p>
               </div>
             </div>
           </CardContent>
@@ -391,7 +411,7 @@ export default function CategoriesPage() {
               <div>
                 <p className="text-sm text-muted-foreground">Root Categories</p>
                 <p className="text-2xl font-bold">
-                  {categories.filter(c => !c.parentId).length}
+                  {categoryMeta?.rootCategories ?? categories.filter(c => !c.parentId).length}
                 </p>
               </div>
             </div>
@@ -406,7 +426,22 @@ export default function CategoriesPage() {
               <div>
                 <p className="text-sm text-muted-foreground">Total Products</p>
                 <p className="text-2xl font-bold">
-                  {categories.reduce((sum, c) => sum + (c.productCount || 0), 0)}
+                  {categoryMeta?.totalProducts ?? categories.reduce((sum, c) => sum + (c.productCount || 0), 0)}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-amber-100 dark:bg-amber-900/20 rounded-lg">
+                <Package className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Uncategorized</p>
+                <p className="text-2xl font-bold">
+                  {categoryMeta?.uncategorizedProducts ?? 0}
                 </p>
               </div>
             </div>

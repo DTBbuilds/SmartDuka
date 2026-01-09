@@ -593,13 +593,13 @@ function SubscriptionSettingsTab() {
 
   const loading = subLoading || plansLoading || billingLoading;
 
-  // Plan color themes - high contrast
+  // Plan color themes - minimalistic with consistent slate/primary palette
   const planColors: Record<string, { bg: string; border: string; badge: string; iconBg: string; iconColor: string; headerGradient: string }> = {
-    blue: { bg: 'bg-white', border: 'border-blue-300', badge: 'bg-blue-600', iconBg: 'bg-blue-100', iconColor: 'text-blue-700', headerGradient: 'from-blue-600 to-blue-700' },
-    green: { bg: 'bg-white', border: 'border-emerald-300', badge: 'bg-emerald-600', iconBg: 'bg-emerald-100', iconColor: 'text-emerald-700', headerGradient: 'from-emerald-600 to-emerald-700' },
-    purple: { bg: 'bg-white', border: 'border-violet-300', badge: 'bg-violet-600', iconBg: 'bg-violet-100', iconColor: 'text-violet-700', headerGradient: 'from-violet-600 to-violet-700' },
-    gold: { bg: 'bg-amber-50', border: 'border-amber-400', badge: 'bg-amber-600', iconBg: 'bg-amber-200', iconColor: 'text-amber-800', headerGradient: 'from-amber-500 to-orange-600' },
-    gray: { bg: 'bg-gray-50', border: 'border-gray-300', badge: 'bg-gray-600', iconBg: 'bg-gray-100', iconColor: 'text-gray-700', headerGradient: 'from-gray-500 to-gray-600' },
+    blue: { bg: 'bg-white dark:bg-slate-900', border: 'border-slate-200 dark:border-slate-700', badge: 'bg-primary', iconBg: 'bg-slate-100 dark:bg-slate-800', iconColor: 'text-slate-700 dark:text-slate-300', headerGradient: 'from-slate-700 to-slate-800' },
+    green: { bg: 'bg-white dark:bg-slate-900', border: 'border-slate-200 dark:border-slate-700', badge: 'bg-primary', iconBg: 'bg-slate-100 dark:bg-slate-800', iconColor: 'text-slate-700 dark:text-slate-300', headerGradient: 'from-slate-700 to-slate-800' },
+    purple: { bg: 'bg-white dark:bg-slate-900', border: 'border-primary', badge: 'bg-primary', iconBg: 'bg-primary/10', iconColor: 'text-primary', headerGradient: 'from-primary to-primary/80' },
+    gold: { bg: 'bg-white dark:bg-slate-900', border: 'border-amber-400 dark:border-amber-500', badge: 'bg-amber-500', iconBg: 'bg-amber-50 dark:bg-amber-900/20', iconColor: 'text-amber-600 dark:text-amber-400', headerGradient: 'from-amber-500 to-amber-600' },
+    gray: { bg: 'bg-slate-50 dark:bg-slate-900/50', border: 'border-slate-200 dark:border-slate-700', badge: 'bg-slate-500', iconBg: 'bg-slate-100 dark:bg-slate-800', iconColor: 'text-slate-600 dark:text-slate-400', headerGradient: 'from-slate-500 to-slate-600' },
   };
 
   // Status colors - high contrast
@@ -1129,27 +1129,25 @@ function SubscriptionSettingsTab() {
 
       {/* Upgrade Modal - Full Plan Selection */}
       {showUpgradeModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-background rounded-2xl max-w-5xl w-full shadow-2xl overflow-hidden my-4">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-primary to-primary/80 px-6 py-5 text-white">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-white/20 rounded-lg">
-                    <Crown className="h-6 w-6" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-bold">Choose Your Plan</h3>
-                    <p className="text-white/80 text-sm">Select the plan that best fits your business needs</p>
-                  </div>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-background rounded-xl max-w-4xl w-full shadow-xl overflow-hidden my-4 border">
+            {/* Header - Clean and minimal */}
+            <div className="px-6 py-4 border-b flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <Crown className="h-5 w-5 text-primary" />
                 </div>
-                <button 
-                  onClick={() => { setShowUpgradeModal(false); setSelectedPlan(null); }}
-                  className="p-2 hover:bg-white/20 rounded-lg transition-colors"
-                >
-                  <X className="h-5 w-5" />
-                </button>
+                <div>
+                  <h3 className="text-lg font-semibold">Choose Your Plan</h3>
+                  <p className="text-sm text-muted-foreground">Select the plan that fits your business</p>
+                </div>
               </div>
+              <button 
+                onClick={() => { setShowUpgradeModal(false); setSelectedPlan(null); }}
+                className="p-2 hover:bg-muted rounded-lg transition-colors"
+              >
+                <X className="h-5 w-5 text-muted-foreground" />
+              </button>
             </div>
 
             {/* Billing Cycle Toggle */}
@@ -1253,83 +1251,81 @@ function SubscriptionSettingsTab() {
                   </div>
                 </div>
               ) : (
-                /* Plans Grid View */
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                /* Plans Grid View - Minimalistic Design */
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
                   {plans.map((plan) => {
-                    const colors = planColors[plan.colorTheme || 'blue'];
                     const isCurrentPlan = subscription?.planCode === plan.code;
+                    const isPopular = plan.badge === 'Popular';
+                    const isBestValue = plan.badge === 'Best Value';
                     const price = billingCycle === 'annual' ? plan.annualPrice : plan.monthlyPrice;
 
                     return (
                       <div
                         key={plan.code}
-                        className={`relative rounded-xl border-2 overflow-hidden shadow-md hover:shadow-lg transition-all ${colors?.border || 'border-gray-300'} ${colors?.bg || 'bg-white'} ${
-                          isCurrentPlan ? 'ring-2 ring-primary ring-offset-2' : ''
-                        }`}
+                        className={`relative rounded-xl border bg-card overflow-hidden transition-all hover:shadow-md ${
+                          isPopular ? 'border-primary shadow-sm' : 
+                          isBestValue ? 'border-amber-400 dark:border-amber-500' : 
+                          'border-border'
+                        } ${isCurrentPlan ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''}`}
                       >
-                        {/* Header with gradient */}
-                        <div className={`bg-gradient-to-br ${colors?.headerGradient || 'from-gray-600 to-gray-700'} px-5 py-4`}>
-                          <div className="flex items-center justify-between">
-                            <h3 className="text-lg font-bold text-white">{plan.name}</h3>
-                            {plan.badge && (
-                              <span className="px-2.5 py-1 text-xs font-bold text-white bg-white/20 rounded-full backdrop-blur-sm">
-                                {plan.badge}
-                              </span>
-                            )}
+                        {/* Badge */}
+                        {plan.badge && (
+                          <div className={`text-center py-1.5 text-xs font-semibold ${
+                            isPopular ? 'bg-primary text-primary-foreground' :
+                            isBestValue ? 'bg-amber-500 text-white' :
+                            'bg-muted text-muted-foreground'
+                          }`}>
+                            {plan.badge}
                           </div>
-                          {isCurrentPlan && (
-                            <span className="inline-block mt-2 px-2.5 py-0.5 text-xs font-bold text-white bg-white/30 rounded-full">
-                              Current Plan
-                            </span>
-                          )}
-                        </div>
+                        )}
 
-                        {/* Price */}
-                        <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-b from-gray-50 to-white">
-                          <div className="flex items-baseline gap-1">
+                        <div className="p-5">
+                          {/* Plan Name */}
+                          <h3 className="text-lg font-bold text-foreground mb-1">{plan.name}</h3>
+                          
+                          {/* Price */}
+                          <div className="mb-4">
                             {price === 0 ? (
-                              <span className="text-3xl font-extrabold text-gray-900">FREE</span>
+                              <div className="flex items-baseline">
+                                <span className="text-2xl font-bold text-foreground">FREE</span>
+                              </div>
                             ) : (
-                              <>
-                                <span className="text-sm font-semibold text-gray-600">KES</span>
-                                <span className="text-3xl font-extrabold text-gray-900">{price.toLocaleString()}</span>
-                                <span className="text-gray-600 font-medium">/{billingCycle === 'annual' ? 'yr' : 'mo'}</span>
-                              </>
+                              <div className="flex items-baseline gap-1">
+                                <span className="text-xs text-muted-foreground">KES</span>
+                                <span className="text-2xl font-bold text-foreground">{price.toLocaleString()}</span>
+                                <span className="text-xs text-muted-foreground">/{billingCycle === 'annual' ? 'yr' : 'mo'}</span>
+                              </div>
                             )}
                           </div>
-                        </div>
 
-                        {/* Limits */}
-                        <div className="px-5 py-4 space-y-3">
-                          <div className="flex items-center gap-3">
-                            <div className={`p-2 ${colors?.iconBg || 'bg-gray-100'} rounded-lg`}>
-                              <Store className={`h-4 w-4 ${colors?.iconColor || 'text-gray-700'}`} />
+                          {/* Limits - Compact */}
+                          <div className="space-y-2 mb-5 text-sm">
+                            <div className="flex items-center gap-2 text-muted-foreground">
+                              <Store className="h-4 w-4 flex-shrink-0" />
+                              <span><strong className="text-foreground">{plan.maxShops}</strong> Shop{plan.maxShops > 1 ? 's' : ''}</span>
                             </div>
-                            <span className="font-semibold text-gray-900">{plan.maxShops} Shop{plan.maxShops > 1 ? 's' : ''}</span>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <div className={`p-2 ${colors?.iconBg || 'bg-gray-100'} rounded-lg`}>
-                              <Users className={`h-4 w-4 ${colors?.iconColor || 'text-gray-700'}`} />
+                            <div className="flex items-center gap-2 text-muted-foreground">
+                              <Users className="h-4 w-4 flex-shrink-0" />
+                              <span><strong className="text-foreground">{plan.maxEmployees}</strong> Employees</span>
                             </div>
-                            <span className="font-semibold text-gray-900">{plan.maxEmployees} Employees</span>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <div className={`p-2 ${colors?.iconBg || 'bg-gray-100'} rounded-lg`}>
-                              <Package className={`h-4 w-4 ${colors?.iconColor || 'text-gray-700'}`} />
+                            <div className="flex items-center gap-2 text-muted-foreground">
+                              <Package className="h-4 w-4 flex-shrink-0" />
+                              <span><strong className="text-foreground">{plan.maxProducts.toLocaleString()}</strong> Products</span>
                             </div>
-                            <span className="font-semibold text-gray-900">{plan.maxProducts.toLocaleString()} Products</span>
                           </div>
-                        </div>
 
-                        {/* CTA */}
-                        <div className="px-5 pb-5">
+                          {/* CTA */}
                           <Button
-                            className="w-full font-bold shadow-sm"
-                            variant={isCurrentPlan ? "outline" : "default"}
+                            className={`w-full ${isPopular ? '' : isBestValue ? 'bg-amber-500 hover:bg-amber-600 text-white' : ''}`}
+                            variant={isCurrentPlan ? "outline" : isPopular ? "default" : "secondary"}
                             disabled={isCurrentPlan}
                             onClick={() => setSelectedPlan(plan)}
                           >
-                            {isCurrentPlan ? 'Current Plan' : 'Select Plan'}
+                            {isCurrentPlan ? (
+                              <><Check className="h-4 w-4 mr-1.5" /> Current</>
+                            ) : (
+                              'Select'
+                            )}
                           </Button>
                         </div>
                       </div>
