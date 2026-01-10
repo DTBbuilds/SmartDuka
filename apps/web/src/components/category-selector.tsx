@@ -35,7 +35,9 @@ export function CategorySelector({ token, value, onChange, placeholder = "Select
         if (!res.ok) throw new Error(`Failed (${res.status})`);
         const text = await res.text();
         const data = text ? JSON.parse(text) : [];
-        setCategories(Array.isArray(data) ? data : []);
+        // Handle both array format and object format { categories: [...], meta: {...} }
+        const categoriesArray = Array.isArray(data) ? data : (data.categories || []);
+        setCategories(categoriesArray);
       } catch (err) {
         console.error('Failed to load categories:', err);
       } finally {

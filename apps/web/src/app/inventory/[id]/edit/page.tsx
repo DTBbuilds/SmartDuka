@@ -124,7 +124,9 @@ export default function EditProductPage() {
       const catData = catText ? JSON.parse(catText) : [];
       
       if (res.ok) {
-        setCategories(catData);
+        // Handle both array format and object format { categories: [...], meta: {...} }
+        const categoriesArray = Array.isArray(catData) ? catData : (catData.categories || []);
+        setCategories(categoriesArray);
       }
     } catch (error) {
       console.error("Failed to fetch categories:", error);
@@ -142,7 +144,9 @@ export default function EditProductPage() {
       const supData = supText ? JSON.parse(supText) : [];
       
       if (res.ok) {
-        setSuppliers(supData.filter((s: Supplier) => s.status === 'active'));
+        // Ensure supData is an array before filtering
+        const suppliersArray = Array.isArray(supData) ? supData : [];
+        setSuppliers(suppliersArray.filter((s: Supplier) => s.status === 'active'));
       }
     } catch (error) {
       console.error("Failed to fetch suppliers:", error);

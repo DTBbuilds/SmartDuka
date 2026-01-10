@@ -7,11 +7,17 @@ import { BillingCycle, SubscriptionStatus } from '../schemas/subscription.schema
  */
 export class CreateSubscriptionDto {
   @IsString()
-  planCode: string; // 'starter', 'basic', 'silver', 'gold'
+  planCode: string; // 'starter', 'basic', 'silver', 'gold', 'daily'
 
   @IsEnum(BillingCycle)
   @IsOptional()
   billingCycle?: BillingCycle = BillingCycle.MONTHLY;
+
+  @IsNumber()
+  @IsOptional()
+  @Min(1)
+  @Max(365)
+  numberOfDays?: number; // For daily billing - how many days to pay for (1-365)
 
   @IsString()
   @IsOptional()
@@ -64,6 +70,18 @@ export class CancelSubscriptionDto {
   @IsBoolean()
   @IsOptional()
   immediate?: boolean = false; // Cancel immediately or at end of billing period
+
+  @IsBoolean()
+  @IsOptional()
+  deleteAccount?: boolean = false; // Also request account deletion
+}
+
+/**
+ * DTO for requesting account deletion
+ */
+export class RequestAccountDeletionDto {
+  @IsString()
+  confirmation: string; // Must be "DELETE MY ACCOUNT"
 }
 
 /**
@@ -85,6 +103,8 @@ export class SubscriptionResponseDto {
   isTrialUsed: boolean;
   trialEndDate?: Date;
   autoRenew: boolean;
+  numberOfDays?: number; // For daily billing - how many days were purchased
+  isTrialExpired?: boolean; // True if trial period has ended
   
   // Usage vs limits
   usage: {
@@ -104,6 +124,7 @@ export class SubscriptionPlanResponseDto {
   code: string;
   name: string;
   description?: string;
+  dailyPrice: number; // Daily subscription price (KES 99 for daily plan)
   monthlyPrice: number;
   annualPrice: number;
   setupPrice: number;

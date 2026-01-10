@@ -27,6 +27,9 @@ export class SubscriptionPlan {
   description?: string;
 
   // Pricing in KES
+  @Prop({ required: false, default: 0 })
+  dailyPrice: number; // Daily subscription price (KES 99 for daily plan)
+
   @Prop({ required: true })
   monthlyPrice: number; // Monthly subscription price
 

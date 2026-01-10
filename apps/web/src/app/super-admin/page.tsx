@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/lib/use-toast';
+import { AuthGuard } from '@/components/auth-guard';
 import { ToastContainer } from '@/components/toast-container';
 
 type DashboardStats = {
@@ -20,7 +21,7 @@ type DashboardStats = {
   total: number;
 };
 
-export default function SuperAdminDashboard() {
+function SuperAdminDashboardContent() {
   const router = useRouter();
   const { token } = useAuth();
   const { toasts, toast, dismiss } = useToast();
@@ -448,5 +449,14 @@ export default function SuperAdminDashboard() {
         </div>
       </div>
     </main>
+  );
+}
+
+// SECURITY: Wrap dashboard with AuthGuard to ensure only super_admin users can access
+export default function SuperAdminDashboard() {
+  return (
+    <AuthGuard requiredRole="super_admin" fallbackRoute="/login">
+      <SuperAdminDashboardContent />
+    </AuthGuard>
   );
 }

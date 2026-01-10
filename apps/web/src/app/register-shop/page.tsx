@@ -15,6 +15,7 @@ interface SubscriptionPlan {
   code: string;
   name: string;
   description?: string;
+  dailyPrice?: number; // For daily plan (KES 99/day)
   monthlyPrice: number;
   annualPrice: number;
   setupPrice: number;
@@ -67,6 +68,20 @@ const planColors: Record<string, {
   ring: string;
   icon: string;
 }> = {
+  gray: {
+    gradient: 'from-gray-500 to-gray-600',
+    border: 'border-gray-400',
+    bg: 'bg-gray-50 dark:bg-gray-950/30',
+    ring: 'ring-gray-500',
+    icon: 'text-gray-600',
+  },
+  orange: {
+    gradient: 'from-orange-500 to-orange-600',
+    border: 'border-orange-400',
+    bg: 'bg-orange-50 dark:bg-orange-950/30',
+    ring: 'ring-orange-500',
+    icon: 'text-orange-600',
+  },
   blue: { 
     gradient: 'from-blue-500 to-blue-600', 
     border: 'border-blue-400',
@@ -467,7 +482,22 @@ function RegisterShopContent() {
                     const colors = planColors[plan.colorTheme || 'blue'] || planColors['blue'];
                     // Compare by code since _id might not always be available
                     const isSelected = selectedPlan?.code === plan.code;
-                    const price = billingCycle === 'monthly' ? plan.monthlyPrice : Math.round(plan.annualPrice / 12);
+                    const isDaily = plan.code === 'daily';
+                    const isTrial = plan.code === 'trial';
+                    
+                    // Calculate price based on plan type
+                    let price: number;
+                    let priceLabel: string;
+                    if (isTrial) {
+                      price = 0;
+                      priceLabel = '';
+                    } else if (isDaily) {
+                      price = plan.dailyPrice || 99;
+                      priceLabel = '/day';
+                    } else {
+                      price = billingCycle === 'monthly' ? plan.monthlyPrice : Math.round(plan.annualPrice / 12);
+                      priceLabel = '/mo';
+                    }
                     
                     return (
                       <div
@@ -498,10 +528,16 @@ function RegisterShopContent() {
 
                         {/* Price */}
                         <div className="mt-2">
-                          <span className={`text-xl font-bold ${isSelected ? 'text-white' : 'text-foreground'}`}>
-                            KES {price.toLocaleString()}
-                          </span>
-                          <span className={`text-xs ${isSelected ? 'text-white/80' : 'text-muted-foreground'}`}>/mo</span>
+                          {isTrial ? (
+                            <span className={`text-xl font-bold ${isSelected ? 'text-white' : 'text-emerald-600'}`}>FREE</span>
+                          ) : (
+                            <>
+                              <span className={`text-xl font-bold ${isSelected ? 'text-white' : 'text-foreground'}`}>
+                                KES {price.toLocaleString()}
+                              </span>
+                              <span className={`text-xs ${isSelected ? 'text-white/80' : 'text-muted-foreground'}`}>{priceLabel}</span>
+                            </>
+                          )}
                         </div>
 
                         {/* Limits - Compact */}
@@ -534,7 +570,10 @@ function RegisterShopContent() {
                 {selectedPlan && (
                   <div className="text-right">
                     <span className="text-sm font-bold text-primary">
-                      {selectedPlan.name} - KES {(billingCycle === 'monthly' ? selectedPlan.monthlyPrice : selectedPlan.annualPrice).toLocaleString()}/{billingCycle === 'monthly' ? 'mo' : 'yr'}
+                      {selectedPlan.name} - {selectedPlan.code === 'trial' ? 'FREE' : selectedPlan.code === 'daily' 
+                        ? `KES ${(selectedPlan.dailyPrice || 99).toLocaleString()}/day`
+                        : `KES ${(billingCycle === 'monthly' ? selectedPlan.monthlyPrice : selectedPlan.annualPrice).toLocaleString()}/${billingCycle === 'monthly' ? 'mo' : 'yr'}`
+                      }
                     </span>
                   </div>
                 )}

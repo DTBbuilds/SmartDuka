@@ -15,18 +15,22 @@ export type JwtPayload = {
 };
 
 /**
- * Extract JWT from cookie or Authorization header
+ * Extract JWT from Authorization header or cookie
+ * IMPORTANT: Authorization header takes priority over cookies to support
+ * re-login scenarios where a new token is issued but old httpOnly cookies persist
  */
 function extractJwtFromCookieOrHeader(req: Request): string | null {
-  // First try httpOnly cookie
-  if (req.cookies && req.cookies['smartduka_access']) {
-    return req.cookies['smartduka_access'];
-  }
-  
-  // Fallback to Authorization header
+  // FIRST try Authorization header - this is the primary method
+  // This ensures that when a user logs in with a new account,
+  // the new token takes precedence over stale httpOnly cookies
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
     return authHeader.substring(7);
+  }
+  
+  // Fallback to httpOnly cookie (for requests without explicit header)
+  if (req.cookies && req.cookies['smartduka_access']) {
+    return req.cookies['smartduka_access'];
   }
   
   return null;

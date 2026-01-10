@@ -12,10 +12,14 @@ import { CookieService } from '../services/cookie.service';
  * Validates that a refresh token is present in the request
  * Does NOT validate the token itself - that's done in the service
  * 
- * Token sources (in order of priority):
- * 1. httpOnly cookie (smartduka_refresh) - primary method for web
- * 2. Request body (refreshToken field) - for mobile/API clients
- * 3. Authorization header (Bearer token) - fallback for API clients
+ * IMPORTANT: Token sources (in order of priority):
+ * 1. Request body (refreshToken field) - PRIMARY to support re-login with different account
+ * 2. Authorization header (Bearer token) - for API clients
+ * 3. httpOnly cookie (smartduka_refresh) - fallback only
+ * 
+ * Body/header takes priority because httpOnly cookies cannot be cleared by JavaScript.
+ * When a user logs in with a new account, the frontend sends the new refresh token
+ * in the body/header, but the stale cookie from the previous session persists.
  */
 @Injectable()
 export class RefreshTokenGuard implements CanActivate {
@@ -26,22 +30,31 @@ export class RefreshTokenGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest();
     
-    // Try to get refresh token from cookie first (primary method for web)
-    let refreshToken = this.cookieService.getRefreshToken(request);
-    let tokenSource = 'cookie';
+    let refreshToken: string | null = null;
+    let tokenSource = 'none';
     
-    // Fallback to request body (for mobile/API clients)
-    if (!refreshToken && request.body?.refreshToken) {
+    // FIRST: Try request body (primary method to support re-login scenarios)
+    // This ensures new login tokens take precedence over stale httpOnly cookies
+    if (request.body?.refreshToken) {
       refreshToken = request.body.refreshToken;
       tokenSource = 'body';
     }
     
-    // Fallback to Authorization header (for API clients)
+    // SECOND: Try Authorization header (for API clients)
     if (!refreshToken) {
       const authHeader = request.headers.authorization;
       if (authHeader && authHeader.startsWith('Bearer ')) {
         refreshToken = authHeader.substring(7);
         tokenSource = 'header';
+      }
+    }
+    
+    // LAST: Fallback to httpOnly cookie (only if body/header not provided)
+    if (!refreshToken) {
+      const cookieToken = this.cookieService.getRefreshToken(request);
+      if (cookieToken) {
+        refreshToken = cookieToken;
+        tokenSource = 'cookie';
       }
     }
 

@@ -213,28 +213,27 @@ export class SubscriptionPaymentController {
   }
 
   /**
-   * Confirm manual M-Pesa payment for plan upgrade
+   * Submit manual M-Pesa payment for plan upgrade
    * 
-   * Verifies receipt and upgrades plan only if payment is valid
-   * Does NOT change plan before verification
+   * IMPORTANT: This does NOT activate the upgrade immediately!
+   * Payment is marked as 'pending_verification' and requires super admin approval.
+   * Plan change only occurs after verification.
    */
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
-  @Post('manual/confirm-upgrade')
+  @Post('manual/submit-upgrade-payment')
   @HttpCode(HttpStatus.OK)
-  async confirmManualUpgradePayment(
+  async submitManualUpgradePayment(
     @CurrentUser() user: JwtPayload,
     @Body() dto: { 
       mpesaReceiptNumber: string; 
-      planCode: string;
-      billingCycle: 'monthly' | 'annual';
       amount: number;
     },
   ): Promise<{
     success: boolean;
     message: string;
   }> {
-    this.logger.log(`Confirming manual upgrade payment for shop ${user.shopId} to plan ${dto.planCode}`);
+    this.logger.log(`Submitting manual upgrade payment for shop ${user.shopId}`);
 
     // Track payment attempt
     const attempt = await this.paymentAttemptService.createAttempt({
@@ -243,32 +242,30 @@ export class SubscriptionPaymentController {
       method: PaymentMethod.MPESA_MANUAL,
       type: PaymentAttemptType.UPGRADE,
       amount: dto.amount,
-      planCode: dto.planCode,
-      billingCycle: dto.billingCycle,
       metadata: { 
         source: 'subscription_upgrade_manual',
         mpesaReceiptNumber: dto.mpesaReceiptNumber,
+        status: 'pending_verification',
       },
     });
 
-    const result = await this.mpesaService.confirmManualUpgradePayment(
+    const result = await this.mpesaService.submitManualUpgradePayment(
       user.shopId,
       dto.mpesaReceiptNumber,
-      dto.planCode,
-      dto.billingCycle,
       dto.amount,
     );
 
     // Update attempt with result
     if (result.success) {
-      await this.paymentAttemptService.markSuccess(
+      await this.paymentAttemptService.updateStatus(
         attempt._id.toString(),
-        dto.mpesaReceiptNumber,
+        'pending_verification',
+        { mpesaReceiptNumber: dto.mpesaReceiptNumber },
       );
     } else {
       await this.paymentAttemptService.markFailed(
         attempt._id.toString(),
-        'VERIFICATION_FAILED',
+        'SUBMISSION_FAILED',
         result.message,
       );
     }

@@ -259,7 +259,19 @@ export function SubscriptionBlockedOverlay({ onPaymentSuccess }: SubscriptionBlo
   );
 }
 
-function getStatusConfig(status: string | null) {
+function getStatusConfig(status: string | null, isTrialExpired?: boolean) {
+  // Special handling for expired trial
+  if (status === 'trial' && isTrialExpired) {
+    return {
+      icon: <Clock className="h-12 w-12 text-orange-600" />,
+      bgColor: 'bg-orange-100',
+      headerBg: 'bg-orange-600',
+      headerText: 'text-white',
+      title: 'Trial Period Ended',
+      isTrialExpired: true,
+    };
+  }
+
   switch (status) {
     case 'suspended':
       return {
@@ -292,6 +304,15 @@ function getStatusConfig(status: string | null) {
         headerBg: 'bg-amber-600',
         headerText: 'text-white',
         title: 'Payment Required',
+      };
+    case 'trial':
+      return {
+        icon: <Clock className="h-12 w-12 text-orange-600" />,
+        bgColor: 'bg-orange-100',
+        headerBg: 'bg-orange-600',
+        headerText: 'text-white',
+        title: 'Trial Period Ended',
+        isTrialExpired: true,
       };
     default:
       return {

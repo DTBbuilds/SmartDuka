@@ -7,7 +7,7 @@ import { Loader2, CheckCircle, XCircle } from 'lucide-react';
 import { config } from '@/lib/config';
 import { activityTracker } from '@/lib/activity-tracker';
 import { statusManager } from '@/lib/status-manager';
-import { storeToken, storeCsrfToken } from '@/lib/secure-session';
+import { storeToken, storeCsrfToken, storeUser, clearSession } from '@/lib/secure-session';
 
 function AuthCallbackContent() {
   const router = useRouter();
@@ -90,12 +90,39 @@ function AuthCallbackContent() {
 
   const handleTokenFromUrl = async (token: string, csrfToken: string | null, refreshToken: string | null) => {
     try {
+      // SECURITY: Clear any stale session data before storing new credentials
+      // This prevents stale user data from previous sessions (e.g., super-admin) from persisting
+      clearSession();
+      
+      // CRITICAL: Clear httpOnly cookies on the backend
+      // JavaScript cannot clear httpOnly cookies, so we need to call the backend
+      // This prevents stale refresh tokens from overriding new login tokens
+      try {
+        await fetch(`${config.apiUrl}/auth/clear-cookies`, {
+          method: 'POST',
+          credentials: 'include', // Important: sends cookies so they can be cleared
+        });
+      } catch (err) {
+        console.warn('Failed to clear backend cookies:', err);
+        // Continue anyway - the new tokens will still work
+      }
+      
       const decoded = JSON.parse(atob(token.split('.')[1]));
       
       // Store token securely - include refresh token for cross-origin fallback
       // Note: In OAuth flow, refresh token may come from cookies set by backend
       // or passed via URL for cross-origin scenarios
       storeToken(token, undefined, undefined, refreshToken || undefined);
+      
+      // CRITICAL: Store user data from decoded token to ensure role is available
+      // This is essential for role-based access control
+      storeUser({
+        sub: decoded.sub,
+        email: decoded.email,
+        name: decoded.name,
+        role: decoded.role,
+        shopId: decoded.shopId,
+      });
       
       // Store CSRF token if provided
       if (csrfToken) {

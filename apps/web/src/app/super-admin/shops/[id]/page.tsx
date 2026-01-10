@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, Badge, Butto
 import { ArrowLeft, AlertCircle, CheckCircle, Clock, Flag, Trash2 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { config } from '@/lib/config';
+import { AuthGuard } from '@/components/auth-guard';
 import { useToast } from '@/lib/use-toast';
 import { ToastContainer } from '@/components/toast-container';
 
@@ -35,7 +36,7 @@ type ShopDetails = {
   updatedAt: string;
 };
 
-export default function ShopDetailsPage() {
+function ShopDetailsContent() {
   const params = useParams();
   const router = useRouter();
   const { token } = useAuth();
@@ -418,5 +419,14 @@ export default function ShopDetailsPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+// SECURITY: Protect with AuthGuard
+export default function ShopDetailsPage() {
+  return (
+    <AuthGuard requiredRole="super_admin" fallbackRoute="/login">
+      <ShopDetailsContent />
+    </AuthGuard>
   );
 }

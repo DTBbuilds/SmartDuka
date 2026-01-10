@@ -5,7 +5,7 @@ import { api } from '@/lib/api-client';
 import { useRefreshEvent, refreshEvents } from '@/lib/refresh-events';
 
 // Types
-export type BillingCycle = 'monthly' | 'annual';
+export type BillingCycle = 'daily' | 'monthly' | 'annual';
 
 export type SubscriptionStatus = 
   | 'pending_payment'
@@ -20,6 +20,7 @@ export interface SubscriptionPlan {
   code: string;
   name: string;
   description?: string;
+  dailyPrice: number; // Daily subscription price (KES 99 for daily plan)
   monthlyPrice: number;
   annualPrice: number;
   setupPrice: number;
@@ -58,6 +59,8 @@ export interface Subscription {
   isTrialUsed: boolean;
   trialEndDate?: string;
   autoRenew: boolean;
+  numberOfDays?: number; // For daily billing - how many days were purchased
+  isTrialExpired?: boolean; // True if trial period has ended
   usage: {
     shops: { current: number; limit: number };
     employees: { current: number; limit: number };
@@ -124,6 +127,28 @@ function hasAuthToken(): boolean {
 }
 
 /**
+ * Check if current user is a super-admin (platform manager, no shop context)
+ * SECURITY: Only use the JWT token as the source of truth - localStorage user data can be stale
+ */
+function isSuperAdmin(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    // ONLY check the JWT token - this is the authoritative source
+    // localStorage user data can be stale from previous sessions
+    const token = localStorage.getItem('smartduka:token');
+    if (!token) return false;
+    
+    const decoded = JSON.parse(atob(token.split('.')[1]));
+    
+    // Super-admin users have role='super_admin' AND no shopId
+    // Regular shop admins have role='admin' AND a shopId
+    return decoded?.role === 'super_admin' && !decoded?.shopId;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Hook to manage current subscription
  */
 export function useSubscription() {
@@ -139,18 +164,43 @@ export function useSubscription() {
       return;
     }
 
+    // Skip for super-admin users - they manage the platform, not individual shops
+    if (isSuperAdmin()) {
+      setLoading(false);
+      setSubscription(null);
+      setError(null);
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
-      const data = await api.get<Subscription>('/subscriptions/current');
-      setSubscription(data);
+      const data = await api.get<Subscription | null>('/subscriptions/current');
+      
+      // Set subscription data if it exists (null is valid response for super-admin)
+      if (data !== null && data !== undefined) {
+        // Validate that it's not an empty object
+        if (typeof data === 'object' && Object.keys(data).length > 0) {
+          setSubscription(data);
+        } else {
+          setSubscription(null);
+        }
+      } else {
+        setSubscription(null);
+      }
     } catch (err: any) {
-      // 404 means no subscription yet
+      // 404 means no subscription yet or no shop context (super-admin)
       if (err.statusCode === 404) {
         setSubscription(null);
+        setError(null); // Clear error for expected cases
       } else if (err.statusCode === 401) {
         // Unauthorized - token expired or invalid
         setSubscription(null);
+        setError(null);
+      } else if (err.statusCode === 403) {
+        // Forbidden - user doesn't have shop context (super-admin)
+        setSubscription(null);
+        setError(null);
       } else {
         setError(err.message || 'Failed to fetch subscription');
       }
@@ -172,28 +222,126 @@ export function useSubscription() {
     }
   }, []);
 
-  const changePlan = useCallback(async (newPlanCode: string, billingCycle?: BillingCycle) => {
+  /**
+   * Change subscription plan
+   * 
+   * For UPGRADES: Returns { requiresPayment: true, invoiceId, pendingUpgrade }
+   * The plan is NOT changed until payment is confirmed.
+   * 
+   * For DOWNGRADES: Changes plan immediately and returns updated subscription.
+   */
+  const changePlan = useCallback(async (newPlanCode: string, billingCycle?: BillingCycle): Promise<
+    Subscription & { requiresPayment?: boolean; invoiceId?: string; pendingUpgrade?: any }
+  > => {
     try {
-      const data = await api.put<Subscription>('/subscriptions/change-plan', {
+      const data = await api.put<Subscription & { 
+        requiresPayment?: boolean; 
+        invoiceId?: string; 
+        pendingUpgrade?: any;
+      }>('/subscriptions/change-plan', {
         newPlanCode,
         billingCycle,
         immediate: true,
       });
-      setSubscription(data);
+      
+      // Only update subscription state if plan was actually changed (downgrade)
+      // For upgrades, requiresPayment=true means plan hasn't changed yet
+      if (!data.requiresPayment) {
+        setSubscription(data);
+      }
+      
       return data;
     } catch (err: any) {
       throw new Error(err.message || 'Failed to change plan');
     }
   }, []);
 
-  const cancelSubscription = useCallback(async (reason?: string, immediate = false) => {
+  /**
+   * Get pending upgrade (if any)
+   */
+  const getPendingUpgrade = useCallback(async () => {
     try {
-      await api.delete('/subscriptions/cancel', { reason, immediate });
+      return await api.get<any | null>('/subscriptions/pending-upgrade');
+    } catch {
+      return null;
+    }
+  }, []);
+
+  /**
+   * Cancel pending upgrade
+   */
+  const cancelPendingUpgrade = useCallback(async () => {
+    try {
+      await api.delete('/subscriptions/pending-upgrade');
+    } catch (err: any) {
+      throw new Error(err.message || 'Failed to cancel pending upgrade');
+    }
+  }, []);
+
+  /**
+   * Get cancellation preview - shows what will happen if user cancels
+   */
+  const getCancellationPreview = useCallback(async () => {
+    try {
+      return await api.get<{
+        currentPlan: string;
+        currentPeriodEnd: string;
+        daysRemaining: number;
+        dataArchiveDate: string;
+        dataDeletionDate: string;
+        warnings: string[];
+      }>('/subscriptions/cancel/preview');
+    } catch (err: any) {
+      throw new Error(err.message || 'Failed to get cancellation preview');
+    }
+  }, []);
+
+  /**
+   * Cancel subscription with data retention info
+   */
+  const cancelSubscription = useCallback(async (reason?: string, immediate = false, deleteAccount = false) => {
+    try {
+      const result = await api.delete<{
+        message: string;
+        currentPeriodEnd: string;
+        dataArchiveDate: string;
+        dataDeletionDate: string;
+      }>('/subscriptions/cancel', { reason, immediate, deleteAccount });
       await fetchSubscription();
+      return result;
     } catch (err: any) {
       throw new Error(err.message || 'Failed to cancel subscription');
     }
   }, [fetchSubscription]);
+
+  /**
+   * Request account and data deletion
+   */
+  const requestAccountDeletion = useCallback(async (confirmation: string) => {
+    try {
+      return await api.post<{
+        success: boolean;
+        message: string;
+        scheduledDeletionDate?: string;
+      }>('/subscriptions/delete-account', { confirmation });
+    } catch (err: any) {
+      throw new Error(err.message || 'Failed to request account deletion');
+    }
+  }, []);
+
+  /**
+   * Cancel account deletion request
+   */
+  const cancelAccountDeletion = useCallback(async () => {
+    try {
+      return await api.delete<{
+        success: boolean;
+        message: string;
+      }>('/subscriptions/delete-account');
+    } catch (err: any) {
+      throw new Error(err.message || 'Failed to cancel account deletion');
+    }
+  }, []);
 
   const reactivateSubscription = useCallback(async () => {
     try {
@@ -227,6 +375,11 @@ export function useSubscription() {
     changePlan,
     cancelSubscription,
     reactivateSubscription,
+    getPendingUpgrade,
+    cancelPendingUpgrade,
+    getCancellationPreview,
+    requestAccountDeletion,
+    cancelAccountDeletion,
   };
 }
 
@@ -248,6 +401,15 @@ export function useBillingHistory() {
       return;
     }
 
+    // Skip for super-admin users - they manage the platform, not individual shops
+    if (isSuperAdmin()) {
+      setLoading(false);
+      setInvoices([]);
+      setPendingInvoices([]);
+      setError(null);
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
@@ -258,10 +420,11 @@ export function useBillingHistory() {
       setInvoices(history);
       setPendingInvoices(pending);
     } catch (err: any) {
-      if (err.statusCode === 401) {
-        // Unauthorized - token expired or invalid
+      if (err.statusCode === 401 || err.statusCode === 404 || err.statusCode === 403) {
+        // Unauthorized, not found, or forbidden - expected for super-admin
         setInvoices([]);
         setPendingInvoices([]);
+        setError(null);
       } else {
         setError(err.message || 'Failed to fetch billing history');
       }

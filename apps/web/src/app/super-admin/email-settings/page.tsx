@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Mail, AlertCircle, CheckCircle, Clock, Copy, ExternalLink } from 'lucide-react';
+import { AuthGuard } from '@/components/auth-guard';
 
 interface SmtpConfig {
   smtpConfigured: boolean;
@@ -41,7 +42,7 @@ interface TestResult {
   missingFields?: string[];
 }
 
-export default function EmailSettingsPage() {
+function EmailSettingsContent() {
   const [config, setConfig] = useState<SmtpConfig | null>(null);
   const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [testEmail, setTestEmail] = useState('');
@@ -330,5 +331,14 @@ export default function EmailSettingsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// SECURITY: Protect with AuthGuard
+export default function EmailSettingsPage() {
+  return (
+    <AuthGuard requiredRole="super_admin" fallbackRoute="/login">
+      <EmailSettingsContent />
+    </AuthGuard>
   );
 }

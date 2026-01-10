@@ -11,6 +11,7 @@ import {
   HttpCode,
   HttpStatus,
   Logger,
+  NotFoundException,
 } from '@nestjs/common';
 import { SubscriptionsService } from './subscriptions.service';
 import { SubscriptionMigrationService } from './subscription-migration.service';
@@ -69,12 +70,24 @@ export class SubscriptionsController {
 
   /**
    * Get current subscription for the authenticated shop
+   * Returns null for super-admin users who don't have a shop context
    */
   @UseGuards(JwtAuthGuard)
   @Get('current')
   async getCurrentSubscription(
     @CurrentUser() user: JwtPayload,
-  ): Promise<SubscriptionResponseDto> {
+  ): Promise<SubscriptionResponseDto | null> {
+    // Super-admin users (platform managers) don't have shop context
+    // Return null instead of throwing error to avoid noisy logs
+    if (!user.shopId) {
+      if (user.role === 'super_admin') {
+        return null;
+      }
+      // For other users without shopId, this is unexpected
+      this.logger.warn('getCurrentSubscription called without shopId for user:', user.email);
+      throw new NotFoundException('Shop context required to fetch subscription');
+    }
+    
     return this.subscriptionsService.getSubscription(user.shopId);
   }
 
@@ -95,6 +108,11 @@ export class SubscriptionsController {
 
   /**
    * Change subscription plan (upgrade/downgrade)
+   * 
+   * For UPGRADES: Returns requiresPayment=true with invoice details.
+   * Plan is NOT changed until payment is confirmed.
+   * 
+   * For DOWNGRADES: Changes plan immediately.
    */
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
@@ -102,24 +120,110 @@ export class SubscriptionsController {
   async changePlan(
     @CurrentUser() user: JwtPayload,
     @Body() dto: ChangePlanDto,
-  ): Promise<SubscriptionResponseDto> {
+  ): Promise<SubscriptionResponseDto & { requiresPayment?: boolean; invoiceId?: string; pendingUpgrade?: any }> {
     this.logger.log(`Changing plan for shop ${user.shopId} to ${dto.newPlanCode}`);
     return this.subscriptionsService.changePlan(user.shopId, dto);
   }
 
   /**
+   * Get pending upgrade (if any)
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Get('pending-upgrade')
+  async getPendingUpgrade(
+    @CurrentUser() user: JwtPayload,
+  ): Promise<any | null> {
+    return this.subscriptionsService.getPendingUpgrade(user.shopId);
+  }
+
+  /**
+   * Cancel pending upgrade
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Delete('pending-upgrade')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async cancelPendingUpgrade(
+    @CurrentUser() user: JwtPayload,
+  ): Promise<void> {
+    this.logger.log(`Cancelling pending upgrade for shop ${user.shopId}`);
+    return this.subscriptionsService.cancelPendingUpgrade(user.shopId);
+  }
+
+  /**
+   * Get cancellation preview - shows what will happen if user cancels
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Get('cancel/preview')
+  async getCancellationPreview(
+    @CurrentUser() user: JwtPayload,
+  ): Promise<{
+    currentPlan: string;
+    currentPeriodEnd: Date;
+    daysRemaining: number;
+    dataArchiveDate: Date;
+    dataDeletionDate: Date;
+    warnings: string[];
+  }> {
+    return this.subscriptionsService.getCancellationPreview(user.shopId);
+  }
+
+  /**
    * Cancel subscription
+   * Returns data retention schedule instead of void
    */
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
   @Delete('cancel')
-  @HttpCode(HttpStatus.NO_CONTENT)
+  @HttpCode(HttpStatus.OK)
   async cancelSubscription(
     @CurrentUser() user: JwtPayload,
     @Body() dto: CancelSubscriptionDto,
-  ): Promise<void> {
+  ): Promise<{
+    message: string;
+    currentPeriodEnd: Date;
+    dataArchiveDate: Date;
+    dataDeletionDate: Date;
+  }> {
     this.logger.log(`Cancelling subscription for shop ${user.shopId}`);
     return this.subscriptionsService.cancelSubscription(user.shopId, dto);
+  }
+
+  /**
+   * Request account and data deletion
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Post('delete-account')
+  async requestAccountDeletion(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: { confirmation: string },
+  ): Promise<{
+    success: boolean;
+    message: string;
+    scheduledDeletionDate?: Date;
+  }> {
+    this.logger.warn(`Account deletion requested for shop ${user.shopId}`);
+    return this.subscriptionsService.requestAccountDeletion(user.shopId, user.sub, dto.confirmation);
+  }
+
+  /**
+   * Cancel account deletion request
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Delete('delete-account')
+  @HttpCode(HttpStatus.OK)
+  async cancelAccountDeletion(
+    @CurrentUser() user: JwtPayload,
+  ): Promise<{
+    success: boolean;
+    message: string;
+  }> {
+    this.logger.log(`Account deletion cancelled for shop ${user.shopId}`);
+    return this.subscriptionsService.cancelAccountDeletion(user.shopId);
   }
 
   /**

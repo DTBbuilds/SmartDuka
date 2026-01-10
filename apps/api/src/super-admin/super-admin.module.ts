@@ -22,6 +22,7 @@ import { SystemManagementService } from './services/system-management.service';
 import { SystemConfigService } from './services/system-config.service';
 import { SuperAdminCommunicationsService } from './services/super-admin-communications.service';
 import { SuperAdminCommunicationsController } from './super-admin-communications.controller';
+import { SuperAdminPaymentsController } from './super-admin-payments.controller';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
@@ -55,7 +56,7 @@ import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
     SystemConfigService,
     SuperAdminCommunicationsService,
   ],
-  controllers: [SuperAdminController, SystemManagementController, SuperAdminCommunicationsController],
+  controllers: [SuperAdminController, SystemManagementController, SuperAdminCommunicationsController, SuperAdminPaymentsController],
   exports: [
     SuperAdminService,
     ShopAuditLogService,

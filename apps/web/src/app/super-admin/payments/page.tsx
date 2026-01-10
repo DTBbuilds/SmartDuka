@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api-client';
+import { AuthGuard } from '@/components/auth-guard';
 import {
   Card,
   CardContent,
@@ -158,7 +159,7 @@ const methodLabels: Record<string, string> = {
   other: 'Other',
 };
 
-export default function SuperAdminPaymentsPage() {
+function SuperAdminPaymentsContent() {
   const { token } = useAuth();
   const [loading, setLoading] = useState(true);
   const [attempts, setAttempts] = useState<PaymentAttempt[]>([]);
@@ -1177,5 +1178,14 @@ export default function SuperAdminPaymentsPage() {
         </>
       )}
     </div>
+  );
+}
+
+// SECURITY: Protect with AuthGuard
+export default function SuperAdminPaymentsPage() {
+  return (
+    <AuthGuard requiredRole="super_admin" fallbackRoute="/login">
+      <SuperAdminPaymentsContent />
+    </AuthGuard>
   );
 }

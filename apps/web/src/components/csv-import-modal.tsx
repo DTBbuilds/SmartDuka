@@ -72,7 +72,9 @@ export function CSVImportModal({ isOpen, onClose, onImport, token, categories: p
         if (!res.ok) throw new Error('Failed to load categories');
         const text = await res.text();
         const data = text ? JSON.parse(text) : [];
-        setCategories(Array.isArray(data) ? data : []);
+        // Handle both array format and object format { categories: [...], meta: {...} }
+        const categoriesArray = Array.isArray(data) ? data : (data.categories || []);
+        setCategories(categoriesArray);
       } catch (err) {
         console.error('Failed to load categories:', err);
       } finally {

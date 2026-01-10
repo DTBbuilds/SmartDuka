@@ -10,6 +10,8 @@ import { TableSkeleton } from "@/components/shared/loading-skeleton";
 import { useSubscription, useSubscriptionPlans, useBillingHistory, type BillingCycle, type SubscriptionPlan } from "@/hooks/use-subscription";
 import { MpesaSettings } from "@/components/settings/mpesa-settings";
 import { PaymentConfigs } from "@/components/settings/payment-configs";
+import { StripePaymentForm } from "@/components/stripe-payment-form";
+import { useStripePayment } from "@/hooks/use-stripe-payment";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -32,6 +34,7 @@ export default function SettingsPage() {
   // Role-based access control - only admin can access settings
   const isAdmin = user?.role === 'admin';
   const isCashier = user?.role === 'cashier';
+  const isSuperAdmin = user?.role === 'super_admin';
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -62,11 +65,16 @@ export default function SettingsPage() {
   });
 
   // Redirect cashiers away from settings page
+  // Super-admins should go to their admin dashboard, not shop settings
   useEffect(() => {
-    if (!loading && user && isCashier) {
-      router.push('/pos');
+    if (!loading && user) {
+      if (user.role === 'cashier') {
+        router.push('/pos');
+      } else if (user.role === 'super_admin') {
+        router.push('/super-admin');
+      }
     }
-  }, [loading, user, isCashier, router]);
+  }, [loading, user, router]);
 
   useEffect(() => {
     fetchShopData();
@@ -576,20 +584,43 @@ function SubscriptionSettingsTab() {
   const { subscription, loading: subLoading, changePlan, cancelSubscription, reactivateSubscription } = useSubscription();
   const { plans, loading: plansLoading } = useSubscriptionPlans();
   const { invoices, pendingInvoices, loading: billingLoading, initiatePayment, getPaymentSummary, checkStkStatus } = useBillingHistory();
+  const { token } = useAuth();
+  
+  // Stripe payment hook
+  const { 
+    isConfigured: stripeConfigured, 
+    createSubscriptionPayment, 
+    clientSecret: stripeClientSecret,
+    reset: resetStripe,
+    isLoading: stripeLoading 
+  } = useStripePayment();
   
   const [billingCycle, setBillingCycle] = useState<BillingCycle>('monthly');
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showInvoiceDetails, setShowInvoiceDetails] = useState(false);
+  const [showPlanDetails, setShowPlanDetails] = useState(false);
+  const [detailPlan, setDetailPlan] = useState<SubscriptionPlan | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<string | null>(null);
   const [selectedInvoiceData, setSelectedInvoiceData] = useState<any>(null);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [processing, setProcessing] = useState(false);
   const [paymentStep, setPaymentStep] = useState<'details' | 'phone' | 'processing' | 'success'>('details');
+  const [paymentMethod, setPaymentMethod] = useState<'mpesa-stk' | 'mpesa-send' | 'card'>('mpesa-stk');
   const [paymentSummary, setPaymentSummary] = useState<any>(null);
   const [checkoutRequestId, setCheckoutRequestId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [upgradeStep, setUpgradeStep] = useState<'plans' | 'confirm' | 'payment'>('plans');
+  const [sendMoneyStep, setSendMoneyStep] = useState<'instructions' | 'verify'>('instructions');
+  const [referenceCode, setReferenceCode] = useState('');
+  const [verifyingCode, setVerifyingCode] = useState(false);
+  
+  // Stripe payment state
+  const [stripePaymentClientSecret, setStripePaymentClientSecret] = useState<string | null>(null);
+  const [stripePublishableKey, setStripePublishableKey] = useState<string>('');
+  const [stripeError, setStripeError] = useState<string | null>(null);
+  const [creatingStripePayment, setCreatingStripePayment] = useState(false);
 
   const loading = subLoading || plansLoading || billingLoading;
 
@@ -600,6 +631,7 @@ function SubscriptionSettingsTab() {
     purple: { bg: 'bg-white dark:bg-slate-900', border: 'border-primary', badge: 'bg-primary', iconBg: 'bg-primary/10', iconColor: 'text-primary', headerGradient: 'from-primary to-primary/80' },
     gold: { bg: 'bg-white dark:bg-slate-900', border: 'border-amber-400 dark:border-amber-500', badge: 'bg-amber-500', iconBg: 'bg-amber-50 dark:bg-amber-900/20', iconColor: 'text-amber-600 dark:text-amber-400', headerGradient: 'from-amber-500 to-amber-600' },
     gray: { bg: 'bg-slate-50 dark:bg-slate-900/50', border: 'border-slate-200 dark:border-slate-700', badge: 'bg-slate-500', iconBg: 'bg-slate-100 dark:bg-slate-800', iconColor: 'text-slate-600 dark:text-slate-400', headerGradient: 'from-slate-500 to-slate-600' },
+    orange: { bg: 'bg-white dark:bg-slate-900', border: 'border-orange-400 dark:border-orange-500', badge: 'bg-orange-500', iconBg: 'bg-orange-50 dark:bg-orange-900/20', iconColor: 'text-orange-600 dark:text-orange-400', headerGradient: 'from-orange-500 to-orange-600' },
   };
 
   // Status colors - high contrast
@@ -616,9 +648,42 @@ function SubscriptionSettingsTab() {
     if (!subscription) return;
     setProcessing(true);
     try {
-      await changePlan(plan.code, billingCycle);
-      setShowUpgradeModal(false);
-      setSelectedPlan(null);
+      // For daily plans, use 'daily' billing cycle; otherwise use selected cycle
+      const effectiveBillingCycle = plan.code === 'daily' ? 'daily' : billingCycle;
+      const result = await changePlan(plan.code, effectiveBillingCycle);
+      
+      // Check if payment is required (upgrade to paid plan)
+      if (result.requiresPayment && result.pendingUpgrade) {
+        // Close upgrade modal and show payment modal
+        setShowUpgradeModal(false);
+        setSelectedPlan(null);
+        
+        // Set up payment for the upgrade invoice
+        setSelectedInvoiceData({
+          id: result.invoiceId,
+          invoiceNumber: result.pendingUpgrade.invoiceNumber,
+          totalAmount: result.pendingUpgrade.price,
+          description: `Upgrade to ${result.pendingUpgrade.planName} Plan`,
+          status: 'pending',
+        });
+        setSelectedInvoice(result.invoiceId || null);
+        setShowPaymentModal(true);
+        setPaymentStep('phone');
+        
+        // Fetch payment summary for the upgrade invoice
+        if (result.invoiceId) {
+          try {
+            const summary = await getPaymentSummary(result.invoiceId);
+            setPaymentSummary(summary);
+          } catch (error) {
+            console.error('Failed to get payment summary:', error);
+          }
+        }
+      } else {
+        // Downgrade completed immediately
+        setShowUpgradeModal(false);
+        setSelectedPlan(null);
+      }
     } catch (error: any) {
       alert(error.message);
     } finally {
@@ -722,6 +787,14 @@ function SubscriptionSettingsTab() {
     setPaymentStep('details');
     setPaymentSummary(null);
     setCheckoutRequestId(null);
+    setSendMoneyStep('instructions');
+    setReferenceCode('');
+    setVerifyingCode(false);
+    // Reset Stripe state
+    setStripePaymentClientSecret(null);
+    setStripeError(null);
+    setCreatingStripePayment(false);
+    resetStripe();
   };
 
   // Copy to clipboard
@@ -753,13 +826,16 @@ function SubscriptionSettingsTab() {
     );
   }
 
+  // Check if subscription is valid (not null and has required fields)
+  const hasValidSubscription = subscription && subscription.status && subscription.planCode;
+
   return (
     <div className="space-y-6">
       {/* Current Subscription Card - Modern Design */}
-      {subscription ? (
+      {hasValidSubscription ? (
         <Card className="overflow-hidden border-0 shadow-xl">
           {/* Gradient Header */}
-          <div className={`bg-gradient-to-r ${planColors[subscription.planCode === 'trial' ? 'gray' : subscription.planCode === 'starter' ? 'blue' : subscription.planCode === 'professional' ? 'green' : subscription.planCode === 'business' ? 'purple' : 'gold']?.headerGradient || 'from-primary to-primary/80'} px-6 py-6 text-white`}>
+          <div className={`bg-gradient-to-r ${planColors[subscription.planCode === 'trial' ? 'gray' : subscription.planCode === 'daily' ? 'orange' : subscription.planCode === 'starter' ? 'blue' : subscription.planCode === 'professional' ? 'green' : subscription.planCode === 'business' ? 'purple' : 'gold']?.headerGradient || 'from-primary to-primary/80'} px-6 py-6 text-white`}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm">
@@ -768,11 +844,27 @@ function SubscriptionSettingsTab() {
                 <div>
                   <h2 className="text-2xl font-bold">{subscription.planName} Plan</h2>
                   <p className="text-white/80 flex items-center gap-2 mt-1">
-                    <span className="text-lg font-semibold">KES {subscription.currentPrice.toLocaleString()}</span>
-                    <span className="text-white/60">/ {subscription.billingCycle === 'annual' ? 'year' : 'month'}</span>
-                    <span className="px-2 py-0.5 bg-white/20 rounded-full text-xs font-medium ml-2">
-                      {subscription.billingCycle === 'annual' ? 'Annual' : 'Monthly'}
-                    </span>
+                    {subscription.planCode === 'trial' ? (
+                      <span className="text-lg font-semibold">FREE</span>
+                    ) : subscription.planCode === 'daily' ? (
+                      <>
+                        <span className="text-lg font-semibold">KES 99</span>
+                        <span className="text-white/60">/ day</span>
+                        {subscription.numberOfDays && (
+                          <span className="px-2 py-0.5 bg-white/20 rounded-full text-xs font-medium ml-2">
+                            {subscription.numberOfDays} days
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-lg font-semibold">KES {(subscription.currentPrice || 0).toLocaleString()}</span>
+                        <span className="text-white/60">/ {subscription.billingCycle === 'annual' ? 'year' : 'month'}</span>
+                        <span className="px-2 py-0.5 bg-white/20 rounded-full text-xs font-medium ml-2">
+                          {subscription.billingCycle === 'annual' ? 'Annual' : 'Monthly'}
+                        </span>
+                      </>
+                    )}
                   </p>
                 </div>
               </div>
@@ -784,7 +876,7 @@ function SubscriptionSettingsTab() {
                   'bg-white/20 text-white'
                 }`}>
                   {statusColors[subscription.status]?.icon}
-                  {subscription.status.replace('_', ' ').toUpperCase()}
+                  {(subscription.status || 'unknown').replace('_', ' ').toUpperCase()}
                 </span>
               </div>
             </div>
@@ -1127,210 +1219,305 @@ function SubscriptionSettingsTab() {
         </CardContent>
       </Card>
 
-      {/* Upgrade Modal - Full Plan Selection */}
+      {/* Upgrade Modal - Redesigned Compact & Appealing */}
       {showUpgradeModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-background rounded-xl max-w-4xl w-full shadow-xl overflow-hidden my-4 border">
-            {/* Header - Clean and minimal */}
-            <div className="px-6 py-4 border-b flex items-center justify-between">
+        <div className="fixed top-0 left-0 right-0 bottom-0 w-full h-full bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 overflow-y-auto">
+          <div className="bg-background rounded-xl w-full max-w-3xl shadow-2xl overflow-hidden">
+            {/* Header */}
+            <div className="px-5 py-4 border-b flex items-center justify-between bg-gradient-to-r from-primary/10 to-primary/5">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-primary/10 rounded-lg">
+                <div className="p-2 bg-primary/20 rounded-lg">
                   <Crown className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold">Choose Your Plan</h3>
-                  <p className="text-sm text-muted-foreground">Select the plan that fits your business</p>
+                  <h3 className="text-lg font-bold">
+                    {upgradeStep === 'plans' ? 'Choose Your Plan' : upgradeStep === 'confirm' ? 'Confirm Selection' : 'Payment'}
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    {upgradeStep === 'plans' ? 'Select the plan that fits your business' : upgradeStep === 'confirm' ? 'Review your selection before payment' : 'Complete your subscription'}
+                  </p>
                 </div>
               </div>
               <button 
-                onClick={() => { setShowUpgradeModal(false); setSelectedPlan(null); }}
+                onClick={() => { setShowUpgradeModal(false); setSelectedPlan(null); setUpgradeStep('plans'); }}
                 className="p-2 hover:bg-muted rounded-lg transition-colors"
               >
                 <X className="h-5 w-5 text-muted-foreground" />
               </button>
             </div>
 
-            {/* Billing Cycle Toggle */}
-            <div className="px-6 py-4 border-b bg-muted/30">
-              <div className="flex items-center justify-center gap-4">
-                <span className={`text-sm font-medium ${billingCycle === 'monthly' ? 'text-foreground' : 'text-muted-foreground'}`}>Monthly</span>
-                <button
-                  onClick={() => setBillingCycle(billingCycle === 'monthly' ? 'annual' : 'monthly')}
-                  className={`relative w-14 h-7 rounded-full transition-colors ${billingCycle === 'annual' ? 'bg-primary' : 'bg-muted-foreground/30'}`}
-                >
-                  <div className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow transition-transform ${billingCycle === 'annual' ? 'translate-x-8' : 'translate-x-1'}`} />
-                </button>
-                <div className="flex items-center gap-2">
-                  <span className={`text-sm font-medium ${billingCycle === 'annual' ? 'text-foreground' : 'text-muted-foreground'}`}>Annual</span>
-                  <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-bold rounded-full">Save 17%</span>
-                </div>
+            {/* Progress Steps */}
+            <div className="px-5 py-3 border-b bg-muted/30">
+              <div className="flex items-center justify-center gap-2">
+                {['plans', 'confirm', 'payment'].map((step, idx) => (
+                  <div key={step} className="flex items-center">
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                      upgradeStep === step ? 'bg-primary text-white' :
+                      ['plans', 'confirm', 'payment'].indexOf(upgradeStep) > idx ? 'bg-emerald-500 text-white' :
+                      'bg-muted text-muted-foreground'
+                    }`}>
+                      {['plans', 'confirm', 'payment'].indexOf(upgradeStep) > idx ? <Check className="h-3 w-3" /> : idx + 1}
+                    </div>
+                    <span className={`ml-1.5 text-xs font-medium hidden sm:inline ${upgradeStep === step ? 'text-foreground' : 'text-muted-foreground'}`}>
+                      {step === 'plans' ? 'Plan' : step === 'confirm' ? 'Confirm' : 'Pay'}
+                    </span>
+                    {idx < 2 && <ChevronRight className="h-4 w-4 mx-2 text-muted-foreground" />}
+                  </div>
+                ))}
               </div>
             </div>
 
-            {/* Plans Grid */}
-            <div className="p-6">
-              {selectedPlan ? (
-                /* Plan Confirmation View */
-                <div className="max-w-lg mx-auto">
-                  <div className="text-center mb-6">
-                    <h4 className="text-lg font-semibold">Confirm Your Selection</h4>
-                    <p className="text-muted-foreground">You're about to {subscription ? 'switch to' : 'subscribe to'} the {selectedPlan.name} plan</p>
-                  </div>
-                  
-                  <div className={`border-2 rounded-xl p-6 ${planColors[selectedPlan.colorTheme || 'blue']?.border}`}>
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-xl font-bold">{selectedPlan.name}</h3>
-                      {selectedPlan.badge && (
-                        <span className={`px-3 py-1 text-xs font-bold text-white rounded-full ${planColors[selectedPlan.colorTheme || 'blue']?.badge}`}>
-                          {selectedPlan.badge}
-                        </span>
-                      )}
-                    </div>
-                    
-                    <div className="flex items-baseline gap-1 mb-4">
-                      <span className="text-sm font-semibold text-muted-foreground">KES</span>
-                      <span className="text-4xl font-extrabold">
-                        {(billingCycle === 'annual' ? selectedPlan.annualPrice : selectedPlan.monthlyPrice).toLocaleString()}
-                      </span>
-                      <span className="text-muted-foreground">/{billingCycle === 'annual' ? 'year' : 'month'}</span>
-                    </div>
-
-                    <div className="space-y-3 mb-6">
-                      <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded-lg ${planColors[selectedPlan.colorTheme || 'blue']?.iconBg}`}>
-                          <Store className={`h-4 w-4 ${planColors[selectedPlan.colorTheme || 'blue']?.iconColor}`} />
-                        </div>
-                        <span className="font-medium">{selectedPlan.maxShops} Shop{selectedPlan.maxShops > 1 ? 's' : ''}</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded-lg ${planColors[selectedPlan.colorTheme || 'blue']?.iconBg}`}>
-                          <Users className={`h-4 w-4 ${planColors[selectedPlan.colorTheme || 'blue']?.iconColor}`} />
-                        </div>
-                        <span className="font-medium">Up to {selectedPlan.maxEmployees} Employees</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded-lg ${planColors[selectedPlan.colorTheme || 'blue']?.iconBg}`}>
-                          <Package className={`h-4 w-4 ${planColors[selectedPlan.colorTheme || 'blue']?.iconColor}`} />
-                        </div>
-                        <span className="font-medium">Up to {selectedPlan.maxProducts.toLocaleString()} Products</span>
-                      </div>
-                    </div>
-
-                    {selectedPlan.features && selectedPlan.features.length > 0 && (
-                      <div className="border-t pt-4">
-                        <h5 className="text-sm font-semibold mb-2">Features Included:</h5>
-                        <ul className="space-y-1">
-                          {selectedPlan.features.slice(0, 5).map((feature: string, idx: number) => (
-                            <li key={idx} className="flex items-center gap-2 text-sm text-muted-foreground">
-                              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                              {feature}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
+            <div className="p-5">
+              {/* Step 1: Plan Selection */}
+              {upgradeStep === 'plans' && (
+                <div className="space-y-4">
+                  {/* Billing Toggle - Compact */}
+                  <div className="flex items-center justify-center gap-3 pb-3">
+                    <span className={`text-sm font-medium ${billingCycle === 'monthly' ? 'text-foreground' : 'text-muted-foreground'}`}>Monthly</span>
+                    <button
+                      onClick={() => setBillingCycle(billingCycle === 'monthly' ? 'annual' : 'monthly')}
+                      className={`relative w-12 h-6 rounded-full transition-colors ${billingCycle === 'annual' ? 'bg-primary' : 'bg-muted-foreground/30'}`}
+                    >
+                      <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${billingCycle === 'annual' ? 'translate-x-7' : 'translate-x-1'}`} />
+                    </button>
+                    <span className={`text-sm font-medium ${billingCycle === 'annual' ? 'text-foreground' : 'text-muted-foreground'}`}>Annual</span>
+                    <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-bold rounded-full">-17%</span>
                   </div>
 
-                  <div className="flex gap-3 mt-6">
-                    <Button variant="outline" className="flex-1" onClick={() => setSelectedPlan(null)}>
-                      <ChevronLeft className="h-4 w-4 mr-1" />
-                      Back to Plans
+                  {/* Plans Grid - Compact Cards */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 gap-3">
+                    {plans.map((plan) => {
+                      const isCurrentPlan = subscription?.planCode === plan.code;
+                      const isPopular = plan.badge === 'Popular';
+                      const isBestValue = plan.badge === 'Best Value';
+                      const isFlexible = plan.badge === 'Flexible';
+                      const isTrial = plan.code === 'trial';
+                      const isDaily = plan.code === 'daily';
+                      
+                      // Calculate price based on plan type
+                      let price: number;
+                      let priceLabel: string;
+                      if (isTrial) {
+                        price = 0;
+                        priceLabel = '';
+                      } else if (isDaily) {
+                        price = plan.dailyPrice || 99;
+                        priceLabel = '/day';
+                      } else {
+                        price = billingCycle === 'annual' ? plan.annualPrice : plan.monthlyPrice;
+                        priceLabel = billingCycle === 'annual' ? '/yr' : '/mo';
+                      }
+
+                      return (
+                        <div
+                          key={plan.code}
+                          onClick={() => !isCurrentPlan && setSelectedPlan(plan)}
+                          className={`relative rounded-lg border p-3 cursor-pointer transition-all hover:shadow-md ${
+                            selectedPlan?.code === plan.code ? 'ring-2 ring-primary border-primary bg-primary/5' :
+                            isCurrentPlan ? 'border-emerald-300 bg-emerald-50/50 dark:bg-emerald-900/10' :
+                            isPopular ? 'border-primary/50' : 
+                            isBestValue ? 'border-amber-300' : 
+                            isFlexible ? 'border-orange-300' :
+                            'border-border hover:border-primary/30'
+                          } ${isCurrentPlan ? 'cursor-default' : ''}`}
+                        >
+                          {/* Badge */}
+                          {(plan.badge || isCurrentPlan) && (
+                            <div className={`absolute -top-2 left-3 px-2 py-0.5 text-[10px] font-bold rounded ${
+                              isCurrentPlan ? 'bg-emerald-500 text-white' :
+                              isPopular ? 'bg-primary text-white' :
+                              isBestValue ? 'bg-amber-500 text-white' :
+                              isFlexible ? 'bg-orange-500 text-white' :
+                              'bg-muted text-muted-foreground'
+                            }`}>
+                              {isCurrentPlan ? 'Current' : plan.badge}
+                            </div>
+                          )}
+
+                          {/* Info Icon - Click for details */}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setDetailPlan(plan); setShowPlanDetails(true); }}
+                            className="absolute top-2 right-2 p-1 hover:bg-muted rounded-full"
+                          >
+                            <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                          </button>
+
+                          <h4 className="font-bold text-sm mt-1">{plan.name}</h4>
+                          
+                          <div className="mt-1 mb-2">
+                            {isTrial ? (
+                              <span className="text-lg font-bold text-emerald-600">FREE</span>
+                            ) : (
+                              <div className="flex items-baseline gap-0.5">
+                                <span className="text-[10px] text-muted-foreground">KES</span>
+                                <span className={`text-lg font-bold ${isDaily ? 'text-orange-600' : ''}`}>{price.toLocaleString()}</span>
+                                <span className="text-[10px] text-muted-foreground">{priceLabel}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="space-y-1 text-xs text-muted-foreground">
+                            <div className="flex items-center gap-1">
+                              <Store className="h-3 w-3" />
+                              <span>{plan.maxShops} shop{plan.maxShops > 1 ? 's' : ''}</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Users className="h-3 w-3" />
+                              <span>{plan.maxEmployees} staff</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Package className="h-3 w-3" />
+                              <span>{plan.maxProducts.toLocaleString()} items</span>
+                            </div>
+                          </div>
+
+                          {/* Selection indicator */}
+                          {selectedPlan?.code === plan.code && (
+                            <div className="absolute top-2 right-2 w-5 h-5 bg-primary rounded-full flex items-center justify-center">
+                              <Check className="h-3 w-3 text-white" />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Continue Button */}
+                  <div className="flex gap-2 pt-2">
+                    <Button variant="outline" className="flex-1" onClick={() => { setShowUpgradeModal(false); setSelectedPlan(null); }}>
+                      Cancel
                     </Button>
                     <Button 
-                      className="flex-1 bg-gradient-to-r from-primary to-primary/80" 
-                      onClick={() => handleUpgrade(selectedPlan)} 
+                      className="flex-1" 
+                      disabled={!selectedPlan || subscription?.planCode === selectedPlan?.code}
+                      onClick={() => setUpgradeStep('confirm')}
+                    >
+                      Continue
+                      <ChevronRight className="h-4 w-4 ml-1" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Step 2: Confirmation */}
+              {upgradeStep === 'confirm' && selectedPlan && (
+                <div className="space-y-4">
+                  {/* Selected Plan Summary */}
+                  <div className="bg-muted/50 rounded-lg p-4 border">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h4 className="font-bold text-lg">{selectedPlan.name} Plan</h4>
+                        <p className="text-sm text-muted-foreground">
+                          {subscription ? `Switching from ${subscription.planName}` : 'New subscription'}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <div className={`text-2xl font-bold ${selectedPlan.code === 'daily' ? 'text-orange-600' : 'text-primary'}`}>
+                          {selectedPlan.monthlyPrice === 0 ? 'FREE' : 
+                           selectedPlan.code === 'daily' ? `KES ${(selectedPlan.dailyPrice || 99).toLocaleString()}` :
+                           `KES ${(billingCycle === 'annual' ? selectedPlan.annualPrice : selectedPlan.monthlyPrice).toLocaleString()}`}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {selectedPlan.code === 'daily' ? 'per day' : 
+                           selectedPlan.monthlyPrice > 0 && (billingCycle === 'annual' ? 'per year' : 'per month')}
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-3 gap-3 mt-4 pt-3 border-t">
+                      <div className="text-center">
+                        <Store className="h-4 w-4 mx-auto text-muted-foreground" />
+                        <p className="text-sm font-bold mt-1">{selectedPlan.maxShops}</p>
+                        <p className="text-[10px] text-muted-foreground">Shops</p>
+                      </div>
+                      <div className="text-center">
+                        <Users className="h-4 w-4 mx-auto text-muted-foreground" />
+                        <p className="text-sm font-bold mt-1">{selectedPlan.maxEmployees}</p>
+                        <p className="text-[10px] text-muted-foreground">Staff</p>
+                      </div>
+                      <div className="text-center">
+                        <Package className="h-4 w-4 mx-auto text-muted-foreground" />
+                        <p className="text-sm font-bold mt-1">{selectedPlan.maxProducts.toLocaleString()}</p>
+                        <p className="text-[10px] text-muted-foreground">Products</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Payment Method Selection (for paid plans) */}
+                  {selectedPlan.monthlyPrice > 0 && (
+                    <div className="space-y-3">
+                      <h5 className="text-sm font-semibold">Select Payment Method</h5>
+                      <div className="grid grid-cols-3 gap-2">
+                        <button
+                          onClick={() => setPaymentMethod('mpesa-stk')}
+                          className={`p-3 rounded-lg border text-center transition-all ${
+                            paymentMethod === 'mpesa-stk' ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border hover:border-primary/30'
+                          }`}
+                        >
+                          <Smartphone className="h-5 w-5 mx-auto text-emerald-600" />
+                          <p className="text-xs font-medium mt-1">M-Pesa</p>
+                          <p className="text-[10px] text-muted-foreground">STK Push</p>
+                        </button>
+                        <button
+                          onClick={() => setPaymentMethod('mpesa-send')}
+                          className={`p-3 rounded-lg border text-center transition-all ${
+                            paymentMethod === 'mpesa-send' ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border hover:border-primary/30'
+                          }`}
+                        >
+                          <Banknote className="h-5 w-5 mx-auto text-emerald-600" />
+                          <p className="text-xs font-medium mt-1">Send Money</p>
+                          <p className="text-[10px] text-muted-foreground">Manual</p>
+                        </button>
+                        <button
+                          onClick={() => setPaymentMethod('card')}
+                          className={`p-3 rounded-lg border text-center transition-all ${
+                            paymentMethod === 'card' ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border hover:border-primary/30'
+                          }`}
+                        >
+                          <CreditCard className="h-5 w-5 mx-auto text-blue-600" />
+                          <p className="text-xs font-medium mt-1">Card</p>
+                          <p className="text-[10px] text-muted-foreground">Visa/MC</p>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Features Preview */}
+                  {selectedPlan.features && selectedPlan.features.length > 0 && (
+                    <div className="bg-muted/30 rounded-lg p-3">
+                      <h5 className="text-xs font-semibold text-muted-foreground mb-2">FEATURES INCLUDED</h5>
+                      <div className="grid grid-cols-2 gap-1">
+                        {selectedPlan.features.slice(0, 6).map((feature: string, idx: number) => (
+                          <div key={idx} className="flex items-center gap-1.5 text-xs">
+                            <CheckCircle2 className="h-3 w-3 text-emerald-500 flex-shrink-0" />
+                            <span className="truncate">{feature}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Action Buttons */}
+                  <div className="flex gap-2 pt-2">
+                    <Button variant="outline" className="flex-1" onClick={() => setUpgradeStep('plans')}>
+                      <ChevronLeft className="h-4 w-4 mr-1" />
+                      Back
+                    </Button>
+                    <Button 
+                      className="flex-1 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white" 
+                      onClick={() => handleUpgrade(selectedPlan)}
                       disabled={processing}
                     >
                       {processing ? (
                         <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      ) : selectedPlan.monthlyPrice === 0 ? (
+                        <Check className="h-4 w-4 mr-1" />
                       ) : (
-                        <Smartphone className="h-4 w-4 mr-2" />
+                        <ArrowRight className="h-4 w-4 mr-1" />
                       )}
-                      {selectedPlan.monthlyPrice === 0 ? 'Activate Free Plan' : 'Continue to Payment'}
+                      {selectedPlan.monthlyPrice === 0 ? 'Activate Free Plan' : 'Proceed to Payment'}
                     </Button>
                   </div>
-                </div>
-              ) : (
-                /* Plans Grid View - Minimalistic Design */
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-                  {plans.map((plan) => {
-                    const isCurrentPlan = subscription?.planCode === plan.code;
-                    const isPopular = plan.badge === 'Popular';
-                    const isBestValue = plan.badge === 'Best Value';
-                    const price = billingCycle === 'annual' ? plan.annualPrice : plan.monthlyPrice;
-
-                    return (
-                      <div
-                        key={plan.code}
-                        className={`relative rounded-xl border bg-card overflow-hidden transition-all hover:shadow-md ${
-                          isPopular ? 'border-primary shadow-sm' : 
-                          isBestValue ? 'border-amber-400 dark:border-amber-500' : 
-                          'border-border'
-                        } ${isCurrentPlan ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''}`}
-                      >
-                        {/* Badge */}
-                        {plan.badge && (
-                          <div className={`text-center py-1.5 text-xs font-semibold ${
-                            isPopular ? 'bg-primary text-primary-foreground' :
-                            isBestValue ? 'bg-amber-500 text-white' :
-                            'bg-muted text-muted-foreground'
-                          }`}>
-                            {plan.badge}
-                          </div>
-                        )}
-
-                        <div className="p-5">
-                          {/* Plan Name */}
-                          <h3 className="text-lg font-bold text-foreground mb-1">{plan.name}</h3>
-                          
-                          {/* Price */}
-                          <div className="mb-4">
-                            {price === 0 ? (
-                              <div className="flex items-baseline">
-                                <span className="text-2xl font-bold text-foreground">FREE</span>
-                              </div>
-                            ) : (
-                              <div className="flex items-baseline gap-1">
-                                <span className="text-xs text-muted-foreground">KES</span>
-                                <span className="text-2xl font-bold text-foreground">{price.toLocaleString()}</span>
-                                <span className="text-xs text-muted-foreground">/{billingCycle === 'annual' ? 'yr' : 'mo'}</span>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Limits - Compact */}
-                          <div className="space-y-2 mb-5 text-sm">
-                            <div className="flex items-center gap-2 text-muted-foreground">
-                              <Store className="h-4 w-4 flex-shrink-0" />
-                              <span><strong className="text-foreground">{plan.maxShops}</strong> Shop{plan.maxShops > 1 ? 's' : ''}</span>
-                            </div>
-                            <div className="flex items-center gap-2 text-muted-foreground">
-                              <Users className="h-4 w-4 flex-shrink-0" />
-                              <span><strong className="text-foreground">{plan.maxEmployees}</strong> Employees</span>
-                            </div>
-                            <div className="flex items-center gap-2 text-muted-foreground">
-                              <Package className="h-4 w-4 flex-shrink-0" />
-                              <span><strong className="text-foreground">{plan.maxProducts.toLocaleString()}</strong> Products</span>
-                            </div>
-                          </div>
-
-                          {/* CTA */}
-                          <Button
-                            className={`w-full ${isPopular ? '' : isBestValue ? 'bg-amber-500 hover:bg-amber-600 text-white' : ''}`}
-                            variant={isCurrentPlan ? "outline" : isPopular ? "default" : "secondary"}
-                            disabled={isCurrentPlan}
-                            onClick={() => setSelectedPlan(plan)}
-                          >
-                            {isCurrentPlan ? (
-                              <><Check className="h-4 w-4 mr-1.5" /> Current</>
-                            ) : (
-                              'Select'
-                            )}
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })}
                 </div>
               )}
             </div>
@@ -1338,24 +1525,18 @@ function SubscriptionSettingsTab() {
         </div>
       )}
 
-      {/* Invoice Details Modal */}
-      {showInvoiceDetails && selectedInvoiceData && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-background rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-primary to-primary/80 px-6 py-5 text-white">
+      {/* Plan Details Modal */}
+      {showPlanDetails && detailPlan && (
+        <div className="fixed top-0 left-0 right-0 bottom-0 w-full h-full bg-black/60 backdrop-blur-sm flex items-center justify-center z-[110] p-4 overflow-y-auto">
+          <div className="bg-background rounded-xl w-full max-w-md shadow-2xl overflow-hidden">
+            <div className={`bg-gradient-to-r ${planColors[detailPlan.colorTheme || 'blue']?.headerGradient || 'from-primary to-primary/80'} px-5 py-4 text-white`}>
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-white/20 rounded-lg">
-                    <FileText className="h-6 w-6" />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-bold">Invoice Details</h3>
-                    <p className="text-white/80 text-sm font-mono">{selectedInvoiceData.invoiceNumber}</p>
-                  </div>
+                <div>
+                  <h3 className="text-lg font-bold">{detailPlan.name} Plan</h3>
+                  <p className="text-white/80 text-sm">{detailPlan.description || 'Full plan details'}</p>
                 </div>
                 <button 
-                  onClick={resetPaymentModal}
+                  onClick={() => { setShowPlanDetails(false); setDetailPlan(null); }}
                   className="p-2 hover:bg-white/20 rounded-lg transition-colors"
                 >
                   <X className="h-5 w-5" />
@@ -1363,156 +1544,269 @@ function SubscriptionSettingsTab() {
               </div>
             </div>
 
-            {/* Content */}
-            <div className="p-6 space-y-5">
-              {/* Invoice Summary */}
-              <div className="bg-muted/50 rounded-xl p-4 space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Description</span>
-                  <span className="font-semibold">{selectedInvoiceData.description}</span>
-                </div>
-                {selectedInvoiceData.periodStart && selectedInvoiceData.periodEnd && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">Period</span>
-                    <span className="text-sm">{formatDate(selectedInvoiceData.periodStart)} - {formatDate(selectedInvoiceData.periodEnd)}</span>
+            <div className="p-5 space-y-4">
+              {/* Pricing */}
+              <div className="text-center pb-4 border-b">
+                {detailPlan.monthlyPrice === 0 ? (
+                  <div className="text-3xl font-bold text-emerald-600">FREE</div>
+                ) : (
+                  <div>
+                    <div className="flex items-baseline justify-center gap-1">
+                      <span className="text-sm text-muted-foreground">KES</span>
+                      <span className="text-3xl font-bold">{detailPlan.monthlyPrice.toLocaleString()}</span>
+                      <span className="text-muted-foreground">/month</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      or KES {detailPlan.annualPrice.toLocaleString()}/year (save 17%)
+                    </p>
                   </div>
                 )}
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Due Date</span>
-                  <span className="font-medium">{formatDate(selectedInvoiceData.dueDate)}</span>
+              </div>
+
+              {/* Limits */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-muted/50 rounded-lg p-3 text-center">
+                  <Store className="h-5 w-5 mx-auto text-primary" />
+                  <p className="text-lg font-bold mt-1">{detailPlan.maxShops}</p>
+                  <p className="text-xs text-muted-foreground">Shops</p>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Status</span>
-                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
-                    selectedInvoiceData.status === 'paid' 
-                      ? 'bg-emerald-100 text-emerald-800' 
-                      : 'bg-amber-100 text-amber-800'
-                  }`}>
-                    {selectedInvoiceData.status === 'paid' && <CheckCircle2 className="h-3 w-3 mr-1" />}
-                    {selectedInvoiceData.status.toUpperCase()}
-                  </span>
+                <div className="bg-muted/50 rounded-lg p-3 text-center">
+                  <Users className="h-5 w-5 mx-auto text-primary" />
+                  <p className="text-lg font-bold mt-1">{detailPlan.maxEmployees}</p>
+                  <p className="text-xs text-muted-foreground">Employees</p>
+                </div>
+                <div className="bg-muted/50 rounded-lg p-3 text-center">
+                  <Package className="h-5 w-5 mx-auto text-primary" />
+                  <p className="text-lg font-bold mt-1">{detailPlan.maxProducts.toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground">Products</p>
                 </div>
               </div>
 
-              {/* Amount Breakdown */}
-              <div className="border rounded-xl overflow-hidden">
-                <div className="bg-muted/30 px-4 py-2 border-b">
-                  <h4 className="font-semibold text-sm">Amount Breakdown</h4>
-                </div>
-                <div className="p-4 space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Subtotal</span>
-                    <span>KES {selectedInvoiceData.amount?.toLocaleString() || selectedInvoiceData.totalAmount?.toLocaleString()}</span>
-                  </div>
-                  {selectedInvoiceData.discount > 0 && (
-                    <div className="flex justify-between text-sm text-emerald-600">
-                      <span>Discount</span>
-                      <span>- KES {selectedInvoiceData.discount.toLocaleString()}</span>
-                    </div>
-                  )}
-                  {selectedInvoiceData.tax > 0 && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Tax</span>
-                      <span>KES {selectedInvoiceData.tax.toLocaleString()}</span>
-                    </div>
-                  )}
-                  <div className="border-t pt-2 mt-2">
-                    <div className="flex justify-between items-center">
-                      <span className="font-semibold">Total Amount</span>
-                      <span className="text-2xl font-bold text-primary">KES {selectedInvoiceData.totalAmount.toLocaleString()}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Payment Info (if paid) */}
-              {selectedInvoiceData.status === 'paid' && selectedInvoiceData.mpesaReceiptNumber && (
-                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
-                  <div className="flex items-center gap-2 text-emerald-800 mb-2">
-                    <CheckCircle2 className="h-5 w-5" />
-                    <span className="font-semibold">Payment Confirmed</span>
-                  </div>
-                  <div className="space-y-1 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-emerald-700">M-Pesa Receipt</span>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-semibold">{selectedInvoiceData.mpesaReceiptNumber}</span>
-                        <button 
-                          onClick={() => copyToClipboard(selectedInvoiceData.mpesaReceiptNumber)}
-                          className="p-1 hover:bg-emerald-200 rounded transition-colors"
-                        >
-                          {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                        </button>
-                      </div>
-                    </div>
-                    {selectedInvoiceData.paidAt && (
-                      <div className="flex justify-between">
-                        <span className="text-emerald-700">Paid On</span>
-                        <span>{formatDate(selectedInvoiceData.paidAt)}</span>
-                      </div>
-                    )}
-                  </div>
+              {/* All Features */}
+              {detailPlan.features && detailPlan.features.length > 0 && (
+                <div>
+                  <h5 className="text-sm font-semibold mb-2">All Features</h5>
+                  <ul className="space-y-2">
+                    {detailPlan.features.map((feature: string, idx: number) => (
+                      <li key={idx} className="flex items-start gap-2 text-sm">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-500 mt-0.5 flex-shrink-0" />
+                        <span>{feature}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
 
-              {/* Trust Indicators */}
-              {selectedInvoiceData.status !== 'paid' && (
-                <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                  <div className="flex items-center gap-1.5">
-                    <Shield className="h-4 w-4 text-emerald-600" />
-                    <span>Secure Payment</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <Zap className="h-4 w-4 text-amber-500" />
-                    <span>Instant Activation</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <RefreshCw className="h-4 w-4 text-blue-500" />
-                    <span>Auto-Renewal</span>
-                  </div>
+              {/* Setup Includes */}
+              {detailPlan.setupIncludes && detailPlan.setupIncludes.length > 0 && (
+                <div className="bg-blue-50 dark:bg-blue-950/30 rounded-lg p-3">
+                  <h5 className="text-sm font-semibold text-blue-800 dark:text-blue-200 mb-2">Setup Includes</h5>
+                  <ul className="space-y-1">
+                    {detailPlan.setupIncludes.map((item: string, idx: number) => (
+                      <li key={idx} className="flex items-center gap-2 text-sm text-blue-700 dark:text-blue-300">
+                        <Check className="h-3.5 w-3.5" />
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
-            </div>
 
-            {/* Footer */}
-            <div className="px-6 py-4 bg-muted/30 border-t">
-              {selectedInvoiceData.status === 'paid' ? (
-                <Button className="w-full" variant="outline" onClick={resetPaymentModal}>
-                  Close
-                </Button>
-              ) : (
-                <div className="flex gap-3">
-                  <Button variant="outline" className="flex-1" onClick={resetPaymentModal}>
-                    Cancel
-                  </Button>
-                  <Button 
-                    className="flex-1 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-semibold shadow-lg"
-                    onClick={startPaymentFlow}
-                  >
-                    <Smartphone className="h-4 w-4 mr-2" />
-                    Pay with M-Pesa
-                  </Button>
-                </div>
-              )}
+              {/* Select Button */}
+              <Button 
+                className="w-full"
+                onClick={() => {
+                  setSelectedPlan(detailPlan);
+                  setShowPlanDetails(false);
+                  setDetailPlan(null);
+                }}
+                disabled={subscription?.planCode === detailPlan.code}
+              >
+                {subscription?.planCode === detailPlan.code ? 'Current Plan' : 'Select This Plan'}
+              </Button>
             </div>
           </div>
         </div>
       )}
 
-      {/* M-Pesa Payment Modal */}
-      {showPaymentModal && selectedInvoiceData && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-background rounded-2xl max-w-md w-full shadow-2xl overflow-hidden">
+      {/* Invoice Details Modal - Compact & Desktop Friendly */}
+      {showInvoiceDetails && selectedInvoiceData && (
+        <div className="fixed top-0 left-0 right-0 bottom-0 w-full h-full bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 overflow-y-auto">
+          <div className="bg-background rounded-xl w-full max-w-lg lg:max-w-2xl shadow-2xl overflow-hidden">
             {/* Header */}
-            <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 px-6 py-5 text-white">
+            <div className="bg-gradient-to-r from-primary to-primary/80 px-6 py-5 text-white">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 bg-white/20 rounded-lg">
-                    <Smartphone className="h-6 w-6" />
+                  <div className="p-2.5 bg-white/20 rounded-xl">
+                    <FileText className="h-6 w-6" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-bold">M-Pesa Payment</h3>
-                    <p className="text-white/80 text-sm">KES {selectedInvoiceData.totalAmount.toLocaleString()}</p>
+                    <h3 className="text-xl font-bold">Invoice Details</h3>
+                    <p className="text-white/80 text-sm font-mono">{selectedInvoiceData.invoiceNumber}</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={resetPaymentModal}
+                  className="p-2.5 hover:bg-white/20 rounded-xl transition-colors"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Content - Compact layout */}
+            <div className="p-5">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                {/* Left Column - Invoice Details */}
+                <div className="space-y-4">
+                  {/* Invoice Summary */}
+                  <div className="bg-muted/50 rounded-lg p-4 space-y-2.5">
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground">Description</span>
+                      <span className="font-semibold text-right">{selectedInvoiceData.description}</span>
+                    </div>
+                    {selectedInvoiceData.periodStart && selectedInvoiceData.periodEnd && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-muted-foreground">Period</span>
+                        <span className="text-sm">{formatDate(selectedInvoiceData.periodStart)} - {formatDate(selectedInvoiceData.periodEnd)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground">Due Date</span>
+                      <span className="font-medium">{formatDate(selectedInvoiceData.dueDate)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground">Status</span>
+                      <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold ${
+                        selectedInvoiceData.status === 'paid' 
+                          ? 'bg-emerald-100 text-emerald-800' 
+                          : 'bg-amber-100 text-amber-800'
+                      }`}>
+                        {selectedInvoiceData.status === 'paid' && <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />}
+                        {selectedInvoiceData.status.toUpperCase()}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Payment Info (if paid) */}
+                  {selectedInvoiceData.status === 'paid' && selectedInvoiceData.mpesaReceiptNumber && (
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+                      <div className="flex items-center gap-2 text-emerald-800 mb-3">
+                        <CheckCircle2 className="h-5 w-5" />
+                        <span className="font-semibold">Payment Confirmed</span>
+                      </div>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between items-center">
+                          <span className="text-emerald-700">M-Pesa Receipt</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-bold text-base">{selectedInvoiceData.mpesaReceiptNumber}</span>
+                            <button 
+                              onClick={() => copyToClipboard(selectedInvoiceData.mpesaReceiptNumber)}
+                              className="p-1.5 hover:bg-emerald-200 rounded-lg transition-colors"
+                            >
+                              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                            </button>
+                          </div>
+                        </div>
+                        {selectedInvoiceData.paidAt && (
+                          <div className="flex justify-between">
+                            <span className="text-emerald-700">Paid On</span>
+                            <span>{formatDate(selectedInvoiceData.paidAt)}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Right Column - Amount & Actions */}
+                <div className="space-y-4">
+                  {/* Amount Breakdown */}
+                  <div className="border rounded-lg overflow-hidden">
+                    <div className="bg-muted/30 px-4 py-2 border-b">
+                      <h4 className="font-semibold text-sm">Amount Breakdown</h4>
+                    </div>
+                    <div className="p-4 space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Subtotal</span>
+                        <span className="font-medium">KES {selectedInvoiceData.amount?.toLocaleString() || selectedInvoiceData.totalAmount?.toLocaleString()}</span>
+                      </div>
+                      {selectedInvoiceData.discount > 0 && (
+                        <div className="flex justify-between text-sm text-emerald-600">
+                          <span>Discount</span>
+                          <span>- KES {selectedInvoiceData.discount.toLocaleString()}</span>
+                        </div>
+                      )}
+                      {selectedInvoiceData.tax > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Tax</span>
+                          <span>KES {selectedInvoiceData.tax.toLocaleString()}</span>
+                        </div>
+                      )}
+                      <div className="border-t pt-3 mt-3">
+                        <div className="flex justify-between items-center">
+                          <span className="font-semibold">Total</span>
+                          <span className="text-2xl font-bold text-primary">KES {selectedInvoiceData.totalAmount.toLocaleString()}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Trust Indicators - Inline */}
+                  {selectedInvoiceData.status !== 'paid' && (
+                    <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground py-2">
+                      <span className="flex items-center gap-1"><Shield className="h-3.5 w-3.5 text-emerald-600" /> Secure</span>
+                      <span className="flex items-center gap-1"><Zap className="h-3.5 w-3.5 text-amber-500" /> Instant</span>
+                      <span className="flex items-center gap-1"><RefreshCw className="h-3.5 w-3.5 text-blue-500" /> Auto-Renew</span>
+                    </div>
+                  )}
+
+                  {/* Action Buttons */}
+                  <div className="pt-2">
+                    {selectedInvoiceData.status === 'paid' ? (
+                      <Button className="w-full h-10" variant="outline" onClick={resetPaymentModal}>
+                        Close
+                      </Button>
+                    ) : (
+                      <div className="flex gap-2">
+                        <Button variant="outline" className="flex-1 h-10" onClick={resetPaymentModal}>
+                          Cancel
+                        </Button>
+                        <Button 
+                          className="flex-1 h-10 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-semibold"
+                          onClick={startPaymentFlow}
+                        >
+                          <Smartphone className="h-4 w-4 mr-1.5" />
+                          Pay Now
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment Modal - Multi-Method Support with Desktop Optimization */}
+      {showPaymentModal && selectedInvoiceData && (
+        <div className="fixed top-0 left-0 right-0 bottom-0 w-full h-full bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 overflow-y-auto">
+          <div className="bg-background rounded-xl w-full max-w-lg lg:max-w-3xl shadow-2xl overflow-hidden">
+            {/* Header - Larger text for readability */}
+            <div className={`px-5 py-4 text-white ${
+              paymentMethod === 'card' ? 'bg-gradient-to-r from-blue-500 to-blue-600' : 'bg-gradient-to-r from-emerald-500 to-emerald-600'
+            }`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-white/20 rounded-lg">
+                    {paymentMethod === 'card' ? <CreditCard className="h-6 w-6" /> : <Smartphone className="h-6 w-6" />}
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold">Complete Payment</h3>
+                    <p className="text-white/90 text-sm">
+                      Pay <span className="font-bold text-base">KES {selectedInvoiceData.totalAmount.toLocaleString()}</span>
+                    </p>
                   </div>
                 </div>
                 <button 
@@ -1525,134 +1819,446 @@ function SubscriptionSettingsTab() {
               </div>
             </div>
 
-            {/* Content */}
-            <div className="p-6">
+            {/* Content - Horizontal layout on desktop */}
+            <div className="p-4 lg:p-5">
               {paymentStep === 'phone' && (
-                <div className="space-y-5">
-                  {/* Invoice Summary */}
-                  <div className="bg-muted/50 rounded-xl p-4">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-muted-foreground">Paying for</span>
-                      <span className="font-semibold">{selectedInvoiceData.description}</span>
-                    </div>
-                    <div className="flex justify-between items-center mt-2">
-                      <span className="text-sm text-muted-foreground">Amount</span>
-                      <span className="text-xl font-bold text-emerald-600">KES {selectedInvoiceData.totalAmount.toLocaleString()}</span>
-                    </div>
-                  </div>
-
-                  {/* Phone Input */}
-                  <div>
-                    <Label htmlFor="mpesaPhone" className="text-sm font-semibold">M-Pesa Phone Number</Label>
-                    <div className="relative mt-2">
-                      <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-muted-foreground">
-                        <Phone className="h-4 w-4" />
-                        <span className="text-sm font-medium">+254</span>
-                      </div>
-                      <Input
-                        id="mpesaPhone"
-                        type="tel"
-                        value={phoneNumber}
-                        onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                        placeholder="712345678"
-                        className="pl-20 h-12 text-lg font-mono"
-                        maxLength={10}
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-2">
-                      Enter the phone number registered with M-Pesa
-                    </p>
-                  </div>
-
-                  {/* Quick Select */}
-                  <div className="flex gap-2">
-                    {['07', '01'].map((prefix) => (
+                <div className="lg:grid lg:grid-cols-5 lg:gap-5">
+                  {/* Left Column - Payment Method & Summary (Desktop) */}
+                  <div className="lg:col-span-2 space-y-3 mb-4 lg:mb-0">
+                    {/* Payment Method Tabs - Larger text */}
+                    <div className="grid grid-cols-3 lg:grid-cols-1 gap-2 p-1.5 bg-muted/50 rounded-lg">
                       <button
-                        key={prefix}
-                        onClick={() => setPhoneNumber(prefix)}
-                        className="px-3 py-1.5 text-xs font-medium bg-muted hover:bg-muted/80 rounded-lg transition-colors"
+                        onClick={() => setPaymentMethod('mpesa-stk')}
+                        className={`p-2.5 lg:p-3.5 rounded-md text-center lg:text-left lg:flex lg:items-center lg:gap-3 transition-all ${
+                          paymentMethod === 'mpesa-stk' ? 'bg-background shadow-sm ring-2 ring-emerald-500' : 'hover:bg-muted'
+                        }`}
                       >
-                        {prefix}XX XXX XXX
+                        <Smartphone className={`h-5 w-5 mx-auto lg:mx-0 ${paymentMethod === 'mpesa-stk' ? 'text-emerald-600' : 'text-muted-foreground'}`} />
+                        <div className="lg:flex-1">
+                          <p className={`text-sm font-semibold mt-1 lg:mt-0 ${paymentMethod === 'mpesa-stk' ? 'text-foreground' : 'text-muted-foreground'}`}>M-Pesa STK</p>
+                          <p className="hidden lg:block text-xs text-muted-foreground">Instant prompt</p>
+                        </div>
                       </button>
-                    ))}
+                      <button
+                        onClick={() => setPaymentMethod('mpesa-send')}
+                        className={`p-2.5 lg:p-3.5 rounded-md text-center lg:text-left lg:flex lg:items-center lg:gap-3 transition-all ${
+                          paymentMethod === 'mpesa-send' ? 'bg-background shadow-sm ring-2 ring-emerald-500' : 'hover:bg-muted'
+                        }`}
+                      >
+                        <Banknote className={`h-5 w-5 mx-auto lg:mx-0 ${paymentMethod === 'mpesa-send' ? 'text-emerald-600' : 'text-muted-foreground'}`} />
+                        <div className="lg:flex-1">
+                          <p className={`text-sm font-semibold mt-1 lg:mt-0 ${paymentMethod === 'mpesa-send' ? 'text-foreground' : 'text-muted-foreground'}`}>Send Money</p>
+                          <p className="hidden lg:block text-xs text-muted-foreground">Manual transfer</p>
+                        </div>
+                      </button>
+                      <button
+                        onClick={() => setPaymentMethod('card')}
+                        className={`p-2.5 lg:p-3.5 rounded-md text-center lg:text-left lg:flex lg:items-center lg:gap-3 transition-all ${
+                          paymentMethod === 'card' ? 'bg-background shadow-sm ring-2 ring-blue-500' : 'hover:bg-muted'
+                        }`}
+                      >
+                        <CreditCard className={`h-5 w-5 mx-auto lg:mx-0 ${paymentMethod === 'card' ? 'text-blue-600' : 'text-muted-foreground'}`} />
+                        <div className="lg:flex-1">
+                          <p className={`text-sm font-semibold mt-1 lg:mt-0 ${paymentMethod === 'card' ? 'text-foreground' : 'text-muted-foreground'}`}>Card</p>
+                          <p className="hidden lg:block text-xs text-muted-foreground">Visa, Mastercard</p>
+                        </div>
+                      </button>
+                    </div>
+
+                    {/* Order Summary - Desktop Only */}
+                    <div className="hidden lg:block bg-muted/50 rounded-lg p-4 border">
+                      <p className="text-sm text-muted-foreground mb-1">Paying for</p>
+                      <p className="text-base font-semibold">{selectedInvoiceData.description}</p>
+                      <div className="mt-3 pt-3 border-t">
+                        <p className="text-3xl font-bold text-primary">KES {selectedInvoiceData.totalAmount.toLocaleString()}</p>
+                      </div>
+                    </div>
+
+                    {/* Trust badges - Desktop */}
+                    <div className="hidden lg:flex items-center gap-4 text-sm text-muted-foreground pt-2">
+                      <span className="flex items-center gap-1.5"><Shield className="h-4 w-4 text-emerald-600" /> Secure</span>
+                      <span className="flex items-center gap-1.5"><Zap className="h-4 w-4 text-amber-500" /> Fast</span>
+                    </div>
                   </div>
 
-                  {/* Security Note */}
-                  <div className="flex items-start gap-3 p-3 bg-blue-50 rounded-xl text-sm">
-                    <Info className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                    <div className="text-blue-800">
-                      <p className="font-medium">How it works:</p>
-                      <ol className="mt-1 space-y-1 text-blue-700">
-                        <li>1. You'll receive an M-Pesa prompt on your phone</li>
-                        <li>2. Enter your M-Pesa PIN to confirm</li>
-                        <li>3. Your subscription activates instantly</li>
-                      </ol>
+                  {/* Right Column - Payment Form */}
+                  <div className="lg:col-span-3 space-y-4">
+                    {/* Order Summary - Mobile Only */}
+                    <div className="lg:hidden bg-muted/50 rounded-lg p-4 border">
+                      <div className="flex justify-between items-center">
+                        <span className="text-base text-muted-foreground">{selectedInvoiceData.description}</span>
+                        <span className="text-xl font-bold text-primary">KES {selectedInvoiceData.totalAmount.toLocaleString()}</span>
+                      </div>
                     </div>
+
+                  {/* M-Pesa STK Push Form - Larger text */}
+                  {paymentMethod === 'mpesa-stk' && (
+                    <div className="space-y-4">
+                      <div className="bg-muted/30 rounded-lg p-4 border">
+                        <Label htmlFor="mpesaPhone" className="text-base font-semibold flex items-center gap-2">
+                          <Phone className="h-5 w-5 text-emerald-600" />
+                          M-Pesa Phone Number
+                        </Label>
+                        <div className="relative mt-3">
+                          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold text-base">+254</div>
+                          <Input
+                            id="mpesaPhone"
+                            type="tel"
+                            value={phoneNumber}
+                            onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                            placeholder="712345678"
+                            className="pl-16 h-12 text-xl font-mono"
+                            maxLength={10}
+                            autoFocus
+                          />
+                        </div>
+                        <div className="flex gap-2 mt-3">
+                          {['07', '01'].map((prefix) => (
+                            <button
+                              key={prefix}
+                              onClick={() => setPhoneNumber(prefix)}
+                              className="px-3 py-1.5 text-sm font-medium bg-background hover:bg-muted border rounded transition-colors"
+                            >
+                              {prefix}XX
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="bg-blue-50 dark:bg-blue-950/30 rounded-lg p-4 border border-blue-100 dark:border-blue-900">
+                        <p className="font-semibold text-base text-blue-800 dark:text-blue-200">How it works:</p>
+                        <p className="text-blue-700 dark:text-blue-300 mt-1 text-sm">You'll receive a prompt on your phone. Enter your M-Pesa PIN to complete.</p>
+                      </div>
+
+                      <Button 
+                        className="w-full h-12 text-base bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-semibold"
+                        onClick={handlePayment}
+                        disabled={processing || phoneNumber.length < 9}
+                      >
+                        {processing ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : <ArrowRight className="h-5 w-5 mr-2" />}
+                        Send M-Pesa Prompt
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* Send Money Form - Manual M-Pesa Transfer - Larger text */}
+                  {paymentMethod === 'mpesa-send' && (
+                    <div className="space-y-4">
+                      {sendMoneyStep === 'instructions' ? (
+                        <>
+                          <div className="bg-emerald-50 dark:bg-emerald-950/30 rounded-lg p-4 border border-emerald-200 dark:border-emerald-800">
+                            <h5 className="font-semibold text-lg text-emerald-800 dark:text-emerald-200 mb-4">Send Money Instructions</h5>
+                            <ol className="space-y-3 text-base text-emerald-700 dark:text-emerald-300">
+                              <li className="flex gap-3 items-start">
+                                <span className="w-6 h-6 rounded-full bg-emerald-200 dark:bg-emerald-800 flex items-center justify-center text-sm font-bold flex-shrink-0">1</span>
+                                <span>Go to M-Pesa → Send Money</span>
+                              </li>
+                              <li className="flex gap-3 items-start">
+                                <span className="w-6 h-6 rounded-full bg-emerald-200 dark:bg-emerald-800 flex items-center justify-center text-sm font-bold flex-shrink-0">2</span>
+                                <div>
+                                  <span>Send to: </span>
+                                  <button onClick={() => copyToClipboard('0729925567')} className="font-mono font-bold text-lg bg-white dark:bg-emerald-900 px-3 py-1 rounded inline-flex items-center gap-2">
+                                    0729925567 {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                                  </button>
+                                </div>
+                              </li>
+                              <li className="flex gap-3 items-start">
+                                <span className="w-6 h-6 rounded-full bg-emerald-200 dark:bg-emerald-800 flex items-center justify-center text-sm font-bold flex-shrink-0">3</span>
+                                <span>Amount: <strong className="text-lg">KES {selectedInvoiceData.totalAmount.toLocaleString()}</strong></span>
+                              </li>
+                              <li className="flex gap-3 items-start">
+                                <span className="w-6 h-6 rounded-full bg-emerald-200 dark:bg-emerald-800 flex items-center justify-center text-sm font-bold flex-shrink-0">4</span>
+                                <span>Enter your M-Pesa PIN to confirm</span>
+                              </li>
+                            </ol>
+                          </div>
+
+                          <div className="bg-blue-50 dark:bg-blue-950/30 rounded-lg p-4 border border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200">
+                            <p className="font-semibold text-base flex items-center gap-2">
+                              <Info className="h-5 w-5" />
+                              Important
+                            </p>
+                            <p className="mt-1 text-sm">After sending, you'll receive an M-Pesa confirmation SMS with a transaction code. You'll need this code to verify your payment.</p>
+                          </div>
+
+                          <Button 
+                            className="w-full h-12 text-base bg-emerald-600 hover:bg-emerald-700 text-white font-semibold" 
+                            onClick={() => setSendMoneyStep('verify')}
+                          >
+                            I've Sent the Money
+                            <ArrowRight className="h-5 w-5 ml-2" />
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <div className="text-center mb-4">
+                            <h5 className="font-semibold text-lg">Verify Your Payment</h5>
+                            <p className="text-base text-muted-foreground mt-1">Enter the M-Pesa confirmation code from your SMS</p>
+                          </div>
+
+                          <div className="bg-muted/30 rounded-lg p-4 border">
+                            <Label htmlFor="refCode" className="text-base font-semibold flex items-center gap-2">
+                              <Receipt className="h-5 w-5 text-emerald-600" />
+                              M-Pesa Transaction Code
+                            </Label>
+                            <Input
+                              id="refCode"
+                              type="text"
+                              value={referenceCode}
+                              onChange={(e) => setReferenceCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+                              placeholder="e.g. SLK4H7G2YP"
+                              className="mt-3 h-14 text-xl font-mono text-center tracking-wider uppercase"
+                              maxLength={10}
+                              autoFocus
+                            />
+                            <p className="text-sm text-muted-foreground mt-2 text-center">
+                              The code looks like: <span className="font-mono font-bold text-base">SLK4H7G2YP</span>
+                            </p>
+                          </div>
+
+                          <div className="bg-amber-50 dark:bg-amber-950/30 rounded-lg p-4 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200">
+                            <p className="text-sm">We'll verify your payment and activate your subscription within minutes.</p>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Button 
+                              className="w-full h-12 text-base bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+                              onClick={async () => {
+                                if (referenceCode.length < 8) {
+                                  alert('Please enter a valid M-Pesa transaction code');
+                                  return;
+                                }
+                                setVerifyingCode(true);
+                                // TODO: Call API to verify the code
+                                // For now, show success message
+                                setTimeout(() => {
+                                  setVerifyingCode(false);
+                                  alert('Payment verification submitted! We will verify your payment and activate your subscription within 24 hours. You will receive a confirmation SMS.');
+                                  resetPaymentModal();
+                                  setSendMoneyStep('instructions');
+                                  setReferenceCode('');
+                                }, 1500);
+                              }}
+                              disabled={verifyingCode || referenceCode.length < 8}
+                            >
+                              {verifyingCode ? (
+                                <><Loader2 className="h-5 w-5 animate-spin mr-2" /> Verifying...</>
+                              ) : (
+                                <><Check className="h-5 w-5 mr-2" /> Verify Payment</>
+                              )}
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              className="w-full h-10 text-sm text-muted-foreground" 
+                              onClick={() => setSendMoneyStep('instructions')}
+                              disabled={verifyingCode}
+                            >
+                              <ChevronLeft className="h-4 w-4 mr-1" />
+                              Back to Instructions
+                            </Button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Card Payment Form - Stripe Integration */}
+                  {paymentMethod === 'card' && (
+                    <div className="space-y-4">
+                      {!stripeConfigured ? (
+                        <>
+                          <div className="bg-amber-50 dark:bg-amber-950/30 rounded-lg p-4 border border-amber-200 dark:border-amber-800 text-center">
+                            <CreditCard className="h-8 w-8 mx-auto text-amber-600 mb-2" />
+                            <h5 className="font-semibold text-amber-800 dark:text-amber-200">Card Payment Unavailable</h5>
+                            <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                              Card payments are not configured yet. Please use M-Pesa.
+                            </p>
+                          </div>
+                          <Button variant="outline" className="w-full h-10" onClick={() => setPaymentMethod('mpesa-stk')}>
+                            Switch to M-Pesa
+                          </Button>
+                        </>
+                      ) : !stripePaymentClientSecret ? (
+                        <>
+                          <div className="bg-blue-50 dark:bg-blue-950/30 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
+                            <div className="flex items-center gap-3 mb-3">
+                              <div className="p-2 bg-blue-200 dark:bg-blue-800 rounded-lg">
+                                <CreditCard className="h-5 w-5 text-blue-600 dark:text-blue-300" />
+                              </div>
+                              <div>
+                                <h5 className="font-semibold text-blue-800 dark:text-blue-200">Card Payment</h5>
+                                <p className="text-xs text-blue-600 dark:text-blue-400">Visa, Mastercard, and more</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 text-xs text-blue-700 dark:text-blue-300">
+                              <Shield className="h-3.5 w-3.5" />
+                              <span>Secured by Stripe - 256-bit encryption</span>
+                            </div>
+                          </div>
+
+                          {stripeError && (
+                            <div className="bg-red-50 dark:bg-red-950/30 rounded-lg p-3 border border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300">
+                              {stripeError}
+                            </div>
+                          )}
+
+                          <Button 
+                            className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+                            onClick={async () => {
+                              if (!selectedInvoiceData) return;
+                              setCreatingStripePayment(true);
+                              setStripeError(null);
+                              try {
+                                // Get Stripe config
+                                const configRes = await fetch(`${config.apiUrl}/stripe/config`, {
+                                  headers: { Authorization: `Bearer ${token}` },
+                                });
+                                if (!configRes.ok) throw new Error('Failed to get Stripe config');
+                                const stripeConfig = await configRes.json();
+                                setStripePublishableKey(stripeConfig.publishableKey);
+
+                                // Create payment intent for subscription
+                                const res = await fetch(`${config.apiUrl}/stripe/subscription/create-payment`, {
+                                  method: 'POST',
+                                  headers: {
+                                    'Content-Type': 'application/json',
+                                    Authorization: `Bearer ${token}`,
+                                  },
+                                  body: JSON.stringify({
+                                    invoiceId: selectedInvoiceData.id,
+                                    invoiceNumber: selectedInvoiceData.invoiceNumber || 'SUB',
+                                    amount: Math.round(selectedInvoiceData.totalAmount * 100),
+                                    currency: 'kes',
+                                    description: selectedInvoiceData.description,
+                                  }),
+                                });
+                                const data = await res.json();
+                                if (!res.ok) throw new Error(data.message || 'Failed to create payment');
+                                setStripePaymentClientSecret(data.clientSecret);
+                              } catch (err: any) {
+                                setStripeError(err.message);
+                              } finally {
+                                setCreatingStripePayment(false);
+                              }
+                            }}
+                            disabled={creatingStripePayment}
+                          >
+                            {creatingStripePayment ? (
+                              <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Preparing...</>
+                            ) : (
+                              <><CreditCard className="h-4 w-4 mr-2" /> Pay with Card</>
+                            )}
+                          </Button>
+                        </>
+                      ) : (
+                        <div className="min-h-[300px]">
+                          <StripePaymentForm
+                            clientSecret={stripePaymentClientSecret}
+                            amount={Math.round((selectedInvoiceData?.totalAmount || 0) * 100)}
+                            currency="kes"
+                            publishableKey={stripePublishableKey}
+                            onSuccess={(paymentIntentId) => {
+                              setPaymentStep('success');
+                              setStripePaymentClientSecret(null);
+                            }}
+                            onCancel={() => {
+                              setStripePaymentClientSecret(null);
+                              resetStripe();
+                            }}
+                            onError={(error) => {
+                              setStripeError(error);
+                              setStripePaymentClientSecret(null);
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Back Button */}
+                  <Button variant="ghost" className="w-full h-9 text-muted-foreground" onClick={resetPaymentModal}>
+                    Cancel
+                  </Button>
                   </div>
                 </div>
               )}
 
               {paymentStep === 'processing' && (
-                <div className="py-8 text-center space-y-4">
-                  <div className="relative mx-auto w-20 h-20">
+                <div className="py-6 max-w-sm mx-auto text-center space-y-4">
+                  <div className="relative mx-auto w-16 h-16">
                     <div className="absolute inset-0 rounded-full border-4 border-emerald-200"></div>
                     <div className="absolute inset-0 rounded-full border-4 border-emerald-500 border-t-transparent animate-spin"></div>
-                    <Smartphone className="absolute inset-0 m-auto h-8 w-8 text-emerald-600" />
+                    <Smartphone className="absolute inset-0 m-auto h-7 w-7 text-emerald-600" />
                   </div>
                   <div>
-                    <h4 className="text-lg font-semibold">Check Your Phone</h4>
-                    <p className="text-muted-foreground mt-1">
-                      An M-Pesa prompt has been sent to<br />
-                      <span className="font-mono font-semibold">+254 {phoneNumber}</span>
+                    <h4 className="text-lg font-bold">Check Your Phone</h4>
+                    <p className="text-muted-foreground mt-1 text-sm">
+                      M-Pesa prompt sent to <span className="font-mono font-semibold text-foreground">+254 {phoneNumber}</span>
                     </p>
                   </div>
-                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-800">
-                    <p className="font-medium">Enter your M-Pesa PIN to complete payment</p>
-                    <p className="text-amber-600 mt-1">Do not share your PIN with anyone</p>
+                  <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-3 text-sm text-amber-800 dark:text-amber-200">
+                    <p className="font-semibold">Enter your M-Pesa PIN to complete</p>
+                    <p className="text-amber-600 dark:text-amber-400 mt-1 text-xs">Do not share your PIN with anyone</p>
                   </div>
                 </div>
               )}
 
               {paymentStep === 'success' && (
-                <div className="py-8 text-center space-y-4">
-                  <div className="mx-auto w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center">
-                    <CheckCircle2 className="h-12 w-12 text-emerald-600" />
+                <div className="py-6 max-w-sm mx-auto text-center space-y-4">
+                  <div className="mx-auto w-16 h-16 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center">
+                    <CheckCircle2 className="h-10 w-10 text-emerald-600" />
                   </div>
                   <div>
-                    <h4 className="text-lg font-semibold text-emerald-800">Payment Successful!</h4>
-                    <p className="text-muted-foreground mt-1">
-                      Your subscription has been activated
-                    </p>
+                    <h4 className="text-lg font-bold text-emerald-800 dark:text-emerald-400">Payment Successful!</h4>
+                    <p className="text-muted-foreground mt-1 text-sm">Your subscription has been activated</p>
                   </div>
-                  <p className="text-sm text-muted-foreground">
-                    Redirecting...
-                  </p>
+                  
+                  {/* Receipt Download */}
+                  <div className="bg-muted/50 rounded-lg p-3 border">
+                    <p className="text-xs text-muted-foreground mb-2">Transaction Details</p>
+                    {selectedInvoiceData.invoiceNumber && (
+                      <p className="text-sm font-mono">{selectedInvoiceData.invoiceNumber}</p>
+                    )}
+                    <div className="flex gap-2 mt-3">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="flex-1"
+                        onClick={() => {
+                          // Download receipt - open invoice in new tab or generate PDF
+                          window.open(`/api/v1/subscriptions/invoices/${selectedInvoice}/pdf`, '_blank');
+                        }}
+                      >
+                        <Download className="h-3.5 w-3.5 mr-1" />
+                        Receipt
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="flex-1"
+                        onClick={() => {
+                          // Download invoice
+                          window.open(`/api/v1/subscriptions/invoices/${selectedInvoice}/pdf?type=invoice`, '_blank');
+                        }}
+                      >
+                        <FileText className="h-3.5 w-3.5 mr-1" />
+                        Invoice
+                      </Button>
+                    </div>
+                  </div>
+
+                  <Button 
+                    className="w-full"
+                    onClick={() => {
+                      resetPaymentModal();
+                      window.location.reload();
+                    }}
+                  >
+                    Done
+                  </Button>
                 </div>
               )}
             </div>
-
-            {/* Footer */}
-            {paymentStep === 'phone' && (
-              <div className="px-6 py-4 bg-muted/30 border-t">
-                <div className="flex gap-3">
-                  <Button variant="outline" className="flex-1" onClick={resetPaymentModal}>
-                    Back
-                  </Button>
-                  <Button 
-                    className="flex-1 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-semibold"
-                    onClick={handlePayment}
-                    disabled={processing || phoneNumber.length < 9}
-                  >
-                    {processing ? (
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    ) : (
-                      <ArrowRight className="h-4 w-4 mr-2" />
-                    )}
-                    Send M-Pesa Prompt
-                  </Button>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       )}

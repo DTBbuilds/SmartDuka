@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api-client';
+import { AuthGuard } from '@/components/auth-guard';
 import {
   Card,
   CardContent,
@@ -116,7 +117,7 @@ const CACHE_DURATION = 60000; // 1 minute cache
 
 const ITEMS_PER_PAGE = 20;
 
-export default function SuperAdminSubscriptionsPage() {
+function SuperAdminSubscriptionsContent() {
   const { token } = useAuth();
   const [subscriptions, setSubscriptions] = useState<ShopSubscription[]>([]);
   const [stats, setStats] = useState<SubscriptionStats | null>(null);
@@ -837,5 +838,14 @@ export default function SuperAdminSubscriptionsPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+// SECURITY: Protect with AuthGuard
+export default function SuperAdminSubscriptions() {
+  return (
+    <AuthGuard requiredRole="super_admin" fallbackRoute="/login">
+      <SuperAdminSubscriptionsContent />
+    </AuthGuard>
   );
 }

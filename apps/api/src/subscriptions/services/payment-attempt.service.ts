@@ -102,6 +102,21 @@ export class PaymentAttemptService {
   }
 
   /**
+   * Update payment attempt status with optional metadata
+   */
+  async updateStatus(
+    attemptId: string,
+    status: PaymentAttemptStatus | string,
+    metadata?: Record<string, any>,
+  ): Promise<void> {
+    const updateData: any = { status };
+    if (metadata) {
+      updateData.metadata = metadata;
+    }
+    await this.attemptModel.findByIdAndUpdate(attemptId, { $set: updateData });
+  }
+
+  /**
    * Mark attempt as successful
    */
   async markSuccess(

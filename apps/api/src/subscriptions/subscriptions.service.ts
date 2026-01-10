@@ -187,7 +187,7 @@ export class SubscriptionsService {
           freeMonths: SETUP_FREE_MONTHS,
           optional: true,
         },
-        displayOrder: 1,
+        displayOrder: 2,
         colorTheme: 'blue',
       },
       {
@@ -217,7 +217,7 @@ export class SubscriptionsService {
           freeMonths: SETUP_FREE_MONTHS,
           optional: true,
         },
-        displayOrder: 2,
+        displayOrder: 3,
         badge: 'Popular',
         colorTheme: 'green',
       },
@@ -249,7 +249,7 @@ export class SubscriptionsService {
           freeMonths: SETUP_FREE_MONTHS,
           optional: true,
         },
-        displayOrder: 3,
+        displayOrder: 4,
         colorTheme: 'purple',
       },
       {
@@ -281,9 +281,46 @@ export class SubscriptionsService {
           freeMonths: SETUP_FREE_MONTHS,
           optional: true,
         },
-        displayOrder: 4,
+        displayOrder: 5,
         badge: 'Best Value',
         colorTheme: 'gold',
+      },
+      {
+        code: 'daily',
+        name: 'Daily',
+        description: 'Pay per day - flexible subscription with Silver-level features',
+        dailyPrice: 99, // KES 99 per day
+        monthlyPrice: 2970, // 99 * 30 (reference only)
+        annualPrice: 36135, // 99 * 365 (reference only)
+        setupPrice: 0, // No setup fee for daily
+        maxShops: 5,
+        maxEmployees: 15,
+        maxProducts: 2000,
+        features: [
+          'Full POS System',
+          'Multi-Branch Support (5 branches)',
+          'Inventory Management',
+          'Sales Reports & Analytics',
+          'M-Pesa Integration',
+          'Stock Transfer',
+          'Purchase Orders',
+          'Supplier Management',
+          'API Access',
+          'Phone Support',
+          'Flexible Daily Billing',
+        ],
+        setupIncludes: {
+          siteSurvey: false,
+          stocktake: false,
+          setup: false,
+          training: false,
+          support: true,
+          freeMonths: 0,
+          optional: false,
+        },
+        displayOrder: 1, // After trial (0), before starter (2)
+        badge: 'Flexible',
+        colorTheme: 'orange',
       },
     ];
 
@@ -300,7 +337,8 @@ export class SubscriptionsService {
       await this.planModel.create({
         code: 'trial',
         name: 'Trial',
-        description: 'Free plan with limited features to get started',
+        description: 'Free 14-day trial with limited features to get started',
+        dailyPrice: 0,
         monthlyPrice: 0,
         annualPrice: 0,
         setupPrice: 0,
@@ -312,6 +350,7 @@ export class SubscriptionsService {
           'Limited Inventory (25 products)',
           'Basic Sales Reports',
           'Email Support',
+          '14-Day Free Trial',
         ],
         setupIncludes: {
           siteSurvey: false,
@@ -328,6 +367,78 @@ export class SubscriptionsService {
       });
       this.logger.log('Trial plan created');
     }
+  }
+
+  /**
+   * Ensure daily plan exists (for existing databases)
+   * Daily plan: KES 99/day with Silver-level features
+   */
+  async ensureDailyPlanExists(): Promise<void> {
+    const dailyPlan = await this.planModel.findOne({ code: 'daily' });
+    if (!dailyPlan) {
+      await this.planModel.create({
+        code: 'daily',
+        name: 'Daily',
+        description: 'Pay per day - flexible subscription with Silver-level features',
+        dailyPrice: 99, // KES 99 per day
+        monthlyPrice: 2970, // 99 * 30 (reference only)
+        annualPrice: 36135, // 99 * 365 (reference only)
+        setupPrice: 0, // No setup fee for daily
+        maxShops: 5,
+        maxEmployees: 15,
+        maxProducts: 2000,
+        features: [
+          'Full POS System',
+          'Multi-Branch Support (5 branches)',
+          'Inventory Management',
+          'Sales Reports & Analytics',
+          'M-Pesa Integration',
+          'Stock Transfer',
+          'Purchase Orders',
+          'Supplier Management',
+          'API Access',
+          'Phone Support',
+          'Flexible Daily Billing',
+        ],
+        setupIncludes: {
+          siteSurvey: false,
+          stocktake: false,
+          setup: false,
+          training: false,
+          support: true,
+          freeMonths: 0,
+          optional: false,
+        },
+        displayOrder: 1, // After trial (0), before starter (2)
+        badge: 'Flexible',
+        colorTheme: 'orange',
+        status: 'active',
+      });
+      this.logger.log('Daily plan created (KES 99/day with Silver features)');
+    }
+  }
+
+  /**
+   * Update plan display orders for proper sorting
+   * Order: trial(0), daily(1), starter(2), basic(3), silver(4), gold(5)
+   */
+  async updatePlanDisplayOrders(): Promise<void> {
+    const orderMap: Record<string, number> = {
+      trial: 0,
+      daily: 1,
+      starter: 2,
+      basic: 3,
+      silver: 4,
+      gold: 5,
+    };
+
+    for (const [code, order] of Object.entries(orderMap)) {
+      await this.planModel.updateOne(
+        { code },
+        { $set: { displayOrder: order } },
+      );
+    }
+    this.logger.log('Plan display orders updated');
   }
 
   /**
@@ -407,6 +518,12 @@ export class SubscriptionsService {
    * If no subscription exists, auto-create a trial subscription
    */
   async getSubscription(shopId: string): Promise<SubscriptionResponseDto> {
+    // Validate shopId before proceeding
+    if (!shopId || shopId === 'undefined') {
+      this.logger.warn('getSubscription called with invalid shopId:', shopId);
+      throw new NotFoundException('Shop ID is required to fetch subscription');
+    }
+    
     let subscription = await this.subscriptionModel.findOne({
       shopId: new Types.ObjectId(shopId),
     });
@@ -429,9 +546,32 @@ export class SubscriptionsService {
       return this.createTrialSubscription(shopId, trialPlan);
     }
 
-    const plan = await this.planModel.findById(subscription.planId);
+    let plan = await this.planModel.findById(subscription.planId);
     if (!plan) {
       throw new NotFoundException('Subscription plan not found');
+    }
+
+    // CRITICAL: Validate that planCode matches the actual plan
+    // This prevents data integrity issues where planId and planCode are out of sync
+    if (plan.code !== subscription.planCode) {
+      this.logger.warn(
+        `Plan mismatch detected for shop ${shopId}: subscription.planCode='${subscription.planCode}' but planId references plan.code='${plan.code}'. Fixing...`
+      );
+      
+      // Try to find the correct plan by planCode
+      const correctPlan = await this.planModel.findOne({ code: subscription.planCode });
+      if (correctPlan) {
+        // Update the subscription to reference the correct plan
+        subscription.planId = correctPlan._id;
+        await subscription.save();
+        plan = correctPlan;
+        this.logger.log(`Fixed plan reference for shop ${shopId}: now using planId for '${correctPlan.code}'`);
+      } else {
+        // If planCode doesn't exist, update planCode to match planId
+        subscription.planCode = plan.code;
+        await subscription.save();
+        this.logger.log(`Fixed planCode for shop ${shopId}: now using '${plan.code}'`);
+      }
     }
 
     // Fetch real-time usage counts from database
@@ -447,20 +587,26 @@ export class SubscriptionsService {
 
   /**
    * Create a trial subscription for a shop (internal helper)
+   * Trial expires after TRIAL_PERIOD_DAYS (14 days)
    */
   private async createTrialSubscription(shopId: string, trialPlan: SubscriptionPlanDocument): Promise<SubscriptionResponseDto> {
     const now = new Date();
     
-    // Trial has no end date (free forever with limits)
+    // Trial expires after 14 days - user must upgrade to continue
+    const trialEndDate = new Date(now);
+    trialEndDate.setDate(trialEndDate.getDate() + TRIAL_PERIOD_DAYS);
+    
     const subscription = new this.subscriptionModel({
       shopId: new Types.ObjectId(shopId),
       planId: trialPlan._id,
       planCode: 'trial',
       billingCycle: BillingCycle.MONTHLY,
-      status: SubscriptionStatus.ACTIVE,
+      status: SubscriptionStatus.TRIAL, // Use TRIAL status, not ACTIVE
       startDate: now,
       currentPeriodStart: now,
-      currentPeriodEnd: null, // No end for trial
+      currentPeriodEnd: trialEndDate, // Expires after 14 days
+      trialEndDate: trialEndDate, // Store trial end date explicitly
+      isTrialUsed: true,
       nextBillingDate: null, // No billing for trial
       currentPrice: 0,
       usage: {
@@ -480,6 +626,7 @@ export class SubscriptionsService {
 
   /**
    * Create a new subscription for a shop
+   * Supports daily, monthly, and annual billing cycles
    */
   async createSubscription(
     shopId: string,
@@ -502,15 +649,14 @@ export class SubscriptionsService {
 
     const now = new Date();
     const billingCycle = dto.billingCycle || BillingCycle.MONTHLY;
-    const price = billingCycle === BillingCycle.ANNUAL ? plan.annualPrice : plan.monthlyPrice;
-
-    // Calculate period end based on billing cycle
-    const periodEnd = new Date(now);
-    if (billingCycle === BillingCycle.ANNUAL) {
-      periodEnd.setFullYear(periodEnd.getFullYear() + 1);
-    } else {
-      periodEnd.setMonth(periodEnd.getMonth() + 1);
-    }
+    
+    // Calculate price and period end based on billing cycle
+    const { price, periodEnd, numberOfDays } = this.calculateBillingDetails(
+      plan,
+      billingCycle,
+      dto.numberOfDays,
+      now,
+    );
 
     // Create subscription
     // - If setup fee required: starts as PENDING_PAYMENT
@@ -545,6 +691,7 @@ export class SubscriptionsService {
       currentPeriodEnd: freeMonths > 0 ? trialEndDate : periodEnd,
       nextBillingDate: freeMonths > 0 ? trialEndDate : periodEnd,
       currentPrice: price,
+      numberOfDays: billingCycle === BillingCycle.DAILY ? numberOfDays : undefined,
       isTrialUsed: freeMonths > 0,
       trialEndDate: freeMonths > 0 ? trialEndDate : undefined,
       autoRenew: dto.autoRenew ?? true,
@@ -555,7 +702,7 @@ export class SubscriptionsService {
 
     await subscription.save();
 
-    this.logger.log(`Created subscription for shop ${shopId} with plan ${plan.code}, status: ${initialStatus}`);
+    this.logger.log(`Created subscription for shop ${shopId} with plan ${plan.code}, billing: ${billingCycle}${numberOfDays ? ` (${numberOfDays} days)` : ''}, status: ${initialStatus}`);
 
     // Create setup invoice if applicable
     if (hasSetupFee) {
@@ -573,12 +720,55 @@ export class SubscriptionsService {
   }
 
   /**
+   * Calculate billing details based on billing cycle and number of days
+   */
+  private calculateBillingDetails(
+    plan: SubscriptionPlanDocument,
+    billingCycle: BillingCycle,
+    numberOfDays?: number,
+    startDate: Date = new Date(),
+  ): { price: number; periodEnd: Date; numberOfDays?: number } {
+    const periodEnd = new Date(startDate);
+    let price: number;
+    let days: number | undefined;
+
+    switch (billingCycle) {
+      case BillingCycle.DAILY:
+        // Daily billing - user specifies number of days (default 1)
+        days = numberOfDays || 1;
+        price = (plan.dailyPrice || 99) * days; // Default to KES 99 if not set
+        periodEnd.setDate(periodEnd.getDate() + days);
+        break;
+      case BillingCycle.ANNUAL:
+        price = plan.annualPrice;
+        periodEnd.setFullYear(periodEnd.getFullYear() + 1);
+        break;
+      case BillingCycle.MONTHLY:
+      default:
+        price = plan.monthlyPrice;
+        periodEnd.setMonth(periodEnd.getMonth() + 1);
+        break;
+    }
+
+    return { price, periodEnd, numberOfDays: days };
+  }
+
+  /**
    * Change subscription plan (upgrade/downgrade)
+   * 
+   * IMPORTANT: For upgrades to paid plans, this creates a PENDING upgrade
+   * that requires payment before activation. The plan is NOT changed until
+   * payment is confirmed via M-Pesa callback or manual confirmation.
+   * 
+   * Free transitions (no payment required):
+   * - Any plan to trial/free plan (downgrade)
+   * - Trial to any plan when first subscribing (handled by createSubscription)
+   * - Downgrade to lower-priced plan
    */
   async changePlan(
     shopId: string,
     dto: ChangePlanDto,
-  ): Promise<SubscriptionResponseDto> {
+  ): Promise<SubscriptionResponseDto & { requiresPayment?: boolean; invoiceId?: string; pendingUpgrade?: any }> {
     const subscription = await this.subscriptionModel.findOne({
       shopId: new Types.ObjectId(shopId),
     });
@@ -587,98 +777,313 @@ export class SubscriptionsService {
       throw new NotFoundException('Subscription not found');
     }
 
+    const currentPlan = await this.planModel.findById(subscription.planId);
     const newPlan = await this.planModel.findOne({ code: dto.newPlanCode, status: 'active' });
+    
     if (!newPlan) {
       throw new NotFoundException(`Plan '${dto.newPlanCode}' not found`);
     }
 
-    // Get current usage counts
+    // Same plan - no change needed
+    if (subscription.planCode === dto.newPlanCode) {
+      throw new BadRequestException('Already on this plan');
+    }
+
+    const billingCycle = dto.billingCycle || subscription.billingCycle;
+    const newPrice = billingCycle === BillingCycle.ANNUAL ? newPlan.annualPrice : 
+                     billingCycle === BillingCycle.DAILY ? newPlan.dailyPrice :
+                     newPlan.monthlyPrice;
+    const currentPrice = currentPlan ? currentPlan.monthlyPrice : 0;
+
+    // Determine if this is an upgrade (requires payment) or downgrade (free)
+    const isUpgrade = newPlan.monthlyPrice > currentPrice;
+    const isToFreePlan = newPlan.code === 'trial' || newPlan.monthlyPrice === 0;
+    const isFromFreePlan = subscription.planCode === 'trial' || currentPrice === 0;
+
+    // Get current usage counts for limit validation
     const currentUsage = await this.getUsageCounts(shopId);
 
-    // Check if downgrading would exceed new plan limits
+    // Check if change would exceed new plan limits
     const limitWarnings: string[] = [];
-    
     if (currentUsage.products > newPlan.maxProducts) {
-      limitWarnings.push(
-        `You have ${currentUsage.products} products but ${newPlan.name} plan only supports ${newPlan.maxProducts}. ` +
-        `Please remove ${currentUsage.products - newPlan.maxProducts} products first or some features may be restricted.`
-      );
+      limitWarnings.push(`You have ${currentUsage.products} products but ${newPlan.name} plan only supports ${newPlan.maxProducts}.`);
     }
-    
     if (currentUsage.employees > newPlan.maxEmployees) {
-      limitWarnings.push(
-        `You have ${currentUsage.employees} employees but ${newPlan.name} plan only supports ${newPlan.maxEmployees}. ` +
-        `Please remove ${currentUsage.employees - newPlan.maxEmployees} employees first.`
-      );
+      limitWarnings.push(`You have ${currentUsage.employees} employees but ${newPlan.name} plan only supports ${newPlan.maxEmployees}.`);
     }
-    
     if (currentUsage.shops > newPlan.maxShops) {
-      limitWarnings.push(
-        `You have ${currentUsage.shops} shops but ${newPlan.name} plan only supports ${newPlan.maxShops}. ` +
-        `Please remove ${currentUsage.shops - newPlan.maxShops} shops first.`
-      );
+      limitWarnings.push(`You have ${currentUsage.shops} shops but ${newPlan.name} plan only supports ${newPlan.maxShops}.`);
     }
 
-    // Log warnings but allow the change (user was warned in frontend)
-    if (limitWarnings.length > 0) {
-      this.logger.warn(`Plan change for shop ${shopId} exceeds limits: ${limitWarnings.join(' | ')}`);
-    }
+    // === FREE TRANSITIONS: Direct plan change ===
+    // 1. Downgrade to free/trial plan
+    // 2. Downgrade to lower-priced plan
+    // 3. From trial to paid (first subscription - payment handled separately)
+    if (isToFreePlan || !isUpgrade) {
+      if (limitWarnings.length > 0) {
+        this.logger.warn(`Plan downgrade for shop ${shopId} exceeds limits: ${limitWarnings.join(' | ')}`);
+      }
 
-    const oldPlanCode = subscription.planCode;
-    const billingCycle = dto.billingCycle || subscription.billingCycle;
-    const newPrice = billingCycle === BillingCycle.ANNUAL ? newPlan.annualPrice : newPlan.monthlyPrice;
-
-    // Check if upgrading or downgrading
-    const isUpgrade = newPlan.monthlyPrice > subscription.currentPrice;
-
-    // Update subscription
-    subscription.planId = newPlan._id;
-    subscription.planCode = newPlan.code;
-    subscription.billingCycle = billingCycle;
-    subscription.currentPrice = newPrice;
-
-    if (isUpgrade) {
-      subscription.metadata = {
-        ...subscription.metadata,
-        upgradedFrom: oldPlanCode,
-        upgradedAt: new Date(),
-      };
-    } else {
+      const oldPlanCode = subscription.planCode;
+      subscription.planId = newPlan._id;
+      subscription.planCode = newPlan.code;
+      subscription.billingCycle = billingCycle;
+      subscription.currentPrice = newPrice;
+      subscription.pendingUpgrade = undefined; // Clear any pending upgrade
       subscription.metadata = {
         ...subscription.metadata,
         downgradedFrom: oldPlanCode,
         downgradedAt: new Date(),
       };
+
+      await subscription.save();
+      this.logger.log(`Downgraded subscription for shop ${shopId} from ${oldPlanCode} to ${newPlan.code}`);
+
+      return this.mapSubscriptionToResponse(subscription, newPlan);
     }
+
+    // === PAID UPGRADE: Requires payment first ===
+    this.logger.log(`Creating pending upgrade for shop ${shopId} from ${subscription.planCode} to ${newPlan.code}`);
+
+    // Calculate upgrade amount
+    // For daily plans, ALWAYS use the exact daily price (no proration)
+    // For other plans, use full price (proration was confusing users)
+    let finalAmount: number;
+    let isProrated = false;
+    
+    if (billingCycle === BillingCycle.DAILY) {
+      // Daily plan: exact daily price, no proration
+      finalAmount = newPlan.dailyPrice || 99;
+    } else {
+      // Monthly/Annual: use full price for clarity
+      // Users pay full price for the new plan period
+      finalAmount = newPrice;
+    }
+
+    // Create upgrade invoice
+    const invoice = await this.createInvoice(
+      shopId,
+      subscription._id.toString(),
+      InvoiceType.UPGRADE,
+      `Upgrade to ${newPlan.name} Plan (${billingCycle})`,
+      finalAmount,
+    );
+
+    // Store pending upgrade on subscription (NOT activated yet)
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 24); // Expires in 24 hours
+
+    subscription.pendingUpgrade = {
+      planCode: newPlan.code,
+      planId: newPlan._id.toString(),
+      billingCycle,
+      price: finalAmount, // Use finalAmount (KES 99 for daily, full price for others)
+      invoiceId: invoice._id.toString(),
+      requestedAt: new Date(),
+      expiresAt,
+    };
 
     await subscription.save();
 
-    this.logger.log(`Changed subscription for shop ${shopId} from ${oldPlanCode} to ${newPlan.code}`);
+    this.logger.log(`Created pending upgrade for shop ${shopId}: ${newPlan.code} - Invoice ${invoice.invoiceNumber}`);
 
-    // Create upgrade invoice if immediate and upgrading
-    if (dto.immediate && isUpgrade) {
-      const proratedAmount = this.calculateProratedAmount(subscription, newPrice);
-      if (proratedAmount > 0) {
-        await this.createInvoice(
-          shopId,
-          subscription._id.toString(),
-          InvoiceType.UPGRADE,
-          `Upgrade to ${newPlan.name} Plan`,
-          proratedAmount,
-        );
-      }
+    // Return current subscription with pending upgrade info
+    const response = this.mapSubscriptionToResponse(subscription, currentPlan || newPlan);
+    return {
+      ...response,
+      requiresPayment: true,
+      invoiceId: invoice._id.toString(),
+      pendingUpgrade: {
+        planCode: newPlan.code,
+        planName: newPlan.name,
+        price: finalAmount,
+        billingCycle,
+        invoiceNumber: invoice.invoiceNumber,
+        expiresAt,
+      },
+    };
+  }
+
+  /**
+   * Activate a pending upgrade after payment is confirmed
+   * Called by payment callback handlers (M-Pesa, Stripe, manual confirmation)
+   */
+  async activatePendingUpgrade(shopId: string, invoiceId?: string): Promise<SubscriptionResponseDto | null> {
+    const subscription = await this.subscriptionModel.findOne({
+      shopId: new Types.ObjectId(shopId),
+    });
+
+    if (!subscription || !subscription.pendingUpgrade) {
+      this.logger.warn(`No pending upgrade found for shop ${shopId}`);
+      return null;
     }
+
+    // Verify invoice matches if provided
+    if (invoiceId && subscription.pendingUpgrade.invoiceId !== invoiceId) {
+      this.logger.warn(`Invoice mismatch for upgrade: expected ${subscription.pendingUpgrade.invoiceId}, got ${invoiceId}`);
+      return null;
+    }
+
+    // Check if pending upgrade has expired
+    if (subscription.pendingUpgrade.expiresAt && new Date() > subscription.pendingUpgrade.expiresAt) {
+      this.logger.warn(`Pending upgrade expired for shop ${shopId}`);
+      subscription.pendingUpgrade = undefined;
+      await subscription.save();
+      return null;
+    }
+
+    const newPlan = await this.planModel.findById(subscription.pendingUpgrade.planId);
+    if (!newPlan) {
+      this.logger.error(`Plan not found for pending upgrade: ${subscription.pendingUpgrade.planId}`);
+      return null;
+    }
+
+    // Activate the upgrade
+    const oldPlanCode = subscription.planCode;
+    subscription.planId = newPlan._id;
+    subscription.planCode = newPlan.code;
+    subscription.billingCycle = subscription.pendingUpgrade.billingCycle as BillingCycle;
+    subscription.currentPrice = subscription.pendingUpgrade.price;
+    subscription.status = SubscriptionStatus.ACTIVE;
+    subscription.lastPaymentDate = new Date();
+    subscription.metadata = {
+      ...subscription.metadata,
+      upgradedFrom: oldPlanCode,
+      upgradedAt: new Date(),
+    };
+    
+    // Clear pending upgrade
+    subscription.pendingUpgrade = undefined;
+
+    await subscription.save();
+
+    this.logger.log(`✅ Activated upgrade for shop ${shopId}: ${oldPlanCode} -> ${newPlan.code}`);
 
     return this.mapSubscriptionToResponse(subscription, newPlan);
   }
 
   /**
-   * Cancel subscription
+   * Get pending upgrade for a shop (if any)
+   */
+  async getPendingUpgrade(shopId: string): Promise<any | null> {
+    const subscription = await this.subscriptionModel.findOne({
+      shopId: new Types.ObjectId(shopId),
+    });
+
+    if (!subscription?.pendingUpgrade) {
+      return null;
+    }
+
+    // Check if expired
+    if (subscription.pendingUpgrade.expiresAt && new Date() > subscription.pendingUpgrade.expiresAt) {
+      subscription.pendingUpgrade = undefined;
+      await subscription.save();
+      return null;
+    }
+
+    const plan = await this.planModel.findById(subscription.pendingUpgrade.planId);
+    
+    return {
+      ...subscription.pendingUpgrade,
+      planName: plan?.name,
+    };
+  }
+
+  /**
+   * Cancel a pending upgrade
+   */
+  async cancelPendingUpgrade(shopId: string): Promise<void> {
+    const subscription = await this.subscriptionModel.findOne({
+      shopId: new Types.ObjectId(shopId),
+    });
+
+    if (!subscription?.pendingUpgrade) {
+      return;
+    }
+
+    // Cancel the associated invoice
+    if (subscription.pendingUpgrade.invoiceId) {
+      await this.invoiceModel.findByIdAndUpdate(subscription.pendingUpgrade.invoiceId, {
+        status: InvoiceStatus.CANCELLED,
+      });
+    }
+
+    subscription.pendingUpgrade = undefined;
+    await subscription.save();
+
+    this.logger.log(`Cancelled pending upgrade for shop ${shopId}`);
+  }
+
+  /**
+   * Get cancellation preview - shows user what will happen if they cancel
+   */
+  async getCancellationPreview(shopId: string): Promise<{
+    currentPlan: string;
+    currentPeriodEnd: Date;
+    daysRemaining: number;
+    dataArchiveDate: Date;
+    dataDeletionDate: Date;
+    warnings: string[];
+  }> {
+    const subscription = await this.subscriptionModel.findOne({
+      shopId: new Types.ObjectId(shopId),
+    });
+
+    if (!subscription) {
+      throw new NotFoundException('Subscription not found');
+    }
+
+    const plan = await this.planModel.findById(subscription.planId);
+    const now = new Date();
+    const daysRemaining = Math.max(0, Math.ceil(
+      (subscription.currentPeriodEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+    ));
+
+    // Data archive happens 60 days after cancellation
+    const dataArchiveDate = new Date(subscription.currentPeriodEnd);
+    dataArchiveDate.setDate(dataArchiveDate.getDate() + 60);
+
+    // Data deletion happens 90 days after cancellation (30 days after archive)
+    const dataDeletionDate = new Date(subscription.currentPeriodEnd);
+    dataDeletionDate.setDate(dataDeletionDate.getDate() + 90);
+
+    const warnings = [
+      `Your subscription will remain active until ${subscription.currentPeriodEnd.toLocaleDateString()}`,
+      `After cancellation, you will have ${daysRemaining} days of remaining access`,
+      `Your data will be archived on ${dataArchiveDate.toLocaleDateString()} (60 days after period ends)`,
+      `Your data will be permanently deleted on ${dataDeletionDate.toLocaleDateString()} (90 days after period ends)`,
+      'You can reactivate your subscription anytime before data deletion',
+      'Downloaded reports and receipts will not be affected',
+    ];
+
+    return {
+      currentPlan: plan?.name || subscription.planCode,
+      currentPeriodEnd: subscription.currentPeriodEnd,
+      daysRemaining,
+      dataArchiveDate,
+      dataDeletionDate,
+      warnings,
+    };
+  }
+
+  /**
+   * Cancel subscription with proper data retention schedule
+   * 
+   * Cancellation Timeline:
+   * 1. Immediate: Subscription marked for cancellation, access continues until period end
+   * 2. Period End: Access reverted to trial/free plan
+   * 3. +60 days: Data archived (read-only)
+   * 4. +90 days: Data permanently deleted
    */
   async cancelSubscription(
     shopId: string,
     dto: CancelSubscriptionDto,
-  ): Promise<void> {
+  ): Promise<{
+    message: string;
+    currentPeriodEnd: Date;
+    dataArchiveDate: Date;
+    dataDeletionDate: Date;
+  }> {
     const subscription = await this.subscriptionModel.findOne({
       shopId: new Types.ObjectId(shopId),
     });
@@ -691,18 +1096,163 @@ export class SubscriptionsService {
       throw new BadRequestException('Subscription is already cancelled');
     }
 
-    subscription.cancelledAt = new Date();
+    const now = new Date();
+    
+    // Calculate data retention dates
+    const periodEnd = dto.immediate ? now : subscription.currentPeriodEnd;
+    const dataArchiveDate = new Date(periodEnd);
+    dataArchiveDate.setDate(dataArchiveDate.getDate() + 60);
+    const dataDeletionDate = new Date(periodEnd);
+    dataDeletionDate.setDate(dataDeletionDate.getDate() + 90);
+
+    // Update subscription
+    subscription.cancelledAt = now;
     subscription.cancelReason = dto.reason;
     subscription.autoRenew = false;
+    subscription.metadata = {
+      ...subscription.metadata,
+      cancellationSchedule: {
+        cancelledAt: now,
+        periodEnd,
+        dataArchiveDate,
+        dataDeletionDate,
+        reason: dto.reason,
+        deleteAccountRequested: dto.deleteAccount || false,
+      },
+    };
 
     if (dto.immediate) {
       subscription.status = SubscriptionStatus.CANCELLED;
-      subscription.currentPeriodEnd = new Date();
+      subscription.currentPeriodEnd = now;
+      
+      // Downgrade to trial plan immediately
+      const trialPlan = await this.planModel.findOne({ code: 'trial' });
+      if (trialPlan) {
+        subscription.planId = trialPlan._id;
+        subscription.planCode = 'trial';
+        subscription.currentPrice = 0;
+      }
     }
 
     await subscription.save();
 
-    this.logger.log(`Cancelled subscription for shop ${shopId}`);
+    this.logger.log(`Cancelled subscription for shop ${shopId}. Period ends: ${periodEnd}, Archive: ${dataArchiveDate}, Delete: ${dataDeletionDate}`);
+
+    return {
+      message: dto.immediate 
+        ? 'Your subscription has been cancelled immediately. You have been moved to the free trial plan.'
+        : `Your subscription will end on ${periodEnd.toLocaleDateString()}. You can continue using all features until then.`,
+      currentPeriodEnd: periodEnd,
+      dataArchiveDate,
+      dataDeletionDate,
+    };
+  }
+
+  /**
+   * Request account and data deletion
+   * This schedules the account for deletion after the data retention period
+   */
+  async requestAccountDeletion(
+    shopId: string,
+    userId: string,
+    confirmation: string,
+  ): Promise<{
+    success: boolean;
+    message: string;
+    scheduledDeletionDate?: Date;
+  }> {
+    // Require explicit confirmation
+    if (confirmation !== 'DELETE MY ACCOUNT') {
+      throw new BadRequestException('Please type "DELETE MY ACCOUNT" to confirm');
+    }
+
+    const subscription = await this.subscriptionModel.findOne({
+      shopId: new Types.ObjectId(shopId),
+    });
+
+    if (!subscription) {
+      throw new NotFoundException('Subscription not found');
+    }
+
+    // Calculate deletion date (90 days from now or from period end)
+    const now = new Date();
+    const baseDate = subscription.status === SubscriptionStatus.CANCELLED 
+      ? subscription.currentPeriodEnd 
+      : now;
+    const scheduledDeletionDate = new Date(baseDate);
+    scheduledDeletionDate.setDate(scheduledDeletionDate.getDate() + 90);
+
+    // Update subscription with deletion request
+    subscription.metadata = {
+      ...subscription.metadata,
+      accountDeletionRequest: {
+        requestedAt: now,
+        requestedBy: userId,
+        scheduledDeletionDate,
+        confirmed: true,
+      },
+    };
+
+    // If not already cancelled, cancel now
+    if (subscription.status !== SubscriptionStatus.CANCELLED) {
+      subscription.cancelledAt = now;
+      subscription.autoRenew = false;
+      subscription.status = SubscriptionStatus.CANCELLED;
+      subscription.currentPeriodEnd = now;
+      
+      // Downgrade to trial
+      const trialPlan = await this.planModel.findOne({ code: 'trial' });
+      if (trialPlan) {
+        subscription.planId = trialPlan._id;
+        subscription.planCode = 'trial';
+        subscription.currentPrice = 0;
+      }
+    }
+
+    await subscription.save();
+
+    this.logger.warn(`⚠️ Account deletion requested for shop ${shopId}. Scheduled: ${scheduledDeletionDate}`);
+
+    return {
+      success: true,
+      message: `Your account and all data will be permanently deleted on ${scheduledDeletionDate.toLocaleDateString()}. You will receive a final reminder 7 days before deletion.`,
+      scheduledDeletionDate,
+    };
+  }
+
+  /**
+   * Cancel account deletion request
+   */
+  async cancelAccountDeletion(shopId: string): Promise<{
+    success: boolean;
+    message: string;
+  }> {
+    const subscription = await this.subscriptionModel.findOne({
+      shopId: new Types.ObjectId(shopId),
+    });
+
+    if (!subscription) {
+      throw new NotFoundException('Subscription not found');
+    }
+
+    if (!subscription.metadata?.accountDeletionRequest) {
+      throw new BadRequestException('No account deletion request found');
+    }
+
+    // Remove deletion request
+    subscription.metadata = {
+      ...subscription.metadata,
+      accountDeletionRequest: undefined,
+    };
+
+    await subscription.save();
+
+    this.logger.log(`Account deletion cancelled for shop ${shopId}`);
+
+    return {
+      success: true,
+      message: 'Account deletion request has been cancelled. Your data is safe.',
+    };
   }
 
   /**
@@ -1151,14 +1701,36 @@ export class SubscriptionsService {
 
   /**
    * Process expiring subscriptions (run daily)
+   * Handles trial expiry, subscription renewal, and suspension
    */
   async processExpiringSubscriptions(): Promise<void> {
     const now = new Date();
     const warningDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
 
-    // Find subscriptions expiring in 7 days
+    // ============================================
+    // 1. Process expired TRIAL subscriptions
+    // Trial users must upgrade after 14 days
+    // ============================================
+    const expiredTrials = await this.subscriptionModel.find({
+      status: SubscriptionStatus.TRIAL,
+      $or: [
+        { trialEndDate: { $lte: now } },
+        { currentPeriodEnd: { $lte: now } },
+      ],
+    });
+
+    for (const subscription of expiredTrials) {
+      subscription.status = SubscriptionStatus.EXPIRED;
+      await subscription.save();
+      this.logger.log(`Trial expired for shop ${subscription.shopId} - user must upgrade to continue`);
+      // TODO: Send trial expiry notification
+    }
+
+    // ============================================
+    // 2. Find subscriptions expiring in 7 days (for warnings)
+    // ============================================
     const expiring = await this.subscriptionModel.find({
-      status: { $in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIAL] },
+      status: SubscriptionStatus.ACTIVE,
       currentPeriodEnd: { $lte: warningDate, $gt: now },
       autoRenew: true,
     });
@@ -1169,9 +1741,11 @@ export class SubscriptionsService {
       this.logger.log(`Subscription ${subscription._id} expiring soon`);
     }
 
-    // Find expired subscriptions
+    // ============================================
+    // 3. Find expired ACTIVE subscriptions (not trial)
+    // ============================================
     const expired = await this.subscriptionModel.find({
-      status: { $in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIAL] },
+      status: SubscriptionStatus.ACTIVE,
       currentPeriodEnd: { $lte: now },
     });
 
@@ -1182,7 +1756,13 @@ export class SubscriptionsService {
         if (plan) {
           const periodStart = new Date();
           const periodEnd = new Date();
-          if (subscription.billingCycle === BillingCycle.ANNUAL) {
+          
+          // Calculate period end based on billing cycle
+          if (subscription.billingCycle === BillingCycle.DAILY) {
+            // For daily, renew for same number of days as before
+            const days = subscription.numberOfDays || 1;
+            periodEnd.setDate(periodEnd.getDate() + days);
+          } else if (subscription.billingCycle === BillingCycle.ANNUAL) {
             periodEnd.setFullYear(periodEnd.getFullYear() + 1);
           } else {
             periodEnd.setMonth(periodEnd.getMonth() + 1);
@@ -1208,7 +1788,9 @@ export class SubscriptionsService {
       await subscription.save();
     }
 
-    // Suspend subscriptions past grace period
+    // ============================================
+    // 4. Suspend subscriptions past grace period
+    // ============================================
     const pastGrace = await this.subscriptionModel.find({
       status: SubscriptionStatus.PAST_DUE,
       gracePeriodEndDate: { $lte: now },
@@ -1233,6 +1815,7 @@ export class SubscriptionsService {
       code: plan.code,
       name: plan.name,
       description: plan.description,
+      dailyPrice: plan.dailyPrice || 0,
       monthlyPrice: plan.monthlyPrice,
       annualPrice: plan.annualPrice,
       setupPrice: plan.setupPrice,
@@ -1266,6 +1849,11 @@ export class SubscriptionsService {
       shops: subscription.currentShopCount,
     };
 
+    // Check if trial has expired
+    const isTrialExpired = subscription.status === SubscriptionStatus.TRIAL && 
+      subscription.currentPeriodEnd && 
+      now > subscription.currentPeriodEnd;
+
     return {
       id: subscription._id.toString(),
       shopId: subscription.shopId.toString(),
@@ -1282,6 +1870,8 @@ export class SubscriptionsService {
       isTrialUsed: subscription.isTrialUsed,
       trialEndDate: subscription.trialEndDate,
       autoRenew: subscription.autoRenew,
+      numberOfDays: subscription.numberOfDays,
+      isTrialExpired,
       usage: {
         shops: { current: usage.shops, limit: plan.maxShops },
         employees: { current: usage.employees, limit: plan.maxEmployees },

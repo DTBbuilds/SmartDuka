@@ -14,6 +14,7 @@ export enum SubscriptionStatus {
 }
 
 export enum BillingCycle {
+  DAILY = 'daily',
   MONTHLY = 'monthly',
   ANNUAL = 'annual',
 }
@@ -133,6 +134,22 @@ export class Subscription {
     lastReminderSent?: Date;
   };
 
+  // For daily billing - number of days purchased
+  @Prop({ required: false })
+  numberOfDays?: number;
+
+  // Pending upgrade (awaiting payment)
+  @Prop({ type: Object, required: false })
+  pendingUpgrade?: {
+    planCode: string;
+    planId: string;
+    billingCycle: string;
+    price: number;
+    invoiceId?: string;
+    requestedAt: Date;
+    expiresAt?: Date; // Pending upgrade expires after 24 hours
+  };
+
   // Metadata
   @Prop({ type: Object, default: {} })
   metadata: {
@@ -141,6 +158,20 @@ export class Subscription {
     downgradedFrom?: string;
     downgradedAt?: Date;
     notes?: string;
+    cancellationSchedule?: {
+      cancelledAt: Date;
+      periodEnd: Date;
+      dataArchiveDate: Date;
+      dataDeletionDate: Date;
+      reason?: string;
+      deleteAccountRequested: boolean;
+    };
+    accountDeletionRequest?: {
+      requestedAt: Date;
+      requestedBy: string;
+      scheduledDeletionDate: Date;
+      confirmed: boolean;
+    };
   };
 
   // Timestamps

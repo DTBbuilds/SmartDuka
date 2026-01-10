@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Mail, Filter, RefreshCw, Download, AlertCircle, CheckCircle, Clock, Trash2, RotateCcw } from 'lucide-react';
+import { AuthGuard } from '@/components/auth-guard';
 
 interface EmailLog {
   _id: string;
@@ -26,7 +27,7 @@ interface Stats {
   successRate: number;
 }
 
-export default function EmailLogsPage() {
+function EmailLogsContent() {
   const [logs, setLogs] = useState<EmailLog[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -360,5 +361,14 @@ export default function EmailLogsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// SECURITY: Protect with AuthGuard
+export default function EmailLogsPage() {
+  return (
+    <AuthGuard requiredRole="super_admin" fallbackRoute="/login">
+      <EmailLogsContent />
+    </AuthGuard>
   );
 }

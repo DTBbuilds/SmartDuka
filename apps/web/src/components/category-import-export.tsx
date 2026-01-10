@@ -47,9 +47,11 @@ export function CategoryImportExport({ token, isOpen, onClose, onImportComplete 
         if (!res.ok) throw new Error('Failed to load categories');
         const text = await res.text();
         const data = text ? JSON.parse(text) : [];
-        setCategories(Array.isArray(data) ? data : []);
-        if (data.length > 0) {
-          setSelectedCategoryId(data[0]._id);
+        // Handle both array format and object format { categories: [...], meta: {...} }
+        const categoriesArray = Array.isArray(data) ? data : (data.categories || []);
+        setCategories(categoriesArray);
+        if (categoriesArray.length > 0) {
+          setSelectedCategoryId(categoriesArray[0]._id);
         }
       } catch (err: any) {
         console.error('Failed to load categories:', err);

@@ -7,6 +7,7 @@ import { Search, MessageSquare, Clock, CheckCircle, AlertCircle, RefreshCw, Inbo
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/lib/use-toast';
+import { AuthGuard } from '@/components/auth-guard';
 import { ToastContainer } from '@/components/toast-container';
 
 type SupportTicket = {
@@ -21,7 +22,7 @@ type SupportTicket = {
   messages: Array<{ sender: string; message: string; createdAt: string }>;
 };
 
-export default function SupportTickets() {
+function SupportTicketsContent() {
   const { token } = useAuth();
   const { toasts, toast, dismiss } = useToast();
   const [activeTab, setActiveTab] = useState('open');
@@ -337,5 +338,14 @@ export default function SupportTickets() {
         </div>
       </div>
     </main>
+  );
+}
+
+// SECURITY: Protect with AuthGuard
+export default function SupportTickets() {
+  return (
+    <AuthGuard requiredRole="super_admin" fallbackRoute="/login">
+      <SupportTicketsContent />
+    </AuthGuard>
   );
 }

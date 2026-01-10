@@ -95,7 +95,9 @@ function AdminDashboardContent() {
       if (categoriesRes.ok) {
         const text = await categoriesRes.text();
         const data = text ? JSON.parse(text) : [];
-        setCategoriesCount(Array.isArray(data) ? data.length : 0);
+        // Handle both array format and object format { categories: [...], meta: {...} }
+        const categoriesArray = Array.isArray(data) ? data : (data.categories || []);
+        setCategoriesCount(categoriesArray.length);
       }
 
       if (lowStockRes.ok) {

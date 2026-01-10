@@ -3,6 +3,7 @@
 import { config } from '@/lib/config';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/lib/auth-context';
+import { AuthGuard } from '@/components/auth-guard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -105,7 +106,7 @@ interface LineItem {
   unitPrice: number;
 }
 
-export default function SuperAdminCommunicationsPage() {
+function SuperAdminCommunicationsContent() {
   const { token } = useAuth();
   const [activeTab, setActiveTab] = useState('compose-email');
   const [loading, setLoading] = useState(false);
@@ -1453,5 +1454,14 @@ export default function SuperAdminCommunicationsPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+// SECURITY: Protect with AuthGuard
+export default function SuperAdminCommunicationsPage() {
+  return (
+    <AuthGuard requiredRole="super_admin" fallbackRoute="/login">
+      <SuperAdminCommunicationsContent />
+    </AuthGuard>
   );
 }

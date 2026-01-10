@@ -3,6 +3,7 @@
 import { config } from '@/lib/config';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
+import { AuthGuard } from '@/components/auth-guard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -103,7 +104,7 @@ interface SmtpStatus {
   frontendUrl?: string;
 }
 
-export default function SuperAdminEmailsPage() {
+function SuperAdminEmailsContent() {
   const { token } = useAuth();
   const [activeTab, setActiveTab] = useState('overview');
   const [emails, setEmails] = useState<EmailLog[]>([]);
@@ -1045,5 +1046,14 @@ export default function SuperAdminEmailsPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+// SECURITY: Protect with AuthGuard
+export default function SuperAdminEmailsPage() {
+  return (
+    <AuthGuard requiredRole="super_admin" fallbackRoute="/login">
+      <SuperAdminEmailsContent />
+    </AuthGuard>
   );
 }

@@ -458,6 +458,18 @@ export class AuthController {
   }
 
   /**
+   * Clear session cookies (public endpoint - no auth required)
+   * Used by frontend before storing new tokens to clear stale httpOnly cookies
+   * that cannot be cleared by JavaScript
+   */
+  @Post('clear-cookies')
+  @SkipCsrf()
+  async clearCookies(@Res({ passthrough: true }) res: Response) {
+    this.cookieService.clearAuthCookies(res);
+    return { message: 'Cookies cleared' };
+  }
+
+  /**
    * Logout from all devices and clear cookies
    */
   @UseGuards(JwtAuthGuard)

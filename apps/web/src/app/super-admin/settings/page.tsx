@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api-client';
+import { AuthGuard } from '@/components/auth-guard';
 import {
   Card,
   CardContent,
@@ -57,7 +58,7 @@ interface VatConfig {
   description: string;
 }
 
-export default function SuperAdminSettingsPage() {
+function SuperAdminSettingsContent() {
   const { token } = useAuth();
   const [activeTab, setActiveTab] = useState('mpesa');
   const [loading, setLoading] = useState(true);
@@ -706,5 +707,14 @@ export default function SuperAdminSettingsPage() {
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+// SECURITY: Protect with AuthGuard
+export default function SuperAdminSettings() {
+  return (
+    <AuthGuard requiredRole="super_admin" fallbackRoute="/login">
+      <SuperAdminSettingsContent />
+    </AuthGuard>
   );
 }

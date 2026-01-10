@@ -75,6 +75,12 @@ export class SubscriptionsModule implements OnModuleInit {
     // Ensure trial plan exists for existing databases
     await this.subscriptionsService.ensureTrialPlanExists();
     
+    // Ensure daily plan exists for existing databases (KES 99/day with Silver features)
+    await this.subscriptionsService.ensureDailyPlanExists();
+    
+    // Update plan display orders (trial=0, daily=1, starter=2, basic=3, silver=4, gold=5)
+    await this.subscriptionsService.updatePlanDisplayOrders();
+    
     // Update plan product limits (Trial: 25, Starter: 250, Basic: 750)
     await this.subscriptionsService.updatePlanProductLimits();
     

@@ -97,14 +97,39 @@ export class SubscriptionEnforcementService {
 
       switch (subscription.status) {
         case SubscriptionStatus.ACTIVE:
-        case SubscriptionStatus.TRIAL:
           return {
             accessLevel: SubscriptionAccessLevel.FULL,
             status: subscription.status,
-            message: subscription.status === SubscriptionStatus.TRIAL 
-              ? `Trial period - ${daysRemaining} days remaining`
-              : 'Subscription active',
+            message: 'Subscription active',
             daysRemaining,
+            canMakePayment: false,
+            subscription: subscriptionInfo,
+          };
+
+        case SubscriptionStatus.TRIAL:
+          // Check if trial has expired (14 days)
+          const trialEnd = subscription.trialEndDate || subscription.currentPeriodEnd;
+          if (now > trialEnd) {
+            // Trial has expired - BLOCK access until they upgrade
+            return {
+              accessLevel: SubscriptionAccessLevel.BLOCKED,
+              status: subscription.status,
+              message: 'Your 14-day trial has ended. Please upgrade to a paid plan to continue using SmartDuka.',
+              daysRemaining: 0,
+              canMakePayment: true,
+              subscription: subscriptionInfo,
+            };
+          }
+          // Trial still active
+          const trialDaysRemaining = Math.max(
+            0,
+            Math.ceil((trialEnd.getTime() - now.getTime()) / (24 * 60 * 60 * 1000))
+          );
+          return {
+            accessLevel: SubscriptionAccessLevel.FULL,
+            status: subscription.status,
+            message: `Trial period - ${trialDaysRemaining} days remaining`,
+            daysRemaining: trialDaysRemaining,
             canMakePayment: false,
             subscription: subscriptionInfo,
           };
@@ -220,47 +245,107 @@ export class SubscriptionEnforcementService {
 
       switch (subscription.status) {
         case SubscriptionStatus.ACTIVE:
-        case SubscriptionStatus.TRIAL:
-          const daysRemaining = Math.ceil(
+          const activeDaysRemaining = Math.ceil(
             (subscription.currentPeriodEnd.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)
           );
 
           // Warning at 7 days
-          if (daysRemaining <= 7 && daysRemaining > 3) {
+          if (activeDaysRemaining <= 7 && activeDaysRemaining > 3) {
             warnings.push({
               type: 'expiring_soon',
               severity: 'info',
               title: 'Subscription Expiring Soon',
-              message: `Your ${planName} subscription expires in ${daysRemaining} days. Renew now to avoid service interruption.`,
-              daysRemaining,
+              message: `Your ${planName} subscription expires in ${activeDaysRemaining} days. Renew now to avoid service interruption.`,
+              daysRemaining: activeDaysRemaining,
               actionRequired: false,
               actionLabel: 'Renew Now',
               actionUrl: '/admin/subscription',
             });
           }
           // Warning at 3 days
-          else if (daysRemaining <= 3 && daysRemaining > 1) {
+          else if (activeDaysRemaining <= 3 && activeDaysRemaining > 1) {
             warnings.push({
               type: 'expiring_soon',
               severity: 'warning',
               title: 'Subscription Expiring Very Soon',
-              message: `Your ${planName} subscription expires in ${daysRemaining} days. Renew immediately to continue operations.`,
-              daysRemaining,
+              message: `Your ${planName} subscription expires in ${activeDaysRemaining} days. Renew immediately to continue operations.`,
+              daysRemaining: activeDaysRemaining,
               actionRequired: true,
               actionLabel: 'Renew Now',
               actionUrl: '/admin/subscription',
             });
           }
           // Critical at 1 day
-          else if (daysRemaining <= 1) {
+          else if (activeDaysRemaining <= 1) {
             warnings.push({
               type: 'expiring_soon',
               severity: 'error',
               title: 'Subscription Expires Tomorrow',
               message: `Your ${planName} subscription expires tomorrow! Renew now to avoid losing access.`,
-              daysRemaining,
+              daysRemaining: activeDaysRemaining,
               actionRequired: true,
               actionLabel: 'Renew Now',
+              actionUrl: '/admin/subscription',
+            });
+          }
+          break;
+
+        case SubscriptionStatus.TRIAL:
+          // Calculate trial days remaining
+          const trialEnd = subscription.trialEndDate || subscription.currentPeriodEnd;
+          const trialDaysRemaining = Math.ceil(
+            (trialEnd.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)
+          );
+
+          // Trial expired - critical warning
+          if (trialDaysRemaining <= 0) {
+            warnings.push({
+              type: 'expired',
+              severity: 'critical',
+              title: 'Trial Period Ended',
+              message: 'Your 14-day free trial has ended. Upgrade to a paid plan to continue using SmartDuka.',
+              daysRemaining: 0,
+              actionRequired: true,
+              actionLabel: 'Upgrade Now',
+              actionUrl: '/admin/subscription',
+            });
+          }
+          // Trial ending soon - warning at 3 days
+          else if (trialDaysRemaining <= 3 && trialDaysRemaining > 1) {
+            warnings.push({
+              type: 'expiring_soon',
+              severity: 'warning',
+              title: 'Trial Ending Soon',
+              message: `Your free trial ends in ${trialDaysRemaining} days. Upgrade now to keep your data and continue using SmartDuka.`,
+              daysRemaining: trialDaysRemaining,
+              actionRequired: true,
+              actionLabel: 'Upgrade Now',
+              actionUrl: '/admin/subscription',
+            });
+          }
+          // Trial ending tomorrow - error
+          else if (trialDaysRemaining === 1) {
+            warnings.push({
+              type: 'expiring_soon',
+              severity: 'error',
+              title: 'Trial Ends Tomorrow',
+              message: 'Your free trial ends tomorrow! Upgrade now to avoid losing access to your shop.',
+              daysRemaining: 1,
+              actionRequired: true,
+              actionLabel: 'Upgrade Now',
+              actionUrl: '/admin/subscription',
+            });
+          }
+          // Trial info - show countdown at 7 days
+          else if (trialDaysRemaining <= 7) {
+            warnings.push({
+              type: 'expiring_soon',
+              severity: 'info',
+              title: 'Trial Period',
+              message: `You have ${trialDaysRemaining} days left in your free trial. Explore all features and upgrade when ready.`,
+              daysRemaining: trialDaysRemaining,
+              actionRequired: false,
+              actionLabel: 'View Plans',
               actionUrl: '/admin/subscription',
             });
           }

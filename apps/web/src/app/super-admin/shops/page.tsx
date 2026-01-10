@@ -8,6 +8,7 @@ import { Search, Eye, CheckCircle, XCircle, AlertCircle, Clock, RefreshCw, Arrow
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/lib/use-toast';
+import { AuthGuard } from '@/components/auth-guard';
 import { ToastContainer } from '@/components/toast-container';
 
 type Shop = {
@@ -27,7 +28,7 @@ type Shop = {
   deletionReason?: string;
 };
 
-export default function ShopsManagement() {
+function ShopsManagementContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { token } = useAuth();
@@ -674,5 +675,14 @@ function ShopCard({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+// SECURITY: Protect with AuthGuard
+export default function ShopsManagement() {
+  return (
+    <AuthGuard requiredRole="super_admin" fallbackRoute="/login">
+      <ShopsManagementContent />
+    </AuthGuard>
   );
 }

@@ -1,4 +1,4 @@
-import { Injectable, Logger, BadRequestException, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, OnModuleInit, Inject, forwardRef } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -9,6 +9,7 @@ import {
 import { Subscription, SubscriptionDocument, SubscriptionStatus } from './schemas/subscription.schema';
 import { SystemConfig, SystemConfigDocument, SystemConfigType } from '../super-admin/schemas/system-config.schema';
 import { MpesaEncryptionService } from '../payments/services/mpesa-encryption.service';
+import type { SubscriptionsService } from './subscriptions.service';
 
 /**
  * SmartDuka Subscription M-Pesa Payment Service
@@ -71,6 +72,8 @@ export class SubscriptionMpesaService implements OnModuleInit {
     private readonly systemConfigModel: Model<SystemConfigDocument>,
     private readonly configService: ConfigService,
     private readonly encryptionService: MpesaEncryptionService,
+    @Inject(forwardRef(() => require('./subscriptions.service').SubscriptionsService))
+    private readonly subscriptionsService: SubscriptionsService,
   ) {}
 
   async onModuleInit() {
@@ -622,20 +625,23 @@ export class SubscriptionMpesaService implements OnModuleInit {
   }
 
   /**
-   * Confirm manual payment for plan upgrade
-   * Verifies receipt and upgrades plan only if payment is valid
+   * Submit manual payment for plan upgrade
+   * 
+   * IMPORTANT: This does NOT activate the upgrade immediately!
+   * The payment is marked as 'pending_verification' and requires:
+   * 1. Super admin to verify the receipt, OR
+   * 2. Automated M-Pesa verification system to confirm
+   * 
+   * Only after verification will the plan change occur via activatePendingUpgrade()
    */
-  async confirmManualUpgradePayment(
+  async submitManualUpgradePayment(
     shopId: string,
     mpesaReceiptNumber: string,
-    planCode: string,
-    billingCycle: 'monthly' | 'annual',
     amount: number,
   ): Promise<PaymentConfirmation> {
     try {
-      this.logger.log(`=== CONFIRMING MANUAL UPGRADE PAYMENT ===`);
+      this.logger.log(`=== SUBMITTING MANUAL UPGRADE PAYMENT FOR VERIFICATION ===`);
       this.logger.log(`Shop ID: ${shopId}`);
-      this.logger.log(`Plan: ${planCode}`);
       this.logger.log(`Receipt: ${mpesaReceiptNumber}`);
       this.logger.log(`Amount: KES ${amount}`);
 
@@ -660,7 +666,7 @@ export class SubscriptionMpesaService implements OnModuleInit {
         };
       }
 
-      // Get current subscription
+      // Get current subscription with pending upgrade
       const subscription = await this.subscriptionModel.findOne({
         shopId: new Types.ObjectId(shopId),
       });
@@ -672,61 +678,69 @@ export class SubscriptionMpesaService implements OnModuleInit {
         };
       }
 
-      // Create an invoice for this upgrade payment (plan change will be done via subscription service)
-      const invoiceNumber = `UPG-${Date.now().toString(36).toUpperCase()}`;
-      const now = new Date();
-      const periodEnd = new Date(Date.now() + (billingCycle === 'annual' ? 365 : 30) * 24 * 60 * 60 * 1000);
-      
-      const invoice = new this.invoiceModel({
-        shopId: new Types.ObjectId(shopId),
-        subscriptionId: subscription._id,
-        invoiceNumber,
-        type: 'upgrade',
-        description: `Upgrade to ${planCode} Plan`,
-        amount: amount,
-        currency: 'KES',
-        discount: 0,
-        tax: 0,
-        totalAmount: amount,
-        dueDate: now, // Due immediately for upgrade
-        status: 'paid',
-        paidAt: now,
-        mpesaReceiptNumber: normalizedReceipt,
-        paymentMethod: 'mpesa_manual',
-        periodStart: now,
-        periodEnd: periodEnd,
-      });
+      // Must have a pending upgrade to submit payment for
+      if (!subscription.pendingUpgrade) {
+        return {
+          success: false,
+          message: 'No pending upgrade found. Please initiate an upgrade first.',
+        };
+      }
 
-      await invoice.save();
+      // Find the invoice for this pending upgrade
+      const invoice = await this.invoiceModel.findById(subscription.pendingUpgrade.invoiceId);
+      if (!invoice) {
+        return {
+          success: false,
+          message: 'Upgrade invoice not found. Please initiate a new upgrade.',
+        };
+      }
 
-      // Store pending upgrade info - the plan change will be processed
-      const oldPlanCode = subscription.planCode;
+      // Verify amount matches (allow 5% variance for fees)
+      if (amount < invoice.totalAmount * 0.95) {
+        return {
+          success: false,
+          message: `Amount paid (KES ${amount}) is less than required (KES ${invoice.totalAmount})`,
+        };
+      }
 
-      // Update subscription with new plan info
-      await this.subscriptionModel.findOneAndUpdate(
-        { shopId: new Types.ObjectId(shopId) },
+      // Update invoice with payment details - mark as PENDING VERIFICATION
+      // Plan will NOT change until super admin verifies or automated system confirms
+      await this.invoiceModel.updateOne(
+        { _id: invoice._id },
         {
           $set: {
-            planCode: planCode,
-            billingCycle: billingCycle as any,
-            'metadata.upgradedFrom': oldPlanCode,
-            'metadata.upgradedAt': new Date(),
+            status: 'pending_verification',
+            paymentMethod: 'mpesa_manual',
+            mpesaReceiptNumber: normalizedReceipt,
+            paidAmount: amount,
+            'manualPayment': {
+              receiptNumber: normalizedReceipt,
+              submittedAt: new Date(),
+              pendingVerification: true,
+              claimedAmount: amount,
+              verifiedAt: null,
+              verifiedBy: null,
+            },
+          },
+          $inc: {
+            paymentAttempts: 1,
           },
         },
       );
 
-      this.logger.log(`✅ Manual upgrade payment confirmed. Plan upgraded from ${oldPlanCode} to ${planCode}`);
+      this.logger.log(`📋 Manual payment submitted for verification - Invoice: ${invoice.invoiceNumber}, Receipt: ${normalizedReceipt}`);
+      this.logger.log(`⏳ Plan change will occur ONLY after super admin verification`);
 
       return {
         success: true,
-        message: `Payment confirmed! Your plan has been upgraded to ${planCode}.`,
+        message: `Payment submitted for verification! Your plan will be upgraded to ${subscription.pendingUpgrade.planCode} once the payment is verified by our team (usually within 24 hours).`,
         mpesaReceiptNumber: normalizedReceipt,
       };
     } catch (error: any) {
-      this.logger.error('❌ Manual upgrade payment confirmation failed:', error.message);
+      this.logger.error('❌ Manual upgrade payment submission failed:', error.message);
       return {
         success: false,
-        message: error.message || 'Failed to confirm payment',
+        message: error.message || 'Failed to submit payment',
       };
     }
   }
@@ -987,6 +1001,9 @@ export class SubscriptionMpesaService implements OnModuleInit {
 
   /**
    * Activate subscription after successful payment
+   * 
+   * If there's a pending upgrade, activates that instead of just updating status.
+   * This ensures plan changes only happen AFTER payment is confirmed.
    */
   private async activateSubscriptionAfterPayment(
     shopId: string,
@@ -1006,12 +1023,32 @@ export class SubscriptionMpesaService implements OnModuleInit {
       // Get the invoice to retrieve payment details
       const invoice = await this.invoiceModel.findById(invoiceId);
 
-      // Update subscription status to active
+      // Check if this payment is for a pending upgrade
+      if (subscription.pendingUpgrade && 
+          (subscription.pendingUpgrade.invoiceId === invoiceId || 
+           invoice?.type === 'upgrade')) {
+        
+        this.logger.log(`Activating pending upgrade for shop ${shopId} after payment confirmation`);
+        
+        // Use the subscriptions service to activate the upgrade
+        const result = await this.subscriptionsService.activatePendingUpgrade(shopId, invoiceId);
+        
+        if (result) {
+          this.logger.log(`✅ Pending upgrade activated for shop ${shopId}: ${result.planCode}`);
+        } else {
+          this.logger.warn(`Failed to activate pending upgrade for shop ${shopId}`);
+        }
+        return;
+      }
+
+      // No pending upgrade - just activate/renew the subscription
       const now = new Date();
       const periodEnd = new Date(now);
       
       if (subscription.billingCycle === 'annual') {
         periodEnd.setFullYear(periodEnd.getFullYear() + 1);
+      } else if (subscription.billingCycle === 'daily' && subscription.numberOfDays) {
+        periodEnd.setDate(periodEnd.getDate() + subscription.numberOfDays);
       } else {
         periodEnd.setMonth(periodEnd.getMonth() + 1);
       }

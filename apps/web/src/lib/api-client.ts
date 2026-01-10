@@ -132,7 +132,8 @@ async function request<T = unknown>(
   
   // Safely parse JSON - handle empty responses
   const text = await response.text();
-  const data = text ? JSON.parse(text) : {};
+  // Handle null responses from backend - don't convert null to {}
+  const data = text ? JSON.parse(text) : null;
   
   if (!response.ok) {
     // Handle 401 Unauthorized - redirect to login

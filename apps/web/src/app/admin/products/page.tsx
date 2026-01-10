@@ -88,7 +88,9 @@ function ProductsContent() {
 
       if (categoriesRes.ok) {
         const data = await categoriesRes.json();
-        setCategories(Array.isArray(data) ? data : []);
+        // Handle both array format and object format { categories: [...], meta: {...} }
+        const categoriesArray = Array.isArray(data) ? data : (data.categories || []);
+        setCategories(categoriesArray);
       } else {
         setCategories([]);
       }
