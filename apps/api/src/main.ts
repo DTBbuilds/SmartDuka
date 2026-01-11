@@ -64,6 +64,11 @@ async function bootstrap() {
   // Excludes health endpoints and docs for direct access
   app.setGlobalPrefix('api/v1', {
     exclude: [
+      // Root routes for Render health probes and basic info
+      '',
+      'robots.txt',
+      'favicon.ico',
+      // Health endpoints
       'health', 
       'health/ready', 
       'health/live', 

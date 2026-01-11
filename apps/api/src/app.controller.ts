@@ -1,4 +1,4 @@
-import { Controller, Get, Header } from '@nestjs/common';
+import { Controller, Get, Head, Header } from '@nestjs/common';
 import { AppService } from './app.service';
 
 @Controller()
@@ -6,8 +6,24 @@ export class AppController {
   constructor(private readonly appService: AppService) {}
 
   @Get()
-  getHello(): string {
-    return this.appService.getHello();
+  getRoot(): object {
+    return {
+      name: 'SmartDuka API',
+      version: '1.0.0',
+      status: 'running',
+      timestamp: new Date().toISOString(),
+      endpoints: {
+        health: '/health',
+        docs: '/api/docs',
+        api: '/api/v1',
+      },
+    };
+  }
+
+  @Head()
+  headRoot(): void {
+    // HEAD request for health probes - returns 200 with no body
+    return;
   }
 
   @Get('robots.txt')
