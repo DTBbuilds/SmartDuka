@@ -273,4 +273,98 @@ export class SubscriptionMigrationService implements OnModuleInit {
     // For now, log a message
     this.logger.log('Product count sync should be triggered from inventory service');
   }
+
+  /**
+   * Fix daily subscription periods that were incorrectly set to monthly periods
+   * This migration corrects subscriptions where billingCycle is 'daily' but
+   * currentPeriodEnd is more than 7 days from lastPaymentDate
+   */
+  async fixDailySubscriptionPeriods(): Promise<{
+    fixed: number;
+    skipped: number;
+    errors: number;
+    details: string[];
+  }> {
+    this.logger.log('Starting fix for daily subscription periods...');
+    
+    const details: string[] = [];
+    let fixed = 0;
+    let skipped = 0;
+    let errors = 0;
+
+    try {
+      // Find all daily subscriptions
+      const dailySubscriptions = await this.subscriptionModel.find({
+        billingCycle: BillingCycle.DAILY,
+      }).exec();
+
+      this.logger.log(`Found ${dailySubscriptions.length} daily subscriptions to check`);
+
+      for (const subscription of dailySubscriptions) {
+        try {
+          const now = new Date();
+          const periodEnd = subscription.currentPeriodEnd;
+          const lastPayment = subscription.lastPaymentDate || subscription.currentPeriodStart;
+          
+          // Calculate days between last payment and period end
+          const daysBetween = Math.ceil(
+            (periodEnd.getTime() - lastPayment.getTime()) / (24 * 60 * 60 * 1000)
+          );
+          
+          // If period is more than 7 days, it's likely incorrectly set to monthly
+          if (daysBetween > 7) {
+            const numberOfDays = subscription.numberOfDays || 1;
+            const correctPeriodEnd = new Date(lastPayment);
+            correctPeriodEnd.setDate(correctPeriodEnd.getDate() + numberOfDays);
+            
+            // Only fix if the correct period end is in the future or recently passed
+            // Don't fix very old subscriptions
+            const daysSinceCorrectEnd = Math.ceil(
+              (now.getTime() - correctPeriodEnd.getTime()) / (24 * 60 * 60 * 1000)
+            );
+            
+            if (daysSinceCorrectEnd < 30) {
+              // Update the subscription
+              await this.subscriptionModel.updateOne(
+                { _id: subscription._id },
+                {
+                  $set: {
+                    currentPeriodEnd: correctPeriodEnd,
+                    nextBillingDate: correctPeriodEnd,
+                    numberOfDays: numberOfDays,
+                  },
+                },
+              );
+              
+              const shopId = subscription.shopId.toString();
+              details.push(
+                `Fixed shop ${shopId}: ${daysBetween} days -> ${numberOfDays} day(s), ` +
+                `new end: ${correctPeriodEnd.toISOString()}`
+              );
+              fixed++;
+              this.logger.log(`Fixed daily subscription for shop ${shopId}`);
+            } else {
+              details.push(
+                `Skipped shop ${subscription.shopId}: correct period ended ${daysSinceCorrectEnd} days ago`
+              );
+              skipped++;
+            }
+          } else {
+            skipped++;
+          }
+        } catch (error: any) {
+          errors++;
+          details.push(`Error processing subscription ${subscription._id}: ${error.message}`);
+          this.logger.error(`Error fixing subscription ${subscription._id}:`, error);
+        }
+      }
+
+      this.logger.log(`Daily subscription fix complete: ${fixed} fixed, ${skipped} skipped, ${errors} errors`);
+    } catch (error: any) {
+      this.logger.error('Failed to fix daily subscriptions:', error);
+      throw error;
+    }
+
+    return { fixed, skipped, errors, details };
+  }
 }

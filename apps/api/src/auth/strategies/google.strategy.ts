@@ -19,12 +19,16 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     const clientSecret = configService.get<string>('GOOGLE_CLIENT_SECRET');
 
     // Use placeholder values if not configured - strategy won't work but app won't crash
+    // For development, use localhost. For production, use the configured callback URL.
+    const isDev = process.env.NODE_ENV !== 'production';
+    const defaultCallbackUrl = isDev 
+      ? 'http://localhost:5000/api/v1/auth/google/callback'
+      : 'https://smarduka.onrender.com/api/v1/auth/google/callback';
+    
     const options: StrategyOptions = {
       clientID: clientID || 'not-configured',
       clientSecret: clientSecret || 'not-configured',
-      callbackURL:
-        configService.get<string>('GOOGLE_CALLBACK_URL') ||
-        'http://localhost:5000/auth/google/callback',
+      callbackURL: configService.get<string>('GOOGLE_CALLBACK_URL') || defaultCallbackUrl,
       scope: ['email', 'profile'],
     };
     super(options);

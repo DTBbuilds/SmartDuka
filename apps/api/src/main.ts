@@ -17,14 +17,17 @@ async function bootstrap() {
 
   // Enable CORS FIRST - before any other middleware
   // This ensures preflight requests work correctly
+  const isDev = process.env.NODE_ENV !== 'production';
   app.enableCors({
-    origin: [
-      'http://localhost:3000',
-      'http://localhost:3001',
-      'https://smartduka.vercel.app',
-      'https://smartduka-eta.vercel.app',
-      process.env.CORS_ORIGIN,
-    ].filter(Boolean),
+    origin: isDev 
+      ? true // Allow all origins in development (for mobile testing on same network)
+      : [
+          'http://localhost:3000',
+          'http://localhost:3001',
+          'https://smartduka.vercel.app',
+          'https://smartduka-eta.vercel.app',
+          process.env.CORS_ORIGIN,
+        ].filter(Boolean),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'X-CSRF-Token', 'x-csrf-token'],

@@ -52,7 +52,15 @@ import { WhatsAppModule } from './whatsapp/whatsapp.module';
       isGlobal: true,
       envFilePath: ['.env.local', '.env'],
     }),
-    MongooseModule.forRoot(process.env.MONGODB_URI ?? 'mongodb://localhost:27017/smartduka'),
+    MongooseModule.forRoot(process.env.MONGODB_URI ?? 'mongodb://localhost:27017/smartduka', {
+      // Connection resilience settings for MongoDB Atlas
+      serverSelectionTimeoutMS: 10000, // Timeout for server selection (10s)
+      socketTimeoutMS: 45000, // Socket timeout (45s)
+      maxPoolSize: 10, // Maximum connections in pool
+      minPoolSize: 2, // Keep minimum connections alive
+      retryWrites: true, // Retry failed writes
+      retryReads: true, // Retry failed reads
+    }),
     // Import Subscription schema for global SubscriptionStatusGuard
     MongooseModule.forFeature([
       { name: Subscription.name, schema: SubscriptionSchema },

@@ -1,8 +1,71 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '@/lib/api-client';
 import { useRefreshEvent, refreshEvents } from '@/lib/refresh-events';
+
+// Cache configuration
+const CACHE_KEYS = {
+  SUBSCRIPTION: 'smartduka:cache:subscription',
+  PLANS: 'smartduka:cache:plans',
+  INVOICES: 'smartduka:cache:invoices',
+  PENDING_INVOICES: 'smartduka:cache:pending_invoices',
+};
+
+const CACHE_TTL = {
+  SUBSCRIPTION: 5 * 60 * 1000, // 5 minutes
+  PLANS: 30 * 60 * 1000, // 30 minutes (plans rarely change)
+  INVOICES: 2 * 60 * 1000, // 2 minutes
+};
+
+interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+  ttl: number;
+}
+
+function getCache<T>(key: string): T | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const cached = localStorage.getItem(key);
+    if (!cached) return null;
+    
+    const entry: CacheEntry<T> = JSON.parse(cached);
+    const isExpired = Date.now() - entry.timestamp > entry.ttl;
+    
+    if (isExpired) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    
+    return entry.data;
+  } catch {
+    return null;
+  }
+}
+
+function setCache<T>(key: string, data: T, ttl: number): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const entry: CacheEntry<T> = { data, timestamp: Date.now(), ttl };
+    localStorage.setItem(key, JSON.stringify(entry));
+  } catch {
+    // Ignore storage errors (quota exceeded, etc.)
+  }
+}
+
+function clearCache(key: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // Ignore errors
+  }
+}
+
+function clearAllSubscriptionCache(): void {
+  Object.values(CACHE_KEYS).forEach(clearCache);
+}
 
 // Types
 export type BillingCycle = 'daily' | 'monthly' | 'annual';
@@ -91,19 +154,34 @@ export interface Invoice {
 }
 
 /**
- * Hook to fetch subscription plans (public)
+ * Hook to fetch subscription plans (public) - with caching
  */
 export function useSubscriptionPlans() {
-  const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
+  const [plans, setPlans] = useState<SubscriptionPlan[]>(() => {
+    // Initialize from cache
+    return getCache<SubscriptionPlan[]>(CACHE_KEYS.PLANS) || [];
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const fetchedRef = useRef(false);
 
-  const fetchPlans = useCallback(async () => {
+  const fetchPlans = useCallback(async (forceRefresh = false) => {
+    // Check cache first (unless forcing refresh)
+    if (!forceRefresh) {
+      const cached = getCache<SubscriptionPlan[]>(CACHE_KEYS.PLANS);
+      if (cached && cached.length > 0) {
+        setPlans(cached);
+        setLoading(false);
+        return;
+      }
+    }
+
     try {
       setLoading(true);
       setError(null);
       const data = await api.get<SubscriptionPlan[]>('/subscriptions/plans');
       setPlans(data);
+      setCache(CACHE_KEYS.PLANS, data, CACHE_TTL.PLANS);
     } catch (err: any) {
       setError(err.message || 'Failed to fetch plans');
     } finally {
@@ -112,10 +190,13 @@ export function useSubscriptionPlans() {
   }, []);
 
   useEffect(() => {
-    fetchPlans();
+    if (!fetchedRef.current) {
+      fetchedRef.current = true;
+      fetchPlans();
+    }
   }, [fetchPlans]);
 
-  return { plans, loading, error, refetch: fetchPlans };
+  return { plans, loading, error, refetch: () => fetchPlans(true) };
 }
 
 /**
@@ -149,14 +230,18 @@ function isSuperAdmin(): boolean {
 }
 
 /**
- * Hook to manage current subscription
+ * Hook to manage current subscription - with caching
  */
 export function useSubscription() {
-  const [subscription, setSubscription] = useState<Subscription | null>(null);
+  const [subscription, setSubscription] = useState<Subscription | null>(() => {
+    // Initialize from cache
+    return getCache<Subscription>(CACHE_KEYS.SUBSCRIPTION);
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const fetchedRef = useRef(false);
 
-  const fetchSubscription = useCallback(async () => {
+  const fetchSubscription = useCallback(async (forceRefresh = false) => {
     // Skip if no auth token - prevents unnecessary 401 errors
     if (!hasAuthToken()) {
       setLoading(false);
@@ -172,6 +257,16 @@ export function useSubscription() {
       return;
     }
 
+    // Check cache first (unless forcing refresh)
+    if (!forceRefresh) {
+      const cached = getCache<Subscription>(CACHE_KEYS.SUBSCRIPTION);
+      if (cached) {
+        setSubscription(cached);
+        setLoading(false);
+        return;
+      }
+    }
+
     try {
       setLoading(true);
       setError(null);
@@ -182,16 +277,20 @@ export function useSubscription() {
         // Validate that it's not an empty object
         if (typeof data === 'object' && Object.keys(data).length > 0) {
           setSubscription(data);
+          setCache(CACHE_KEYS.SUBSCRIPTION, data, CACHE_TTL.SUBSCRIPTION);
         } else {
           setSubscription(null);
+          clearCache(CACHE_KEYS.SUBSCRIPTION);
         }
       } else {
         setSubscription(null);
+        clearCache(CACHE_KEYS.SUBSCRIPTION);
       }
     } catch (err: any) {
       // 404 means no subscription yet or no shop context (super-admin)
       if (err.statusCode === 404) {
         setSubscription(null);
+        clearCache(CACHE_KEYS.SUBSCRIPTION);
         setError(null); // Clear error for expected cases
       } else if (err.statusCode === 401) {
         // Unauthorized - token expired or invalid
@@ -353,15 +452,36 @@ export function useSubscription() {
     }
   }, []);
 
+  const toggleAutoRenew = useCallback(async (autoRenew: boolean) => {
+    try {
+      const result = await api.put<{ success: boolean; autoRenew: boolean; message: string }>(
+        '/subscriptions/auto-renew',
+        { autoRenew }
+      );
+      // Update local subscription state
+      if (subscription) {
+        setSubscription({ ...subscription, autoRenew: result.autoRenew });
+        setCache(CACHE_KEYS.SUBSCRIPTION, { ...subscription, autoRenew: result.autoRenew }, CACHE_TTL.SUBSCRIPTION);
+      }
+      return result;
+    } catch (err: any) {
+      throw new Error(err.message || 'Failed to update auto-renew setting');
+    }
+  }, [subscription]);
+
   useEffect(() => {
-    fetchSubscription();
+    if (!fetchedRef.current) {
+      fetchedRef.current = true;
+      fetchSubscription();
+    }
   }, [fetchSubscription]);
 
-  // Listen for refresh events that should trigger subscription refetch
+  // Listen for refresh events that should trigger subscription refetch (force refresh)
   useRefreshEvent(
     ['subscription:updated', 'subscription:created', 'subscription:reactivated', 'payment:completed'],
     () => {
-      fetchSubscription();
+      clearCache(CACHE_KEYS.SUBSCRIPTION);
+      fetchSubscription(true);
     },
     [fetchSubscription]
   );
@@ -370,11 +490,12 @@ export function useSubscription() {
     subscription,
     loading,
     error,
-    refetch: fetchSubscription,
+    refetch: () => fetchSubscription(true),
     createSubscription,
     changePlan,
     cancelSubscription,
     reactivateSubscription,
+    toggleAutoRenew,
     getPendingUpgrade,
     cancelPendingUpgrade,
     getCancellationPreview,
@@ -384,15 +505,20 @@ export function useSubscription() {
 }
 
 /**
- * Hook to manage billing history
+ * Hook to manage billing history - with caching
  */
 export function useBillingHistory() {
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [pendingInvoices, setPendingInvoices] = useState<Invoice[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>(() => {
+    return getCache<Invoice[]>(CACHE_KEYS.INVOICES) || [];
+  });
+  const [pendingInvoices, setPendingInvoices] = useState<Invoice[]>(() => {
+    return getCache<Invoice[]>(CACHE_KEYS.PENDING_INVOICES) || [];
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const fetchedRef = useRef(false);
 
-  const fetchHistory = useCallback(async (limit = 20, skip = 0) => {
+  const fetchHistory = useCallback(async (limit = 20, skip = 0, forceRefresh = false) => {
     // Skip if no auth token - prevents unnecessary 401 errors
     if (!hasAuthToken()) {
       setLoading(false);
@@ -410,6 +536,18 @@ export function useBillingHistory() {
       return;
     }
 
+    // Check cache first (unless forcing refresh)
+    if (!forceRefresh) {
+      const cachedInvoices = getCache<Invoice[]>(CACHE_KEYS.INVOICES);
+      const cachedPending = getCache<Invoice[]>(CACHE_KEYS.PENDING_INVOICES);
+      if (cachedInvoices && cachedPending) {
+        setInvoices(cachedInvoices);
+        setPendingInvoices(cachedPending);
+        setLoading(false);
+        return;
+      }
+    }
+
     try {
       setLoading(true);
       setError(null);
@@ -419,6 +557,8 @@ export function useBillingHistory() {
       ]);
       setInvoices(history);
       setPendingInvoices(pending);
+      setCache(CACHE_KEYS.INVOICES, history, CACHE_TTL.INVOICES);
+      setCache(CACHE_KEYS.PENDING_INVOICES, pending, CACHE_TTL.INVOICES);
     } catch (err: any) {
       if (err.statusCode === 401 || err.statusCode === 404 || err.statusCode === 403) {
         // Unauthorized, not found, or forbidden - expected for super-admin
@@ -546,14 +686,19 @@ export function useBillingHistory() {
   }, []);
 
   useEffect(() => {
-    fetchHistory();
+    if (!fetchedRef.current) {
+      fetchedRef.current = true;
+      fetchHistory();
+    }
   }, [fetchHistory]);
 
-  // Listen for refresh events that should trigger billing refetch
+  // Listen for refresh events that should trigger billing refetch (force refresh)
   useRefreshEvent(
     ['payment:completed', 'invoice:created', 'invoice:paid', 'subscription:updated'],
     () => {
-      fetchHistory();
+      clearCache(CACHE_KEYS.INVOICES);
+      clearCache(CACHE_KEYS.PENDING_INVOICES);
+      fetchHistory(20, 0, true);
     },
     [fetchHistory]
   );
@@ -563,7 +708,7 @@ export function useBillingHistory() {
     pendingInvoices,
     loading,
     error,
-    refetch: fetchHistory,
+    refetch: () => fetchHistory(20, 0, true),
     initiatePayment,
     getManualPaymentInstructions,
     confirmManualPayment,

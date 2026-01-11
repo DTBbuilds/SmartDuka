@@ -230,7 +230,11 @@ export class AuthController {
     }
     
     const clientSecret = this.configService.get<string>('GOOGLE_CLIENT_SECRET');
-    const callbackUrl = this.configService.get<string>('GOOGLE_CALLBACK_URL') || 'http://localhost:5000/api/v1/auth/google/callback';
+    const isDev = process.env.NODE_ENV !== 'production';
+    const defaultCallbackUrl = isDev 
+      ? 'http://localhost:5000/api/v1/auth/google/callback'
+      : 'https://smarduka.onrender.com/api/v1/auth/google/callback';
+    const callbackUrl = this.configService.get<string>('GOOGLE_CALLBACK_URL') || defaultCallbackUrl;
     
     // Build Google OAuth URL with state parameter
     const state = encodeURIComponent(JSON.stringify({ role: 'cashier' }));

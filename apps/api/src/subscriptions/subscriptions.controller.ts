@@ -12,7 +12,10 @@ import {
   HttpStatus,
   Logger,
   NotFoundException,
+  Res,
+  StreamableFile,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { SubscriptionsService } from './subscriptions.service';
 import { SubscriptionMigrationService } from './subscription-migration.service';
 import { ActivityLogService } from './services/activity-log.service';
@@ -239,6 +242,20 @@ export class SubscriptionsController {
     return this.subscriptionsService.reactivateSubscription(user.shopId);
   }
 
+  /**
+   * Toggle auto-renew setting
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Put('auto-renew')
+  async toggleAutoRenew(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: { autoRenew: boolean },
+  ): Promise<{ success: boolean; autoRenew: boolean; message: string }> {
+    this.logger.log(`Toggling auto-renew for shop ${user.shopId} to ${dto.autoRenew}`);
+    return this.subscriptionsService.toggleAutoRenew(user.shopId, dto.autoRenew);
+  }
+
   // ============================================
   // BILLING ENDPOINTS
   // ============================================
@@ -281,6 +298,137 @@ export class SubscriptionsController {
     @Param('id') invoiceId: string,
   ): Promise<InvoiceResponseDto> {
     return this.subscriptionsService.getInvoice(user.shopId, invoiceId);
+  }
+
+  /**
+   * Get invoice/receipt as PDF or HTML
+   * @param type - 'invoice' for invoice, 'receipt' for payment receipt
+   */
+  @UseGuards(JwtAuthGuard)
+  @Get('invoices/:id/pdf')
+  async getInvoicePdf(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') invoiceId: string,
+    @Query('type') type: 'invoice' | 'receipt' = 'invoice',
+    @Res() res: Response,
+  ): Promise<void> {
+    const invoice = await this.subscriptionsService.getInvoice(user.shopId, invoiceId);
+    
+    if (!invoice) {
+      throw new NotFoundException('Invoice not found');
+    }
+
+    // For receipts, invoice must be paid
+    if (type === 'receipt' && invoice.status !== 'paid') {
+      throw new NotFoundException('Receipt not available - invoice not paid');
+    }
+
+    // Generate HTML document
+    const html = this.generateInvoiceHtml(invoice, type);
+    
+    res.setHeader('Content-Type', 'text/html');
+    res.setHeader('Content-Disposition', `inline; filename="${type}-${invoice.invoiceNumber}.html"`);
+    res.send(html);
+  }
+
+  /**
+   * Generate invoice/receipt HTML
+   */
+  private generateInvoiceHtml(invoice: InvoiceResponseDto, type: 'invoice' | 'receipt'): string {
+    const isReceipt = type === 'receipt';
+    const title = isReceipt ? 'Payment Receipt' : 'Invoice';
+    const statusColor = invoice.status === 'paid' ? '#10b981' : invoice.status === 'pending' ? '#f59e0b' : '#ef4444';
+    
+    return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title} - ${invoice.invoiceNumber}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f8fafc; padding: 20px; }
+    .container { max-width: 800px; margin: 0 auto; background: white; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); overflow: hidden; }
+    .header { background: linear-gradient(135deg, #1e293b 0%, #334155 100%); color: white; padding: 32px; }
+    .header h1 { font-size: 28px; font-weight: 700; }
+    .header p { opacity: 0.8; margin-top: 4px; }
+    .badge { display: inline-block; padding: 6px 16px; border-radius: 20px; font-size: 12px; font-weight: 600; text-transform: uppercase; background: ${statusColor}; color: white; margin-top: 12px; }
+    .content { padding: 32px; }
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 32px; }
+    .info-box { background: #f8fafc; padding: 16px; border-radius: 8px; }
+    .info-box h3 { font-size: 12px; text-transform: uppercase; color: #64748b; margin-bottom: 8px; letter-spacing: 0.5px; }
+    .info-box p { color: #1e293b; font-weight: 500; }
+    .table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+    .table th { background: #f1f5f9; padding: 12px 16px; text-align: left; font-size: 12px; text-transform: uppercase; color: #64748b; }
+    .table td { padding: 16px; border-bottom: 1px solid #e2e8f0; }
+    .table .amount { text-align: right; font-weight: 600; }
+    .total-row { background: #f8fafc; }
+    .total-row td { font-weight: 700; font-size: 18px; color: #1e293b; }
+    .footer { background: #f8fafc; padding: 24px 32px; text-align: center; color: #64748b; font-size: 14px; }
+    .footer a { color: #3b82f6; text-decoration: none; }
+    @media print { body { background: white; padding: 0; } .container { box-shadow: none; } }
+    @media (max-width: 600px) { .info-grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>SmartDuka</h1>
+      <p>${title}</p>
+      <span class="badge">${invoice.status.toUpperCase()}</span>
+    </div>
+    
+    <div class="content">
+      <div class="info-grid">
+        <div class="info-box">
+          <h3>${isReceipt ? 'Receipt Number' : 'Invoice Number'}</h3>
+          <p>${invoice.invoiceNumber}</p>
+        </div>
+        <div class="info-box">
+          <h3>${isReceipt ? 'Payment Date' : 'Due Date'}</h3>
+          <p>${isReceipt && invoice.paidAt ? new Date(invoice.paidAt).toLocaleDateString('en-KE', { year: 'numeric', month: 'long', day: 'numeric' }) : new Date(invoice.dueDate).toLocaleDateString('en-KE', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+        </div>
+        ${invoice.mpesaReceiptNumber ? `
+        <div class="info-box">
+          <h3>M-Pesa Receipt</h3>
+          <p>${invoice.mpesaReceiptNumber}</p>
+        </div>
+        ` : ''}
+        <div class="info-box">
+          <h3>Payment Method</h3>
+          <p>${invoice.paymentMethod ? invoice.paymentMethod.replace('_', ' ').toUpperCase() : 'Pending'}</p>
+        </div>
+      </div>
+
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Description</th>
+            <th class="amount">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>${invoice.description}</td>
+            <td class="amount">KES ${invoice.totalAmount.toLocaleString()}</td>
+          </tr>
+          <tr class="total-row">
+            <td>Total ${isReceipt ? 'Paid' : 'Due'}</td>
+            <td class="amount">KES ${invoice.totalAmount.toLocaleString()}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="footer">
+      <p>Thank you for using SmartDuka!</p>
+      <p style="margin-top: 8px;">Questions? Contact us at <a href="mailto:support@smartduka.co.ke">support@smartduka.co.ke</a></p>
+    </div>
+  </div>
+</body>
+</html>
+    `.trim();
   }
 
   // ============================================
@@ -416,5 +564,19 @@ export class SubscriptionsController {
   ): Promise<{ success: boolean; message: string }> {
     this.logger.log(`Super admin ${user.email} reactivating subscription for shop ${shopId}`);
     return this.subscriptionsService.adminReactivateSubscription(shopId);
+  }
+
+  /**
+   * Fix daily subscription periods that were incorrectly set (super admin only)
+   * This corrects subscriptions where billingCycle is 'daily' but period is monthly
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('super_admin')
+  @Post('admin/fix-daily-subscriptions')
+  async fixDailySubscriptions(
+    @CurrentUser() user: JwtPayload,
+  ): Promise<{ fixed: number; skipped: number; errors: number; details: string[] }> {
+    this.logger.log(`Super admin ${user.email} fixing daily subscription periods`);
+    return this.migrationService.fixDailySubscriptionPeriods();
   }
 }

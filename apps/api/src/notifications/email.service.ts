@@ -40,6 +40,9 @@ export interface TemplateEmailOptions {
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
   private transporter: nodemailer.Transporter | null = null;
+  private isTransporterReady = false;
+  private readonly maxRetries = 2;
+  private readonly retryDelayMs = 1000;
 
   constructor(
     @InjectModel(EmailTemplate.name)
@@ -52,7 +55,9 @@ export class EmailService {
 
   private initializeTransporter() {
     const host = process.env.SMTP_HOST;
-    const port = parseInt(process.env.SMTP_PORT || '587', 10);
+    // Default to port 465 (SSL) as it's more reliable across networks
+    // Port 587 (STARTTLS) is often blocked by firewalls/ISPs
+    const port = parseInt(process.env.SMTP_PORT || '465', 10);
     const user = process.env.SMTP_USER;
     const pass = process.env.SMTP_PASS;
     const from = process.env.SMTP_FROM || 'SmartDuka <noreply@smartduka.co.ke>';
@@ -69,16 +74,16 @@ export class EmailService {
       this.transporter = nodemailer.createTransport({
         host,
         port,
-        secure: port === 465,
+        secure: port === 465, // true for 465 (SSL), false for 587 (STARTTLS)
         auth: { user, pass },
-        connectionTimeout: 15000, // Increased from 10s to 15s
-        greetingTimeout: 15000,   // Increased from 10s to 15s
-        socketTimeout: 45000,     // Increased from 30s to 45s
+        connectionTimeout: 15000,
+        greetingTimeout: 15000,
+        socketTimeout: 45000,
         pool: true,
-        maxConnections: 3,        // Reduced from 5 to 3 for stability
-        maxMessages: 50,          // Reduced from 100 to 50
+        maxConnections: 3,
+        maxMessages: 50,
         tls: {
-          rejectUnauthorized: process.env.NODE_ENV === 'production', // Strict in prod only
+          rejectUnauthorized: process.env.NODE_ENV === 'production',
         },
       });
 
@@ -142,6 +147,7 @@ export class EmailService {
         templateVariables: options.templateVariables,
         triggeredBy: options.triggeredBy || 'system',
         status: 'pending',
+        retryCount: 0,
       });
       await emailLog.save();
     } catch (logError: any) {
@@ -150,7 +156,6 @@ export class EmailService {
 
     if (!this.transporter) {
       this.logger.warn('Email not sent - SMTP not configured');
-      // Update log to failed
       if (emailLog) {
         await this.emailLogModel.findByIdAndUpdate(emailLog._id, {
           status: 'failed',
@@ -161,45 +166,67 @@ export class EmailService {
       return { success: false, error: 'SMTP not configured', emailLogId: emailLog?._id?.toString() };
     }
 
-    try {
-      const result = await this.transporter.sendMail({
-        from,
-        to: toAddress,
-        subject: options.subject,
-        html: options.html,
-        text: options.text,
-        replyTo: options.replyTo,
-        attachments: options.attachments,
-      });
+    // Retry logic for transient failures
+    let lastError: Error | null = null;
+    for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+      try {
+        const result = await this.transporter.sendMail({
+          from,
+          to: toAddress,
+          subject: options.subject,
+          html: options.html,
+          text: options.text,
+          replyTo: options.replyTo,
+          attachments: options.attachments,
+        });
 
-      this.logger.log(`Email sent to ${toAddress}: ${result.messageId}`);
-      
-      // Update log to sent
-      if (emailLog) {
-        await this.emailLogModel.findByIdAndUpdate(emailLog._id, {
-          status: 'sent',
-          sentAt: new Date(),
-          messageId: result.messageId,
-          provider: 'nodemailer',
-        });
+        this.logger.log(`Email sent to ${toAddress}: ${result.messageId}${attempt > 0 ? ` (retry ${attempt})` : ''}`);
+        
+        if (emailLog) {
+          await this.emailLogModel.findByIdAndUpdate(emailLog._id, {
+            status: 'sent',
+            sentAt: new Date(),
+            messageId: result.messageId,
+            provider: 'nodemailer',
+            retryCount: attempt,
+          });
+        }
+        
+        return { success: true, messageId: result.messageId, emailLogId: emailLog?._id?.toString() };
+      } catch (error: any) {
+        lastError = error;
+        
+        // Only retry on transient errors (timeout, connection issues)
+        const isRetryable = error.code === 'ETIMEDOUT' || 
+                           error.code === 'ECONNRESET' || 
+                           error.code === 'ECONNREFUSED' ||
+                           error.message?.includes('timeout') ||
+                           error.message?.includes('Connection');
+        
+        if (isRetryable && attempt < this.maxRetries) {
+          this.logger.warn(`Email to ${toAddress} failed (attempt ${attempt + 1}/${this.maxRetries + 1}): ${error.message}. Retrying...`);
+          await new Promise(resolve => setTimeout(resolve, this.retryDelayMs * (attempt + 1)));
+          continue;
+        }
+        
+        break;
       }
-      
-      return { success: true, messageId: result.messageId, emailLogId: emailLog?._id?.toString() };
-    } catch (error: any) {
-      this.logger.error(`Failed to send email to ${toAddress}:`, error.message);
-      
-      // Update log to failed
-      if (emailLog) {
-        await this.emailLogModel.findByIdAndUpdate(emailLog._id, {
-          status: 'failed',
-          failedAt: new Date(),
-          errorMessage: error.message,
-          errorCode: error.code,
-        });
-      }
-      
-      return { success: false, error: error.message, emailLogId: emailLog?._id?.toString() };
     }
+
+    // All retries exhausted
+    this.logger.error(`Failed to send email to ${toAddress} after ${this.maxRetries + 1} attempts:`, lastError?.message);
+    
+    if (emailLog) {
+      await this.emailLogModel.findByIdAndUpdate(emailLog._id, {
+        status: 'failed',
+        failedAt: new Date(),
+        errorMessage: lastError?.message || 'Unknown error',
+        errorCode: (lastError as any)?.code,
+        retryCount: this.maxRetries,
+      });
+    }
+    
+    return { success: false, error: lastError?.message || 'Unknown error', emailLogId: emailLog?._id?.toString() };
   }
 
   async sendTemplateEmail(options: TemplateEmailOptions): Promise<{ success: boolean; messageId?: string; error?: string }> {

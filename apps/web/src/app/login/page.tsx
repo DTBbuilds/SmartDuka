@@ -90,8 +90,9 @@ export default function LoginPage() {
         // Pass the shop directly since state might not be updated yet
         enterDemoMode(selectedShop as any);
       }
-      // Redirect directly to admin dashboard
-      router.push('/admin');
+      // Use redirect parameter if available, otherwise go to admin dashboard
+      const redirectTo = searchParams.get('redirect') || '/admin';
+      router.push(redirectTo);
     } catch (err: any) {
       setError(err.message || 'Login failed');
     } finally {
@@ -109,8 +110,9 @@ export default function LoginPage() {
         // Pass the shop directly since state might not be updated yet
         enterDemoMode(selectedShop as any);
       }
-      // Redirect directly to cashier dashboard
-      router.push('/cashier/dashboard');
+      // Use redirect parameter if available, otherwise go to POS
+      const redirectTo = searchParams.get('redirect') || '/pos';
+      router.push(redirectTo);
     } catch (err: any) {
       setError(err.message || 'Login failed');
     } finally {

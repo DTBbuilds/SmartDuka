@@ -219,14 +219,25 @@ class SessionMonitor {
    */
   private async performAutoRefresh() {
     if (this.state.isRefreshing) return;
+    
+    // Check if we've exceeded max attempts - stop the loop
+    if (this.state.refreshAttempts >= this.MAX_REFRESH_ATTEMPTS) {
+      console.warn('[SessionMonitor] Max refresh attempts reached, stopping auto-refresh');
+      this.autoRefreshEnabled = false;
+      // Clear session and redirect to login
+      const { clearSession } = await import('./secure-session');
+      clearSession();
+      window.location.href = '/login?reason=session_expired';
+      return;
+    }
 
     this.updateState({ isRefreshing: true });
 
     try {
-      const { refreshToken, resetRefreshAttempts, getToken } = await import('./secure-session');
+      const { refreshToken, getToken } = await import('./secure-session');
       
-      // Reset attempts before trying - auto-refresh is proactive, not a retry
-      resetRefreshAttempts();
+      // DO NOT reset attempts here - that causes infinite loop!
+      // Attempts are only reset on successful login
       
       const result = await refreshToken();
 
@@ -234,32 +245,48 @@ class SessionMonitor {
         console.log('[SessionMonitor] Auto-refresh successful');
         this.currentToken = result.accessToken;
         
+        // Reset attempts only on SUCCESS
+        this.updateState({ refreshAttempts: 0, isRefreshing: false });
+        
         // Dispatch event for auth context BEFORE reinitializing
-        // This ensures auth context updates first
         window.dispatchEvent(new CustomEvent('token-refreshed', {
           detail: { accessToken: result.accessToken, csrfToken: result.csrfToken }
         }));
         
-        // Reinitialize with new token - this resets all state including refreshAttempts
+        // Reinitialize with new token
         this.initialize(result.accessToken);
       } else {
-        // Check if we still have a valid token - don't increment attempts if token still exists
-        const currentToken = getToken();
-        if (currentToken) {
-          console.warn('[SessionMonitor] Auto-refresh returned null but token still valid');
-          this.updateState({ isRefreshing: false });
-        } else {
-          console.warn('[SessionMonitor] Auto-refresh failed and no token');
-          this.updateState({ 
-            refreshAttempts: this.state.refreshAttempts + 1,
-            isRefreshing: false 
-          });
+        // Increment attempts on failure
+        const newAttempts = this.state.refreshAttempts + 1;
+        console.warn(`[SessionMonitor] Auto-refresh failed (attempt ${newAttempts}/${this.MAX_REFRESH_ATTEMPTS})`);
+        
+        this.updateState({ 
+          refreshAttempts: newAttempts,
+          isRefreshing: false 
+        });
+        
+        // If max attempts reached, redirect to login
+        if (newAttempts >= this.MAX_REFRESH_ATTEMPTS) {
+          console.warn('[SessionMonitor] Max refresh attempts reached, redirecting to login');
+          const { clearSession } = await import('./secure-session');
+          clearSession();
+          window.location.href = '/login?reason=session_expired';
         }
       }
     } catch (err) {
       console.error('[SessionMonitor] Auto-refresh error:', err);
-      this.updateState({ isRefreshing: false });
-      // Don't increment attempts on network errors - user might just be offline temporarily
+      // Increment attempts on error too
+      const newAttempts = this.state.refreshAttempts + 1;
+      this.updateState({ 
+        refreshAttempts: newAttempts,
+        isRefreshing: false 
+      });
+      
+      if (newAttempts >= this.MAX_REFRESH_ATTEMPTS) {
+        const { clearSession } = await import('./secure-session');
+        clearSession();
+        window.location.href = '/login?reason=session_expired';
+      }
     }
   }
 

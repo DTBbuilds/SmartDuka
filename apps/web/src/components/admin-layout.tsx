@@ -1,16 +1,28 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { AdminSidebar } from './admin-sidebar';
 import { AdminMobileNav } from './admin-mobile-nav';
 import { cn } from '@smartduka/ui';
+
+// Routes that should NOT show the admin sidebar
+const PUBLIC_ROUTES = [
+  '/login',
+  '/register',
+  '/onboarding',
+  '/auth',
+  '/super-admin',
+  '/cashier',
+];
 
 interface AdminLayoutProps {
   children: React.ReactNode;
 }
 
 export function AdminLayout({ children }: AdminLayoutProps) {
+  const pathname = usePathname();
   const { user, isDemoMode, isShopPending, loading } = useAuth();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
@@ -42,8 +54,19 @@ export function AdminLayout({ children }: AdminLayoutProps) {
     };
   }, []);
 
+  // Check if current route is a public route (no sidebar)
+  const isPublicRoute = PUBLIC_ROUTES.some(route => pathname?.startsWith(route));
+  
+  // Also check for root landing page when not logged in
+  const isLandingPage = pathname === '/' && !user;
+
   // Wait for auth to load before deciding layout
   if (loading) {
+    return <>{children}</>;
+  }
+
+  // Don't show admin layout on public routes or landing page
+  if (isPublicRoute || isLandingPage) {
     return <>{children}</>;
   }
 

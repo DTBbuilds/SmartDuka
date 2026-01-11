@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { initializeCameraPolyfill, checkCameraSupport, requestCameraAccess, stopMediaStream } from '@/lib/camera-polyfill';
 
 export type CameraPermissionState = 'prompt' | 'granted' | 'denied' | 'unavailable' | 'checking';
 
@@ -12,8 +13,54 @@ export interface CameraPermissionResult {
   isUnavailable: boolean;
   isChecking: boolean;
   error: string | null;
+  diagnostics: CameraDiagnostics | null;
   requestPermission: () => Promise<boolean>;
   checkPermission: () => Promise<CameraPermissionState>;
+}
+
+export interface CameraDiagnostics {
+  hasWindow: boolean;
+  hasNavigator: boolean;
+  hasMediaDevices: boolean;
+  hasGetUserMedia: boolean;
+  hasLegacyGetUserMedia: boolean;
+  isSecureContext: boolean;
+  protocol: string;
+  userAgent: string;
+  isIOS: boolean;
+  isAndroid: boolean;
+  isSafari: boolean;
+  isChrome: boolean;
+  isFirefox: boolean;
+  browserInfo: { browser: string; version: string } | null;
+  recommendations: string[];
+}
+
+/**
+ * Perform comprehensive browser capability diagnostics
+ */
+function getDiagnostics(): CameraDiagnostics {
+  const support = checkCameraSupport();
+  const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+  const uaLower = ua.toLowerCase();
+  
+  return {
+    hasWindow: typeof window !== 'undefined',
+    hasNavigator: typeof navigator !== 'undefined',
+    hasMediaDevices: support.hasMediaDevices,
+    hasGetUserMedia: support.hasGetUserMedia,
+    hasLegacyGetUserMedia: support.hasLegacyGetUserMedia,
+    isSecureContext: support.isSecureContext,
+    protocol: support.protocol,
+    userAgent: support.userAgent,
+    isIOS: /iPad|iPhone|iPod/.test(ua),
+    isAndroid: /Android/.test(ua),
+    isSafari: uaLower.includes('safari') && !uaLower.includes('chrome') && !uaLower.includes('crios'),
+    isChrome: uaLower.includes('chrome') || uaLower.includes('crios'),
+    isFirefox: uaLower.includes('firefox') || uaLower.includes('fxios'),
+    browserInfo: support.browserInfo,
+    recommendations: support.recommendations,
+  };
 }
 
 /**
@@ -24,34 +71,38 @@ export interface CameraPermissionResult {
  * - Request camera permission
  * - Handle all permission states gracefully
  * - Provide user-friendly error messages
+ * - Comprehensive browser compatibility
  */
 export function useCameraPermission(): CameraPermissionResult {
   const [state, setState] = useState<CameraPermissionState>('checking');
   const [error, setError] = useState<string | null>(null);
-
-  /**
-   * Check if camera API is available
-   */
-  const isCameraAvailable = useCallback((): boolean => {
-    if (typeof window === 'undefined') return false;
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return false;
-    if (!window.isSecureContext) return false;
-    return true;
-  }, []);
+  const [diagnostics, setDiagnostics] = useState<CameraDiagnostics | null>(null);
 
   /**
    * Check current camera permission state
+   * Uses the camera polyfill for cross-browser compatibility
    */
   const checkPermission = useCallback(async (): Promise<CameraPermissionState> => {
-    if (!isCameraAvailable()) {
+    // Initialize polyfill first
+    await initializeCameraPolyfill();
+    
+    // Update diagnostics
+    const diag = getDiagnostics();
+    setDiagnostics(diag);
+    
+    // Check if camera is supported using polyfill
+    const support = checkCameraSupport();
+    
+    if (!support.supported) {
       setState('unavailable');
-      setError('Camera not available. Ensure you are using HTTPS and a modern browser.');
+      const reason = support.recommendations[0] || 'Camera not available. Ensure you are using HTTPS and a modern browser.';
+      setError(reason);
+      console.warn('[Camera] Not available:', reason, diag);
       return 'unavailable';
     }
 
     try {
       // Use Permissions API if available (not supported in Safari)
-      // Safari throws a TypeError when querying 'camera' permission
       if (navigator.permissions && navigator.permissions.query) {
         try {
           const result = await navigator.permissions.query({ name: 'camera' as PermissionName });
@@ -65,92 +116,100 @@ export function useCameraPermission(): CameraPermissionResult {
           
           return permState;
         } catch (permError) {
-          // Safari doesn't support camera permission query - fall through to device enumeration
-          console.log('Permissions API not supported for camera, using fallback');
+          // Safari doesn't support camera permission query - fall through
+          console.log('[Camera] Permissions API not supported for camera, using fallback');
         }
       }
       
-      // Fallback: try to enumerate devices
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const videoDevices = devices.filter(d => d.kind === 'videoinput');
-      
-      if (videoDevices.length === 0) {
-        setState('unavailable');
-        setError('No camera found on this device.');
-        return 'unavailable';
+      // Fallback: try to enumerate devices (after polyfill is applied)
+      try {
+        if (navigator.mediaDevices?.enumerateDevices) {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const videoDevices = devices.filter(d => d.kind === 'videoinput');
+          
+          // On iOS Safari and some Android browsers, enumerateDevices returns empty
+          // until permission is granted. Don't treat this as "no camera".
+          if (videoDevices.length === 0) {
+            console.log('[Camera] No video devices enumerated - assuming permission needed');
+            setState('prompt');
+            return 'prompt';
+          }
+          
+          // If we can see device labels, permission was granted before
+          const hasLabels = videoDevices.some(d => d.label && d.label.length > 0);
+          if (hasLabels) {
+            setState('granted');
+            return 'granted';
+          }
+        }
+      } catch (enumErr) {
+        console.log('[Camera] enumerateDevices failed:', enumErr);
       }
       
-      // If we can see device labels, permission was granted before
-      // Note: On iOS Safari, labels are only available after permission is granted
-      const hasLabels = videoDevices.some(d => d.label && d.label.length > 0);
-      if (hasLabels) {
-        setState('granted');
-        return 'granted';
-      }
-      
-      // Otherwise, permission hasn't been requested yet
+      // Default to prompt - let user try to request permission
       setState('prompt');
       return 'prompt';
     } catch (err) {
-      console.error('Error checking camera permission:', err);
+      console.error('[Camera] Error checking permission:', err);
+      // Be optimistic - let user try anyway
       setState('prompt');
       return 'prompt';
     }
-  }, [isCameraAvailable]);
+  }, []);
 
   /**
-   * Request camera permission
+   * Request camera permission using the polyfill
+   * 
+   * IMPORTANT: On mobile browsers (especially iOS Safari and some Android browsers),
+   * camera permission must be requested in response to a user gesture (tap/click).
+   * This function should be called from a button click handler, not automatically.
    */
   const requestPermission = useCallback(async (): Promise<boolean> => {
-    if (!isCameraAvailable()) {
-      setError('Camera not available. Ensure you are using HTTPS and a modern browser.');
+    // Initialize polyfill first
+    await initializeCameraPolyfill();
+    
+    // Check if camera is supported
+    const support = checkCameraSupport();
+    if (!support.supported) {
+      const reason = support.recommendations[0] || 'Camera not available. Ensure you are using HTTPS and a modern browser.';
+      setError(reason);
       setState('unavailable');
       return false;
     }
 
     try {
       setError(null);
+      setState('checking');
       
-      // Request camera access
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: 'environment', // Prefer back camera on mobile
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-      });
+      // Use the polyfill's requestCameraAccess which handles all the complexity
+      const result = await requestCameraAccess({ preferBackCamera: true });
       
-      // Permission granted - stop the stream immediately
-      stream.getTracks().forEach(track => track.stop());
-      
-      setState('granted');
-      return true;
+      if (result.stream) {
+        // Permission granted - stop the stream immediately
+        stopMediaStream(result.stream);
+        setState('granted');
+        return true;
+      } else {
+        // Handle error from polyfill
+        setError(result.error || 'Failed to access camera');
+        
+        // Determine state based on error message
+        if (result.error?.includes('denied')) {
+          setState('denied');
+        } else if (result.error?.includes('not found') || result.error?.includes('not supported')) {
+          setState('unavailable');
+        } else {
+          setState('denied');
+        }
+        return false;
+      }
     } catch (err: any) {
       console.error('Camera permission error:', err);
-      
-      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        setState('denied');
-        setError('Camera permission denied. Please enable camera access in your browser settings.');
-      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
-        setState('unavailable');
-        setError('No camera found on this device.');
-      } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
-        setState('denied');
-        setError('Camera is in use by another application. Please close other apps using the camera.');
-      } else if (err.name === 'OverconstrainedError') {
-        setState('denied');
-        setError('Camera does not meet the required constraints.');
-      } else if (err.name === 'SecurityError') {
-        setState('unavailable');
-        setError('Camera access blocked by security policy. Use HTTPS.');
-      } else {
-        setState('denied');
-        setError(`Camera error: ${err.message || 'Unknown error'}`);
-      }
-      
+      setState('denied');
+      setError(`Camera error: ${err.message || 'Unknown error'}. Please try again.`);
       return false;
     }
-  }, [isCameraAvailable]);
+  }, []);
 
   // Check permission on mount
   useEffect(() => {
@@ -165,6 +224,7 @@ export function useCameraPermission(): CameraPermissionResult {
     isUnavailable: state === 'unavailable',
     isChecking: state === 'checking',
     error,
+    diagnostics,
     requestPermission,
     checkPermission,
   };

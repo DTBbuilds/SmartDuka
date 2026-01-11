@@ -36,7 +36,10 @@ export function AuthGuard({
 
     // Check if user is authenticated
     if (!user) {
-      router.push('/login');
+      // Preserve current path for redirect after login
+      const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
+      const redirectParam = currentPath && currentPath !== '/login' ? `?redirect=${encodeURIComponent(currentPath)}` : '';
+      router.push(`/login${redirectParam}`);
       return;
     }
 

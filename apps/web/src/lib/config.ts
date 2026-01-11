@@ -7,7 +7,24 @@
 const isDevelopment = process.env.NODE_ENV === 'development';
 const isProduction = process.env.NODE_ENV === 'production';
 
-// Backend API URLs
+// API version prefix
+const API_VERSION = '/api/v1';
+
+// Helper to get the current host for mobile testing on same network
+// This is called dynamically to support client-side detection
+const getDevApiBaseUrl = (): string => {
+  if (typeof window !== 'undefined' && isDevelopment) {
+    // If accessing from a non-localhost address (e.g., phone on same network),
+    // use the same host but with the API port
+    const currentHost = window.location.hostname;
+    if (currentHost !== 'localhost' && currentHost !== '127.0.0.1') {
+      return `http://${currentHost}:5000`;
+    }
+  }
+  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+};
+
+// Backend API URLs (static fallbacks for SSR)
 const BACKEND_URLS = {
   development: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000',
   production: process.env.NEXT_PUBLIC_API_URL || 'https://smarduka.onrender.com',
@@ -19,19 +36,18 @@ const FRONTEND_URLS = {
   production: process.env.NEXT_PUBLIC_FRONTEND_URL || 'https://smartduka.vercel.app',
 } as const;
 
-// API version prefix
-const API_VERSION = '/api/v1';
-
-// Get the appropriate URL based on environment
+// Get the appropriate URL based on environment (dynamic for client-side)
 const getBackendUrl = (): string => {
-  const baseUrl = isDevelopment ? BACKEND_URLS.development : BACKEND_URLS.production;
-  return `${baseUrl}${API_VERSION}`;
+  if (isDevelopment) {
+    return `${getDevApiBaseUrl()}${API_VERSION}`;
+  }
+  return `${BACKEND_URLS.production}${API_VERSION}`;
 };
 
 // Get base backend URL without API version (for webhooks, health checks)
 const getBackendBaseUrl = (): string => {
   if (isDevelopment) {
-    return BACKEND_URLS.development;
+    return getDevApiBaseUrl();
   }
   return BACKEND_URLS.production;
 };
@@ -49,14 +65,20 @@ export const config = {
   isProduction,
   nodeEnv: process.env.NODE_ENV || 'development',
   
-  // Backend API URL (includes /api/v1 prefix)
-  apiUrl: getBackendUrl(),
+  // Backend API URL (includes /api/v1 prefix) - computed dynamically for mobile testing
+  get apiUrl() {
+    return getBackendUrl();
+  },
   
   // Backend base URL (without API version - for health checks, webhooks)
-  apiBaseUrl: getBackendBaseUrl(),
+  get apiBaseUrl() {
+    return getBackendBaseUrl();
+  },
   
   // Frontend URL
-  frontendUrl: getFrontendUrl(),
+  get frontendUrl() {
+    return getFrontendUrl();
+  },
   
   // API version
   apiVersion: API_VERSION,
@@ -75,6 +97,6 @@ export const config = {
       update: '/status/update',
     },
   },
-} as const;
+};
 
 export default config;

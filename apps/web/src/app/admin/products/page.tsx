@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   Badge,
   Button,
@@ -11,7 +11,7 @@ import {
   CardTitle,
   Input,
 } from '@smartduka/ui';
-import { Plus, Trash2, Edit2, Download, Upload, Eye, Search, ChevronDown, ChevronUp, Package, Loader2, ChevronLeft, ChevronRight, History } from 'lucide-react';
+import { Plus, Trash2, Edit2, Download, Upload, Eye, Search, ChevronDown, ChevronUp, Package, Loader2, ChevronLeft, ChevronRight, History, RefreshCw } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
@@ -22,7 +22,75 @@ import { CSVImportModal } from '@/components/csv-import-modal';
 import { downloadCSV } from '@/lib/csv-parser';
 import { AuthGuard } from '@/components/auth-guard';
 import { QuickAddProductForm } from '@/components/quick-add-product-form';
+import { QuickAddProductMobile } from '@/components/quick-add-product-mobile';
+import { ProductsListMobile } from '@/components/products-list-mobile';
 import { StockHistoryModal } from '@/components/stock-history-modal';
+import { smartCache } from '@/lib/smart-cache-manager';
+import { useCachedProducts, useCachedCategories } from '@/hooks/use-smart-cache';
+
+// Cache configuration
+const PRODUCTS_CACHE_KEY = 'smartduka:cache:products';
+const CATEGORIES_CACHE_KEY = 'smartduka:cache:categories';
+const CACHE_TTL = 2 * 60 * 1000; // 2 minutes
+
+interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+  branchId?: string;
+}
+
+function getCache<T>(key: string, branchId?: string): T | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const cached = sessionStorage.getItem(key);
+    if (!cached) return null;
+    
+    const entry: CacheEntry<T> = JSON.parse(cached);
+    const isExpired = Date.now() - entry.timestamp > CACHE_TTL;
+    const branchMismatch = branchId && entry.branchId !== branchId;
+    
+    if (isExpired || branchMismatch) {
+      sessionStorage.removeItem(key);
+      return null;
+    }
+    
+    return entry.data;
+  } catch {
+    return null;
+  }
+}
+
+function setCache<T>(key: string, data: T, branchId?: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const entry: CacheEntry<T> = { data, timestamp: Date.now(), branchId };
+    sessionStorage.setItem(key, JSON.stringify(entry));
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+function clearProductsCache(): void {
+  if (typeof window === 'undefined') return;
+  sessionStorage.removeItem(PRODUCTS_CACHE_KEY);
+}
+
+// Debounce hook for search
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
+
+  return debouncedValue;
+}
 
 type Product = {
   _id: string;
@@ -47,8 +115,15 @@ function ProductsContent() {
   const { currentBranch } = useBranch();
   const { toasts, toast, dismiss } = useToast();
 
-  const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
+  // Initialize from cache for instant UI
+  const [products, setProducts] = useState<Product[]>(() => {
+    const cached = getCache<Product[]>(PRODUCTS_CACHE_KEY, currentBranch?._id);
+    return cached || [];
+  });
+  const [categories, setCategories] = useState<Category[]>(() => {
+    const cached = getCache<Category[]>(CATEGORIES_CACHE_KEY);
+    return cached || [];
+  });
   const [loading, setLoading] = useState(false);
   const [isCSVImportOpen, setIsCSVImportOpen] = useState(false);
   const [isQuickAddExpanded, setIsQuickAddExpanded] = useState(false);
@@ -58,20 +133,41 @@ function ProductsContent() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [stockHistoryProduct, setStockHistoryProduct] = useState<Product | null>(null);
+  const [totalProducts, setTotalProducts] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const itemsPerPage = 20;
+  const fetchedRef = useRef(false);
+  
+  // Debounce search for performance
+  const debouncedSearch = useDebounce(searchQuery, 300);
 
-  useEffect(() => {
-    loadData();
-  }, [token, currentBranch]);
-
-  const loadData = async () => {
+  // Load data with caching
+  const loadData = useCallback(async (forceRefresh = false) => {
     if (!token) return;
+    
+    const branchId = currentBranch?._id;
+    
+    // Check cache first (unless forcing refresh)
+    if (!forceRefresh) {
+      const cachedProducts = getCache<Product[]>(PRODUCTS_CACHE_KEY, branchId);
+      const cachedCategories = getCache<Category[]>(CATEGORIES_CACHE_KEY);
+      
+      if (cachedProducts && cachedCategories) {
+        setProducts(cachedProducts);
+        setCategories(cachedCategories);
+        setTotalProducts(cachedProducts.length);
+        return;
+      }
+    }
+    
     try {
-      setLoading(true);
+      setLoading(products.length === 0); // Only show loading if no cached data
+      setIsRefreshing(products.length > 0); // Show refresh indicator if we have data
+      
       const base = config.apiUrl;
       const headers = { Authorization: `Bearer ${token}` };
       
-      const branchParam = currentBranch ? `branchId=${currentBranch._id}` : '';
+      const branchParam = branchId ? `branchId=${branchId}` : '';
       const branchQuery = branchParam ? `&${branchParam}` : '';
 
       const [productsRes, categoriesRes] = await Promise.all([
@@ -81,16 +177,20 @@ function ProductsContent() {
 
       if (productsRes.ok) {
         const data = await productsRes.json();
-        setProducts(Array.isArray(data) ? data : []);
+        const productsArray = Array.isArray(data) ? data : [];
+        setProducts(productsArray);
+        setTotalProducts(productsArray.length);
+        setCache(PRODUCTS_CACHE_KEY, productsArray, branchId);
       } else {
         setProducts([]);
+        setTotalProducts(0);
       }
 
       if (categoriesRes.ok) {
         const data = await categoriesRes.json();
-        // Handle both array format and object format { categories: [...], meta: {...} }
         const categoriesArray = Array.isArray(data) ? data : (data.categories || []);
         setCategories(categoriesArray);
+        setCache(CATEGORIES_CACHE_KEY, categoriesArray);
       } else {
         setCategories([]);
       }
@@ -99,8 +199,24 @@ function ProductsContent() {
       toast({ type: 'error', title: 'Load failed', message: err?.message });
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
-  };
+  }, [token, currentBranch?._id, products.length, toast]);
+
+  // Initial load
+  useEffect(() => {
+    if (!fetchedRef.current && token) {
+      fetchedRef.current = true;
+      loadData();
+    }
+  }, [token, loadData]);
+
+  // Reload when branch changes
+  useEffect(() => {
+    if (fetchedRef.current && token) {
+      loadData(true); // Force refresh on branch change
+    }
+  }, [currentBranch?._id]);
 
   const handleDeleteProduct = async (id: string) => {
     if (!token) return;
@@ -114,7 +230,8 @@ function ProductsContent() {
       });
       if (!res.ok) throw new Error(`Failed (${res.status})`);
       toast({ type: 'success', title: 'Product deleted' });
-      loadData();
+      clearProductsCache();
+      loadData(true);
     } catch (err: any) {
       toast({ type: 'error', title: 'Delete failed', message: err?.message });
     } finally {
@@ -152,7 +269,8 @@ function ProductsContent() {
       if (result.errors?.length > 0) message += `. ${result.errors.length} errors`;
       
       toast({ type: 'success', title: 'Import complete', message });
-      loadData();
+      clearProductsCache();
+      loadData(true);
       return result;
     } catch (err: any) {
       toast({ type: 'error', title: 'Import failed', message: err?.message });
@@ -175,13 +293,30 @@ function ProductsContent() {
     }
   };
 
-  const filteredProducts = products.filter((product) => {
-    const matchesSearch = 
-      product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (product.sku && product.sku.toLowerCase().includes(searchQuery.toLowerCase()));
-    const matchesStatus = statusFilter === 'all' || product.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  // Memoized filtered products using debounced search for performance
+  const filteredProducts = useMemo(() => {
+    return products.filter((product) => {
+      const searchLower = debouncedSearch.toLowerCase();
+      const matchesSearch = 
+        product.name.toLowerCase().includes(searchLower) ||
+        (product.sku && product.sku.toLowerCase().includes(searchLower));
+      const matchesStatus = statusFilter === 'all' || product.status === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
+  }, [products, debouncedSearch, statusFilter]);
+
+  // Paginated products for current page
+  const paginatedProducts = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredProducts.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredProducts, currentPage, itemsPerPage]);
+
+  const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
+
+  // Reset to page 1 when search/filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch, statusFilter]);
 
   const handleSelectProduct = (productId: string) => {
     const newSelected = new Set(selectedProducts);
@@ -215,7 +350,8 @@ function ProductsContent() {
       }
       toast({ type: 'success', title: 'Products deleted', message: `${selectedProducts.size} product(s) deleted` });
       setSelectedProducts(new Set());
-      loadData();
+      clearProductsCache();
+      loadData(true);
     } catch (err: any) {
       toast({ type: 'error', title: 'Delete failed', message: err?.message });
     }
@@ -286,7 +422,8 @@ function ProductsContent() {
                     });
                     if (!res.ok) throw new Error(`Failed (${res.status})`);
                     toast({ type: 'success', title: 'Product created', message: `${product.name} added successfully` });
-                    loadData();
+                    clearProductsCache();
+                    loadData(true);
                     setIsQuickAddExpanded(false);
                   } catch (err: any) {
                     throw new Error(err?.message || 'Failed to create product');
@@ -308,9 +445,24 @@ function ProductsContent() {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Products List</CardTitle>
-                  <CardDescription>{filteredProducts.length} of {products.length} product(s)</CardDescription>
+                  <CardTitle className="flex items-center gap-2">
+                    Products List
+                    {isRefreshing && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                  </CardTitle>
+                  <CardDescription>
+                    {filteredProducts.length} of {products.length} product(s)
+                    {totalPages > 1 && ` • Page ${currentPage} of ${totalPages}`}
+                  </CardDescription>
                 </div>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => { clearProductsCache(); loadData(true); }}
+                  disabled={isRefreshing}
+                  title="Refresh products"
+                >
+                  <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                </Button>
               </div>
 
               {/* Search and Filter Bar */}
@@ -382,8 +534,8 @@ function ProductsContent() {
                   <div className="col-span-2">Actions</div>
                 </div>
 
-                {/* Product Rows */}
-                {filteredProducts.map((product) => (
+                {/* Product Rows - Using paginated products for performance */}
+                {paginatedProducts.map((product) => (
                   <div
                     key={product._id}
                     className="grid grid-cols-1 md:grid-cols-12 gap-3 md:gap-3 p-3 border rounded-lg hover:bg-accent transition-colors items-center"
@@ -474,6 +626,83 @@ function ProductsContent() {
                     </div>
                   </div>
                 ))}
+
+                {/* Pagination Controls */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between pt-4 border-t mt-4">
+                    <p className="text-sm text-muted-foreground">
+                      Showing {((currentPage - 1) * itemsPerPage) + 1}-{Math.min(currentPage * itemsPerPage, filteredProducts.length)} of {filteredProducts.length}
+                    </p>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(1)}
+                        disabled={currentPage === 1}
+                        className="h-8 w-8 p-0"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                        <ChevronLeft className="h-4 w-4 -ml-2" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                        disabled={currentPage === 1}
+                        className="h-8 w-8 p-0"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      
+                      {/* Page numbers */}
+                      <div className="flex items-center gap-1 mx-2">
+                        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                          let pageNum;
+                          if (totalPages <= 5) {
+                            pageNum = i + 1;
+                          } else if (currentPage <= 3) {
+                            pageNum = i + 1;
+                          } else if (currentPage >= totalPages - 2) {
+                            pageNum = totalPages - 4 + i;
+                          } else {
+                            pageNum = currentPage - 2 + i;
+                          }
+                          return (
+                            <Button
+                              key={pageNum}
+                              variant={currentPage === pageNum ? 'default' : 'outline'}
+                              size="sm"
+                              onClick={() => setCurrentPage(pageNum)}
+                              className="h-8 w-8 p-0"
+                            >
+                              {pageNum}
+                            </Button>
+                          );
+                        })}
+                      </div>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                        disabled={currentPage === totalPages}
+                        className="h-8 w-8 p-0"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(totalPages)}
+                        disabled={currentPage === totalPages}
+                        className="h-8 w-8 p-0"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                        <ChevronRight className="h-4 w-4 -ml-2" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </CardContent>

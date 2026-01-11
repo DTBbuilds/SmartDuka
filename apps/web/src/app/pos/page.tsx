@@ -80,6 +80,8 @@ import { MpesaPaymentFlowEnhanced } from "@/components/mpesa-payment-flow-enhanc
 import { KeyboardShortcutsHelp } from "@/components/keyboard-shortcuts-help";
 import { useBarcodeScanner } from "@/hooks/use-barcode-scanner";
 import { ScannerStatusIndicator } from "@/components/scanner-status-indicator";
+import { smartCache } from "@/lib/smart-cache-manager";
+import { usePOSProducts } from "@/hooks/use-smart-cache";
 
 type Product = {
   _id: string;
@@ -413,6 +415,19 @@ function POSContent() {
 
   // Get shopId from user context for multi-tenant isolation (moved up for receipts persistence)
   const shopId = user?.shopId || (shop as any)?._id || shop?.id || '';
+
+  // Initialize smart cache for offline support and fast product lookups
+  useEffect(() => {
+    if (token && shopId) {
+      smartCache.initialize(token, shopId);
+    }
+    return () => {
+      // Don't cleanup on unmount - cache persists across navigation
+    };
+  }, [token, shopId]);
+
+  // Use smart cache for fast barcode lookups (works offline)
+  const { getByBarcode: getCachedProductByBarcode, allProducts: cachedProducts } = usePOSProducts();
 
   // Load receipts history from localStorage on mount
   useEffect(() => {
@@ -839,7 +854,20 @@ function POSContent() {
     setIsProcessingBarcode(true);
 
     try {
-      // First, try to find in already loaded products (fastest)
+      // First, try smart cache (fastest - works offline)
+      const cachedProduct = getCachedProductByBarcode(trimmedBarcode);
+      if (cachedProduct) {
+        handleAddToCart({
+          _id: cachedProduct._id,
+          name: cachedProduct.name,
+          price: cachedProduct.price,
+          stock: cachedProduct.stock,
+          barcode: cachedProduct.barcode,
+        }, { fromBarcode: true });
+        return;
+      }
+
+      // Second, try to find in already loaded products
       const localProduct = products.find((p) => 
         p.barcode === trimmedBarcode || 
         p.barcode === trimmedBarcode.replace(/^0+/, '') || // Try without leading zeros
@@ -851,7 +879,7 @@ function POSContent() {
         return;
       }
 
-      // If not found locally, query the API for exact barcode match
+      // If not found in cache or local, query the API for exact barcode match
       toast({ type: 'info', title: 'Searching...', message: `Barcode: ${trimmedBarcode}` });
       
       const res = await fetch(`${config.apiUrl}/inventory/products/barcode/${encodeURIComponent(trimmedBarcode)}`, {
@@ -886,7 +914,7 @@ function POSContent() {
         setIsProcessingBarcode(false);
       }, 300);
     }
-  }, [products, token, handleAddToCart, toast, isProcessingBarcode]);
+  }, [products, token, handleAddToCart, toast, isProcessingBarcode, getCachedProductByBarcode]);
 
   // Hardware barcode scanner integration - works without opening camera modal
   // Must be after handleBarcodeScanned is defined

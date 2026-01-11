@@ -423,6 +423,9 @@ export function BarcodeScannerZXing({
   /**
    * Initialize camera when dialog opens in camera mode
    * On mobile, proactively request permission first
+   * 
+   * IMPORTANT: Mobile browsers require explicit user gesture for camera access.
+   * We show a "Start Camera" button if permission state is uncertain.
    */
   useEffect(() => {
     if (isOpen && scanMode === "camera") {
@@ -431,23 +434,40 @@ export function BarcodeScannerZXing({
       
       // Check if we need to request permission first (mobile-friendly approach)
       const initCamera = async () => {
-        // If permission is not yet granted, request it first
-        if (cameraPermission.isPrompt || cameraPermission.isChecking) {
-          setMessage("📷 Requesting camera access...");
+        // Wait for permission check to complete
+        if (cameraPermission.isChecking) {
+          setMessage("📷 Checking camera availability...");
           setScanStatus("initializing");
-          const granted = await cameraPermission.requestPermission();
-          if (granted) {
-            initZXing();
-          } else {
-            setScanStatus("error");
-            setError("Camera permission required to scan barcodes. Please allow camera access.");
-          }
-        } else if (cameraPermission.isGranted) {
+          // Don't proceed until checking is complete - the effect will re-run
+          return;
+        }
+        
+        // If permission is already granted, initialize camera directly
+        if (cameraPermission.isGranted) {
           initZXing();
-        } else if (cameraPermission.isDenied) {
+          return;
+        }
+        
+        // If permission is denied, show error
+        if (cameraPermission.isDenied) {
           setScanStatus("error");
           setError("Camera permission denied. Please enable camera access in your browser settings.");
+          return;
         }
+        
+        // If permission is unavailable (no camera, insecure context, etc.)
+        if (cameraPermission.isUnavailable) {
+          setScanStatus("error");
+          setError(cameraPermission.error || "Camera not available on this device.");
+          return;
+        }
+        
+        // Permission is 'prompt' - on mobile, we need user gesture
+        // Show permission request UI instead of auto-requesting
+        // This is more reliable across different mobile browsers
+        setShowPermissionRequest(true);
+        setScanStatus("idle");
+        setMessage("");
       };
       
       initCamera();
@@ -456,7 +476,7 @@ export function BarcodeScannerZXing({
     return () => {
       cleanupZXing();
     };
-  }, [isOpen, scanMode, cameraPermission.isPrompt, cameraPermission.isGranted, cameraPermission.isDenied, cameraPermission.isChecking, initZXing, cleanupZXing]);
+  }, [isOpen, scanMode, cameraPermission.isPrompt, cameraPermission.isGranted, cameraPermission.isDenied, cameraPermission.isChecking, cameraPermission.isUnavailable, cameraPermission.error, initZXing, cleanupZXing]);
 
   /**
    * Focus manual input when in manual mode
@@ -484,6 +504,7 @@ export function BarcodeScannerZXing({
     setTorchSupported(false);
     setLastScannedBarcode(null);
     setRetryCount(0);
+    setShowPermissionRequest(false); // Reset permission request state
     scanCompletedRef.current = false; // Reset for next scan session
     onClose();
   };
@@ -497,6 +518,7 @@ export function BarcodeScannerZXing({
     setScanStatus("idle");
     setError(null);
     setMessage("");
+    setShowPermissionRequest(false); // Reset permission request state
     scanCompletedRef.current = false; // Reset for new scan mode
   };
 
@@ -578,8 +600,82 @@ export function BarcodeScannerZXing({
               className="relative w-full bg-black rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700"
               style={{ minHeight: "300px" }}
             >
-              {/* Permission Request UI */}
-              {(cameraPermission.isDenied || cameraPermission.isPrompt) && scanStatus === "error" ? (
+              {/* Camera Unavailable UI */}
+              {cameraPermission.isUnavailable ? (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900 p-6 text-center">
+                  <div className="h-16 w-16 rounded-full bg-red-500/20 flex items-center justify-center mb-4">
+                    <AlertCircle className="h-8 w-8 text-red-500" />
+                  </div>
+                  <h3 className="text-white font-semibold text-lg mb-2">Camera Not Available</h3>
+                  <p className="text-gray-300 text-sm mb-4 max-w-xs">
+                    {cameraPermission.error || 'Camera access is not available on this device or browser.'}
+                  </p>
+                  
+                  <div className="space-y-3 w-full max-w-xs">
+                    {/* Diagnostics info for debugging */}
+                    {cameraPermission.diagnostics && (
+                      <div className="bg-gray-800 rounded-lg p-3 text-left text-xs">
+                        <p className="text-gray-400 mb-2 font-medium">Diagnostics:</p>
+                        <div className="space-y-1 text-gray-500">
+                          <p>• HTTPS: {cameraPermission.diagnostics.protocol === 'https:' ? '✓' : '✗'} ({cameraPermission.diagnostics.protocol})</p>
+                          <p>• MediaDevices API: {cameraPermission.diagnostics.hasMediaDevices ? '✓' : '✗'}</p>
+                          <p>• getUserMedia: {cameraPermission.diagnostics.hasGetUserMedia ? '✓' : '✗'}</p>
+                          <p>• Legacy getUserMedia: {cameraPermission.diagnostics.hasLegacyGetUserMedia ? '✓' : '✗'}</p>
+                          <p>• Secure Context: {cameraPermission.diagnostics.isSecureContext ? '✓' : '✗'}</p>
+                          <p>• Platform: {cameraPermission.diagnostics.isIOS ? 'iOS' : cameraPermission.diagnostics.isAndroid ? 'Android' : 'Desktop'}</p>
+                          <p>• Browser: {cameraPermission.diagnostics.browserInfo?.browser || 'Unknown'} {cameraPermission.diagnostics.browserInfo?.version || ''}</p>
+                        </div>
+                        {cameraPermission.diagnostics.recommendations && cameraPermission.diagnostics.recommendations.length > 0 && (
+                          <div className="mt-2 pt-2 border-t border-gray-700">
+                            <p className="text-yellow-400 font-medium mb-1">Recommendations:</p>
+                            {cameraPermission.diagnostics.recommendations.map((rec, i) => (
+                              <p key={i} className="text-yellow-300/80">• {rec}</p>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    
+                    <Button
+                      className="w-full"
+                      onClick={async () => {
+                        // Force retry - some browsers need user interaction first
+                        setError(null);
+                        setScanStatus("initializing");
+                        await cameraPermission.checkPermission();
+                        if (cameraPermission.isGranted || cameraPermission.isPrompt) {
+                          const granted = await cameraPermission.requestPermission();
+                          if (granted) {
+                            initZXing();
+                          }
+                        }
+                      }}
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Retry Camera Access
+                    </Button>
+                    
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 text-gray-300 border-gray-600"
+                        onClick={() => switchMode("hardware")}
+                      >
+                        Hardware Scanner
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 text-gray-300 border-gray-600"
+                        onClick={() => switchMode("manual")}
+                      >
+                        Manual Entry
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ) : (showPermissionRequest || cameraPermission.isDenied || (cameraPermission.isPrompt && scanStatus !== "ready")) && scanStatus !== "initializing" ? (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900 p-6 text-center">
                   <div className="h-16 w-16 rounded-full bg-orange-500/20 flex items-center justify-center mb-4">
                     <Camera className="h-8 w-8 text-orange-500" />
@@ -628,15 +724,34 @@ export function BarcodeScannerZXing({
                       <Button
                         className="w-full"
                         onClick={async () => {
-                          const granted = await cameraPermission.requestPermission();
-                          if (granted) {
-                            initZXing();
+                          setShowPermissionRequest(false);
+                          setScanStatus("initializing");
+                          setMessage("📷 Requesting camera access...");
+                          setError(null);
+                          
+                          try {
+                            const granted = await cameraPermission.requestPermission();
+                            if (granted) {
+                              // Small delay to ensure permission state is updated
+                              await new Promise(resolve => setTimeout(resolve, 100));
+                              initZXing();
+                            } else {
+                              setScanStatus("error");
+                              setError("Camera permission was not granted. Please try again or use manual entry.");
+                            }
+                          } catch (err: any) {
+                            console.error("Permission request failed:", err);
+                            setScanStatus("error");
+                            setError(err?.message || "Failed to request camera permission.");
                           }
                         }}
                       >
                         <Camera className="h-4 w-4 mr-2" />
-                        Allow Camera Access
+                        Start Camera
                       </Button>
+                      <p className="text-xs text-gray-400 text-center">
+                        Your browser will ask for camera permission
+                      </p>
                       <Button
                         variant="outline"
                         size="sm"
@@ -644,6 +759,14 @@ export function BarcodeScannerZXing({
                         onClick={() => switchMode("hardware")}
                       >
                         Use Hardware Scanner Instead
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-full text-gray-400"
+                        onClick={() => switchMode("manual")}
+                      >
+                        Enter Barcode Manually
                       </Button>
                     </div>
                   )}

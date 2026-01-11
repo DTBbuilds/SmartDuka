@@ -152,7 +152,7 @@ export class SystemEventManagerService implements OnModuleInit {
    * Send welcome email to new shop registration
    */
   async sendWelcomeEmail(shop: ShopContext, user: UserContext, data: any): Promise<void> {
-    await this.emailService.sendTemplateEmail({
+    const emailResult = await this.emailService.sendTemplateEmail({
       to: user.userEmail,
       templateName: 'welcome',
       variables: {
@@ -169,6 +169,7 @@ export class SystemEventManagerService implements OnModuleInit {
       },
     });
 
+    // Create in-app notification regardless of email status
     await this.notificationsService.create({
       shopId: shop.shopId,
       userId: user.userId,
@@ -178,7 +179,11 @@ export class SystemEventManagerService implements OnModuleInit {
       channels: ['in_app', 'email'],
     });
 
-    this.logger.log(`Welcome email sent to ${user.userEmail} for shop ${shop.shopName}`);
+    if (emailResult.success) {
+      this.logger.log(`Welcome email sent to ${user.userEmail} for shop ${shop.shopName}`);
+    } else {
+      this.logger.warn(`Welcome email failed for ${user.userEmail} (shop: ${shop.shopName}): ${emailResult.error}`);
+    }
   }
 
   /**

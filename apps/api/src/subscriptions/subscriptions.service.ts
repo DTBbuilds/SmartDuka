@@ -815,10 +815,37 @@ export class SubscriptionsService {
       limitWarnings.push(`You have ${currentUsage.shops} shops but ${newPlan.name} plan only supports ${newPlan.maxShops}.`);
     }
 
+    // === DOWNGRADE BLOCKING ===
+    // Users cannot downgrade while their current subscription is active.
+    // They must wait until the subscription period expires.
+    if (!isUpgrade && !isFromFreePlan) {
+      const now = new Date();
+      const periodEnd = subscription.currentPeriodEnd;
+      
+      // Check if subscription is still active (not expired)
+      if (subscription.status === SubscriptionStatus.ACTIVE && periodEnd > now) {
+        const daysRemaining = Math.ceil((periodEnd.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+        const formattedDate = periodEnd.toLocaleDateString('en-KE', { 
+          weekday: 'long', 
+          year: 'numeric', 
+          month: 'long', 
+          day: 'numeric' 
+        });
+        
+        throw new BadRequestException(
+          `You cannot downgrade while your current subscription is active. ` +
+          `Your ${currentPlan?.name || subscription.planCode} plan is valid until ${formattedDate} ` +
+          `(${daysRemaining} day${daysRemaining !== 1 ? 's' : ''} remaining). ` +
+          `Please come back after your subscription expires to downgrade, or you can upgrade to a higher plan now.`
+        );
+      }
+    }
+
     // === FREE TRANSITIONS: Direct plan change ===
-    // 1. Downgrade to free/trial plan
-    // 2. Downgrade to lower-priced plan
-    // 3. From trial to paid (first subscription - payment handled separately)
+    // Only allowed when:
+    // 1. Subscription has expired/cancelled
+    // 2. Moving from trial/free plan to any plan
+    // 3. Downgrade after subscription period ends
     if (isToFreePlan || !isUpgrade) {
       if (limitWarnings.length > 0) {
         this.logger.warn(`Plan downgrade for shop ${shopId} exceeds limits: ${limitWarnings.join(' | ')}`);
@@ -940,16 +967,31 @@ export class SubscriptionsService {
 
     // Activate the upgrade
     const oldPlanCode = subscription.planCode;
+    const now = new Date();
+    const billingCycle = subscription.pendingUpgrade.billingCycle as BillingCycle;
+    
+    // Calculate new period based on billing cycle
+    const { periodEnd, numberOfDays } = this.calculateBillingDetails(
+      newPlan,
+      billingCycle,
+      billingCycle === BillingCycle.DAILY ? 1 : undefined, // Default 1 day for daily
+      now,
+    );
+    
     subscription.planId = newPlan._id;
     subscription.planCode = newPlan.code;
-    subscription.billingCycle = subscription.pendingUpgrade.billingCycle as BillingCycle;
+    subscription.billingCycle = billingCycle;
     subscription.currentPrice = subscription.pendingUpgrade.price;
     subscription.status = SubscriptionStatus.ACTIVE;
-    subscription.lastPaymentDate = new Date();
+    subscription.lastPaymentDate = now;
+    subscription.currentPeriodStart = now;
+    subscription.currentPeriodEnd = periodEnd;
+    subscription.nextBillingDate = periodEnd;
+    subscription.numberOfDays = numberOfDays;
     subscription.metadata = {
       ...subscription.metadata,
       upgradedFrom: oldPlanCode,
-      upgradedAt: new Date(),
+      upgradedAt: now,
     };
     
     // Clear pending upgrade
@@ -1310,6 +1352,42 @@ export class SubscriptionsService {
     this.logger.log(`Reactivated subscription for shop ${shopId}`);
 
     return this.mapSubscriptionToResponse(subscription, plan);
+  }
+
+  /**
+   * Toggle auto-renew setting for a subscription
+   */
+  async toggleAutoRenew(
+    shopId: string,
+    autoRenew: boolean,
+  ): Promise<{ success: boolean; autoRenew: boolean; message: string }> {
+    const subscription = await this.subscriptionModel.findOne({
+      shopId: new Types.ObjectId(shopId),
+    });
+
+    if (!subscription) {
+      throw new NotFoundException('No subscription found for this shop');
+    }
+
+    // Cannot enable auto-renew for cancelled subscriptions
+    if (autoRenew && subscription.status === SubscriptionStatus.CANCELLED) {
+      throw new BadRequestException(
+        'Cannot enable auto-renew for a cancelled subscription. Please reactivate your subscription first.',
+      );
+    }
+
+    subscription.autoRenew = autoRenew;
+    await subscription.save();
+
+    this.logger.log(`Auto-renew ${autoRenew ? 'enabled' : 'disabled'} for shop ${shopId}`);
+
+    return {
+      success: true,
+      autoRenew,
+      message: autoRenew
+        ? 'Auto-renewal enabled. Your subscription will automatically renew at the end of each billing period.'
+        : 'Auto-renewal disabled. Your subscription will expire at the end of the current billing period.',
+    };
   }
 
   // ============================================

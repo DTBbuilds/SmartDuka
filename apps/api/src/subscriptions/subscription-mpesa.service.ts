@@ -958,12 +958,76 @@ export class SubscriptionMpesaService implements OnModuleInit {
 
   /**
    * Query STK Push transaction status
+   * 
+   * In SANDBOX mode: Simulates successful payment after a short delay
+   * In PRODUCTION mode: Queries M-Pesa API for actual status
    */
   async queryStkStatus(checkoutRequestId: string): Promise<{
     success: boolean;
     resultCode?: number;
     resultDesc?: string;
   }> {
+    // SANDBOX SIMULATION: Auto-complete payments for testing
+    if (this.environment === 'sandbox') {
+      // Check if we have a pending payment attempt for this checkout
+      const invoice = await this.invoiceModel.findOne({
+        'paymentAttempt.checkoutRequestId': checkoutRequestId,
+      });
+
+      if (invoice) {
+        const initiatedAt = invoice.paymentAttempt?.initiatedAt;
+        if (initiatedAt) {
+          const elapsedSeconds = (Date.now() - new Date(initiatedAt).getTime()) / 1000;
+          
+          // Simulate: After 10 seconds in sandbox, auto-complete the payment
+          if (elapsedSeconds >= 10) {
+            this.logger.log(`🧪 SANDBOX: Simulating successful payment for ${checkoutRequestId}`);
+            
+            // Generate a fake receipt number for sandbox
+            const fakeReceipt = `SB${Date.now().toString().slice(-10)}`;
+            
+            // Simulate the callback processing
+            await this.handleStkCallback({
+              Body: {
+                stkCallback: {
+                  MerchantRequestID: invoice.paymentAttempt?.merchantRequestId || 'SANDBOX',
+                  CheckoutRequestID: checkoutRequestId,
+                  ResultCode: 0,
+                  ResultDesc: 'The service request is processed successfully.',
+                  CallbackMetadata: {
+                    Item: [
+                      { Name: 'Amount', Value: invoice.totalAmount },
+                      { Name: 'MpesaReceiptNumber', Value: fakeReceipt },
+                      { Name: 'TransactionDate', Value: new Date().toISOString() },
+                    ],
+                  },
+                },
+              },
+            });
+
+            return {
+              success: true,
+              resultCode: 0,
+              resultDesc: 'SANDBOX: Payment simulated successfully',
+            };
+          }
+          
+          // Still waiting for simulated delay
+          this.logger.debug(`🧪 SANDBOX: Waiting for payment simulation (${Math.round(elapsedSeconds)}s elapsed, need 10s)`);
+          return {
+            success: false,
+            resultDesc: 'SANDBOX: Payment processing...',
+          };
+        }
+      }
+      
+      return {
+        success: false,
+        resultDesc: 'SANDBOX: Transaction not found',
+      };
+    }
+
+    // PRODUCTION: Query actual M-Pesa API
     try {
       const accessToken = await this.getAccessToken();
       const timestamp = this.getTimestamp();
@@ -982,6 +1046,7 @@ export class SubscriptionMpesaService implements OnModuleInit {
             Authorization: `Bearer ${accessToken}`,
             'Content-Type': 'application/json',
           },
+          timeout: 30000,
         },
       );
 
@@ -991,6 +1056,15 @@ export class SubscriptionMpesaService implements OnModuleInit {
         resultDesc: response.data.ResultDesc,
       };
     } catch (error: any) {
+      // Handle rate limiting (429) gracefully
+      if (error.response?.status === 429) {
+        this.logger.warn('M-Pesa API rate limited (429). Will retry on next poll.');
+        return {
+          success: false,
+          resultDesc: 'Rate limited - please wait',
+        };
+      }
+      
       this.logger.error('STK query failed:', error.message);
       return {
         success: false,
@@ -1047,9 +1121,12 @@ export class SubscriptionMpesaService implements OnModuleInit {
       
       if (subscription.billingCycle === 'annual') {
         periodEnd.setFullYear(periodEnd.getFullYear() + 1);
-      } else if (subscription.billingCycle === 'daily' && subscription.numberOfDays) {
-        periodEnd.setDate(periodEnd.getDate() + subscription.numberOfDays);
+      } else if (subscription.billingCycle === 'daily') {
+        // Daily billing - default to 1 day if numberOfDays not set
+        const days = subscription.numberOfDays || 1;
+        periodEnd.setDate(periodEnd.getDate() + days);
       } else {
+        // Monthly billing (default)
         periodEnd.setMonth(periodEnd.getMonth() + 1);
       }
 

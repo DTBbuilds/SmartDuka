@@ -1,11 +1,13 @@
 'use client';
 
 import { config } from '@/lib/config';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/lib/auth-context';
-import { TrendingUp, Package, Users, ShoppingCart, Crown } from 'lucide-react';
+import { TrendingUp, Package, Users, ShoppingCart, RefreshCw, Wifi, WifiOff } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { SubscriptionStatusCard } from '@/components/subscription-status-card';
+import { dashboardCache, cacheKeys } from '@/lib/data-cache';
+import { smartCache } from '@/lib/smart-cache-manager';
 
 interface DashboardStats {
   totalRevenue: number;
@@ -17,16 +19,57 @@ interface DashboardStats {
 }
 
 export default function DashboardPage() {
-  const { token } = useAuth();
+  const { token, user, shop } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [isOnline, setIsOnline] = useState(true);
 
+  const shopId = user?.shopId || (shop as any)?._id || shop?.id || '';
+
+  // Check online status
   useEffect(() => {
-    fetchStats();
+    if (typeof window === 'undefined') return;
+    setIsOnline(navigator.onLine);
+    
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
   }, []);
 
-  const fetchStats = async () => {
+  // Initialize smart cache
+  useEffect(() => {
+    if (token && shopId) {
+      smartCache.initialize(token, shopId);
+    }
+  }, [token, shopId]);
+
+  const fetchStats = useCallback(async (forceRefresh = false) => {
+    const cacheKey = cacheKeys.dashboardStats(shopId);
+    
+    // Try cache first (unless forcing refresh)
+    if (!forceRefresh) {
+      const cached = dashboardCache.get<DashboardStats>(cacheKey);
+      if (cached) {
+        setStats(cached);
+        setIsLoading(false);
+        // Still fetch in background if cache is older than 1 minute
+        const age = dashboardCache.getAge(cacheKey);
+        if (age && age < 60000) return;
+      }
+    }
+
     try {
+      if (forceRefresh) setIsRefreshing(true);
+      
       const res = await fetch(`${config.apiUrl}/sales/stats`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -36,12 +79,26 @@ export default function DashboardPage() {
       
       if (res.ok) {
         setStats(data);
+        dashboardCache.set(cacheKey, data, 2 * 60 * 1000); // Cache for 2 minutes
+        setLastUpdated(new Date());
       }
     } catch (error) {
       console.error('Failed to fetch stats:', error);
+      // Use cached data if available
+      const cached = dashboardCache.get<DashboardStats>(cacheKey);
+      if (cached) setStats(cached);
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
+  }, [token, shopId]);
+
+  useEffect(() => {
+    if (token) fetchStats();
+  }, [token, fetchStats]);
+
+  const handleRefresh = () => {
+    fetchStats(true);
   };
 
   if (isLoading) {

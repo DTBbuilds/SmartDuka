@@ -114,10 +114,12 @@ export class AuthService {
       shopId: (shop as any)._id,
     });
 
-    // Send welcome email
+    // Send welcome email - fire and forget (don't block registration)
     if (this.systemEventManager) {
-      try {
-        await this.systemEventManager.queueEvent({
+      // Use setImmediate to defer email sending to next tick - doesn't block response
+      const eventManager = this.systemEventManager;
+      setImmediate(() => {
+        eventManager.queueEvent({
           type: 'welcome',
           shop: {
             shopId: (shop as any)._id.toString(),
@@ -134,12 +136,13 @@ export class AuthService {
             trialDays: 14,
             ...subscriptionDetails,
           },
+        }).then(() => {
+          this.logger.log(`Welcome email sent for ${dto.admin.email}`);
+        }).catch((err) => {
+          this.logger.error(`Failed to send welcome email to ${dto.admin.email}:`, err.message);
         });
-        this.logger.log(`Welcome email queued for ${dto.admin.email}`);
-      } catch (err) {
-        this.logger.error('Failed to queue welcome email:', err);
-        // Don't fail registration if email fails
-      }
+      });
+      this.logger.log(`Welcome email queued (async) for ${dto.admin.email}`);
     }
 
     return {
