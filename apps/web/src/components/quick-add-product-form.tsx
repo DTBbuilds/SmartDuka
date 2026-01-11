@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label } from '@smartduka/ui';
 import { Plus, FolderPlus, Scan, AlertCircle, CheckCircle2, Info, Camera } from 'lucide-react';
 import { CategorySelectWithCreate } from './category-select-with-create';
-import { BarcodeScannerZXing } from './barcode-scanner-zxing';
+import { BarcodeScannerUnified } from './barcode-scanner-unified';
 
 interface Category {
   _id: string;
@@ -367,7 +367,7 @@ export function QuickAddProductForm({ categories, onSubmit, onCategoryCreated, t
         </form>
 
         {/* Barcode Scanner Modal */}
-        <BarcodeScannerZXing
+        <BarcodeScannerUnified
           isOpen={isScannerOpen}
           onClose={() => setIsScannerOpen(false)}
           onScan={handleBarcodeScanned}

@@ -12,7 +12,7 @@
 **Current SMTP Settings:**
 ```bash
 SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
+SMTP_PORT=465
 SMTP_USER=your-email@gmail.com              # ⚠️ UPDATE THIS
 SMTP_PASS=your-app-specific-password        # ⚠️ UPDATE THIS
 SMTP_FROM=SmartDuka <noreply@smartduka.co.ke>
@@ -34,7 +34,7 @@ SMTP_FROM=SmartDuka <noreply@smartduka.co.ke>
 3. **Update `.env.local`**
    ```bash
    SMTP_HOST=smtp.gmail.com
-   SMTP_PORT=587
+   SMTP_PORT=465
    SMTP_USER=your-actual-email@gmail.com
    SMTP_PASS=abcdefghijklmnop  # 16-character app password (no spaces)
    SMTP_FROM=SmartDuka <noreply@smartduka.co.ke>
@@ -54,7 +54,7 @@ SMTP_FROM=SmartDuka <noreply@smartduka.co.ke>
 1. **Update `.env.local`**
    ```bash
    SMTP_HOST=smtp-mail.outlook.com
-   SMTP_PORT=587
+   SMTP_PORT=465
    SMTP_USER=your-email@outlook.com
    SMTP_PASS=your-outlook-password
    SMTP_FROM=SmartDuka <noreply@smartduka.co.ke>
@@ -71,7 +71,7 @@ SMTP_FROM=SmartDuka <noreply@smartduka.co.ke>
 2. **Update `.env.local`**
    ```bash
    SMTP_HOST=smtp.sendgrid.net
-   SMTP_PORT=587
+   SMTP_PORT=465
    SMTP_USER=apikey
    SMTP_PASS=SG.your-api-key-here
    SMTP_FROM=SmartDuka <noreply@smartduka.co.ke>
@@ -99,7 +99,7 @@ After updating credentials and restarting:
    Look for:
    ```
    ✅ SMTP connection established successfully
-      Connected to: smtp.gmail.com:587
+      Connected to: smtp.gmail.com:465
       From address: SmartDuka <noreply@smartduka.co.ke>
    ```
 
@@ -151,7 +151,7 @@ Once configured:
 
 ### "Connection failed"
 - Check credentials are correct
-- Verify firewall allows port 587
+- Verify firewall allows port 465
 - For Gmail: Ensure 2FA is enabled
 
 ## 📝 Current Configuration Summary

@@ -114,7 +114,7 @@ Edit your `.env` file in `apps/api/`:
 
 ```bash
 SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
+SMTP_PORT=465
 SMTP_USER=your-email@gmail.com
 SMTP_PASS=your-app-password
 SMTP_FROM=SmartDuka <noreply@smartduka.co.ke>
@@ -167,7 +167,7 @@ On startup, you'll see:
 ```
 === SMTP Configuration Status ===
 SMTP_HOST: ✓ Configured
-SMTP_PORT: 587
+SMTP_PORT: 465
 SMTP_USER: ✓ Configured
 SMTP_PASS: ✓ Configured
 SMTP_FROM: SmartDuka <noreply@smartduka.co.ke>
@@ -219,7 +219,7 @@ To enable email sending, set these environment variables:
 **Solution:**
 1. Verify credentials with your email provider
 2. Test via admin panel: `/super-admin/email-settings`
-3. Check firewall allows port 587 (or 465)
+3. Check firewall allows port 465
 4. For Gmail: Use App Password, not regular password
 
 ### "Authentication failed"

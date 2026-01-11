@@ -421,7 +421,7 @@ export class EmailAdminController {
               <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin: 20px 0;">
                 <h3>Configuration Details:</h3>
                 <p><strong>SMTP Host:</strong> ${host}</p>
-                <p><strong>SMTP Port:</strong> ${process.env.SMTP_PORT || 587}</p>
+                <p><strong>SMTP Port:</strong> ${process.env.SMTP_PORT || 465}</p>
                 <p><strong>From Address:</strong> ${process.env.SMTP_FROM || 'SmartDuka <noreply@smartduka.co.ke>'}</p>
                 <p><strong>Test Email Sent To:</strong> ${testEmail}</p>
               </div>
@@ -440,7 +440,7 @@ export class EmailAdminController {
         testEmail: testEmail,
         configuration: {
           host,
-          port: process.env.SMTP_PORT || 587,
+          port: process.env.SMTP_PORT || 465,
           from: process.env.SMTP_FROM || 'SmartDuka <noreply@smartduka.co.ke>',
         },
       };

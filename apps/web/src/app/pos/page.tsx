@@ -48,7 +48,7 @@ import { useAuth } from "@/lib/auth-context";
 import { config } from "@/lib/config";
 import { useToast } from "@/lib/use-toast";
 import { ToastContainer } from "@/components/toast-container";
-import { BarcodeScannerZXing } from "@/components/barcode-scanner-zxing";
+import { BarcodeScannerUnified } from "@/components/barcode-scanner-unified";
 import { ReceiptModal } from "@/components/receipt-modal";
 import { ReceiptPreviewModal } from "@/components/receipt-preview-modal";
 import { ReceiptData } from "@/lib/receipt-generator";
@@ -1901,7 +1901,7 @@ function POSContent() {
       )}
 
       {/* Barcode Scanner Modal */}
-      <BarcodeScannerZXing
+      <BarcodeScannerUnified
         isOpen={isScannerOpen}
         onClose={() => setIsScannerOpen(false)}
         onScan={handleBarcodeScanned}

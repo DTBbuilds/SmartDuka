@@ -4,6 +4,14 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import axios, { AxiosInstance } from 'axios';
 import * as crypto from 'crypto';
+import {
+  isSandboxTestNumber,
+  getSimulationScenario,
+  getSimulationResponse,
+  generateSandboxReceiptNumber,
+  SANDBOX_MODE_ERROR,
+  SandboxSimulationScenario,
+} from './constants/mpesa-sandbox.constants';
 
 export interface DarajaConfig {
   consumerKey: string;
@@ -110,15 +118,43 @@ export class DarajaService {
 
   async initiateStkPush(request: StkPushRequest): Promise<StkPushResponse> {
     try {
-      const accessToken = await this.getAccessToken();
       const timestamp = this.getTimestamp();
-      const password = this.generatePassword(timestamp);
       const formattedPhone = this.formatPhoneNumber(request.phoneNumber);
+      const isSandbox = this.config.environment === 'sandbox';
 
       // Validate phone number format (Safaricom: 2547XXXXXXXX or 2541XXXXXXXX)
       if (!/^254[71]\d{8}$/.test(formattedPhone)) {
         throw new Error(`Invalid phone number format: ${formattedPhone}. Must be 2547XXXXXXXX or 2541XXXXXXXX (Safaricom number)`);
       }
+
+      // SANDBOX MODE: Only allow sandbox test numbers
+      if (isSandbox) {
+        if (!isSandboxTestNumber(formattedPhone)) {
+          this.logger.warn(`🧪 SANDBOX: Rejecting non-test number ${formattedPhone}`);
+          throw new Error(SANDBOX_MODE_ERROR.message);
+        }
+        
+        // For sandbox test numbers, simulate the STK push response
+        this.logger.log(`🧪 SANDBOX: Simulating STK Push for test number ${formattedPhone}`);
+        const scenario = getSimulationScenario(formattedPhone);
+        this.logger.log(`🧪 SANDBOX: Scenario = ${scenario}`);
+        
+        // Generate fake checkout/merchant request IDs
+        const fakeCheckoutId = `ws_CO_SANDBOX_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        const fakeMerchantId = `SANDBOX_${Date.now()}`;
+        
+        return {
+          MerchantRequestID: fakeMerchantId,
+          CheckoutRequestID: fakeCheckoutId,
+          ResponseCode: '0',
+          ResponseDescription: 'Success. Request accepted for processing',
+          CustomerMessage: `🧪 SANDBOX: STK Push simulated for ${formattedPhone}. Scenario: ${scenario}`,
+        };
+      }
+
+      // PRODUCTION MODE: Make real API call
+      const accessToken = await this.getAccessToken();
+      const password = this.generatePassword(timestamp);
 
       // Validate amount
       if (request.amount < 1 || request.amount > 150000) {
@@ -131,11 +167,10 @@ export class DarajaService {
       }
 
       // Check for potentially problematic callback URLs in sandbox
-      const isSandbox = this.config.environment === 'sandbox';
       const problematicDomains = ['trycloudflare.com', 'cloudflare', 'workers.dev'];
       const hasProblematicDomain = problematicDomains.some(d => request.callbackUrl.includes(d));
       
-      if (isSandbox && hasProblematicDomain) {
+      if (hasProblematicDomain) {
         this.logger.warn(
           `Cloudflare tunnel URLs often get rejected by M-Pesa sandbox with "Threat Detected" error. ` +
           `Consider using ngrok instead: ngrok http 5000`

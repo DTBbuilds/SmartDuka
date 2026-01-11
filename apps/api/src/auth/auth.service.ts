@@ -137,9 +137,9 @@ export class AuthService {
             ...subscriptionDetails,
           },
         }).then(() => {
-          this.logger.log(`Welcome email sent for ${dto.admin.email}`);
+          this.logger.debug(`Welcome email event processed for ${dto.admin.email}`);
         }).catch((err) => {
-          this.logger.error(`Failed to send welcome email to ${dto.admin.email}:`, err.message);
+          this.logger.error(`Failed to queue welcome email for ${dto.admin.email}:`, err.message);
         });
       });
       this.logger.log(`Welcome email queued (async) for ${dto.admin.email}`);

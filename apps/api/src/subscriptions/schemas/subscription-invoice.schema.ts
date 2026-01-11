@@ -163,7 +163,9 @@ export class SubscriptionInvoice {
   paymentAttempt?: {
     checkoutRequestId?: string;
     merchantRequestId?: string;
+    phoneNumber?: string;
     initiatedAt?: Date;
+    sandboxScenario?: string; // For sandbox simulation (success, user_cancelled, timeout, etc.)
     failed?: boolean;
     failedAt?: Date;
     failureReason?: string;

@@ -26,7 +26,7 @@
 ### 1. Root `.env.local` (e:\BUILds\SmartDuka\.env.local)
 ```
 SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
+SMTP_PORT=465
 SMTP_USER=smartdukainfo@gmail.com
 SMTP_PASS=xobuwazyyksbclzh
 SMTP_FROM=SmartDuka <smartdukainfo@gmail.com>
@@ -38,7 +38,7 @@ SMTP_FROM=SmartDuka <smartdukainfo@gmail.com>
 ### 2. API `.env.local` (e:\BUILds\SmartDuka\apps\api\.env.local)
 ```
 SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
+SMTP_PORT=465
 SMTP_USER=smartdukainfo@gmail.com
 SMTP_PASS=plllqnneupnzegsr
 SMTP_FROM=SmartDuka <smartdukainfo@gmail.com>
@@ -51,7 +51,7 @@ SMTP_FROM=SmartDuka <smartdukainfo@gmail.com>
 ### 3. API `.env.example` (e:\BUILds\SmartDuka\apps\api\.env.example)
 ```
 SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
+SMTP_PORT=465
 SMTP_USER=your-email@gmail.com
 SMTP_PASS=your-app-specific-password
 SMTP_FROM=SmartDuka <noreply@smartduka.co.ke>
@@ -127,7 +127,7 @@ But the root `.env.local` has:
 Update `apps/api/.env.local`:
 ```bash
 SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
+SMTP_PORT=465
 SMTP_USER=smartdukainfo@gmail.com
 SMTP_PASS=xobuwazyyksbclzh
 SMTP_FROM=SmartDuka <smartdukainfo@gmail.com>
@@ -195,7 +195,7 @@ Examples (.env.example files)
 | Aspect | Root `.env.local` | API `.env.local` | Status |
 |--------|------------------|------------------|--------|
 | SMTP_HOST | smtp.gmail.com | smtp.gmail.com | ✅ Match |
-| SMTP_PORT | 587 | 587 | ✅ Match |
+| SMTP_PORT | 465 | 465 | ✅ Match |
 | SMTP_USER | smartdukainfo@gmail.com | smartdukainfo@gmail.com | ✅ Match |
 | SMTP_PASS | xobuwazyyksbclzh | plllqnneupnzegsr | ❌ MISMATCH |
 | SMTP_FROM | SmartDuka <smartdukainfo@gmail.com> | SmartDuka <smartdukainfo@gmail.com> | ✅ Match |

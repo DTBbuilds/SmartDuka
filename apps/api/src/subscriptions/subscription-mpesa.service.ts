@@ -10,6 +10,15 @@ import { Subscription, SubscriptionDocument, SubscriptionStatus } from './schema
 import { SystemConfig, SystemConfigDocument, SystemConfigType } from '../super-admin/schemas/system-config.schema';
 import { MpesaEncryptionService } from '../payments/services/mpesa-encryption.service';
 import type { SubscriptionsService } from './subscriptions.service';
+import {
+  isSandboxTestNumber,
+  getSimulationScenario,
+  getSimulationResponse,
+  generateSandboxReceiptNumber,
+  SANDBOX_MODE_ERROR,
+  SandboxSimulationScenario,
+  SimulationResponse,
+} from '../payments/constants/mpesa-sandbox.constants';
 
 /**
  * SmartDuka Subscription M-Pesa Payment Service
@@ -348,7 +357,53 @@ export class SubscriptionMpesaService implements OnModuleInit {
         };
       }
 
-      // Get access token using SYSTEM credentials
+      // SANDBOX MODE: Only allow sandbox test numbers
+      if (this.environment === 'sandbox') {
+        if (!isSandboxTestNumber(formattedPhone)) {
+          this.logger.warn(`🧪 SANDBOX: Rejecting non-test number ${formattedPhone}`);
+          return {
+            success: false,
+            message: SANDBOX_MODE_ERROR.message,
+            error: 'SANDBOX_ONLY',
+          };
+        }
+        
+        // For sandbox test numbers, simulate the STK push response
+        this.logger.log(`🧪 SANDBOX: Simulating STK Push for test number ${formattedPhone}`);
+        const scenario = getSimulationScenario(formattedPhone);
+        this.logger.log(`🧪 SANDBOX: Scenario = ${scenario}`);
+        
+        // Generate fake checkout/merchant request IDs
+        const fakeCheckoutId = `ws_CO_SANDBOX_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        const fakeMerchantId = `SANDBOX_${Date.now()}`;
+        
+        // Update invoice with simulated payment attempt
+        await this.invoiceModel.updateOne(
+          { _id: invoice._id },
+          {
+            $set: {
+              'paymentAttempt': {
+                checkoutRequestId: fakeCheckoutId,
+                merchantRequestId: fakeMerchantId,
+                phoneNumber: formattedPhone,
+                initiatedAt: new Date(),
+                sandboxScenario: scenario,
+              },
+            },
+          },
+        );
+        
+        this.logger.log(`🧪 SANDBOX: STK Push simulated! CheckoutRequestID: ${fakeCheckoutId}, Scenario: ${scenario}`);
+        
+        return {
+          success: true,
+          message: `🧪 SANDBOX: Payment request simulated for ${phoneNumber}. Scenario: ${scenario}. Wait for simulated response.`,
+          checkoutRequestId: fakeCheckoutId,
+          merchantRequestId: fakeMerchantId,
+        };
+      }
+
+      // PRODUCTION MODE: Make real API call
       const accessToken = await this.getAccessToken();
       const timestamp = this.getTimestamp();
       const password = this.generatePassword(timestamp);
@@ -967,7 +1022,7 @@ export class SubscriptionMpesaService implements OnModuleInit {
     resultCode?: number;
     resultDesc?: string;
   }> {
-    // SANDBOX SIMULATION: Auto-complete payments for testing
+    // SANDBOX SIMULATION: Simulate different payment scenarios
     if (this.environment === 'sandbox') {
       // Check if we have a pending payment attempt for this checkout
       const invoice = await this.invoiceModel.findOne({
@@ -976,54 +1031,82 @@ export class SubscriptionMpesaService implements OnModuleInit {
 
       if (invoice) {
         const initiatedAt = invoice.paymentAttempt?.initiatedAt;
+        const phoneNumber = invoice.paymentAttempt?.phoneNumber || '';
+        const savedScenario = invoice.paymentAttempt?.sandboxScenario as SandboxSimulationScenario;
+        
+        // Get the simulation response for this phone number
+        const scenario = savedScenario || getSimulationScenario(phoneNumber);
+        const simResponse = getSimulationResponse(phoneNumber);
+        
         if (initiatedAt) {
-          const elapsedSeconds = (Date.now() - new Date(initiatedAt).getTime()) / 1000;
+          const elapsedMs = Date.now() - new Date(initiatedAt).getTime();
           
-          // Simulate: After 10 seconds in sandbox, auto-complete the payment
-          if (elapsedSeconds >= 10) {
-            this.logger.log(`🧪 SANDBOX: Simulating successful payment for ${checkoutRequestId}`);
+          // Check if enough time has passed for this scenario
+          if (elapsedMs >= simResponse.delayMs) {
+            this.logger.log(`🧪 SANDBOX: Simulating ${scenario} for ${checkoutRequestId}`);
             
-            // Generate a fake receipt number for sandbox
-            const fakeReceipt = `SB${Date.now().toString().slice(-10)}`;
-            
-            // Simulate the callback processing
-            await this.handleStkCallback({
-              Body: {
-                stkCallback: {
-                  MerchantRequestID: invoice.paymentAttempt?.merchantRequestId || 'SANDBOX',
-                  CheckoutRequestID: checkoutRequestId,
-                  ResultCode: 0,
-                  ResultDesc: 'The service request is processed successfully.',
-                  CallbackMetadata: {
-                    Item: [
-                      { Name: 'Amount', Value: invoice.totalAmount },
-                      { Name: 'MpesaReceiptNumber', Value: fakeReceipt },
-                      { Name: 'TransactionDate', Value: new Date().toISOString() },
-                    ],
+            if (simResponse.shouldSucceed) {
+              // Generate a fake receipt number for sandbox
+              const fakeReceipt = generateSandboxReceiptNumber();
+              
+              // Simulate success callback
+              await this.handleStkCallback({
+                Body: {
+                  stkCallback: {
+                    MerchantRequestID: invoice.paymentAttempt?.merchantRequestId || 'SANDBOX',
+                    CheckoutRequestID: checkoutRequestId,
+                    ResultCode: 0,
+                    ResultDesc: 'The service request is processed successfully.',
+                    CallbackMetadata: {
+                      Item: [
+                        { Name: 'Amount', Value: invoice.totalAmount },
+                        { Name: 'MpesaReceiptNumber', Value: fakeReceipt },
+                        { Name: 'TransactionDate', Value: new Date().toISOString() },
+                      ],
+                    },
                   },
                 },
-              },
-            });
+              });
 
-            return {
-              success: true,
-              resultCode: 0,
-              resultDesc: 'SANDBOX: Payment simulated successfully',
-            };
+              return {
+                success: true,
+                resultCode: 0,
+                resultDesc: `🧪 SANDBOX: Payment successful (${scenario})`,
+              };
+            } else {
+              // Simulate failure callback
+              await this.handleStkCallback({
+                Body: {
+                  stkCallback: {
+                    MerchantRequestID: invoice.paymentAttempt?.merchantRequestId || 'SANDBOX',
+                    CheckoutRequestID: checkoutRequestId,
+                    ResultCode: simResponse.resultCode,
+                    ResultDesc: simResponse.resultDesc,
+                  },
+                },
+              });
+
+              return {
+                success: false,
+                resultCode: simResponse.resultCode,
+                resultDesc: `🧪 SANDBOX: ${simResponse.resultDesc} (${scenario})`,
+              };
+            }
           }
           
           // Still waiting for simulated delay
-          this.logger.debug(`🧪 SANDBOX: Waiting for payment simulation (${Math.round(elapsedSeconds)}s elapsed, need 10s)`);
+          const remainingSeconds = Math.ceil((simResponse.delayMs - elapsedMs) / 1000);
+          this.logger.debug(`🧪 SANDBOX: Waiting for ${scenario} simulation (${remainingSeconds}s remaining)`);
           return {
             success: false,
-            resultDesc: 'SANDBOX: Payment processing...',
+            resultDesc: `🧪 SANDBOX: Payment processing... (${scenario} in ${remainingSeconds}s)`,
           };
         }
       }
       
       return {
         success: false,
-        resultDesc: 'SANDBOX: Transaction not found',
+        resultDesc: '🧪 SANDBOX: Transaction not found',
       };
     }
 

@@ -106,7 +106,7 @@ export class EmailService {
           this.logger.warn(`⚠️  SMTP verification failed: ${error.message}`);
           // Provide helpful hints based on error type
           if (error.message.includes('timeout') || error.message.includes('ETIMEDOUT')) {
-            this.logger.warn('   → Check: Firewall blocking port 587? VPN interfering? SMTP server down?');
+            this.logger.warn('   → Check: Firewall blocking port 465? VPN interfering? SMTP server down?');
           } else if (error.message.includes('auth') || error.message.includes('535')) {
             this.logger.warn('   → Check: For Gmail, use App Password (not regular password)');
           } else if (error.message.includes('certificate') || error.message.includes('TLS')) {

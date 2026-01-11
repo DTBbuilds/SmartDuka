@@ -8,7 +8,7 @@ Set these environment variables in your `.env` file:
 
 ```bash
 SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
+SMTP_PORT=465
 SMTP_USER=your-email@gmail.com
 SMTP_PASS=your-app-password
 SMTP_FROM=SmartDuka <noreply@smartduka.co.ke>
@@ -31,7 +31,7 @@ SMTP_FROM=SmartDuka <noreply@smartduka.co.ke>
 3. **Configure SmartDuka**
    ```bash
    SMTP_HOST=smtp.gmail.com
-   SMTP_PORT=587
+   SMTP_PORT=465
    SMTP_USER=your-email@gmail.com
    SMTP_PASS=xxxx xxxx xxxx xxxx  # Remove spaces: xxxxxxxxxxxxxxxx
    SMTP_FROM=SmartDuka <noreply@smartduka.co.ke>
@@ -46,7 +46,7 @@ SMTP_FROM=SmartDuka <noreply@smartduka.co.ke>
 2. **Configure SmartDuka**
    ```bash
    SMTP_HOST=smtp-mail.outlook.com
-   SMTP_PORT=587
+   SMTP_PORT=465
    SMTP_USER=your-email@outlook.com
    SMTP_PASS=your-outlook-password
    SMTP_FROM=SmartDuka <noreply@smartduka.co.ke>
@@ -61,7 +61,7 @@ SMTP_FROM=SmartDuka <noreply@smartduka.co.ke>
 2. **Configure SmartDuka**
    ```bash
    SMTP_HOST=smtp.sendgrid.net
-   SMTP_PORT=587
+   SMTP_PORT=465
    SMTP_USER=apikey
    SMTP_PASS=SG.your-api-key-here
    SMTP_FROM=SmartDuka <noreply@smartduka.co.ke>
@@ -77,7 +77,7 @@ SMTP_FROM=SmartDuka <noreply@smartduka.co.ke>
 2. **Configure SmartDuka**
    ```bash
    SMTP_HOST=email-smtp.region.amazonaws.com
-   SMTP_PORT=587
+   SMTP_PORT=465
    SMTP_USER=your-smtp-username
    SMTP_PASS=your-smtp-password
    SMTP_FROM=SmartDuka <noreply@smartduka.co.ke>
@@ -120,8 +120,8 @@ For Outlook:
 
 ### Port Issues
 
-- **Port 587** (TLS) - Most common, recommended
-- **Port 465** (SSL) - Alternative, set `SMTP_PORT=465`
+- **Port 465** (SSL) - Recommended, more reliable across networks
+- **Port 587** (TLS) - Alternative, often blocked by firewalls
 - **Port 25** (SMTP) - Usually blocked by ISPs, avoid
 
 ## Testing
@@ -176,7 +176,7 @@ All templates can be customized in the admin panel.
 | Variable | Required | Example | Description |
 |----------|----------|---------|-------------|
 | `SMTP_HOST` | Yes | smtp.gmail.com | SMTP server address |
-| `SMTP_PORT` | No | 587 | SMTP port (default: 587) |
+| `SMTP_PORT` | No | 465 | SMTP port (default: 465, SSL) |
 | `SMTP_USER` | Yes | user@gmail.com | Email address or username |
 | `SMTP_PASS` | Yes | app-password | Password or app-specific password |
 | `SMTP_FROM` | No | noreply@smartduka.co.ke | From address for emails |

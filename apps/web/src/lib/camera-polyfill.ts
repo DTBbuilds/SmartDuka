@@ -212,14 +212,16 @@ export async function requestCameraAccess(options?: {
   const constraints: MediaStreamConstraints[] = [];
 
   if (isMobile) {
-    // Mobile: Start with simplest constraints, then try more specific
+    // Mobile: Start with back camera ideal, then simpler constraints
+    // NOTE: Order matters - iOS Safari works better with 'ideal' facingMode
+    // 'exact' facingMode can fail if device is busy
     constraints.push(
-      // 1. Simplest - just video
-      { video: true },
-      // 2. Back camera preference
-      { video: { facingMode: 'environment' } },
-      // 3. Back camera with ideal constraint
+      // 1. Back camera with ideal constraint (most reliable on mobile)
       { video: { facingMode: { ideal: 'environment' } } },
+      // 2. Back camera preference (may fail on some devices)
+      { video: { facingMode: 'environment' } },
+      // 3. Simplest - just video (fallback)
+      { video: true },
     );
   } else {
     // Desktop: Can use more specific constraints

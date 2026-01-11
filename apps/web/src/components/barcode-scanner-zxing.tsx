@@ -148,15 +148,19 @@ export function BarcodeScannerZXing({
 
       // Use decodeFromConstraints for mobile-optimized camera settings
       // This gives us more control over camera selection and resolution
+      // IMPORTANT: On mobile, avoid 'exact' constraints - use 'ideal' instead
+      // 'exact' can fail if device is busy or constraints can't be satisfied
       const videoConstraints: MediaTrackConstraints = {
-        deviceId: deviceId ? { exact: deviceId } : undefined,
+        deviceId: deviceId ? { ideal: deviceId } : undefined,
         facingMode: deviceId ? undefined : { ideal: 'environment' },
         // Use lower resolution for better performance on mobile
+        // iOS specifically works better with lower resolutions
         width: { ideal: isIOS ? 640 : 1280, max: 1920 },
         height: { ideal: isIOS ? 480 : 720, max: 1080 },
       };
 
-      const controls = await codeReader.decodeFromConstraints(
+      // Wrap in timeout to prevent hanging on mobile
+      const decodePromise = codeReader.decodeFromConstraints(
         { video: videoConstraints },
         videoRef.current,
         (result, error) => {
@@ -179,7 +183,29 @@ export function BarcodeScannerZXing({
         }
       );
 
+      // Add timeout for mobile - 15 seconds should be enough
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Camera initialization timeout')), 15000);
+      });
+
+      const controls = await Promise.race([decodePromise, timeoutPromise]) as any;
+
       scanControlsRef.current = controls;
+
+      // MOBILE FIX: Explicitly call play() on video element
+      // Mobile browsers often require explicit play() after stream is attached
+      if (videoRef.current && videoRef.current.paused) {
+        try {
+          await videoRef.current.play();
+          console.log('✅ Video play() called successfully');
+        } catch (playErr: any) {
+          // NotAllowedError is expected if autoplay is blocked
+          // The video will still work when user interacts
+          if (playErr.name !== 'NotAllowedError') {
+            console.warn('Video play() warning:', playErr.message);
+          }
+        }
+      }
       
       // Check if torch/flash is supported
       try {
@@ -276,6 +302,8 @@ export function BarcodeScannerZXing({
         setError("Camera is already in use by another application. Please close other apps and try again.");
       } else if (err.name === "AbortError") {
         setError("Camera initialization was canceled. Please try again.");
+      } else if (err.message?.includes("timeout") || err.message?.includes("Camera initialization timeout")) {
+        setError("Camera took too long to start. Please try again or use manual entry.");
       } else if (err.name === "OverconstrainedError") {
         // On iOS, try again with simpler constraints
         setError("Camera constraints could not be satisfied. Try switching cameras or use manual entry.");
@@ -774,15 +802,23 @@ export function BarcodeScannerZXing({
               ) : (
                 <>
                   {/* Video element with iOS-specific attributes for inline playback */}
+                  {/* MOBILE FIX: Use proper React camelCase attributes for webkit */}
                   <video
                     ref={videoRef}
-                    className="w-full h-auto aspect-[4/3] sm:aspect-video object-cover"
-                    playsInline
-                    autoPlay
-                    muted
-                    style={{ display: "block", width: "100%" }}
-                    // @ts-ignore - iOS Safari requires these non-standard attributes
-                    {...{ 'webkit-playsinline': 'true', 'x-webkit-airplay': 'allow' }}
+                    className="w-full h-auto aspect-[4/3] sm:aspect-video object-cover bg-black"
+                    playsInline={true}
+                    autoPlay={true}
+                    muted={true}
+                    controls={false}
+                    style={{ display: "block", width: "100%", minHeight: "200px" }}
+                    // iOS Safari specific - these are set as DOM attributes after render
+                    onLoadedMetadata={(e) => {
+                      // Ensure video plays on iOS after metadata loads
+                      const video = e.currentTarget;
+                      if (video.paused) {
+                        video.play().catch(() => {});
+                      }
+                    }}
                   />
 
                   {scanStatus === "ready" && (

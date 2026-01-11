@@ -52,7 +52,7 @@ pnpm dev
 Look for:
 ```
 ✅ SMTP connection established successfully
-   Connected to: smtp.gmail.com:587
+   Connected to: smtp.gmail.com:465
 ```
 
 ## Troubleshooting
@@ -84,7 +84,7 @@ Look for:
 **Current Settings:**
 ```bash
 SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
+SMTP_PORT=465
 SMTP_USER=dontech1914@gmail.com
 SMTP_PASS=plllqnneupnzegsr  # ⚠️ This is being rejected
 SMTP_FROM=SmartDuka <dontech1914@gmail.com>

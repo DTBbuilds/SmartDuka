@@ -476,7 +476,7 @@ MPESA_ENCRYPTION_KEY=64-hex-chars-for-aes-256
 
 # Email
 SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
+SMTP_PORT=465
 SMTP_USER=your-email@gmail.com
 SMTP_PASS=your-app-password
 SMTP_FROM=YourApp <your-email@gmail.com>

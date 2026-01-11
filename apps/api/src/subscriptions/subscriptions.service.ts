@@ -1710,7 +1710,20 @@ export class SubscriptionsService {
 
     if (subscription.status !== SubscriptionStatus.ACTIVE && 
         subscription.status !== SubscriptionStatus.TRIAL) {
-      return { allowed: false, current: 0, limit: 0, message: 'Subscription is not active' };
+      const plan = await this.planModel.findById(subscription.planId);
+      const statusMessages: Record<string, string> = {
+        [SubscriptionStatus.PENDING_PAYMENT]: 'Payment required to activate your subscription.',
+        [SubscriptionStatus.PAST_DUE]: 'Your subscription payment is overdue. Please pay to restore access.',
+        [SubscriptionStatus.SUSPENDED]: 'Your subscription has been suspended. Contact support.',
+        [SubscriptionStatus.CANCELLED]: 'Your subscription has been cancelled.',
+        [SubscriptionStatus.EXPIRED]: 'Your subscription has expired. Please renew to continue.',
+      };
+      return { 
+        allowed: false, 
+        current: subscription.currentProductCount || 0, 
+        limit: plan?.maxProducts || 0, 
+        message: statusMessages[subscription.status] || 'Subscription is not active' 
+      };
     }
 
     const plan = await this.planModel.findById(subscription.planId);

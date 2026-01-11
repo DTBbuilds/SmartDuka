@@ -8,7 +8,7 @@ import {
   Loader2, CheckCircle2, Sparkles
 } from 'lucide-react';
 import { CategorySelectWithCreate } from './category-select-with-create';
-import { BarcodeScannerZXing } from './barcode-scanner-zxing';
+import { BarcodeScannerUnified } from './barcode-scanner-unified';
 
 interface Category {
   _id: string;
@@ -489,7 +489,7 @@ export function QuickAddProductMobile({
       </div>
 
       {/* Barcode Scanner Modal */}
-      <BarcodeScannerZXing
+      <BarcodeScannerUnified
         isOpen={isScannerOpen}
         onClose={() => setIsScannerOpen(false)}
         onScan={handleBarcodeScanned}

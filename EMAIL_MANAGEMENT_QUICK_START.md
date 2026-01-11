@@ -39,7 +39,7 @@ Edit `apps/api/.env`:
 
 ```bash
 SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
+SMTP_PORT=465
 SMTP_USER=your-email@gmail.com
 SMTP_PASS=your-app-password
 SMTP_FROM=SmartDuka <noreply@smartduka.co.ke>
@@ -88,7 +88,7 @@ npm run dev
 **Solution:** 
 - Verify credentials are correct
 - For Gmail: Use App Password, not regular password
-- Check firewall allows port 587
+- Check firewall allows port 465
 
 ### Problem: "Authentication failed"
 **Solution:**
@@ -116,7 +116,7 @@ Look for one of these:
 **Success:**
 ```
 ✅ SMTP connection established successfully
-   Connected to: smtp.gmail.com:587
+   Connected to: smtp.gmail.com:465
    From address: SmartDuka <noreply@smartduka.co.ke>
 ```
 
@@ -147,7 +147,7 @@ All customizable in admin panel.
 ### Gmail (Development)
 ```bash
 SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
+SMTP_PORT=465
 SMTP_USER=your-email@gmail.com
 SMTP_PASS=xxxx xxxx xxxx xxxx
 ```
@@ -155,7 +155,7 @@ SMTP_PASS=xxxx xxxx xxxx xxxx
 ### Outlook
 ```bash
 SMTP_HOST=smtp-mail.outlook.com
-SMTP_PORT=587
+SMTP_PORT=465
 SMTP_USER=your-email@outlook.com
 SMTP_PASS=your-password
 ```
@@ -163,7 +163,7 @@ SMTP_PASS=your-password
 ### SendGrid
 ```bash
 SMTP_HOST=smtp.sendgrid.net
-SMTP_PORT=587
+SMTP_PORT=465
 SMTP_USER=apikey
 SMTP_PASS=SG.your-api-key
 ```
@@ -171,7 +171,7 @@ SMTP_PASS=SG.your-api-key
 ### AWS SES
 ```bash
 SMTP_HOST=email-smtp.region.amazonaws.com
-SMTP_PORT=587
+SMTP_PORT=465
 SMTP_USER=your-smtp-username
 SMTP_PASS=your-smtp-password
 ```
