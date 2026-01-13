@@ -14,8 +14,21 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SmartDuka - POS & Inventory Management",
-  description: "Modern Point of Sale System for Kenyan Retailers. Manage sales, inventory, and customers with ease.",
+  metadataBase: new URL(process.env.SITE_URL || 'https://smartduka.co.ke'),
+  title: {
+    default: "SmartDuka - #1 POS & Inventory Management System in Kenya",
+    template: "%s | SmartDuka",
+  },
+  description: "Kenya's leading Point of Sale and Inventory Management System. Features M-Pesa integration, real-time stock tracking, sales analytics, and multi-branch support for retail businesses.",
+  keywords: [
+    "POS system Kenya",
+    "point of sale software Kenya",
+    "inventory management Kenya",
+    "M-Pesa POS integration",
+    "retail software Nairobi",
+    "SmartDuka",
+    "duka management software",
+  ],
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
@@ -27,14 +40,39 @@ export const metadata: Metadata = {
   },
   openGraph: {
     type: "website",
-    siteName: "SmartDuka POS",
-    title: "SmartDuka - POS & Inventory Management",
-    description: "Modern Point of Sale System for Kenyan Retailers",
+    siteName: "SmartDuka",
+    title: "SmartDuka - #1 POS & Inventory Management System in Kenya",
+    description: "Kenya's leading POS system with M-Pesa integration, inventory tracking, and sales analytics for retail businesses.",
+    locale: "en_KE",
+    images: [
+      {
+        url: "/screenshots/pos-desktop.png",
+        width: 1280,
+        height: 720,
+        alt: "SmartDuka POS Dashboard",
+      },
+    ],
   },
   twitter: {
-    card: "summary",
-    title: "SmartDuka POS",
-    description: "Modern Point of Sale System for Kenyan Retailers",
+    card: "summary_large_image",
+    title: "SmartDuka - Kenya's #1 POS System",
+    description: "Complete POS & inventory management with M-Pesa integration for Kenyan retailers.",
+    images: ["/screenshots/pos-desktop.png"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
+  verification: {
+    // Add your Google Search Console verification code here
+    // google: "your-verification-code",
   },
 };
 

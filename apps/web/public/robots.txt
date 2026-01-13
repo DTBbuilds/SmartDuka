@@ -1,0 +1,32 @@
+# *
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /super-admin
+Disallow: /cashier
+Disallow: /pos
+Disallow: /dashboard
+Disallow: /settings
+Disallow: /onboarding
+Disallow: /api
+Disallow: /verification-pending
+Disallow: /verification-rejected
+Disallow: /inbox
+Disallow: /orders
+Disallow: /customers
+Disallow: /suppliers
+Disallow: /purchases
+Disallow: /stock
+Disallow: /reports
+Disallow: /users
+Disallow: /inventory
+Disallow: /payments
+Disallow: /branch-manager
+Disallow: /select-plan
+Disallow: /register-shop
+
+# Host
+Host: https://smartduka.co.ke
+
+# Sitemaps
+Sitemap: https://smartduka.co.ke/sitemap.xml
