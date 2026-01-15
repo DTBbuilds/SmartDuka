@@ -1032,15 +1032,16 @@ function SubscriptionSettingsTab() {
                   </p>
                 </div>
               </div>
-              <div className="text-right">
-                <span className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold shadow-lg ${
+              <div className="text-right flex-shrink-0">
+                <span className={`inline-flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1 sm:py-2 rounded-lg sm:rounded-xl text-[10px] sm:text-sm font-bold shadow-lg whitespace-nowrap ${
                   subscription.status === 'active' ? 'bg-white text-emerald-700' :
                   subscription.status === 'trial' ? 'bg-white text-blue-700' :
                   subscription.status === 'past_due' ? 'bg-amber-100 text-amber-800' :
                   'bg-white/20 text-white'
                 }`}>
                   {statusColors[subscription.status]?.icon}
-                  {(subscription.status || 'unknown').replace('_', ' ').toUpperCase()}
+                  <span className="hidden xs:inline">{(subscription.status || 'unknown').replace('_', ' ').toUpperCase()}</span>
+                  <span className="xs:hidden">{(subscription.status || '?').charAt(0).toUpperCase()}</span>
                 </span>
               </div>
             </div>

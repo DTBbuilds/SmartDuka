@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, Search, Store, CheckCircle, Clock, Sparkles } from 'lucide-react';
+import { ChevronDown, Search, CheckCircle, Clock, Sparkles, Building2, ShoppingBag } from 'lucide-react';
 
 interface Shop {
   id: string;
@@ -135,34 +135,34 @@ export function ShopSelector({
         onClick={() => !disabled && setIsOpen(!isOpen)}
         disabled={disabled}
         className={`
-          w-full px-3 py-2.5 border-2 rounded-xl bg-white dark:bg-slate-800 
-          flex items-center gap-3 transition-all duration-200
+          w-full px-3 sm:px-4 py-3 sm:py-2.5 border-2 rounded-xl bg-white dark:bg-slate-800 
+          flex items-center gap-2 sm:gap-3 transition-all duration-200
           ${isOpen 
-            ? 'border-blue-500 ring-4 ring-blue-500/10' 
-            : 'border-slate-200 dark:border-slate-700 hover:border-blue-400 dark:hover:border-blue-500'
+            ? 'border-primary ring-4 ring-primary/10' 
+            : 'border-slate-200 dark:border-slate-700 hover:border-primary/60 dark:hover:border-primary/60'
           }
           ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
         `}
       >
-        {/* Shop Icon */}
+        {/* Shop Icon - Professional SmartDuka style */}
         <div className={`
-          h-10 w-10 rounded-lg flex items-center justify-center flex-shrink-0
+          h-10 w-10 sm:h-11 sm:w-11 rounded-xl flex items-center justify-center flex-shrink-0 transition-all
           ${selectedShop 
-            ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white' 
-            : 'bg-slate-100 dark:bg-slate-700 text-slate-400'
+            ? 'bg-gradient-to-br from-primary via-orange-500 to-amber-500 text-white shadow-md shadow-primary/20' 
+            : 'bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-600 text-slate-400 dark:text-slate-500'
           }
         `}>
-          <Store className="h-5 w-5" />
+          <ShoppingBag className="h-5 w-5 sm:h-6 sm:w-6" />
         </div>
 
         {/* Shop Info */}
         <div className="flex-1 text-left min-w-0">
           {selectedShop ? (
             <>
-              <div className="font-semibold text-slate-900 dark:text-white truncate">
+              <div className="font-semibold text-sm sm:text-base text-slate-900 dark:text-white truncate">
                 {selectedShop.name}
               </div>
-              <div className="flex items-center gap-2 mt-0.5">
+              <div className="flex items-center gap-1.5 sm:gap-2 mt-0.5 flex-wrap">
                 {getStatusBadge(selectedShop)}
                 {selectedShop.id === lastUsedShopId && (
                   <span className="inline-flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400">
@@ -173,7 +173,10 @@ export function ShopSelector({
               </div>
             </>
           ) : (
-            <span className="text-slate-400 dark:text-slate-500">{placeholder}</span>
+            <div>
+              <span className="text-slate-500 dark:text-slate-400 text-sm sm:text-base block">Select your shop</span>
+              <span className="text-xs text-slate-400 dark:text-slate-500">Tap to choose</span>
+            </div>
           )}
         </div>
 
@@ -190,7 +193,7 @@ export function ShopSelector({
         <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl shadow-xl shadow-slate-200/50 dark:shadow-slate-900/50 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
           {/* Search Input */}
           {shops.length > 3 && (
-            <div className="p-3 border-b border-slate-100 dark:border-slate-700">
+            <div className="p-2 sm:p-3 border-b border-slate-100 dark:border-slate-700">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <input
@@ -199,14 +202,14 @@ export function ShopSelector({
                   placeholder="Search shops..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full pl-10 pr-4 py-2.5 sm:py-3 border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white text-sm sm:text-base placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                 />
               </div>
             </div>
           )}
 
-          {/* Shop List */}
-          <div className="max-h-64 overflow-y-auto p-2">
+          {/* Shop List - Mobile optimized */}
+          <div className="max-h-72 sm:max-h-64 overflow-y-auto p-1.5 sm:p-2 -webkit-overflow-scrolling-touch">
             {sortedShops.length > 0 ? (
               <div className="space-y-1">
                 {sortedShops.map((shop) => {
@@ -219,33 +222,33 @@ export function ShopSelector({
                       type="button"
                       onClick={() => handleShopChange(shop.id)}
                       className={`
-                        w-full text-left px-3 py-3 rounded-lg transition-all duration-150
-                        flex items-center gap-3
+                        w-full text-left px-2.5 sm:px-3 py-3 sm:py-3 rounded-lg transition-all duration-150
+                        flex items-center gap-2.5 sm:gap-3 active:scale-[0.98]
                         ${isSelected 
-                          ? 'bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-500' 
-                          : 'hover:bg-slate-50 dark:hover:bg-slate-700/50 border-2 border-transparent'
+                          ? 'bg-primary/10 dark:bg-primary/20 border-2 border-primary' 
+                          : 'hover:bg-slate-50 dark:hover:bg-slate-700/50 border-2 border-transparent active:bg-slate-100 dark:active:bg-slate-700'
                         }
                       `}
                     >
-                      {/* Shop Icon */}
+                      {/* Shop Icon - SmartDuka style */}
                       <div className={`
-                        h-9 w-9 rounded-lg flex items-center justify-center flex-shrink-0
+                        h-10 w-10 sm:h-9 sm:w-9 rounded-lg flex items-center justify-center flex-shrink-0
                         ${isSelected 
-                          ? 'bg-blue-500 text-white' 
+                          ? 'bg-gradient-to-br from-primary to-orange-500 text-white' 
                           : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
                         }
                       `}>
-                        <Store className="h-4 w-4" />
+                        <ShoppingBag className="h-5 w-5 sm:h-4 sm:w-4" />
                       </div>
 
                       {/* Shop Info */}
                       <div className="flex-1 min-w-0">
-                        <div className={`font-medium truncate ${
-                          isSelected ? 'text-blue-700 dark:text-blue-300' : 'text-slate-900 dark:text-white'
+                        <div className={`font-medium text-sm sm:text-base truncate ${
+                          isSelected ? 'text-primary dark:text-primary' : 'text-slate-900 dark:text-white'
                         }`}>
                           {shop.name}
                         </div>
-                        <div className="flex items-center gap-2 mt-0.5">
+                        <div className="flex items-center gap-1.5 sm:gap-2 mt-0.5 flex-wrap">
                           {getStatusBadge(shop)}
                           {isRecent && !isSelected && (
                             <span className="inline-flex items-center gap-1 text-[10px] text-slate-500">
@@ -258,7 +261,7 @@ export function ShopSelector({
 
                       {/* Selected Check */}
                       {isSelected && (
-                        <div className="h-6 w-6 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
+                        <div className="h-6 w-6 sm:h-6 sm:w-6 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
                           <CheckCircle className="h-4 w-4 text-white" />
                         </div>
                       )}
@@ -268,7 +271,7 @@ export function ShopSelector({
               </div>
             ) : (
               <div className="px-4 py-8 text-center">
-                <Store className="h-10 w-10 mx-auto text-slate-300 dark:text-slate-600 mb-2" />
+                <ShoppingBag className="h-10 w-10 mx-auto text-slate-300 dark:text-slate-600 mb-2" />
                 <p className="text-slate-500 dark:text-slate-400 text-sm">No shops found</p>
                 <p className="text-slate-400 dark:text-slate-500 text-xs mt-1">Try a different search</p>
               </div>

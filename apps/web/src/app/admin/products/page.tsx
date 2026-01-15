@@ -629,9 +629,9 @@ function ProductsContent() {
 
                 {/* Pagination Controls */}
                 {totalPages > 1 && (
-                  <div className="flex items-center justify-between pt-4 border-t mt-4">
-                    <p className="text-sm text-muted-foreground">
-                      Showing {((currentPage - 1) * itemsPerPage) + 1}-{Math.min(currentPage * itemsPerPage, filteredProducts.length)} of {filteredProducts.length}
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t mt-4">
+                    <p className="text-xs sm:text-sm text-muted-foreground text-center sm:text-left">
+                      <span className="hidden sm:inline">Showing </span>{((currentPage - 1) * itemsPerPage) + 1}-{Math.min(currentPage * itemsPerPage, filteredProducts.length)} of {filteredProducts.length}
                     </p>
                     <div className="flex items-center gap-1">
                       <Button

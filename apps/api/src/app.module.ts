@@ -43,6 +43,7 @@ import { CommonModule } from './common/common.module';
 import { QueueModule } from './queue/queue.module';
 import { AiModule } from './ai/ai.module';
 import { WhatsAppModule } from './whatsapp/whatsapp.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 
 @Module({
   imports: [
@@ -117,6 +118,7 @@ import { WhatsAppModule } from './whatsapp/whatsapp.module';
     MessagingModule,
     AiModule,
     WhatsAppModule,
+    AnalyticsModule,
   ],
   controllers: [AppController],
   providers: [

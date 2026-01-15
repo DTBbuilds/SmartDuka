@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Button, Input } from '@smartduka/ui';
 import { ShopSelector } from '../shop-selector';
-import { Lock, Loader2, ArrowRight, Star, Clock, Sparkles } from 'lucide-react';
+import { Lock, Loader2, ArrowRight, Star, Clock, Sparkles, AlertTriangle, Info } from 'lucide-react';
 import { getPreferredShop, type RecentShop } from '@/lib/device-memory';
 import { config } from '@/lib/config';
 
@@ -44,6 +44,7 @@ export function CashierLoginForm({
   });
   
   const [pin, setPin] = useState('');
+  const [validationError, setValidationError] = useState('');
   
   // Auto-skip to PIN entry if we have a preferred shop
   const hasPreferredShop = !!preferredShopId || !!getPreferredShop();
@@ -58,6 +59,31 @@ export function CashierLoginForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setValidationError('');
+
+    // Validate shop selection
+    if (!shopId) {
+      setValidationError('Please select your shop first. Your admin should have registered the shop already.');
+      setStep('shop');
+      return;
+    }
+
+    // Validate PIN
+    if (!pin.trim()) {
+      setValidationError('Please enter your PIN code.');
+      return;
+    }
+
+    if (pin.length < 4) {
+      setValidationError('PIN must be at least 4 digits. Contact your admin if you forgot your PIN.');
+      return;
+    }
+
+    if (pin.length > 6) {
+      setValidationError('PIN cannot be more than 6 digits.');
+      return;
+    }
+
     await onSubmit(pin, shopId);
   };
 
@@ -66,6 +92,14 @@ export function CashierLoginForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
+      {/* Validation Error */}
+      {validationError && (
+        <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg flex items-start gap-2">
+          <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-amber-700 dark:text-amber-300">{validationError}</p>
+        </div>
+      )}
+
       {/* Quick Shop Indicator (when we have a preferred shop) */}
       {step === 'pin' && hasPreferredShop && (
         <div className="flex items-center gap-3 p-3 bg-primary/5 border border-primary/20 rounded-xl mb-2">
@@ -214,6 +248,18 @@ export function CashierLoginForm({
           <p className="text-xs text-center text-muted-foreground mt-2">
             Link your Google account for faster login (requires PIN once)
           </p>
+
+          {/* Help Text for Cashiers */}
+          <div className="p-3 bg-muted/50 rounded-lg mt-4">
+            <div className="flex items-start gap-2">
+              <Info className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+              <div className="text-xs text-muted-foreground space-y-1">
+                <p><strong>Don't have a PIN?</strong> Ask your shop administrator to create a cashier account for you.</p>
+                <p><strong>Wrong shop?</strong> Make sure you select the correct shop where you are employed.</p>
+                <p><strong>Forgot PIN?</strong> Contact your admin to reset your PIN.</p>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </form>

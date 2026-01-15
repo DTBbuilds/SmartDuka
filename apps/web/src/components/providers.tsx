@@ -16,9 +16,13 @@ import { BackendStatusOverlay } from "./backend-status-overlay";
 import { connectionMonitor } from "@/lib/connection-monitor";
 import { tabVisibilityManager } from "@/lib/tab-visibility";
 import { inactivityManager } from "@/lib/inactivity-manager";
+import { useMobileKeyboard } from "@/lib/use-mobile-keyboard";
 import "@/lib/i18n";
 
 function SystemMonitors() {
+  // Initialize mobile keyboard handling for better UX on mobile devices
+  useMobileKeyboard();
+
   useEffect(() => {
     // Initialize connection monitoring
     connectionMonitor.startMonitoring();

@@ -83,7 +83,7 @@ export default function InventoryAnalyticsPage() {
 
   if (loading) {
     return (
-      <div className="container py-8">
+      <div className="container px-4 sm:px-6 py-6 sm:py-8 max-w-full overflow-x-hidden">
         <div className="animate-pulse space-y-6">
           <div className="h-8 bg-muted rounded w-1/3"></div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -98,7 +98,7 @@ export default function InventoryAnalyticsPage() {
 
   if (!stats) {
     return (
-      <div className="container py-8">
+      <div className="container px-4 sm:px-6 py-6 sm:py-8 max-w-full overflow-x-hidden">
         <div className="flex items-center gap-4 mb-8">
           <Button variant="ghost" size="icon" onClick={() => router.back()}>
             <ArrowLeft className="h-5 w-5" />
@@ -121,9 +121,9 @@ export default function InventoryAnalyticsPage() {
   }
 
   return (
-    <div className="container py-8">
+    <div className="container px-4 sm:px-6 py-6 sm:py-8 max-w-full overflow-x-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => router.back()}>
             <ArrowLeft className="h-5 w-5" />
@@ -146,62 +146,62 @@ export default function InventoryAnalyticsPage() {
       {stats && (
         <>
           {/* Key Metrics */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
             <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Total Products</p>
-                    <p className="text-2xl font-bold">{stats.totalProducts}</p>
+              <CardContent className="p-3 sm:pt-6 sm:px-6">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs sm:text-sm text-muted-foreground truncate">Total Products</p>
+                    <p className="text-xl sm:text-2xl font-bold">{stats.totalProducts}</p>
                     <p className="text-xs text-green-600">{stats.activeProducts} active</p>
                   </div>
-                  <div className="p-3 rounded-full bg-blue-500/10">
-                    <Package className="h-6 w-6 text-blue-600" />
+                  <div className="p-2 sm:p-3 rounded-full bg-blue-500/10 flex-shrink-0">
+                    <Package className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600" />
                   </div>
                 </div>
               </CardContent>
             </Card>
 
             <Card className={stats.lowStockProducts > 0 ? 'border-yellow-500/50' : ''}>
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Low Stock</p>
-                    <p className="text-2xl font-bold text-yellow-600">{stats.lowStockProducts}</p>
-                    <p className="text-xs text-red-600">{stats.outOfStockProducts} out of stock</p>
+              <CardContent className="p-3 sm:pt-6 sm:px-6">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs sm:text-sm text-muted-foreground truncate">Low Stock</p>
+                    <p className="text-xl sm:text-2xl font-bold text-yellow-600">{stats.lowStockProducts}</p>
+                    <p className="text-xs text-red-600 truncate">{stats.outOfStockProducts} out of stock</p>
                   </div>
-                  <div className="p-3 rounded-full bg-yellow-500/10">
-                    <AlertTriangle className="h-6 w-6 text-yellow-600" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Stock Value</p>
-                    <p className="text-2xl font-bold">Ksh {(stats.totalStockValue / 1000000).toFixed(2)}M</p>
-                    <p className="text-xs text-muted-foreground">{stats.totalStockUnits.toLocaleString()} units</p>
-                  </div>
-                  <div className="p-3 rounded-full bg-green-500/10">
-                    <DollarSign className="h-6 w-6 text-green-600" />
+                  <div className="p-2 sm:p-3 rounded-full bg-yellow-500/10 flex-shrink-0">
+                    <AlertTriangle className="h-5 w-5 sm:h-6 sm:w-6 text-yellow-600" />
                   </div>
                 </div>
               </CardContent>
             </Card>
 
             <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Turnover Rate</p>
-                    <p className="text-2xl font-bold">{stats.turnoverRate}x</p>
+              <CardContent className="p-3 sm:pt-6 sm:px-6">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs sm:text-sm text-muted-foreground truncate">Stock Value</p>
+                    <p className="text-lg sm:text-2xl font-bold">Ksh {(stats.totalStockValue / 1000000).toFixed(2)}M</p>
+                    <p className="text-xs text-muted-foreground truncate">{stats.totalStockUnits.toLocaleString()} units</p>
+                  </div>
+                  <div className="p-2 sm:p-3 rounded-full bg-green-500/10 flex-shrink-0">
+                    <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-green-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-3 sm:pt-6 sm:px-6">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs sm:text-sm text-muted-foreground truncate">Turnover Rate</p>
+                    <p className="text-xl sm:text-2xl font-bold">{stats.turnoverRate}x</p>
                     <p className="text-xs text-muted-foreground">per month</p>
                   </div>
-                  <div className="p-3 rounded-full bg-purple-500/10">
-                    <RefreshCw className="h-6 w-6 text-purple-600" />
+                  <div className="p-2 sm:p-3 rounded-full bg-purple-500/10 flex-shrink-0">
+                    <RefreshCw className="h-5 w-5 sm:h-6 sm:w-6 text-purple-600" />
                   </div>
                 </div>
               </CardContent>

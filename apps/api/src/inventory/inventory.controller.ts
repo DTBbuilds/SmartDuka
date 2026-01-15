@@ -197,8 +197,13 @@ export class InventoryController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
   @Get('products/export')
-  exportProducts(@Response() res: any, @Query('categoryId') categoryId: string, @CurrentUser() user: any) {
-    return this.inventoryService.exportProducts(user.shopId, res, categoryId);
+  async exportProducts(@Response() res: any, @Query('categoryId') categoryId: string, @CurrentUser() user: any) {
+    try {
+      await this.inventoryService.exportProducts(user.shopId, res, categoryId);
+    } catch (error) {
+      console.error('Export products error:', error);
+      res.status(500).json({ message: 'Failed to export products', error: error.message });
+    }
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

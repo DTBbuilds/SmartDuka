@@ -6,11 +6,11 @@ import { FlaskConical, X, AlertTriangle, Clock, LogOut } from "lucide-react";
 import { Button } from "@smartduka/ui";
 
 export function DemoModeBanner() {
-  const { isDemoMode, isShopPending, exitDemoMode, logout, shop } = useAuth();
+  const { isDemoMode, isShopPending, exitDemoMode, logout, shop, isAuthenticated } = useAuth();
   const router = useRouter();
 
-  // Only show if in demo mode and shop is pending
-  if (!isDemoMode || !isShopPending) {
+  // Only show if authenticated, in demo mode, and shop is pending
+  if (!isAuthenticated || !isDemoMode || !isShopPending) {
     return null;
   }
 
@@ -70,10 +70,11 @@ export function DemoModeBanner() {
 
 // Floating demo mode indicator for corners with logout button
 export function DemoModeIndicator() {
-  const { isDemoMode, isShopPending, logout } = useAuth();
+  const { isDemoMode, isShopPending, logout, isAuthenticated } = useAuth();
   const router = useRouter();
 
-  if (!isDemoMode || !isShopPending) {
+  // Only show if authenticated, in demo mode, and shop is pending
+  if (!isAuthenticated || !isDemoMode || !isShopPending) {
     return null;
   }
 

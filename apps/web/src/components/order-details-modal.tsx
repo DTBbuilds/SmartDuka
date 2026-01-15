@@ -268,7 +268,7 @@ export function OrderDetailsModal({
           <div className="bg-muted/20 rounded-lg p-3 space-y-1.5">
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Subtotal</span>
-              <span className="font-medium">{formatCurrency(order.subtotal)}</span>
+              <span className="font-medium">{formatCurrency(order.subtotal || order.items.reduce((sum, item) => sum + item.lineTotal, 0))}</span>
             </div>
             {order.discountAmount && order.discountAmount > 0 && (
               <div className="flex justify-between text-sm text-green-600">
@@ -399,7 +399,8 @@ function generateReceiptText(
   
   lines.push('');
   lines.push(divider);
-  lines.push(`Subtotal: ${formatCurrency(order.subtotal)}`);
+  const calculatedSubtotal = order.subtotal || order.items.reduce((sum, item) => sum + item.lineTotal, 0);
+  lines.push(`Subtotal: ${formatCurrency(calculatedSubtotal)}`);
   if (order.discountAmount && order.discountAmount > 0) {
     lines.push(`Discount: -${formatCurrency(order.discountAmount)}`);
   }

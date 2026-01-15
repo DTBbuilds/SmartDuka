@@ -32,13 +32,24 @@ export default function LoginPage() {
   const [superAdminLoading, setSuperAdminLoading] = useState(false);
   const [sessionExpired, setSessionExpired] = useState(false);
   const [activeFeature, setActiveFeature] = useState(0);
+  const [loginSuccess, setLoginSuccess] = useState(false);
 
-  const { login, loginWithPin, loginWithGoogle, enterDemoMode } = useAuth();
+  const { login, loginWithPin, loginWithGoogle, enterDemoMode, isAuthenticated, user, loading: authLoading } = useAuth();
   const router = useRouter();
   const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
   const googleError = searchParams.get('error');
   const expired = searchParams.get('expired');
   const logoutReason = searchParams.get('reason');
+
+  // Redirect if already authenticated or after successful login
+  useEffect(() => {
+    if (authLoading) return;
+    
+    if (isAuthenticated && user) {
+      const redirectTo = searchParams.get('redirect') || (user.role === 'cashier' ? '/pos' : user.role === 'super_admin' ? '/super-admin' : '/admin');
+      router.replace(redirectTo);
+    }
+  }, [isAuthenticated, user, authLoading, router, searchParams]);
 
   useEffect(() => {
     fetchShops();
@@ -80,6 +91,85 @@ export default function LoginPage() {
     }
   };
 
+  // Helper to format user-friendly error messages
+  const getLoginErrorMessage = (error: string, role: 'admin' | 'cashier' | 'super_admin') => {
+    const lowerError = error.toLowerCase();
+    
+    // User not found / Invalid credentials
+    if (lowerError.includes('invalid credentials') || lowerError.includes('user not found')) {
+      if (role === 'admin') {
+        return {
+          title: 'Account not found',
+          message: 'No admin account found with this email and password combination.',
+          actions: [
+            'Check that you selected the correct shop',
+            'Verify your email address is spelled correctly',
+            'Make sure you\'re using the right password',
+            'If you\'re new, ask the shop owner to create an account for you',
+          ]
+        };
+      } else if (role === 'cashier') {
+        return {
+          title: 'Invalid PIN or not registered',
+          message: 'The PIN you entered is incorrect or you\'re not registered as a cashier for this shop.',
+          actions: [
+            'Make sure you selected the correct shop',
+            'Check that your PIN is entered correctly (4-6 digits)',
+            'Contact your shop admin to verify your cashier account',
+          ]
+        };
+      }
+    }
+    
+    // Account inactive/suspended
+    if (lowerError.includes('inactive') || lowerError.includes('suspended') || lowerError.includes('disabled')) {
+      return {
+        title: 'Account suspended',
+        message: 'Your account has been suspended or deactivated.',
+        actions: [
+          'Contact your shop administrator for assistance',
+          'Your account may have been disabled for security reasons',
+        ]
+      };
+    }
+    
+    // Shop not found
+    if (lowerError.includes('shop not found') || lowerError.includes('invalid shop')) {
+      return {
+        title: 'Shop not found',
+        message: 'The selected shop could not be found or has been removed.',
+        actions: [
+          'Select a different shop from the list',
+          'The shop may have been deleted or suspended',
+          'Contact SmartDuka support if you believe this is an error',
+        ]
+      };
+    }
+    
+    // Network/server errors
+    if (lowerError.includes('network') || lowerError.includes('fetch') || lowerError.includes('connection')) {
+      return {
+        title: 'Connection error',
+        message: 'Unable to connect to SmartDuka servers.',
+        actions: [
+          'Check your internet connection',
+          'Try again in a few moments',
+          'If the problem persists, contact support',
+        ]
+      };
+    }
+    
+    // Default error
+    return {
+      title: 'Login failed',
+      message: error || 'An unexpected error occurred during login.',
+      actions: [
+        'Please check your credentials and try again',
+        'If the problem persists, contact support',
+      ]
+    };
+  };
+
   const handleAdminLogin = async (email: string, password: string, shopId: string) => {
     setError('');
     setIsLoading(true);
@@ -90,12 +180,14 @@ export default function LoginPage() {
         // Pass the shop directly since state might not be updated yet
         enterDemoMode(selectedShop as any);
       }
-      // Use redirect parameter if available, otherwise go to admin dashboard
+      // Mark login as successful and redirect immediately
+      setLoginSuccess(true);
       const redirectTo = searchParams.get('redirect') || '/admin';
-      router.push(redirectTo);
+      // Use window.location for more reliable redirect after state changes
+      window.location.href = redirectTo;
     } catch (err: any) {
-      setError(err.message || 'Login failed');
-    } finally {
+      const errorInfo = getLoginErrorMessage(err.message || 'Login failed', 'admin');
+      setError(`${errorInfo.title}: ${errorInfo.message}`);
       setIsLoading(false);
     }
   };
@@ -110,12 +202,14 @@ export default function LoginPage() {
         // Pass the shop directly since state might not be updated yet
         enterDemoMode(selectedShop as any);
       }
-      // Use redirect parameter if available, otherwise go to POS
+      // Mark login as successful and redirect immediately
+      setLoginSuccess(true);
       const redirectTo = searchParams.get('redirect') || '/pos';
-      router.push(redirectTo);
+      // Use window.location for more reliable redirect after state changes
+      window.location.href = redirectTo;
     } catch (err: any) {
-      setError(err.message || 'Login failed');
-    } finally {
+      const errorInfo = getLoginErrorMessage(err.message || 'Login failed', 'cashier');
+      setError(`${errorInfo.title}: ${errorInfo.message}`);
       setIsLoading(false);
     }
   };
@@ -134,15 +228,19 @@ export default function LoginPage() {
     setSuperAdminLoading(true);
     try {
       await login(superAdminEmail, superAdminPassword, 'super_admin' as any);
-      router.push('/super-admin');
+      // Mark login as successful and redirect immediately
+      setLoginSuccess(true);
+      // Use window.location for more reliable redirect after state changes
+      window.location.href = '/super-admin';
     } catch (err: any) {
-      setSuperAdminError(err.message || 'Login failed');
-    } finally {
+      const errorInfo = getLoginErrorMessage(err.message || 'Login failed', 'super_admin');
+      setSuperAdminError(`${errorInfo.title}: ${errorInfo.message}`);
       setSuperAdminLoading(false);
     }
   };
 
-  if (loadingShops) {
+  // Show loading while checking auth or loading shops
+  if (loadingShops || authLoading || loginSuccess) {
     return (
       <div className="h-screen bg-background flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
@@ -150,7 +248,22 @@ export default function LoginPage() {
             <div className="h-12 w-12 rounded-full border-4 border-primary/20" />
             <div className="absolute inset-0 h-12 w-12 rounded-full border-4 border-transparent border-t-primary animate-spin" />
           </div>
-          <p className="text-muted-foreground">Connecting to SmartDuka...</p>
+          <p className="text-muted-foreground">{loginSuccess ? 'Redirecting...' : 'Connecting to SmartDuka...'}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render login form if already authenticated
+  if (isAuthenticated) {
+    return (
+      <div className="h-screen bg-background flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="relative">
+            <div className="h-12 w-12 rounded-full border-4 border-primary/20" />
+            <div className="absolute inset-0 h-12 w-12 rounded-full border-4 border-transparent border-t-primary animate-spin" />
+          </div>
+          <p className="text-muted-foreground">Redirecting...</p>
         </div>
       </div>
     );
@@ -488,11 +601,23 @@ export default function LoginPage() {
               </div>
             )}
 
-            {/* Error Alert - Compact */}
+            {/* Error Alert - Enhanced with helpful guidance */}
             {error && (
-              <div className="p-3 xl:p-4 bg-destructive/10 border border-destructive/20 rounded-lg xl:rounded-xl flex items-center gap-2 xl:gap-3 mb-4 xl:mb-5">
-                <AlertCircle className="h-5 w-5 xl:h-6 xl:w-6 text-destructive flex-shrink-0" />
-                <p className="text-destructive text-sm xl:text-base">{error}</p>
+              <div className="p-3 xl:p-4 bg-destructive/10 border border-destructive/20 rounded-lg xl:rounded-xl mb-4 xl:mb-5">
+                <div className="flex items-start gap-2 xl:gap-3">
+                  <AlertCircle className="h-5 w-5 xl:h-6 xl:w-6 text-destructive flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-destructive text-sm xl:text-base font-medium">{error}</p>
+                    <div className="mt-2 text-xs text-muted-foreground">
+                      <p className="font-medium">Need help?</p>
+                      <ul className="list-disc list-inside mt-1 space-y-0.5">
+                        <li>Not registered? <a href="/register-shop" className="text-primary hover:underline">Register your shop</a></li>
+                        <li>Cashier? Ask your admin to create your account</li>
+                        <li>Contact support if the issue persists</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 

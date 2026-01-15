@@ -109,4 +109,66 @@
   .scroll-smooth {
     -webkit-overflow-scrolling: touch;
   }
+
+  /* Mobile keyboard handling - ensure content scrolls when keyboard appears */
+  .keyboard-aware {
+    /* Use dvh for dynamic viewport height that accounts for mobile keyboard */
+    min-height: 100dvh;
+    min-height: -webkit-fill-available;
+  }
+
+  /* Auto-scroll focused input into view on mobile */
+  input:focus,
+  textarea:focus,
+  select:focus {
+    scroll-margin-bottom: 120px;
+    scroll-padding-bottom: 120px;
+  }
+}
+
+/* Mobile-specific styles for keyboard handling */
+@supports (height: 100dvh) {
+  .h-screen {
+    height: 100dvh;
+  }
+  
+  .min-h-screen {
+    min-height: 100dvh;
+  }
+}
+
+/* Ensure forms scroll properly when keyboard is open on iOS */
+@supports (-webkit-touch-callout: none) {
+  body {
+    /* Prevent iOS bounce scroll issues */
+    position: fixed;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+  
+  #__next,
+  main,
+  .main-content {
+    height: 100%;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Form container that handles keyboard appearance */
+.form-keyboard-aware {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: env(safe-area-inset-bottom, 20px);
+}
+
+/* Ensure modals and dialogs scroll properly with keyboard */
+[role="dialog"] {
+  max-height: 100dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }

@@ -214,21 +214,20 @@ export function PaymentMethodModal({
       const stripeConfig = await configRes.json();
       setStripePublishableKey(stripeConfig.publishableKey);
       
-      // Create payment intent
-      const res = await fetch(`${config.apiUrl}/stripe/create-payment-intent`, {
+      // Create payment intent using POS endpoint
+      const res = await fetch(`${config.apiUrl}/stripe/pos/create-payment`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          amount: Math.round(total * 100), // Convert to cents
+          orderId: `temp-${Date.now()}`,
+          orderNumber: `POS-${Date.now()}`,
+          amount: total,
           currency: 'kes',
+          customerName: customerName || 'Walk-in Customer',
           description: `POS Payment - ${itemCount} item(s)`,
-          metadata: {
-            customerName: customerName || 'Walk-in Customer',
-            itemCount: String(itemCount),
-          },
         }),
       });
       
@@ -689,59 +688,108 @@ export function PaymentMethodModal({
             </DialogHeader>
 
             <div className="p-4 space-y-4">
-              {/* Phone Number Input */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium flex items-center gap-2">
-                  <Phone className="h-4 w-4" />
-                  Customer Phone Number
-                </label>
-                <Input
-                  type="tel"
-                  placeholder="07XX XXX XXX"
-                  value={phoneNumber}
-                  onChange={(e) => {
-                    setPhoneNumber(e.target.value);
-                    setPhoneError('');
-                  }}
-                  className={`text-xl font-bold h-14 text-center ${
-                    phoneError ? 'border-red-500 focus-visible:ring-red-500' : ''
-                  }`}
-                  autoFocus
-                />
-                {phoneError && (
-                  <p className="text-sm text-red-500">{phoneError}</p>
-                )}
-              </div>
+              {/* M-Pesa Not Configured Warning - Block phone input */}
+              {(!mpesaConfigStatus?.isConfigured || !mpesaConfigStatus?.isEnabled || !mpesaConfigStatus?.isVerified) ? (
+                <div className="space-y-4">
+                  <div className="p-4 rounded-lg bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 rounded-full bg-amber-100 dark:bg-amber-900/50">
+                        <X className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-amber-800 dark:text-amber-200">M-Pesa Not Available</p>
+                        <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                          {!mpesaConfigStatus?.isConfigured 
+                            ? 'M-Pesa has not been set up for this shop yet.'
+                            : !mpesaConfigStatus?.isEnabled
+                            ? 'M-Pesa payments are currently disabled.'
+                            : 'M-Pesa credentials have not been verified.'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
 
-              {/* Info Box */}
-              <div className="p-3 rounded-lg bg-emerald-100 dark:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800">
-                <p className="text-xs text-emerald-700 dark:text-emerald-300">
-                  An STK push will be sent to this number. The customer will enter their M-Pesa PIN to complete payment.
-                </p>
-              </div>
+                  <div className="p-3 rounded-lg bg-muted/50 border border-border">
+                    <p className="text-sm font-medium mb-2">To enable M-Pesa payments:</p>
+                    <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
+                      <li>Go to <strong>Settings → Payments → M-Pesa</strong></li>
+                      <li>Enter your Safaricom Daraja API credentials</li>
+                      <li>Verify your credentials</li>
+                      <li>Enable M-Pesa payments</li>
+                    </ol>
+                  </div>
 
-              {/* Phone Format Examples */}
-              <div className="flex gap-2 justify-center">
-                {['0712', '0110', '0700'].map((prefix) => (
-                  <button
-                    key={prefix}
-                    onClick={() => setPhoneNumber(prefix)}
-                    className="px-3 py-1 text-xs rounded-full bg-muted hover:bg-muted/80 transition-colors"
+                  <div className="flex gap-2">
+                    <Button variant="outline" className="flex-1" onClick={handleBack}>
+                      <ArrowRight className="h-4 w-4 mr-2 rotate-180" />
+                      Back
+                    </Button>
+                    <Button 
+                      variant="default" 
+                      className="flex-1 bg-amber-600 hover:bg-amber-700"
+                      onClick={() => window.location.href = '/settings?tab=payments'}
+                    >
+                      Go to Settings
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Phone Number Input - Only show when M-Pesa is configured */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium flex items-center gap-2">
+                      <Phone className="h-4 w-4" />
+                      Customer Phone Number
+                    </label>
+                    <Input
+                      type="tel"
+                      placeholder="07XX XXX XXX"
+                      value={phoneNumber}
+                      onChange={(e) => {
+                        setPhoneNumber(e.target.value);
+                        setPhoneError('');
+                      }}
+                      className={`text-xl font-bold h-14 text-center ${
+                        phoneError ? 'border-red-500 focus-visible:ring-red-500' : ''
+                      }`}
+                      autoFocus
+                    />
+                    {phoneError && (
+                      <p className="text-sm text-red-500">{phoneError}</p>
+                    )}
+                  </div>
+
+                  {/* Info Box */}
+                  <div className="p-3 rounded-lg bg-emerald-100 dark:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800">
+                    <p className="text-xs text-emerald-700 dark:text-emerald-300">
+                      An STK push will be sent to this number. The customer will enter their M-Pesa PIN to complete payment.
+                    </p>
+                  </div>
+
+                  {/* Phone Format Examples */}
+                  <div className="flex gap-2 justify-center">
+                    {['0712', '0110', '0700'].map((prefix) => (
+                      <button
+                        key={prefix}
+                        onClick={() => setPhoneNumber(prefix)}
+                        className="px-3 py-1 text-xs rounded-full bg-muted hover:bg-muted/80 transition-colors"
+                      >
+                        {prefix}...
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Confirm Button */}
+                  <Button
+                    className="w-full h-12 text-base font-semibold bg-emerald-600 hover:bg-emerald-700"
+                    onClick={handleMpesaConfirm}
+                    disabled={!phoneNumber.trim()}
                   >
-                    {prefix}...
-                  </button>
-                ))}
-              </div>
-
-              {/* Confirm Button */}
-              <Button
-                className="w-full h-12 text-base font-semibold bg-emerald-600 hover:bg-emerald-700"
-                onClick={handleMpesaConfirm}
-                disabled={!phoneNumber.trim()}
-              >
-                <Smartphone className="h-5 w-5 mr-2" />
-                Send STK Push
-              </Button>
+                    <Smartphone className="h-5 w-5 mr-2" />
+                    Send STK Push
+                  </Button>
+                </>
+              )}
             </div>
           </>
         )}

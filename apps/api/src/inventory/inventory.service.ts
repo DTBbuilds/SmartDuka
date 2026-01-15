@@ -1670,10 +1670,18 @@ export class InventoryService implements OnModuleInit {
       .limit(10)
       .exec();
 
+    // Create a map of product IDs to names for quick lookup
+    const productNameMap = new Map<string, string>();
+    products.forEach(p => {
+      productNameMap.set(p._id.toString(), p.name);
+    });
+
     const recentStockChanges = recentAdjustments.map(adj => {
       const doc = adj as any;
+      const productId = doc.productId?.toString() || '';
+      const productName = productNameMap.get(productId) || 'Unknown Product';
       return {
-        product: doc.productId?.toString() || 'Unknown',
+        product: productName,
         change: adj.quantityChange || 0,
         type: (adj.quantityChange || 0) > 0 ? 'in' : (adj.reason === 'correction' ? 'adjustment' : 'out'),
         date: doc.createdAt || new Date(),

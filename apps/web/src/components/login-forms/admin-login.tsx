@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Button, Input, Label } from '@smartduka/ui';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, AlertTriangle, Info } from 'lucide-react';
 import { ShopSelector } from '../shop-selector';
 
 interface Shop {
@@ -40,13 +40,54 @@ export function AdminLoginForm({
   });
   const [showPassword, setShowPassword] = useState(false);
 
+  const [validationError, setValidationError] = useState('');
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setValidationError('');
+
+    // Validate shop selection
+    if (!shopId) {
+      setValidationError('Please select your shop before signing in. If you don\'t see your shop, it may not be registered yet.');
+      return;
+    }
+
+    // Validate email
+    if (!email.trim()) {
+      setValidationError('Please enter your email address.');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setValidationError('Please enter a valid email address (e.g., admin@yourshop.com).');
+      return;
+    }
+
+    // Validate password
+    if (!password.trim()) {
+      setValidationError('Please enter your password.');
+      return;
+    }
+
+    if (password.length < 6) {
+      setValidationError('Password must be at least 6 characters long.');
+      return;
+    }
+
     await onSubmit(email, password, shopId);
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
+      {/* Validation Error */}
+      {validationError && (
+        <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg flex items-start gap-2">
+          <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-amber-700 dark:text-amber-300">{validationError}</p>
+        </div>
+      )}
+
       {/* Shop selector - full width */}
       <ShopSelector
         shops={shops}
@@ -98,6 +139,17 @@ export function AdminLoginForm({
       <Button type="submit" className="w-full h-9" disabled={isLoading}>
         {isLoading ? 'Signing in...' : 'Sign In'}
       </Button>
+
+      {/* Help Text */}
+      <div className="p-3 bg-muted/50 rounded-lg">
+        <div className="flex items-start gap-2">
+          <Info className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+          <div className="text-xs text-muted-foreground space-y-1">
+            <p><strong>Not registered?</strong> Ask your shop admin to create an account for you, or <a href="/register-shop" className="text-primary hover:underline">register a new shop</a>.</p>
+            <p><strong>Forgot password?</strong> Contact your shop administrator to reset it.</p>
+          </div>
+        </div>
+      </div>
     </form>
   );
 }

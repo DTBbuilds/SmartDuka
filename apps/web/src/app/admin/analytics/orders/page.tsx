@@ -283,61 +283,63 @@ export default function OrdersAnalyticsPage() {
 
           {/* Recent Orders */}
           <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
+            <CardHeader className="pb-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <CardTitle>Recent Orders</CardTitle>
-                  <CardDescription>Latest transactions</CardDescription>
+                  <CardTitle className="text-lg sm:text-xl">Recent Orders</CardTitle>
+                  <CardDescription className="text-xs sm:text-sm">Latest transactions</CardDescription>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-1 sm:gap-2 overflow-x-auto pb-1 -mx-1 px-1">
                   {['all', 'completed', 'pending', 'cancelled'].map((status) => (
                     <Button
                       key={status}
                       variant={statusFilter === status ? 'default' : 'outline'}
                       size="sm"
                       onClick={() => setStatusFilter(status)}
+                      className="text-xs sm:text-sm px-2 sm:px-3 h-7 sm:h-8 whitespace-nowrap flex-shrink-0"
                     >
-                      {status.charAt(0).toUpperCase() + status.slice(1)}
+                      {status === 'cancelled' ? 'Canc' : status.charAt(0).toUpperCase() + status.slice(1)}
                     </Button>
                   ))}
                 </div>
               </div>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
+            <CardContent className="px-3 sm:px-6">
+              <div className="space-y-2 sm:space-y-3">
                 {stats.recentOrders
                   .filter(order => statusFilter === 'all' || order.status === statusFilter)
                   .map((order) => (
                     <div
                       key={order._id}
-                      className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent transition-colors cursor-pointer"
+                      className="flex flex-col sm:flex-row sm:items-center justify-between p-3 sm:p-4 border rounded-lg hover:bg-accent transition-colors cursor-pointer gap-2 sm:gap-4"
                       onClick={() => router.push(`/orders/${order._id}`)}
                     >
-                      <div className="flex items-center gap-4">
-                        <div className="p-2 rounded-lg bg-primary/10">
-                          <ShoppingCart className="h-5 w-5 text-primary" />
+                      <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                        <div className="p-2 rounded-lg bg-primary/10 flex-shrink-0">
+                          <ShoppingCart className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
                         </div>
-                        <div>
-                          <p className="font-medium">{order.orderNumber}</p>
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <Package className="h-3 w-3" />
-                            <span>{order.itemCount} items</span>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium text-sm sm:text-base truncate">{order.orderNumber}</p>
+                          <div className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm text-muted-foreground flex-wrap">
+                            <span className="flex items-center gap-1">
+                              <Package className="h-3 w-3" />
+                              {order.itemCount} items
+                            </span>
                             {order.customerName && (
-                              <>
-                                <span>•</span>
-                                <User className="h-3 w-3" />
-                                <span>{order.customerName}</span>
-                              </>
+                              <span className="truncate max-w-[100px] sm:max-w-none">• {order.customerName}</span>
                             )}
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-4">
-                        <div className="text-right">
-                          <p className="font-semibold">Ksh {order.total.toLocaleString()}</p>
-                          <p className="text-xs text-muted-foreground">{order.paymentMethod}</p>
+                      <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4 pl-11 sm:pl-0">
+                        <div className="text-left sm:text-right">
+                          <p className="font-semibold text-sm sm:text-base">Ksh {order.total.toLocaleString()}</p>
+                          <p className="text-[10px] sm:text-xs text-muted-foreground">{order.paymentMethod}</p>
                         </div>
-                        <Badge variant={order.status === 'completed' ? 'default' : order.status === 'pending' ? 'secondary' : 'destructive'}>
+                        <Badge 
+                          variant={order.status === 'completed' ? 'default' : order.status === 'pending' ? 'secondary' : 'destructive'}
+                          className="text-[10px] sm:text-xs px-1.5 sm:px-2 flex-shrink-0"
+                        >
                           {order.status}
                         </Badge>
                       </div>
