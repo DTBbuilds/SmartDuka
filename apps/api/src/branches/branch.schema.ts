@@ -178,6 +178,9 @@ export class Branch {
   @Prop({ required: false })
   description?: string;
 
+  @Prop({ enum: ['main', 'branch', 'warehouse'], default: 'branch' })
+  type: 'main' | 'branch' | 'warehouse';
+
   // Legacy address field (kept for backward compatibility)
   @Prop({ required: false })
   address?: string;

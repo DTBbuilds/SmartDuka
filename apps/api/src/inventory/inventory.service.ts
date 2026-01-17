@@ -1180,43 +1180,60 @@ export class InventoryService implements OnModuleInit {
   }
 
   async exportProducts(shopId: string, res: any, categoryId?: string): Promise<void> {
-    const filter: any = { shopId: new Types.ObjectId(shopId) };
-    if (categoryId) {
-      filter.categoryId = new Types.ObjectId(categoryId);
+    try {
+      const filter: any = { shopId: new Types.ObjectId(shopId) };
+      if (categoryId && categoryId !== 'undefined' && categoryId !== 'null') {
+        filter.categoryId = new Types.ObjectId(categoryId);
+      }
+      
+      const products = await this.productModel.find(filter).exec();
+      
+      // Get categories for name lookup
+      const categories = await this.categoryModel
+        .find({ shopId: new Types.ObjectId(shopId) })
+        .select('_id name')
+        .exec();
+      const categoryMap = new Map(categories.map(c => [c._id.toString(), c.name]));
+      
+      const headers = ['name', 'sku', 'barcode', 'price', 'cost', 'stock', 'category', 'tax', 'status', 'description'];
+      const rows = products.map((product) => [
+        product.name || '',
+        product.sku || '',
+        product.barcode || '',
+        product.price ?? 0,
+        product.cost ?? 0,
+        product.stock ?? 0,
+        (product.categoryId ? categoryMap.get(product.categoryId.toString()) : '') || '',
+        product.tax ?? 0,
+        product.status || 'active',
+        product.description || '',
+      ]);
+
+      const csvContent = [
+        headers.join(','),
+        ...rows.map((row) =>
+          row
+            .map((cell) => {
+              const str = String(cell ?? '');
+              if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+                return `"${str.replace(/"/g, '""')}"`;
+              }
+              return str;
+            })
+            .join(','),
+        ),
+      ].join('\n');
+
+      // Add BOM for Excel UTF-8 compatibility
+      const csvWithBOM = '\ufeff' + csvContent;
+      
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename=products-export-${new Date().toISOString().split('T')[0]}.csv`);
+      res.send(csvWithBOM);
+    } catch (error) {
+      console.error('Export products service error:', error);
+      throw error;
     }
-    const products = await this.productModel.find(filter).exec();
-    
-    const headers = ['name', 'sku', 'barcode', 'price', 'cost', 'stock', 'categoryId', 'tax', 'status'];
-    const rows = products.map((product) => [
-      product.name,
-      product.sku || '',
-      product.barcode || '',
-      product.price,
-      product.cost || 0,
-      product.stock || 0,
-      product.categoryId?.toString() || '',
-      product.tax || 0,
-      product.status || 'active',
-    ]);
-
-    const csvContent = [
-      headers.join(','),
-      ...rows.map((row) =>
-        row
-          .map((cell) => {
-            const str = String(cell);
-            if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-              return `"${str.replace(/"/g, '""')}"`;
-            }
-            return str;
-          })
-          .join(','),
-      ),
-    ].join('\n');
-
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', 'attachment; filename=products.csv');
-    res.send(csvContent);
   }
 
   async createStockAdjustment(

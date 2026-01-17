@@ -34,4 +34,8 @@ export class QueryProductsDto {
   @IsOptional()
   @IsEnum(['asc', 'desc'])
   sortOrder?: 'asc' | 'desc';
+
+  @IsOptional()
+  @IsMongoId()
+  branchId?: string;
 }

@@ -32,8 +32,11 @@ import {
 } from 'lucide-react';
 import { Button } from '@smartduka/ui';
 import { useAuth } from '@/lib/auth-context';
+import { useBranch } from '@/lib/branch-context';
 import { cn } from '@smartduka/ui';
 import { useInboxUnreadCount } from './inbox-notification-badge';
+import { ThemeToggle } from './theme-toggle';
+import { BranchSelector } from './branch-selector';
 
 interface NavItem {
   name: string;
@@ -169,6 +172,7 @@ function MobileNavSection({
 export function AdminMobileNav() {
   const pathname = usePathname();
   const { user, logout, isDemoMode, shop } = useAuth();
+  const { branches } = useBranch();
   const { unreadCount: inboxUnreadCount } = useInboxUnreadCount();
   const [isOpen, setIsOpen] = useState(false);
 
@@ -255,6 +259,16 @@ export function AdminMobileNav() {
           {/* Menu Panel */}
           <div className="fixed top-16 left-0 right-0 bottom-0 z-40 bg-background overflow-y-auto lg:hidden">
             <nav className="p-3">
+              {/* Branch Selector - Shows when multiple branches exist */}
+              {branches.length > 1 && (
+                <div className="mb-4 pb-3 border-b border-border">
+                  <p className="px-3 mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    Current Branch
+                  </p>
+                  <BranchSelector />
+                </div>
+              )}
+
               {/* Navigation Sections */}
               {mobileNavSections.map((section) => (
                 <MobileNavSection
@@ -304,7 +318,7 @@ export function AdminMobileNav() {
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
                   <User className="h-5 w-5" />
                 </div>
-                <div>
+                <div className="flex-1">
                   <p className="text-sm font-medium">
                     {user.email.split('@')[0]}
                   </p>
@@ -312,6 +326,8 @@ export function AdminMobileNav() {
                     {user.role}
                   </p>
                 </div>
+                {/* Theme Toggle - Accessible on mobile */}
+                <ThemeToggle className="flex-shrink-0" />
               </div>
 
               <Button

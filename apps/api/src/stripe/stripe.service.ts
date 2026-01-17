@@ -63,8 +63,50 @@ export class StripeService implements OnModuleInit {
   }
 
   /**
+   * Minimum amounts for Stripe payments by currency (in smallest unit)
+   * Stripe requires minimum amounts to cover processing fees
+   */
+  private readonly MINIMUM_AMOUNTS: Record<string, number> = {
+    usd: 50,   // $0.50
+    gbp: 30,   // £0.30
+    eur: 50,   // €0.50
+    kes: 5000, // KSh 50.00 (conservative estimate based on GBP conversion)
+    default: 50,
+  };
+
+  /**
+   * Validate payment amount meets Stripe minimums
+   */
+  validateMinimumAmount(amount: number, currency: string): { valid: boolean; minimum: number; message?: string } {
+    const currencyLower = currency.toLowerCase();
+    const minimum = this.MINIMUM_AMOUNTS[currencyLower] || this.MINIMUM_AMOUNTS.default;
+    
+    if (amount < minimum) {
+      const formatted = this.formatAmount(minimum, currencyLower);
+      return {
+        valid: false,
+        minimum,
+        message: `Amount too small for card payment. Minimum is ${formatted}. Please use cash or M-Pesa for smaller amounts.`,
+      };
+    }
+    
+    return { valid: true, minimum };
+  }
+
+  /**
+   * Format amount for display
+   */
+  private formatAmount(amount: number, currency: string): string {
+    const divisor = currency === 'kes' ? 100 : 100;
+    const symbols: Record<string, string> = { usd: '$', gbp: '£', eur: '€', kes: 'KSh ' };
+    const symbol = symbols[currency] || '';
+    return `${symbol}${(amount / divisor).toFixed(2)}`;
+  }
+
+  /**
    * Create a Payment Intent for one-time payments
    * Mobile-friendly with automatic payment method detection
+   * Includes idempotency key support for safe retries
    */
   async createPaymentIntent(params: {
     amount: number; // Amount in smallest currency unit (cents for USD, cents for KES)
@@ -74,12 +116,20 @@ export class StripeService implements OnModuleInit {
     description?: string;
     receiptEmail?: string;
     paymentMethodTypes?: string[];
+    idempotencyKey?: string; // Optional idempotency key for safe retries
   }): Promise<Stripe.PaymentIntent> {
     const stripe = this.getClient();
+    const currencyLower = params.currency.toLowerCase();
+
+    // Validate minimum amount
+    const validation = this.validateMinimumAmount(params.amount, currencyLower);
+    if (!validation.valid) {
+      throw new Error(validation.message);
+    }
 
     const paymentIntentParams: Stripe.PaymentIntentCreateParams = {
       amount: params.amount,
-      currency: params.currency.toLowerCase(),
+      currency: currencyLower,
       automatic_payment_methods: {
         enabled: true,
       },
@@ -97,9 +147,15 @@ export class StripeService implements OnModuleInit {
       (paymentIntentParams as any).payment_method_types = params.paymentMethodTypes;
     }
 
-    const paymentIntent = await stripe.paymentIntents.create(paymentIntentParams);
+    // Use idempotency key if provided for safe retries
+    const options: Stripe.RequestOptions = {};
+    if (params.idempotencyKey) {
+      options.idempotencyKey = params.idempotencyKey;
+    }
 
-    this.logger.log(`PaymentIntent created: ${paymentIntent.id} for ${params.amount} ${params.currency}`);
+    const paymentIntent = await stripe.paymentIntents.create(paymentIntentParams, options);
+
+    this.logger.log(`PaymentIntent created: ${paymentIntent.id} for ${params.amount} ${currencyLower}`);
 
     return paymentIntent;
   }

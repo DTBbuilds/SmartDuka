@@ -66,12 +66,14 @@ export default function StaffAssignmentPage() {
 
       if (staffRes.ok) {
         const staffData = await staffRes.json();
-        setStaff(Array.isArray(staffData) ? staffData : []);
+        const staffList = Array.isArray(staffData) ? staffData : (staffData.data || staffData.users || []);
+        setStaff(staffList);
       }
 
       if (branchRes.ok) {
         const branchData = await branchRes.json();
-        setBranches(Array.isArray(branchData) ? branchData : []);
+        const branchList = Array.isArray(branchData) ? branchData : (branchData.data || []);
+        setBranches(branchList);
       }
     } catch (error) {
       console.error('Failed to fetch data:', error);

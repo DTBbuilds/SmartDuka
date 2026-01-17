@@ -35,6 +35,7 @@ import { useToast } from '@/lib/use-toast';
 import { config } from '@/lib/config';
 import { ToastContainer } from '@/components/toast-container';
 import { AuthGuard } from '@/components/auth-guard';
+import { BranchSelectionModal, useBranchSelectionRequired } from '@/components/branch-selection-modal';
 
 type Product = {
   _id: string;
@@ -45,10 +46,19 @@ type Product = {
 function AdminDashboardContent() {
   const router = useRouter();
   const { user, shop, token } = useAuth();
-  const { currentBranch } = useBranch();
+  const { currentBranch, branches } = useBranch();
   const { toasts, toast, dismiss } = useToast();
+  const branchSelectionRequired = useBranchSelectionRequired();
 
   const [loading, setLoading] = useState(false);
+  const [showBranchModal, setShowBranchModal] = useState(false);
+
+  // Show branch selection modal on first load if required
+  useEffect(() => {
+    if (branchSelectionRequired && branches.length > 1) {
+      setShowBranchModal(true);
+    }
+  }, [branchSelectionRequired, branches.length]);
   const [productsCount, setProductsCount] = useState(0);
   const [categoriesCount, setCategoriesCount] = useState(0);
   const [lowStockProducts, setLowStockProducts] = useState<Product[]>([]);
@@ -76,13 +86,20 @@ function AdminDashboardContent() {
       const base = config.apiUrl;
       const headers = { Authorization: `Bearer ${token}` };
       
-      const branchParam = currentBranch ? `branchId=${currentBranch._id}` : '';
+      // Build branch filter for API calls - always include branchId when branch is selected
+      const branchQuery = currentBranch ? `branchId=${currentBranch._id}` : '';
+      const withBranch = (url: string) => {
+        if (!branchQuery) return url;
+        return url.includes('?') ? `${url}&${branchQuery}` : `${url}?${branchQuery}`;
+      };
+
+      console.log('[Dashboard] Loading data for branch:', currentBranch?.name || 'All', currentBranch?._id);
 
       const [productsRes, categoriesRes, lowStockRes, salesStatsRes, mpesaStatusRes] = await Promise.all([
-        fetch(`${base}/inventory/products?limit=200`, { headers }),
+        fetch(withBranch(`${base}/inventory/products?limit=200`), { headers }),
         fetch(`${base}/inventory/categories`, { headers }),
-        fetch(`${base}/inventory/stock/low-stock${branchParam ? `?${branchParam}` : ''}`, { headers }),
-        fetch(`${base}/sales/stats${branchParam ? `?${branchParam}` : ''}`, { headers }),
+        fetch(withBranch(`${base}/inventory/stock/low-stock`), { headers }),
+        fetch(withBranch(`${base}/sales/stats`), { headers }),
         fetch(`${base}/payments/mpesa/config/status`, { headers }),
       ]);
 
@@ -146,9 +163,16 @@ function AdminDashboardContent() {
               <Home className="h-6 w-6 text-primary" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold">Admin Dashboard</h1>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-2xl font-bold">Admin Dashboard</h1>
+                {currentBranch && (
+                  <span className="text-sm px-2 py-1 rounded-full bg-primary/10 text-primary font-medium">
+                    {currentBranch.name}
+                  </span>
+                )}
+              </div>
               <p className="text-sm text-muted-foreground">
-                Welcome back, {user?.email?.split('@')[0] || 'Admin'}
+                {shop?.name ? `${shop.name} • ` : ''}Welcome back, {user?.email?.split('@')[0] || 'Admin'}
               </p>
             </div>
           </div>
@@ -468,6 +492,15 @@ function AdminDashboardContent() {
           </Card>
         </div>
       </div>
+
+      {/* Branch Selection Modal */}
+      <BranchSelectionModal
+        isOpen={showBranchModal}
+        onClose={() => setShowBranchModal(false)}
+        showAllBranchesOption={true}
+        title="Select Operating Branch"
+        description="Choose which branch to operate. Dashboard data will be filtered for the selected branch."
+      />
     </main>
   );
 }

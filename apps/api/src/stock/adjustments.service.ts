@@ -102,10 +102,28 @@ export class AdjustmentsService {
   }
 
   async findAll(shopId: string): Promise<AdjustmentDocument[]> {
-    return this.adjustmentModel
+    const adjustments = await this.adjustmentModel
       .find({ shopId: new Types.ObjectId(shopId) })
       .sort({ createdAt: -1 })
       .exec();
+
+    // Populate product names for adjustments that might not have them
+    const productIds = [...new Set(adjustments.map(a => a.productId.toString()))];
+    const products = await this.productModel
+      .find({ _id: { $in: productIds.map(id => new Types.ObjectId(id)) } })
+      .select('_id name')
+      .exec();
+    
+    const productMap = new Map(products.map(p => [p._id.toString(), p.name]));
+    
+    // Enrich adjustments with product names
+    return adjustments.map(adj => {
+      const adjObj = adj.toObject();
+      if (!adjObj.productName || adjObj.productName === adjObj.productId?.toString()) {
+        adjObj.productName = productMap.get(adjObj.productId?.toString()) || 'Unknown Product';
+      }
+      return adjObj as AdjustmentDocument;
+    });
   }
 
   async findByProduct(productId: string, shopId: string): Promise<AdjustmentDocument[]> {

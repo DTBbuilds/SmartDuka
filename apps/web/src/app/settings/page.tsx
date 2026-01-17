@@ -23,6 +23,14 @@ export default function SettingsPage() {
   // Get initial tab from URL query parameter
   const initialTab = searchParams.get('tab') || 'shop';
   const [activeTab, setActiveTab] = useState(initialTab);
+
+  // Update active tab when URL params change (e.g., from redirect)
+  useEffect(() => {
+    const tabFromUrl = searchParams.get('tab');
+    if (tabFromUrl && tabFromUrl !== activeTab) {
+      setActiveTab(tabFromUrl);
+    }
+  }, [searchParams]);
   
   // Settings navigation items
   const settingsNavItems = [

@@ -49,27 +49,35 @@ export class StockTransfer {
   @Prop({ required: true, unique: true })
   transferNumber: string;
 
-  // Source branch/warehouse
-  @Prop({ required: true, type: Types.ObjectId, ref: 'Branch', index: true })
-  fromBranchId: Types.ObjectId;
+  // Source branch/warehouse (null if from main store)
+  @Prop({ required: false, type: Types.ObjectId, ref: 'Branch', index: true })
+  fromBranchId?: Types.ObjectId;
 
   @Prop({ required: true })
   fromBranchName: string;
 
-  // Destination branch/warehouse
-  @Prop({ required: true, type: Types.ObjectId, ref: 'Branch', index: true })
-  toBranchId: Types.ObjectId;
+  // Flag indicating if transfer is from main store
+  @Prop({ required: false, default: false })
+  isFromMainStore?: boolean;
+
+  // Destination branch/warehouse (null if to main store)
+  @Prop({ required: false, type: Types.ObjectId, ref: 'Branch', index: true })
+  toBranchId?: Types.ObjectId;
 
   @Prop({ required: true })
   toBranchName: string;
 
+  // Flag indicating if transfer is to main store
+  @Prop({ required: false, default: false })
+  isToMainStore?: boolean;
+
   // Transfer type
   @Prop({ 
     required: true, 
-    enum: ['branch_to_branch', 'warehouse_to_branch', 'branch_to_warehouse', 'emergency'],
+    enum: ['branch_to_branch', 'warehouse_to_branch', 'branch_to_warehouse', 'main_to_branch', 'branch_to_main', 'emergency'],
     default: 'branch_to_branch'
   })
-  transferType: 'branch_to_branch' | 'warehouse_to_branch' | 'branch_to_warehouse' | 'emergency';
+  transferType: 'branch_to_branch' | 'warehouse_to_branch' | 'branch_to_warehouse' | 'main_to_branch' | 'branch_to_main' | 'emergency';
 
   // Items being transferred
   @Prop({ type: [Object], required: true })

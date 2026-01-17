@@ -199,10 +199,19 @@ export class InventoryController {
   @Get('products/export')
   async exportProducts(@Response() res: any, @Query('categoryId') categoryId: string, @CurrentUser() user: any) {
     try {
+      if (!user?.shopId) {
+        return res.status(401).json({ message: 'Unauthorized: Shop ID not found' });
+      }
       await this.inventoryService.exportProducts(user.shopId, res, categoryId);
     } catch (error) {
       console.error('Export products error:', error);
-      res.status(500).json({ message: 'Failed to export products', error: error.message });
+      // Ensure response hasn't already been sent
+      if (!res.headersSent) {
+        res.status(500).json({ 
+          message: 'Failed to export products', 
+          error: error?.message || 'Unknown error occurred'
+        });
+      }
     }
   }
 

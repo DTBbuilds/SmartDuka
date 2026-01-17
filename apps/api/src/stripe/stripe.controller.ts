@@ -69,6 +69,7 @@ export class StripeController {
 
   /**
    * Create payment intent for POS sale
+   * Also aliased as /create-payment-intent for backwards compatibility
    */
   @UseGuards(JwtAuthGuard)
   @Post('pos/create-payment')
@@ -102,6 +103,55 @@ export class StripeController {
       shopId: user.shopId,
       orderId: dto.orderId,
       orderNumber: dto.orderNumber,
+      amount: dto.amount,
+      currency: dto.currency,
+      customerEmail: dto.customerEmail,
+      customerName: dto.customerName,
+      description: dto.description,
+    });
+
+    return {
+      success: true,
+      ...result,
+    };
+  }
+
+  /**
+   * Backwards-compatible alias for create-payment-intent
+   * Some older clients may call this endpoint
+   */
+  @UseGuards(JwtAuthGuard)
+  @Post('create-payment-intent')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Create payment intent (alias for pos/create-payment)' })
+  async createPaymentIntentAlias(
+    @CurrentUser() user: JwtPayload,
+    @Body()
+    dto: {
+      orderId?: string;
+      orderNumber?: string;
+      amount: number;
+      currency?: string;
+      customerEmail?: string;
+      customerName?: string;
+      description?: string;
+    },
+  ): Promise<{
+    success: boolean;
+    paymentIntentId: string;
+    clientSecret: string;
+    amount: number;
+    currency: string;
+  }> {
+    if (!this.stripeService.isStripeConfigured()) {
+      throw new BadRequestException('Stripe is not configured. Please configure Stripe in your shop settings or contact support.');
+    }
+
+    const result = await this.paymentService.createPOSPayment({
+      shopId: user.shopId,
+      orderId: dto.orderId || `pos-${Date.now()}`,
+      orderNumber: dto.orderNumber || `POS-${Date.now()}`,
       amount: dto.amount,
       currency: dto.currency,
       customerEmail: dto.customerEmail,

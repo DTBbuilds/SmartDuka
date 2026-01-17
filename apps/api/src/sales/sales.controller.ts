@@ -22,8 +22,11 @@ export class SalesController {
 
   @UseGuards(JwtAuthGuard)
   @Get('stats')
-  async getStats(@CurrentUser() user: any) {
-    return this.salesService.getShopStats(user.shopId);
+  async getStats(
+    @CurrentUser() user: any,
+    @Query('branchId') branchId?: string,
+  ) {
+    return this.salesService.getShopStats(user.shopId, branchId);
   }
 
   @UseGuards(JwtAuthGuard)

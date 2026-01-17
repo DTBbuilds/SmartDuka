@@ -534,8 +534,9 @@ export class SalesService {
 
   /**
    * Get overall shop statistics for dashboard
+   * Supports optional branchId filter for branch-specific stats
    */
-  async getShopStats(shopId: string): Promise<{
+  async getShopStats(shopId: string, branchId?: string): Promise<{
     totalRevenue: number;
     totalOrders: number;
     totalProducts: number;
@@ -544,25 +545,34 @@ export class SalesService {
     pendingOrders: number;
     todayRevenue: number;
     todayOrders: number;
+    branchId?: string;
   }> {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const endOfToday = new Date();
     endOfToday.setHours(23, 59, 59, 999);
 
-    // Get all completed orders
+    // Build base query with optional branch filter
+    const baseQuery: any = {
+      shopId: new Types.ObjectId(shopId),
+      status: 'completed',
+    };
+    
+    // Add branch filter if provided
+    if (branchId) {
+      baseQuery.branchId = new Types.ObjectId(branchId);
+      this.logger.log(`Filtering stats for branch: ${branchId}`);
+    }
+
+    // Get all completed orders (filtered by branch if specified)
     const allOrders = await this.orderModel
-      .find({
-        shopId: new Types.ObjectId(shopId),
-        status: 'completed',
-      })
+      .find(baseQuery)
       .exec();
 
-    // Get today's orders
+    // Get today's orders (filtered by branch if specified)
     const todayOrders = await this.orderModel
       .find({
-        shopId: new Types.ObjectId(shopId),
-        status: 'completed',
+        ...baseQuery,
         createdAt: { $gte: today, $lte: endOfToday },
       })
       .exec();
@@ -598,6 +608,7 @@ export class SalesService {
       pendingOrders: 0, // Could track pending orders if needed
       todayRevenue,
       todayOrders: todayOrders.length,
+      branchId: branchId || undefined,
     };
   }
 

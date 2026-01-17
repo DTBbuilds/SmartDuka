@@ -627,19 +627,23 @@ function ProductsContent() {
                   </div>
                 ))}
 
-                {/* Pagination Controls */}
+                {/* Pagination Controls - Mobile Optimized */}
                 {totalPages > 1 && (
-                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t mt-4">
-                    <p className="text-xs sm:text-sm text-muted-foreground text-center sm:text-left">
-                      <span className="hidden sm:inline">Showing </span>{((currentPage - 1) * itemsPerPage) + 1}-{Math.min(currentPage * itemsPerPage, filteredProducts.length)} of {filteredProducts.length}
+                  <div className="flex flex-col gap-3 pt-4 border-t mt-4">
+                    {/* Info row - centered on mobile */}
+                    <p className="text-xs sm:text-sm text-muted-foreground text-center">
+                      {((currentPage - 1) * itemsPerPage) + 1}-{Math.min(currentPage * itemsPerPage, filteredProducts.length)} of {filteredProducts.length}
                     </p>
-                    <div className="flex items-center gap-1">
+                    
+                    {/* Pagination controls - centered and responsive */}
+                    <div className="flex items-center justify-center gap-1 flex-wrap">
+                      {/* First/Prev - hidden on very small screens */}
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => setCurrentPage(1)}
                         disabled={currentPage === 1}
-                        className="h-8 w-8 p-0"
+                        className="h-8 w-8 p-0 hidden xs:flex"
                       >
                         <ChevronLeft className="h-4 w-4" />
                         <ChevronLeft className="h-4 w-4 -ml-2" />
@@ -654,26 +658,29 @@ function ProductsContent() {
                         <ChevronLeft className="h-4 w-4" />
                       </Button>
                       
-                      {/* Page numbers */}
-                      <div className="flex items-center gap-1 mx-2">
-                        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      {/* Page numbers - show fewer on mobile */}
+                      <div className="flex items-center gap-1 mx-1 sm:mx-2">
+                        {Array.from({ length: Math.min(typeof window !== 'undefined' && window.innerWidth < 400 ? 3 : 5, totalPages) }, (_, i) => {
+                          const maxPages = 5;
                           let pageNum;
-                          if (totalPages <= 5) {
+                          if (totalPages <= maxPages) {
                             pageNum = i + 1;
                           } else if (currentPage <= 3) {
                             pageNum = i + 1;
                           } else if (currentPage >= totalPages - 2) {
-                            pageNum = totalPages - 4 + i;
+                            pageNum = totalPages - maxPages + 1 + i;
                           } else {
                             pageNum = currentPage - 2 + i;
                           }
+                          // Only show valid page numbers
+                          if (pageNum < 1 || pageNum > totalPages) return null;
                           return (
                             <Button
                               key={pageNum}
                               variant={currentPage === pageNum ? 'default' : 'outline'}
                               size="sm"
                               onClick={() => setCurrentPage(pageNum)}
-                              className="h-8 w-8 p-0"
+                              className="h-8 w-8 p-0 text-xs sm:text-sm"
                             >
                               {pageNum}
                             </Button>
@@ -690,12 +697,13 @@ function ProductsContent() {
                       >
                         <ChevronRight className="h-4 w-4" />
                       </Button>
+                      {/* Last - hidden on very small screens */}
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => setCurrentPage(totalPages)}
                         disabled={currentPage === totalPages}
-                        className="h-8 w-8 p-0"
+                        className="h-8 w-8 p-0 hidden xs:flex"
                       >
                         <ChevronRight className="h-4 w-4" />
                         <ChevronRight className="h-4 w-4 -ml-2" />

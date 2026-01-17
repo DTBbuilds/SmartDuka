@@ -1,10 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { Building2, ChevronDown, Check, MapPin } from 'lucide-react';
+import { Building2, ChevronDown, Check, MapPin, Store } from 'lucide-react';
 import { Button } from '@smartduka/ui';
 import { cn } from '@smartduka/ui';
 import { useBranch, Branch } from '@/lib/branch-context';
+import { useAuth } from '@/lib/auth-context';
 
 interface BranchSelectorProps {
   collapsed?: boolean;
@@ -13,20 +14,39 @@ interface BranchSelectorProps {
 
 export function BranchSelector({ collapsed = false, className }: BranchSelectorProps) {
   const { branches, currentBranch, setCurrentBranch, loading } = useBranch();
+  const { shop } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
 
-  // Don't show if no branches or only one branch
-  if (loading || branches.length <= 1) {
+  // Don't show if no branches
+  if (loading || branches.length === 0) {
     return null;
   }
+
+  // Separate main branch from other branches
+  // If no branch has type 'main', create a virtual main branch from shop data
+  let mainBranch = branches.find(b => b.type === 'main');
+  const otherBranches = branches.filter(b => b.type !== 'main');
+  
+  // If no main branch found in branches, create a virtual one from shop data
+  // This represents the "Main Store" option
+  const virtualMainBranch: Branch | null = !mainBranch && shop ? {
+    _id: 'main',
+    name: shop.name || 'Main Store',
+    code: 'MAIN',
+    type: 'main',
+    isActive: true,
+  } : null;
+  
+  // Use actual main branch if found, otherwise use virtual one
+  const displayMainBranch = mainBranch || virtualMainBranch;
 
   const handleSelect = (branch: Branch | null) => {
     setCurrentBranch(branch);
     setIsOpen(false);
   };
 
-  const displayName = currentBranch?.name || 'All Branches';
-  const displayCode = currentBranch?.code || 'ALL';
+  const displayName = currentBranch?.name || (displayMainBranch?.name || 'Select Branch');
+  const displayCode = currentBranch?.code || (displayMainBranch?.code || '');
 
   if (collapsed) {
     return (
@@ -52,19 +72,30 @@ export function BranchSelector({ collapsed = false, className }: BranchSelectorP
                 <p className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
                   Select Branch
                 </p>
-                <button
-                  onClick={() => handleSelect(null)}
-                  className={cn(
-                    'flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-accent',
-                    !currentBranch && 'bg-accent'
-                  )}
-                >
-                  <Building2 className="h-4 w-4 text-muted-foreground" />
-                  <span className="flex-1 text-left">All Branches</span>
-                  {!currentBranch && <Check className="h-4 w-4 text-primary" />}
-                </button>
-                <div className="my-1 h-px bg-border" />
-                {branches.map((branch) => (
+                {/* Main Branch Option */}
+                {displayMainBranch && (
+                  <button
+                    onClick={() => handleSelect(displayMainBranch._id === 'main' ? null : displayMainBranch)}
+                    className={cn(
+                      'flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-accent',
+                      (displayMainBranch._id === 'main' ? !currentBranch : currentBranch?._id === displayMainBranch._id) && 'bg-accent'
+                    )}
+                  >
+                    <Store className="h-4 w-4 text-primary" />
+                    <div className="flex-1 text-left">
+                      <p className="font-medium">{displayMainBranch.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Main Store • {displayMainBranch.code}
+                      </p>
+                    </div>
+                    {(displayMainBranch._id === 'main' ? !currentBranch : currentBranch?._id === displayMainBranch._id) && (
+                      <Check className="h-4 w-4 text-primary" />
+                    )}
+                  </button>
+                )}
+                {otherBranches.length > 0 && <div className="my-1 h-px bg-border" />}
+                {/* Other Branches */}
+                {otherBranches.map((branch) => (
                   <button
                     key={branch._id}
                     onClick={() => handleSelect(branch)}
@@ -119,19 +150,30 @@ export function BranchSelector({ collapsed = false, className }: BranchSelectorP
           />
           <div className="absolute left-0 right-0 top-full mt-1 z-50 rounded-lg border bg-popover shadow-lg">
             <div className="p-2 max-h-64 overflow-y-auto">
-              <button
-                onClick={() => handleSelect(null)}
-                className={cn(
-                  'flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-accent',
-                  !currentBranch && 'bg-accent'
-                )}
-              >
-                <Building2 className="h-4 w-4 text-muted-foreground" />
-                <span className="flex-1 text-left font-medium">All Branches</span>
-                {!currentBranch && <Check className="h-4 w-4 text-primary" />}
-              </button>
-              <div className="my-1 h-px bg-border" />
-              {branches.map((branch) => (
+              {/* Main Branch Option */}
+              {displayMainBranch && (
+                <button
+                  onClick={() => handleSelect(displayMainBranch._id === 'main' ? null : displayMainBranch)}
+                  className={cn(
+                    'flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-accent',
+                    (displayMainBranch._id === 'main' ? !currentBranch : currentBranch?._id === displayMainBranch._id) && 'bg-accent'
+                  )}
+                >
+                  <Store className="h-4 w-4 text-primary" />
+                  <div className="flex-1 text-left">
+                    <p className="font-medium">{displayMainBranch.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Main Store • {displayMainBranch.code}
+                    </p>
+                  </div>
+                  {(displayMainBranch._id === 'main' ? !currentBranch : currentBranch?._id === displayMainBranch._id) && (
+                    <Check className="h-4 w-4 text-primary" />
+                  )}
+                </button>
+              )}
+              {otherBranches.length > 0 && <div className="my-1 h-px bg-border" />}
+              {/* Other Branches */}
+              {otherBranches.map((branch) => (
                 <button
                   key={branch._id}
                   onClick={() => handleSelect(branch)}

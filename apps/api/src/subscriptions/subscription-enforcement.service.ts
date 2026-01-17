@@ -97,6 +97,30 @@ export class SubscriptionEnforcementService {
 
       switch (subscription.status) {
         case SubscriptionStatus.ACTIVE:
+          // Check if subscription period has actually ended (especially important for daily plans)
+          if (now > subscription.currentPeriodEnd) {
+            // Period has ended - subscription should be expired/past due
+            // For daily plans without auto-renew, block immediately
+            if (subscription.billingCycle === 'daily' || !subscription.autoRenew) {
+              return {
+                accessLevel: SubscriptionAccessLevel.BLOCKED,
+                status: SubscriptionStatus.EXPIRED,
+                message: 'Your subscription period has ended. Please renew to continue using SmartDuka.',
+                daysRemaining: 0,
+                canMakePayment: true,
+                subscription: subscriptionInfo,
+              };
+            }
+            // For auto-renew subscriptions, give grace period (read-only access)
+            return {
+              accessLevel: SubscriptionAccessLevel.READ_ONLY,
+              status: SubscriptionStatus.PAST_DUE,
+              message: 'Your subscription payment is due. Please pay to continue full operations.',
+              daysRemaining: 0,
+              canMakePayment: true,
+              subscription: subscriptionInfo,
+            };
+          }
           return {
             accessLevel: SubscriptionAccessLevel.FULL,
             status: subscription.status,
@@ -248,8 +272,54 @@ export class SubscriptionEnforcementService {
           const activeDaysRemaining = Math.ceil(
             (subscription.currentPeriodEnd.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)
           );
+          const activeHoursRemaining = Math.ceil(
+            (subscription.currentPeriodEnd.getTime() - now.getTime()) / (60 * 60 * 1000)
+          );
 
-          // Warning at 7 days
+          // Check if subscription has actually expired
+          if (now > subscription.currentPeriodEnd) {
+            warnings.push({
+              type: 'expired',
+              severity: 'critical',
+              title: 'Subscription Expired',
+              message: `Your ${planName} subscription has expired. Please renew to continue using SmartDuka.`,
+              daysRemaining: 0,
+              actionRequired: true,
+              actionLabel: 'Renew Now',
+              actionUrl: '/settings?tab=subscription',
+            });
+            break;
+          }
+
+          // Special handling for daily plans - warn in hours
+          if (subscription.billingCycle === 'daily') {
+            if (activeHoursRemaining <= 6 && activeHoursRemaining > 2) {
+              warnings.push({
+                type: 'expiring_soon',
+                severity: 'warning',
+                title: 'Daily Subscription Expiring',
+                message: `Your daily subscription expires in ${activeHoursRemaining} hours. Renew to continue operations.`,
+                daysRemaining: 0,
+                actionRequired: true,
+                actionLabel: 'Renew Now',
+                actionUrl: '/settings?tab=subscription',
+              });
+            } else if (activeHoursRemaining <= 2) {
+              warnings.push({
+                type: 'expiring_soon',
+                severity: 'critical',
+                title: 'Daily Subscription Expiring Soon!',
+                message: `Your daily subscription expires in ${activeHoursRemaining} hour${activeHoursRemaining !== 1 ? 's' : ''}! Renew immediately.`,
+                daysRemaining: 0,
+                actionRequired: true,
+                actionLabel: 'Renew Now',
+                actionUrl: '/settings?tab=subscription',
+              });
+            }
+            break;
+          }
+
+          // Warning at 7 days (non-daily plans)
           if (activeDaysRemaining <= 7 && activeDaysRemaining > 3) {
             warnings.push({
               type: 'expiring_soon',
@@ -259,7 +329,7 @@ export class SubscriptionEnforcementService {
               daysRemaining: activeDaysRemaining,
               actionRequired: false,
               actionLabel: 'Renew Now',
-              actionUrl: '/admin/subscription',
+              actionUrl: '/settings?tab=subscription',
             });
           }
           // Warning at 3 days
@@ -272,7 +342,7 @@ export class SubscriptionEnforcementService {
               daysRemaining: activeDaysRemaining,
               actionRequired: true,
               actionLabel: 'Renew Now',
-              actionUrl: '/admin/subscription',
+              actionUrl: '/settings?tab=subscription',
             });
           }
           // Critical at 1 day
@@ -285,7 +355,7 @@ export class SubscriptionEnforcementService {
               daysRemaining: activeDaysRemaining,
               actionRequired: true,
               actionLabel: 'Renew Now',
-              actionUrl: '/admin/subscription',
+              actionUrl: '/settings?tab=subscription',
             });
           }
           break;

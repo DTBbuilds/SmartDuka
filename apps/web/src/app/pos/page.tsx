@@ -45,6 +45,7 @@ import {
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { db, getPendingOrdersByShop, getPendingOrderCountByShop, addPendingOrder, deletePendingOrder, clearAllLocalData } from "@/lib/db";
 import { useAuth } from "@/lib/auth-context";
+import { useBranch } from "@/lib/branch-context";
 import { config } from "@/lib/config";
 import { useToast } from "@/lib/use-toast";
 import { ToastContainer } from "@/components/toast-container";
@@ -189,6 +190,7 @@ function POSContent() {
   const BARCODE_DEBOUNCE_MS = 1500; // Prevent same barcode within 1.5 seconds
 
   const { user, shop, token, logout } = useAuth();
+  const { currentBranch } = useBranch();
   const { toasts, toast, dismiss } = useToast();
   const { favorites, toggleFavorite, removeFavorite: removeFromFavorites, clearAll: clearFavorites } = useFavoriteProducts();
   const quantityPad = useQuantityPad();
@@ -641,6 +643,8 @@ function POSContent() {
         const params = new URLSearchParams();
         if (q) params.set("q", q);
         if (tab !== "all") params.set("categoryId", tab);
+        // Filter products by branch - each branch sees only its own products
+        if (currentBranch?._id) params.set("branchId", currentBranch._id);
         const query = params.toString();
         const url = `${config.apiUrl}/inventory/products${query ? `?${query}` : ""}`;
         const headers: HeadersInit = {};
@@ -689,7 +693,7 @@ function POSContent() {
     };
     run();
     return () => controller.abort();
-  }, [q, tab]);
+  }, [q, tab, currentBranch?._id]);
 
   // Fetch shop settings on mount
   useEffect(() => {

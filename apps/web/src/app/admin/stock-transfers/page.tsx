@@ -77,6 +77,7 @@ interface Branch {
   name: string;
   code: string;
   status: string;
+  type?: 'main' | 'branch' | 'warehouse';
 }
 
 interface Product {
@@ -90,7 +91,7 @@ interface Product {
 }
 
 export default function StockTransfersPage() {
-  const { token } = useAuth();
+  const { token, shop } = useAuth();
   const { branches: contextBranches } = useBranch();
   
   const [transfers, setTransfers] = useState<StockTransfer[]>([]);
@@ -172,24 +173,46 @@ export default function StockTransfersPage() {
       
       if (res.ok) {
         const data = await res.json();
-        setBranches(data.data || []);
+        // Handle both array response and {data: [...]} response format
+        const branchList: Branch[] = Array.isArray(data) ? data : (data.data || data.branches || []);
+        
+        // Check if main branch exists, if not create a virtual one from shop data
+        const hasMainBranch = branchList.some(b => b.type === 'main');
+        if (!hasMainBranch && shop) {
+          const virtualMainBranch: Branch = {
+            _id: 'main',
+            name: shop.name || 'Main Store',
+            code: 'MAIN',
+            type: 'main',
+            status: 'active',
+          };
+          branchList.unshift(virtualMainBranch);
+        }
+        
+        setBranches(branchList);
       }
     } catch (err) {
       console.error('Failed to fetch branches:', err);
     }
-  }, [token]);
+  }, [token, shop]);
 
-  const fetchProducts = useCallback(async () => {
+  const fetchProducts = useCallback(async (branchId?: string) => {
     if (!token) return;
     
     try {
-      const res = await fetch(`${config.apiUrl}/inventory/products?status=active&limit=200`, {
+      // Filter products by source branch if specified
+      const params = new URLSearchParams({ status: 'active', limit: '200' });
+      if (branchId && branchId !== 'main') {
+        params.set('branchId', branchId);
+      }
+      
+      const res = await fetch(`${config.apiUrl}/inventory/products?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       
       if (res.ok) {
         const data = await res.json();
-        setProducts(data.products || data.data || []);
+        setProducts(data.products || data.data || data || []);
       }
     } catch (err) {
       console.error('Failed to fetch products:', err);
@@ -202,6 +225,14 @@ export default function StockTransfersPage() {
     fetchBranches();
     fetchProducts();
   }, [fetchTransfers, fetchStats, fetchBranches, fetchProducts]);
+
+  // Reload products when source branch changes and clear selected items
+  useEffect(() => {
+    if (createForm.fromBranchId) {
+      fetchProducts(createForm.fromBranchId);
+      setSelectedItems([]); // Clear selected items when source branch changes
+    }
+  }, [createForm.fromBranchId, fetchProducts]);
 
   const handleCreateTransfer = async () => {
     if (!createForm.fromBranchId || !createForm.toBranchId) {
@@ -236,18 +267,25 @@ export default function StockTransfersPage() {
       const data = await res.json();
       
       if (res.ok) {
-        setSuccess('Stock transfer request created successfully');
+        const transferNum = data.transferNumber || '';
+        setSuccess(`Stock transfer ${transferNum} created successfully! Awaiting approval.`);
         setIsCreateOpen(false);
         setCreateForm({ fromBranchId: '', toBranchId: '', priority: 'normal', reason: '', notes: '' });
         setSelectedItems([]);
         fetchTransfers();
         fetchStats();
-        setTimeout(() => setSuccess(null), 3000);
+        setTimeout(() => setSuccess(null), 5000);
       } else {
-        setError(data.message || 'Failed to create transfer');
+        // Extract detailed error message
+        const errorMsg = Array.isArray(data.message) 
+          ? data.message.join(', ') 
+          : (data.message || data.error || 'Failed to create transfer');
+        setError(`Transfer failed: ${errorMsg}`);
+        setTimeout(() => setError(null), 8000);
       }
-    } catch (err) {
-      setError('Failed to create transfer');
+    } catch (err: any) {
+      setError(`Transfer failed: ${err?.message || 'Network error. Please try again.'}`);
+      setTimeout(() => setError(null), 8000);
     } finally {
       setIsSubmitting(false);
     }

@@ -37,6 +37,7 @@ export interface PaymentOption {
 }
 
 // Default payment options with M-Pesa, Send Money, and Cash prioritized
+// Note: Consolidated card/stripe into single option to avoid duplicate payment buttons
 export const defaultPaymentOptions: PaymentOption[] = [
   {
     id: 'mpesa',
@@ -60,22 +61,10 @@ export const defaultPaymentOptions: PaymentOption[] = [
     primary: true,
   },
   {
-    id: 'stripe',
-    label: 'Card/Bank',
-    icon: Building2,
-    description: 'Stripe card & bank payments',
-  },
-  {
     id: 'card',
     label: 'Card',
     icon: CreditCard,
-    description: 'Debit/Credit card',
-  },
-  {
-    id: 'qr',
-    label: 'QR Pay',
-    icon: QrCode,
-    description: 'Scan to pay',
+    description: 'Debit/Credit card (Stripe)',
   },
 ];
 
@@ -119,6 +108,28 @@ const formatPhoneDisplay = (phone: string) => {
     return `${cleaned.slice(0, 4)} ${cleaned.slice(4, 7)} ${cleaned.slice(7)}`;
   }
   return phone;
+};
+
+/**
+ * Minimum amount for card payments in KES (not cents)
+ * Stripe requires minimum amounts to cover processing fees
+ * Note: total prop is passed in KES, not cents
+ */
+const CARD_MINIMUM_AMOUNT_KES = 50; // KSh 50.00
+
+/**
+ * Check if amount meets minimum for card payment
+ * @param amount - Amount in KES (not cents)
+ */
+const isAmountSufficientForCard = (amount: number): boolean => {
+  return amount >= CARD_MINIMUM_AMOUNT_KES;
+};
+
+/**
+ * Format minimum amount for display
+ */
+const formatMinimumAmount = (): string => {
+  return `Ksh ${CARD_MINIMUM_AMOUNT_KES}`;
 };
 
 export function PaymentMethodModal({
@@ -183,6 +194,12 @@ export function PaymentMethodModal({
       setSendMoneyReference('');
       setSendMoneyConfirmed(false);
     } else if (methodId === 'stripe' || methodId === 'card') {
+      // Check minimum amount for card payments
+      if (!isAmountSufficientForCard(total)) {
+        setStripeError(`Amount too small for card payment. Minimum is ${formatMinimumAmount()}. Please use Cash or M-Pesa instead.`);
+        setStep('card-input');
+        return;
+      }
       // For card/stripe, create payment intent and show card form
       setStep('card-input');
       setStripeError(null);
@@ -727,9 +744,9 @@ export function PaymentMethodModal({
                     <Button 
                       variant="default" 
                       className="flex-1 bg-amber-600 hover:bg-amber-700"
-                      onClick={() => window.location.href = '/settings?tab=payments'}
+                      onClick={() => window.location.href = '/settings?tab=mpesa'}
                     >
-                      Go to Settings
+                      Configure M-Pesa
                     </Button>
                   </div>
                 </div>

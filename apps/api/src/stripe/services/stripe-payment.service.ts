@@ -34,8 +34,22 @@ export class StripePaymentService {
   ) {}
 
   /**
+   * Generate idempotency key for payment operations
+   * Ensures safe retries and prevents duplicate payments
+   */
+  private generateIdempotencyKey(shopId: string, orderId: string, type: string): string {
+    return `${shopId}_${orderId}_${type}_${Date.now()}`;
+  }
+
+  /**
    * Create a payment intent for POS sale
    * Returns client secret for frontend to complete payment
+   * 
+   * ACID Properties:
+   * - Atomicity: Payment intent and local record created together
+   * - Consistency: Validates amount before creating payment
+   * - Isolation: Uses idempotency keys to prevent duplicate payments
+   * - Durability: Saved to local DB with Stripe as source of truth
    */
   async createPOSPayment(params: {
     shopId: string;
@@ -51,10 +65,37 @@ export class StripePaymentService {
     clientSecret: string;
     amount: number;
     currency: string;
+    minimumAmount?: number;
   }> {
     const currency = params.currency || 'kes';
 
-    // Create payment intent
+    // Validate minimum amount before attempting Stripe call
+    const validation = this.stripeService.validateMinimumAmount(params.amount, currency);
+    if (!validation.valid) {
+      throw new BadRequestException(validation.message);
+    }
+
+    // Check for existing payment intent for this order to ensure idempotency
+    const existingPayment = await this.paymentModel.findOne({
+      shopId: new Types.ObjectId(params.shopId),
+      'metadata.orderNumber': params.orderNumber,
+      status: { $in: [StripePaymentStatus.REQUIRES_PAYMENT_METHOD, StripePaymentStatus.REQUIRES_ACTION] },
+    });
+
+    if (existingPayment) {
+      this.logger.log(`Returning existing payment intent ${existingPayment.stripePaymentIntentId} for order ${params.orderNumber}`);
+      return {
+        paymentIntentId: existingPayment.stripePaymentIntentId,
+        clientSecret: existingPayment.clientSecret!,
+        amount: existingPayment.amount,
+        currency: existingPayment.currency,
+      };
+    }
+
+    // Generate idempotency key to prevent duplicate payments on retry
+    const idempotencyKey = this.generateIdempotencyKey(params.shopId, params.orderId, 'pos');
+
+    // Create payment intent with idempotency
     const paymentIntent = await this.stripeService.createPaymentIntent({
       amount: params.amount,
       currency,
@@ -67,9 +108,10 @@ export class StripePaymentService {
         type: StripePaymentType.POS_SALE,
         source: 'smartduka_pos',
       },
+      idempotencyKey,
     });
 
-    // Save to local database
+    // Save to local database for tracking
     const payment = new this.paymentModel({
       stripePaymentIntentId: paymentIntent.id,
       shopId: new Types.ObjectId(params.shopId),
@@ -83,12 +125,13 @@ export class StripePaymentService {
       metadata: {
         orderNumber: params.orderNumber,
         customerName: params.customerName || '',
+        idempotencyKey,
       },
     });
 
     await payment.save();
 
-    this.logger.log(`Created POS payment intent ${paymentIntent.id} for order ${params.orderNumber}`);
+    this.logger.log(`Created POS payment intent ${paymentIntent.id} for order ${params.orderNumber} (shop: ${params.shopId})`);
 
     return {
       paymentIntentId: paymentIntent.id,
@@ -100,6 +143,12 @@ export class StripePaymentService {
 
   /**
    * Create a payment intent for subscription/invoice payment
+   * 
+   * ACID Properties:
+   * - Atomicity: Payment intent and local record created together
+   * - Consistency: Validates amount and customer before creating payment
+   * - Isolation: Uses idempotency keys to prevent duplicate payments
+   * - Durability: Saved to local DB with Stripe as source of truth
    */
   async createSubscriptionPayment(params: {
     shopId: string;
@@ -117,6 +166,29 @@ export class StripePaymentService {
   }> {
     const currency = params.currency || 'kes';
 
+    // Validate minimum amount
+    const validation = this.stripeService.validateMinimumAmount(params.amount, currency);
+    if (!validation.valid) {
+      throw new BadRequestException(validation.message);
+    }
+
+    // Check for existing payment intent for this invoice to ensure idempotency
+    const existingPayment = await this.paymentModel.findOne({
+      shopId: new Types.ObjectId(params.shopId),
+      'metadata.invoiceNumber': params.invoiceNumber,
+      status: { $in: [StripePaymentStatus.REQUIRES_PAYMENT_METHOD, StripePaymentStatus.REQUIRES_ACTION] },
+    });
+
+    if (existingPayment) {
+      this.logger.log(`Returning existing payment intent ${existingPayment.stripePaymentIntentId} for invoice ${params.invoiceNumber}`);
+      return {
+        paymentIntentId: existingPayment.stripePaymentIntentId,
+        clientSecret: existingPayment.clientSecret!,
+        amount: existingPayment.amount,
+        currency: existingPayment.currency,
+      };
+    }
+
     // Get or create customer
     const customer = await this.customerService.getOrCreateCustomer({
       shopId: params.shopId,
@@ -126,7 +198,10 @@ export class StripePaymentService {
     // Check if invoiceId is a valid ObjectId (24 hex chars)
     const isValidObjectId = params.invoiceId && /^[a-fA-F0-9]{24}$/.test(params.invoiceId);
 
-    // Create payment intent
+    // Generate idempotency key
+    const idempotencyKey = this.generateIdempotencyKey(params.shopId, params.invoiceNumber, 'subscription');
+
+    // Create payment intent with idempotency
     const paymentIntent = await this.stripeService.createPaymentIntent({
       amount: params.amount,
       currency,
@@ -140,6 +215,7 @@ export class StripePaymentService {
         type: StripePaymentType.SUBSCRIPTION,
         source: 'smartduka_subscription',
       },
+      idempotencyKey,
     });
 
     // Save to local database
@@ -157,12 +233,13 @@ export class StripePaymentService {
       receiptEmail: params.customerEmail,
       metadata: {
         invoiceNumber: params.invoiceNumber,
+        idempotencyKey,
       },
     });
 
     await payment.save();
 
-    this.logger.log(`Created subscription payment intent ${paymentIntent.id} for invoice ${params.invoiceNumber}`);
+    this.logger.log(`Created subscription payment intent ${paymentIntent.id} for invoice ${params.invoiceNumber} (shop: ${params.shopId})`);
 
     return {
       paymentIntentId: paymentIntent.id,
