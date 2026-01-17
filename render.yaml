@@ -104,3 +104,13 @@ services:
         value: true
     healthCheckPath: /health
     autoDeploy: true
+
+  # Cron job to keep the free-tier web service alive
+  - type: cron
+    name: smartduka-keep-alive
+    runtime: node
+    region: singapore
+    plan: free
+    schedule: "*/5 * * * *"
+    buildCommand: echo "No build needed"
+    startCommand: curl -s https://smartduka-api.onrender.com/health/live || true

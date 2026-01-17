@@ -6,12 +6,6 @@
   "outputDirectory": ".next",
   "devCommand": "pnpm dev",
   "regions": ["iad1"],
-  "crons": [
-    {
-      "path": "/api/cron/keep-alive",
-      "schedule": "*/5 * * * *"
-    }
-  ],
   "headers": [
     {
       "source": "/(.*)",
