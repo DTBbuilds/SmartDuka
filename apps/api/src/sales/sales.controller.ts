@@ -85,12 +85,15 @@ export class SalesController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
   @Get('orders/analytics')
-  async getOrdersAnalytics(@CurrentUser() user: any) {
+  async getOrdersAnalytics(
+    @Query('branchId') branchId: string,
+    @CurrentUser() user: any,
+  ) {
     if (!user?.shopId) {
       console.error('[OrdersAnalytics] No shopId in user token:', user);
       throw new BadRequestException('Shop ID not found in authentication token. Please log in again.');
     }
-    return this.salesService.getOrdersAnalytics(user.shopId);
+    return this.salesService.getOrdersAnalytics(user.shopId, branchId);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -98,12 +101,13 @@ export class SalesController {
   @Get('profit/analytics')
   async getProfitAnalytics(
     @Query('range') range: string = 'month',
+    @Query('branchId') branchId: string,
     @CurrentUser() user: any,
   ) {
     if (!user?.shopId) {
       throw new BadRequestException('Shop ID not found in authentication token.');
     }
-    return this.salesService.getProfitAnalytics(user.shopId, range);
+    return this.salesService.getProfitAnalytics(user.shopId, range, branchId);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -155,9 +159,10 @@ export class SalesController {
   @Get('analytics')
   async getSalesAnalytics(
     @Query('range') range: string = 'month',
+    @Query('branchId') branchId: string,
     @CurrentUser() user: any,
   ) {
-    return this.salesService.getSalesAnalytics(user.shopId, range);
+    return this.salesService.getSalesAnalytics(user.shopId, range, branchId);
   }
 
   // ==================== RECEIPT ENDPOINTS ====================

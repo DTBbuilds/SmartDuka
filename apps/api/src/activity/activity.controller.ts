@@ -177,6 +177,9 @@ export class ActivityController {
       user.role,
       dto.action,
       dto.details,
+      undefined, // ipAddress
+      undefined, // userAgent
+      user.branchId, // Include branchId for branch-specific activity tracking
     );
     return { success: !!activity, activity };
   }
@@ -198,6 +201,9 @@ export class ActivityController {
       user.role,
       'status_change',
       { status: dto.status },
+      undefined, // ipAddress
+      undefined, // userAgent
+      user.branchId, // Include branchId for branch-specific activity tracking
     );
     return { success: true, status: dto.status };
   }
@@ -219,6 +225,9 @@ export class ActivityController {
       user.role,
       'heartbeat',
       { status: dto.status || 'online' },
+      undefined, // ipAddress
+      undefined, // userAgent
+      user.branchId, // Include branchId for branch-specific activity tracking
     );
     return { success: true, timestamp: new Date().toISOString() };
   }

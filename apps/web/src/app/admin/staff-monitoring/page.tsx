@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/lib/auth-context';
+import { useBranch } from '@/lib/branch-context';
 import { config } from '@/lib/config';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -88,6 +89,7 @@ interface DashboardStats {
 
 export default function StaffMonitoringPage() {
   const { token } = useAuth();
+  const { currentBranch } = useBranch();
   
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [staffStats, setStaffStats] = useState<StaffStats[]>([]);
@@ -108,17 +110,25 @@ export default function StaffMonitoringPage() {
       setIsLoading(true);
       setError(null);
 
-      // Fetch staff list
-      const staffRes = await fetch(`${config.apiUrl}/users?role=cashier,admin`, {
+      // Build branch query parameter
+      const branchQuery = currentBranch ? `&branchId=${currentBranch._id}` : '';
+
+      // Fetch staff list filtered by branch
+      const staffUrl = currentBranch 
+        ? `${config.apiUrl}/staff-assignment/branch/${currentBranch._id}`
+        : `${config.apiUrl}/users?role=cashier,admin`;
+      
+      const staffRes = await fetch(staffUrl, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (staffRes.ok) {
         const staffData = await staffRes.json();
-        setStaff(staffData.data || staffData || []);
+        const staffList = Array.isArray(staffData) ? staffData : (staffData.data || []);
+        setStaff(staffList);
       }
 
-      // Fetch today's activity with limit
-      const activityRes = await fetch(`${config.apiUrl}/activity?limit=100`, {
+      // Fetch today's activity with limit, filtered by branch
+      const activityRes = await fetch(`${config.apiUrl}/activity?limit=100${branchQuery}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (activityRes.ok) {
@@ -136,7 +146,7 @@ export default function StaffMonitoringPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [token]);
+  }, [token, currentBranch]);
 
   const calculateDashboardStats = () => {
     // This would ideally come from a dedicated backend endpoint
@@ -144,7 +154,8 @@ export default function StaffMonitoringPage() {
     const activeStaff = staff.filter(s => s.status === 'active');
     const checkoutActivities = activities.filter(a => a.action === 'checkout');
     
-    const totalSales = checkoutActivities.reduce((sum, a) => sum + (a.details?.amount || 0), 0);
+    // Note: checkout activity stores 'total' not 'amount'
+    const totalSales = checkoutActivities.reduce((sum, a) => sum + (a.details?.total || a.details?.amount || 0), 0);
     
     // Group by user to find top performer
     const salesByUser: Record<string, { name: string; sales: number }> = {};
@@ -152,7 +163,7 @@ export default function StaffMonitoringPage() {
       if (!salesByUser[a.userId]) {
         salesByUser[a.userId] = { name: a.userName, sales: 0 };
       }
-      salesByUser[a.userId].sales += a.details?.amount || 0;
+      salesByUser[a.userId].sales += a.details?.total || a.details?.amount || 0;
     });
     
     const topPerformer = Object.values(salesByUser).sort((a, b) => b.sales - a.sales)[0];

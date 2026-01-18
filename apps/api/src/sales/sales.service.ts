@@ -158,13 +158,15 @@ export class SalesService {
           total: order.total,
           itemCount: order.items.length,
           paymentStatus: order.paymentStatus,
-          branchId: branchId,
           orderItems: order.items.map(item => ({
             name: item.name,
             quantity: item.quantity,
             price: item.unitPrice,
           })),
-        }
+        },
+        undefined, // ipAddress
+        undefined, // userAgent
+        branchId, // Include branchId for branch-specific activity tracking
       );
     } catch (error: any) {
       // Log error but don't fail checkout - activity logging should not break the transaction
@@ -581,11 +583,14 @@ export class SalesService {
     const totalRevenue = allOrders.reduce((sum, order) => sum + (order.total || 0), 0);
     const todayRevenue = todayOrders.reduce((sum, order) => sum + (order.total || 0), 0);
 
-    // Get product count from inventory service
+    // Get product count from inventory service - filter by branch if specified
     let totalProducts = 0;
     let lowStockProducts = 0;
     try {
-      const products = await this.inventoryService.listProducts(shopId, { limit: 1000 });
+      const products = await this.inventoryService.listProducts(shopId, { 
+        limit: 1000,
+        branchId: branchId, // Pass branchId for branch-specific inventory
+      });
       totalProducts = products.length;
       lowStockProducts = products.filter((p: any) => (p.stock || 0) <= (p.lowStockThreshold || 5)).length;
     } catch (err) {
@@ -764,40 +769,43 @@ export class SalesService {
 
   /**
    * Get comprehensive sales analytics
+   * Supports branch-specific analytics when branchId is provided
    */
-  async getSalesAnalytics(shopId: string, range: string = 'month') {
+  async getSalesAnalytics(shopId: string, range: string = 'month', branchId?: string) {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
     const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
     const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
 
+    // Build base query - filter by branch if provided
+    const baseQuery: any = {
+      shopId: new Types.ObjectId(shopId),
+      status: 'completed',
+    };
+    if (branchId) {
+      baseQuery.branchId = new Types.ObjectId(branchId);
+    }
+
     // Get orders for different periods
     const [todayOrders, yesterdayOrders, weekOrders, monthOrders, allOrders] = await Promise.all([
       this.orderModel.find({
-        shopId: new Types.ObjectId(shopId),
-        status: 'completed',
+        ...baseQuery,
         createdAt: { $gte: today },
       }).exec(),
       this.orderModel.find({
-        shopId: new Types.ObjectId(shopId),
-        status: 'completed',
+        ...baseQuery,
         createdAt: { $gte: yesterday, $lt: today },
       }).exec(),
       this.orderModel.find({
-        shopId: new Types.ObjectId(shopId),
-        status: 'completed',
+        ...baseQuery,
         createdAt: { $gte: weekAgo },
       }).exec(),
       this.orderModel.find({
-        shopId: new Types.ObjectId(shopId),
-        status: 'completed',
+        ...baseQuery,
         createdAt: { $gte: monthAgo },
       }).exec(),
-      this.orderModel.find({
-        shopId: new Types.ObjectId(shopId),
-        status: 'completed',
-      }).exec(),
+      this.orderModel.find(baseQuery).exec(),
     ]);
 
     // Calculate revenue
@@ -904,8 +912,9 @@ export class SalesService {
 
   /**
    * Get orders analytics
+   * Supports branch-specific analytics when branchId is provided
    */
-  async getOrdersAnalytics(shopId: string) {
+  async getOrdersAnalytics(shopId: string, branchId?: string) {
     if (!shopId) {
       throw new BadRequestException('Shop ID is required for analytics');
     }
@@ -916,11 +925,17 @@ export class SalesService {
       const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
       const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-      // Get all orders for the month
-      const monthOrders = await this.orderModel.find({
+      // Build query - filter by branch if provided
+      const query: any = {
         shopId: new Types.ObjectId(shopId),
         createdAt: { $gte: monthAgo },
-      }).sort({ createdAt: -1 }).exec();
+      };
+      if (branchId) {
+        query.branchId = new Types.ObjectId(branchId);
+      }
+
+      // Get all orders for the month
+      const monthOrders = await this.orderModel.find(query).sort({ createdAt: -1 }).exec();
 
     // Filter orders by time period
     const todayAllOrders = monthOrders.filter(o => {
@@ -1048,8 +1063,9 @@ export class SalesService {
    * 
    * @param shopId - Shop ID for multi-tenant isolation
    * @param range - Time range: 'today', 'week', 'month', 'year'
+   * @param branchId - Optional branch ID for branch-specific analytics
    */
-  async getProfitAnalytics(shopId: string, range: string = 'month') {
+  async getProfitAnalytics(shopId: string, range: string = 'month', branchId?: string) {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -1065,12 +1081,18 @@ export class SalesService {
       default: startDate = monthAgo;
     }
 
-    // Get completed orders for the period
-    const orders = await this.orderModel.find({
+    // Build query - filter by branch if provided
+    const query: any = {
       shopId: new Types.ObjectId(shopId),
       status: 'completed',
       createdAt: { $gte: startDate },
-    }).exec();
+    };
+    if (branchId) {
+      query.branchId = new Types.ObjectId(branchId);
+    }
+
+    // Get completed orders for the period
+    const orders = await this.orderModel.find(query).exec();
 
     // Calculate revenue and cost of goods sold
     let totalRevenue = 0;

@@ -181,19 +181,18 @@ export default function BranchDetailPage() {
         setActivityLoading(false);
       }
 
-      // Fetch staff members for this branch
-      if (branchData.staffIds && branchData.staffIds.length > 0) {
-        try {
-          const staffRes = await fetch(`${apiUrl}/users?ids=${branchData.staffIds.join(',')}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (staffRes.ok) {
-            const staffData = await staffRes.json();
-            setStaffMembers(staffData.data || staffData || []);
-          }
-        } catch {
-          // Staff endpoint may not exist
+      // Fetch staff members for this branch using staff-assignment API
+      try {
+        const staffRes = await fetch(`${apiUrl}/staff-assignment/branch/${branchId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (staffRes.ok) {
+          const staffData = await staffRes.json();
+          const staffList = Array.isArray(staffData) ? staffData : (staffData.data || []);
+          setStaffMembers(staffList);
         }
+      } catch {
+        // Staff endpoint may not exist
       }
     } catch (err: any) {
       setError(err.message || 'Failed to load branch details');
@@ -638,7 +637,7 @@ export default function BranchDetailPage() {
               <div>
                 <CardTitle>Branch Staff</CardTitle>
                 <CardDescription>
-                  {branch.staffIds?.length || 0} staff members assigned
+                  {staffMembers.length} staff members assigned
                   {branch.maxStaff && ` (max: ${branch.maxStaff})`}
                 </CardDescription>
               </div>
@@ -650,7 +649,7 @@ export default function BranchDetailPage() {
               </Button>
             </CardHeader>
             <CardContent>
-              {!branch.staffIds || branch.staffIds.length === 0 ? (
+              {staffMembers.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <Users className="h-12 w-12 mx-auto mb-3 opacity-50" />
                   <p>No staff assigned to this branch yet</p>
@@ -662,7 +661,7 @@ export default function BranchDetailPage() {
                     Assign Staff Members
                   </Button>
                 </div>
-              ) : staffMembers.length > 0 ? (
+              ) : (
                 <div className="space-y-3">
                   {staffMembers.map((staff) => (
                     <div
@@ -695,17 +694,6 @@ export default function BranchDetailPage() {
                       </div>
                     </div>
                   ))}
-                </div>
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  <p>{branch.staffIds.length} staff member(s) assigned</p>
-                  <Button
-                    variant="link"
-                    onClick={() => router.push('/admin/staff-assignment')}
-                    className="mt-2"
-                  >
-                    View in Staff Assignment
-                  </Button>
                 </div>
               )}
             </CardContent>

@@ -277,11 +277,33 @@ export class InventoryService implements OnModuleInit {
     if (q.status) {
       filter.status = q.status;
     }
-    return this.productModel
+
+    // For branch-specific inventory: filter products that have stock in the branch
+    // If branchId is provided, only show products with branchInventory for that branch
+    if (q.branchId) {
+      const branchKey = `branchInventory.${q.branchId}`;
+      filter[branchKey] = { $exists: true };
+    }
+
+    const products = await this.productModel
       .find(filter)
       .sort({ updatedAt: -1 })
       .limit(Math.min(q.limit ?? 50, 200))
       .exec();
+
+    // If branchId provided, transform stock to show branch-specific stock
+    if (q.branchId) {
+      const branchId = q.branchId; // Capture for type narrowing
+      return products.map(product => {
+        const doc = product.toObject() as any;
+        const branchStock = product.branchInventory?.[branchId]?.stock ?? 0;
+        doc.stock = branchStock;
+        doc._branchStock = branchStock; // Additional field for clarity
+        return doc as ProductDocument;
+      });
+    }
+
+    return products;
   }
 
   /**
@@ -1595,52 +1617,144 @@ export class InventoryService implements OnModuleInit {
   }
 
   /**
-   * Get comprehensive inventory analytics
+   * Add product to a specific branch's inventory
+   * This initializes or updates the branchInventory for a product in a specific branch
+   * Used when importing products to a branch or manually adding branch inventory
    */
-  async getInventoryAnalytics(shopId: string) {
+  async addProductToBranch(
+    shopId: string,
+    productId: string,
+    branchId: string,
+    initialStock: number,
+    addedBy?: string,
+  ): Promise<ProductDocument | null> {
+    const product = await this.productModel.findOne({
+      _id: new Types.ObjectId(productId),
+      shopId: new Types.ObjectId(shopId),
+    });
+
+    if (!product) {
+      throw new BadRequestException('Product not found');
+    }
+
+    // Initialize branchInventory if needed
+    if (!product.branchInventory) {
+      product.branchInventory = {};
+    }
+
+    // Initialize or update branch stock
+    if (!product.branchInventory[branchId]) {
+      product.branchInventory[branchId] = { stock: initialStock };
+    } else {
+      product.branchInventory[branchId].stock = initialStock;
+    }
+
+    const updated = await product.save();
+
+    // Log as stock adjustment
+    if (addedBy) {
+      await this.createStockAdjustment(
+        shopId,
+        productId,
+        initialStock,
+        'branch_import',
+        addedBy,
+        `Product added to branch ${branchId} with initial stock: ${initialStock}`,
+      );
+    }
+
+    return updated;
+  }
+
+  /**
+   * Bulk add products to a branch's inventory
+   * Used for importing multiple products to a branch at once
+   */
+  async bulkAddProductsToBranch(
+    shopId: string,
+    branchId: string,
+    products: { productId: string; stock: number }[],
+    addedBy?: string,
+  ): Promise<{ success: number; failed: number; errors: string[] }> {
+    let success = 0;
+    let failed = 0;
+    const errors: string[] = [];
+
+    for (const item of products) {
+      try {
+        await this.addProductToBranch(shopId, item.productId, branchId, item.stock, addedBy);
+        success++;
+      } catch (error: any) {
+        failed++;
+        errors.push(`Product ${item.productId}: ${error.message}`);
+      }
+    }
+
+    return { success, failed, errors };
+  }
+
+  /**
+   * Get comprehensive inventory analytics
+   * Supports branch-specific analytics when branchId is provided
+   */
+  async getInventoryAnalytics(shopId: string, branchId?: string) {
+    // Build query - if branchId provided, only get products with inventory in that branch
+    const query: any = { shopId: new Types.ObjectId(shopId) };
+    if (branchId) {
+      query[`branchInventory.${branchId}`] = { $exists: true };
+    }
+
     const products = await this.productModel
-      .find({ shopId: new Types.ObjectId(shopId) })
+      .find(query)
       .exec();
+
+    // Helper function to get stock for a product (branch-specific or main)
+    const getStock = (product: any): number => {
+      if (branchId && product.branchInventory?.[branchId]) {
+        return product.branchInventory[branchId].stock || 0;
+      }
+      return product.stock || 0;
+    };
 
     const categories = await this.categoryModel
       .find({ shopId: new Types.ObjectId(shopId) })
       .exec();
 
-    // Basic stats
+    // Basic stats - use getStock for branch-specific stock
     const totalProducts = products.length;
     const activeProducts = products.filter(p => p.status === 'active').length;
     const defaultThreshold = 10;
     // Compare each product's stock against its own lowStockThreshold (or default of 10)
     const lowStockProducts = products.filter(p => {
       const threshold = p.lowStockThreshold ?? defaultThreshold;
-      const stock = p.stock || 0;
+      const stock = getStock(p);
       return stock <= threshold && stock > 0;
     }).length;
-    const outOfStockProducts = products.filter(p => (p.stock || 0) === 0).length;
+    const outOfStockProducts = products.filter(p => getStock(p) === 0).length;
 
-    // Stock value
-    const totalStockValue = products.reduce((sum, p) => sum + ((p.cost || p.price || 0) * (p.stock || 0)), 0);
-    const totalStockUnits = products.reduce((sum, p) => sum + (p.stock || 0), 0);
+    // Stock value - use branch-specific stock
+    const totalStockValue = products.reduce((sum, p) => sum + ((p.cost || p.price || 0) * getStock(p)), 0);
+    const totalStockUnits = products.reduce((sum, p) => sum + getStock(p), 0);
 
     // Average stock level
     const averageStockLevel = totalProducts > 0 ? Math.round(totalStockUnits / totalProducts) : 0;
 
-    // Low stock items - compare each product against its own threshold
+    // Low stock items - compare each product against its own threshold using branch stock
     const lowStockItems = products
       .filter(p => {
         const threshold = p.lowStockThreshold ?? defaultThreshold;
-        return (p.stock || 0) <= threshold;
+        return getStock(p) <= threshold;
       })
-      .sort((a, b) => (a.stock || 0) - (b.stock || 0))
+      .sort((a, b) => getStock(a) - getStock(b))
       .slice(0, 10)
       .map(p => ({
         name: p.name,
-        stock: p.stock || 0,
+        stock: getStock(p),
         threshold: p.lowStockThreshold ?? defaultThreshold,
         sku: p.sku || '',
       }));
 
-    // Stock by category
+    // Stock by category - use branch-specific stock
     const categoryMap = new Map<string, { name: string; count: number; value: number }>();
     products.forEach(p => {
       const catId = p.categoryId?.toString() || 'uncategorized';
@@ -1648,7 +1762,7 @@ export class InventoryService implements OnModuleInit {
       const catName = category?.name || 'Uncategorized';
       const existing = categoryMap.get(catId) || { name: catName, count: 0, value: 0 };
       existing.count += 1;
-      existing.value += (p.cost || p.price || 0) * (p.stock || 0);
+      existing.value += (p.cost || p.price || 0) * getStock(p);
       categoryMap.set(catId, existing);
     });
     const stockByCategory = Array.from(categoryMap.values())
@@ -1659,24 +1773,24 @@ export class InventoryService implements OnModuleInit {
     // Top moving products (based on stock - lower stock = more sold)
     // Since we don't have salesCount, we'll use products with lower stock as proxy for fast-moving
     const topMovingProducts = products
-      .filter(p => p.status === 'active' && (p.stock || 0) > 0)
-      .sort((a, b) => (a.stock || 0) - (b.stock || 0)) // Lower stock = more sold
+      .filter(p => p.status === 'active' && getStock(p) > 0)
+      .sort((a, b) => getStock(a) - getStock(b)) // Lower stock = more sold
       .slice(0, 5)
       .map(p => ({
         name: p.name,
         soldQty: 0, // Would need sales data to calculate
-        currentStock: p.stock || 0,
+        currentStock: getStock(p),
       }));
 
     // Slow moving products (high stock relative to others)
     const slowMovingProducts = products
-      .filter(p => p.status === 'active' && (p.stock || 0) > 20)
-      .sort((a, b) => (b.stock || 0) - (a.stock || 0)) // Higher stock = slower moving
+      .filter(p => p.status === 'active' && getStock(p) > 20)
+      .sort((a, b) => getStock(b) - getStock(a)) // Higher stock = slower moving
       .slice(0, 5)
       .map(p => ({
         name: p.name,
         soldQty: 0, // Would need sales data
-        currentStock: p.stock || 0,
+        currentStock: getStock(p),
         daysSinceLastSale: 30, // Default since we don't track lastSoldAt
       }));
 

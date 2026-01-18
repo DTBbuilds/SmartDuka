@@ -203,7 +203,7 @@ export class Branch {
   // INVENTORY SETTINGS
   // ============================================
 
-  @Prop({ enum: ['shared', 'separate'], default: 'shared' })
+  @Prop({ enum: ['shared', 'separate'], default: 'separate' })
   inventoryType: 'shared' | 'separate';
 
   @Prop({ required: false, default: true })

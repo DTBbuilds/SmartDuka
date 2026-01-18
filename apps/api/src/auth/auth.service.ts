@@ -231,6 +231,7 @@ export class AuthService {
         { email: user.email },
         ipAddress,
         userAgent,
+        (user as any).branchId?.toString(), // Include branchId for branch-specific activity tracking
       );
     }
 
@@ -366,6 +367,7 @@ export class AuthService {
         { method: 'PIN' },
         ipAddress,
         userAgent,
+        (user as any).branchId?.toString(), // Include branchId for branch-specific activity tracking
       );
     }
 
@@ -542,6 +544,7 @@ export class AuthService {
         { email: user.email, method: 'Google OAuth' },
         ipAddress,
         userAgent,
+        (user as any).branchId?.toString(), // Include branchId for branch-specific activity tracking
       );
     }
 
@@ -657,6 +660,7 @@ export class AuthService {
         { email: user.email, method: 'Google OAuth' },
         ipAddress,
         userAgent,
+        (user as any).branchId?.toString(), // Include branchId for branch-specific activity tracking
       );
     }
 
@@ -870,6 +874,7 @@ export class AuthService {
         },
         ipAddress,
         userAgent,
+        (cashier as any).branchId?.toString(), // Include branchId for branch-specific activity tracking
       );
     }
 
@@ -1081,6 +1086,7 @@ export class AuthService {
         { email: user.email },
         ipAddress,
         userAgent,
+        (user as any).branchId?.toString(), // Include branchId for branch-specific activity tracking
       );
     }
 
@@ -1209,6 +1215,7 @@ export class AuthService {
         { method: 'PIN' },
         ipAddress,
         userAgent,
+        (user as any).branchId?.toString(), // Include branchId for branch-specific activity tracking
       );
     }
 

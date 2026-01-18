@@ -61,10 +61,33 @@ export function SubscriptionGuard({
     return currentPlanIndex >= requiredPlanIndex;
   };
 
-  // Check if subscription is active
+  // Check if subscription is active (also checks if period has expired)
   const isSubscriptionActive = () => {
     if (!subscription) return false;
-    return ['trial', 'active'].includes(subscription.status);
+    
+    // Check if status is active or trial
+    const statusActive = ['trial', 'active'].includes(subscription.status);
+    if (!statusActive) return false;
+    
+    // CRITICAL: Also check if the period has actually expired
+    // The backend scheduled job might not have run yet to update the status
+    if (subscription.currentPeriodEnd) {
+      const periodEnd = new Date(subscription.currentPeriodEnd);
+      const now = new Date();
+      if (now > periodEnd) {
+        return false; // Period has expired even if status says active
+      }
+    }
+    
+    return true;
+  };
+
+  // Check if subscription period has expired (even if status hasn't updated)
+  const isSubscriptionExpiredByDate = () => {
+    if (!subscription || !subscription.currentPeriodEnd) return false;
+    const periodEnd = new Date(subscription.currentPeriodEnd);
+    const now = new Date();
+    return now > periodEnd;
   };
 
   // Check resource limits
@@ -85,7 +108,9 @@ export function SubscriptionGuard({
 
     // Subscription not active and not allowing read-only
     if (subscription && !isSubscriptionActive() && !allowReadOnly && !showBlockedMessage) {
-      router.push('/admin/subscription');
+      // Redirect to payments tab in settings for subscription payment
+      // This provides a direct path to renew/pay for the subscription
+      router.push('/settings?tab=payments');
       return;
     }
   }, [loading, subscription, router, showBlockedMessage, allowReadOnly]);
@@ -114,22 +139,35 @@ export function SubscriptionGuard({
     return null; // Will redirect
   }
 
-  // Subscription not active
+  // Subscription not active (either by status or by expired period)
   if (!isSubscriptionActive() && !allowReadOnly) {
     if (showBlockedMessage) {
+      // Determine the right message based on why subscription is inactive
+      let title = "Subscription Inactive";
+      let message = "Your subscription has expired. Please renew to continue.";
+      
+      if (isSubscriptionExpiredByDate() && ['trial', 'active'].includes(subscription.status)) {
+        // Period expired but status not updated yet
+        title = "Subscription Expired";
+        message = "Your subscription period has ended. Please make a payment to continue using SmartDuka.";
+      } else if (subscription.status === 'past_due') {
+        title = "Payment Overdue";
+        message = "Your subscription payment is overdue. Please pay to continue using this feature.";
+      } else if (subscription.status === 'suspended') {
+        title = "Subscription Suspended";
+        message = "Your subscription has been suspended due to non-payment. Please pay your outstanding balance.";
+      } else if (subscription.status === 'pending_payment') {
+        title = "Payment Required";
+        message = "Your subscription is pending payment. Please complete payment to activate your account.";
+      }
+
       return (
         <SubscriptionBlockedMessage
           icon={<AlertTriangle className="h-12 w-12 text-yellow-500" />}
-          title="Subscription Inactive"
-          message={
-            subscription.status === 'past_due'
-              ? "Your subscription payment is overdue. Please pay to continue using this feature."
-              : subscription.status === 'suspended'
-              ? "Your subscription has been suspended. Please contact support."
-              : "Your subscription has expired. Please renew to continue."
-          }
-          actionLabel="Manage Subscription"
-          actionHref="/admin/subscription"
+          title={title}
+          message={message}
+          actionLabel="Make Payment"
+          actionHref="/settings?tab=payments"
         />
       );
     }

@@ -88,6 +88,13 @@ export class Receipt {
   @Prop()
   shopTaxPin?: string;
 
+  // Branch-specific customization
+  @Prop()
+  branchName?: string;
+
+  @Prop()
+  headerMessage?: string;
+
   // Transaction details
   @Prop({ type: [ReceiptItemSchema], default: [] })
   items: ReceiptItem[];

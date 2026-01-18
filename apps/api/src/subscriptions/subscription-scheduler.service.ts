@@ -42,6 +42,27 @@ export class SubscriptionSchedulerService {
   }
 
   /**
+   * Process DAILY billing cycle subscriptions more frequently (every 4 hours)
+   * 
+   * Daily subscriptions can expire within 24 hours, so we need to check more often
+   * than the daily 9 AM job. This ensures:
+   * - Daily subscriptions are expired promptly when their period ends
+   * - Users are blocked from access as soon as their daily period expires
+   * - Renewal invoices are created promptly
+   */
+  @Cron('0 */4 * * *') // Every 4 hours
+  async processDailySubscriptions(): Promise<void> {
+    this.logger.log('Starting daily billing cycle subscription check...');
+    
+    try {
+      await this.subscriptionsService.processDailyBillingSubscriptions();
+      this.logger.log('Completed daily billing subscription check');
+    } catch (error) {
+      this.logger.error('Failed to process daily billing subscriptions:', error);
+    }
+  }
+
+  /**
    * Send dunning notifications (runs daily at 10 AM)
    * This handles:
    * - Expiry warnings (7, 3, 1 days before)

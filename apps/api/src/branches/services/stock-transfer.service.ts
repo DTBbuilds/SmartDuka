@@ -374,6 +374,8 @@ export class StockTransferService {
   /**
    * Mark transfer as shipped (in transit)
    * This deducts stock from source branch
+   * NOTE: For branch-to-branch transfers, we only modify branchInventory, NOT main stock
+   * Main stock is only modified when transferring to/from the main store
    */
   async ship(
     transferId: string,
@@ -387,23 +389,39 @@ export class StockTransferService {
       throw new BadRequestException(`Cannot ship transfer with status: ${transfer.status}`);
     }
 
-    // Deduct stock from source branch (skip branch inventory if from main store)
+    // Deduct stock from source branch
     for (const item of transfer.items) {
-      if (transfer.fromBranchId && !transfer.isFromMainStore) {
-        const fromBranchKey = `branchInventory.${transfer.fromBranchId.toString()}.stock`;
-        
-        // Update branch-specific inventory
-        await this.productModel.updateOne(
-          { _id: item.productId, shopId: new Types.ObjectId(shopId) },
-          { $inc: { [fromBranchKey]: -item.quantity, stock: -item.quantity } },
-        );
-      } else {
-        // Main store - only update main stock
+      if (transfer.isFromMainStore) {
+        // From main store - only update main stock
         await this.productModel.updateOne(
           { _id: item.productId, shopId: new Types.ObjectId(shopId) },
           { $inc: { stock: -item.quantity } },
         );
+      } else if (transfer.fromBranchId) {
+        // From a branch - only update branch inventory, NOT main stock
+        const fromBranchKey = `branchInventory.${transfer.fromBranchId.toString()}.stock`;
+        
+        await this.productModel.updateOne(
+          { _id: item.productId, shopId: new Types.ObjectId(shopId) },
+          { $inc: { [fromBranchKey]: -item.quantity } },
+        );
       }
+
+      // Create audit log for product history
+      await this.auditModel.create({
+        shopId: new Types.ObjectId(shopId),
+        branchId: transfer.fromBranchId,
+        userId: new Types.ObjectId(userId),
+        action: 'stock_transfer_shipped',
+        resource: 'product',
+        resourceId: item.productId,
+        changes: {
+          transferNumber: transfer.transferNumber,
+          quantity: -item.quantity,
+          fromBranch: transfer.fromBranchName,
+          toBranch: transfer.toBranchName,
+        },
+      });
     }
 
     transfer.status = 'in_transit';
@@ -478,21 +496,62 @@ export class StockTransferService {
       const goodQuantity = receivedItem.receivedQuantity - (receivedItem.damagedQuantity || 0);
       
       if (goodQuantity > 0) {
-        if (transfer.toBranchId && !transfer.isToMainStore) {
-          const toBranchKey = `branchInventory.${transfer.toBranchId.toString()}.stock`;
-          
-          // Update branch-specific inventory and main stock
-          await this.productModel.updateOne(
-            { _id: transferItem.productId, shopId: new Types.ObjectId(shopId) },
-            { $inc: { [toBranchKey]: goodQuantity, stock: goodQuantity } },
-          );
-        } else {
-          // Main store - only update main stock
+        if (transfer.isToMainStore) {
+          // To main store - only update main stock
           await this.productModel.updateOne(
             { _id: transferItem.productId, shopId: new Types.ObjectId(shopId) },
             { $inc: { stock: goodQuantity } },
           );
+        } else if (transfer.toBranchId) {
+          // To a branch - only update branch inventory, NOT main stock
+          // First ensure branchInventory exists for this product/branch
+          const toBranchId = transfer.toBranchId.toString();
+          const toBranchKey = `branchInventory.${toBranchId}.stock`;
+          
+          // Use findOneAndUpdate to ensure branchInventory is initialized
+          // This handles the case where the product doesn't have inventory in the destination branch yet
+          await this.productModel.findOneAndUpdate(
+            { _id: transferItem.productId, shopId: new Types.ObjectId(shopId) },
+            [
+              {
+                $set: {
+                  branchInventory: {
+                    $mergeObjects: [
+                      { $ifNull: ['$branchInventory', {}] },
+                      {
+                        [toBranchId]: {
+                          stock: {
+                            $add: [
+                              { $ifNull: [`$branchInventory.${toBranchId}.stock`, 0] },
+                              goodQuantity
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          );
         }
+
+        // Create audit log for product history
+        await this.auditModel.create({
+          shopId: new Types.ObjectId(shopId),
+          branchId: transfer.toBranchId,
+          userId: new Types.ObjectId(userId),
+          action: 'stock_transfer_received',
+          resource: 'product',
+          resourceId: transferItem.productId,
+          changes: {
+            transferNumber: transfer.transferNumber,
+            quantity: goodQuantity,
+            damagedQuantity: receivedItem.damagedQuantity || 0,
+            fromBranch: transfer.fromBranchName,
+            toBranch: transfer.toBranchName,
+          },
+        });
       }
     }
 
@@ -536,21 +595,37 @@ export class StockTransferService {
     // If already shipped, need to return stock to source
     if (transfer.status === 'in_transit') {
       for (const item of transfer.items) {
-        if (transfer.fromBranchId && !transfer.isFromMainStore) {
-          const fromBranchKey = `branchInventory.${transfer.fromBranchId.toString()}.stock`;
-          
-          // Return stock to source branch
-          await this.productModel.updateOne(
-            { _id: item.productId, shopId: new Types.ObjectId(shopId) },
-            { $inc: { [fromBranchKey]: item.quantity, stock: item.quantity } },
-          );
-        } else {
+        if (transfer.isFromMainStore) {
           // Main store - only update main stock
           await this.productModel.updateOne(
             { _id: item.productId, shopId: new Types.ObjectId(shopId) },
             { $inc: { stock: item.quantity } },
           );
+        } else if (transfer.fromBranchId) {
+          // From a branch - only update branch inventory, NOT main stock
+          const fromBranchKey = `branchInventory.${transfer.fromBranchId.toString()}.stock`;
+          
+          await this.productModel.updateOne(
+            { _id: item.productId, shopId: new Types.ObjectId(shopId) },
+            { $inc: { [fromBranchKey]: item.quantity } },
+          );
         }
+
+        // Create audit log for product history
+        await this.auditModel.create({
+          shopId: new Types.ObjectId(shopId),
+          branchId: transfer.fromBranchId,
+          userId: new Types.ObjectId(userId),
+          action: 'stock_transfer_cancelled',
+          resource: 'product',
+          resourceId: item.productId,
+          changes: {
+            transferNumber: transfer.transferNumber,
+            quantity: item.quantity,
+            reason: reason,
+            stockReturned: true,
+          },
+        });
       }
     }
 

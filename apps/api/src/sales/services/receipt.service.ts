@@ -1,10 +1,24 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Optional } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { nanoid } from 'nanoid';
 import { Receipt, ReceiptDocument } from '../schemas/receipt.schema';
 import { Order, OrderDocument } from '../schemas/order.schema';
 import { CreateReceiptDto } from '../dto/receipt.dto';
+
+// Import Branch schema for receipt customization
+interface BranchOperations {
+  receiptHeader?: string;
+  receiptFooter?: string;
+  receiptLogo?: string;
+}
+
+interface BranchDocument {
+  _id: Types.ObjectId;
+  name: string;
+  code: string;
+  operations?: BranchOperations;
+}
 
 export interface ReceiptFilters {
   from?: string;
@@ -21,6 +35,7 @@ export class ReceiptService {
   constructor(
     @InjectModel(Receipt.name) private readonly receiptModel: Model<ReceiptDocument>,
     @InjectModel(Order.name) private readonly orderModel: Model<OrderDocument>,
+    @Optional() @InjectModel('Branch') private readonly branchModel?: Model<BranchDocument>,
   ) {}
 
   /**
@@ -34,6 +49,7 @@ export class ReceiptService {
 
   /**
    * Create receipt from order
+   * Supports branch-specific receipt customization (header, footer, logo)
    */
   async createFromOrder(shopId: string, branchId: string | undefined, dto: CreateReceiptDto): Promise<ReceiptDocument> {
     // Get order
@@ -59,6 +75,21 @@ export class ReceiptService {
       return existingReceipt;
     }
 
+    // Fetch branch settings for receipt customization if branchId provided
+    let branchReceiptSettings: BranchOperations | undefined;
+    let branchName: string | undefined;
+    if (branchId && this.branchModel) {
+      try {
+        const branch = await this.branchModel.findById(branchId).exec();
+        if (branch) {
+          branchReceiptSettings = branch.operations;
+          branchName = branch.name;
+        }
+      } catch {
+        // Ignore branch lookup errors, continue with default settings
+      }
+    }
+
     // Determine primary payment method
     let primaryPaymentMethod = 'cash';
     if (order.payments && order.payments.length > 0) {
@@ -68,6 +99,11 @@ export class ReceiptService {
         primaryPaymentMethod = 'mixed';
       }
     }
+
+    // Use branch-specific customization if available
+    const headerMessage = branchReceiptSettings?.receiptHeader;
+    const footerMessage = branchReceiptSettings?.receiptFooter || dto.footerMessage || 'Thank you for your purchase!';
+    const shopLogo = branchReceiptSettings?.receiptLogo || dto.shopLogo;
 
     // Create receipt
     const receipt = new this.receiptModel({
@@ -80,8 +116,10 @@ export class ReceiptService {
       shopAddress: dto.shopAddress,
       shopPhone: dto.shopPhone,
       shopEmail: dto.shopEmail,
-      shopLogo: dto.shopLogo,
+      shopLogo: shopLogo,
       shopTaxPin: dto.shopTaxPin,
+      branchName: branchName,
+      headerMessage: headerMessage,
       items: order.items.map(item => ({
         name: item.name,
         quantity: item.quantity,
@@ -102,7 +140,7 @@ export class ReceiptService {
       cashierId: order.cashierId ? new Types.ObjectId(order.cashierId) : undefined,
       cashierName: order.cashierName,
       notes: order.notes,
-      footerMessage: dto.footerMessage || 'Thank you for your purchase!',
+      footerMessage: footerMessage,
       format: dto.format || 'thermal',
       status: 'active',
     });
@@ -269,6 +307,7 @@ export class ReceiptService {
 
   /**
    * Generate formatted receipt text (for thermal printer - 80mm/58mm)
+   * Supports branch-specific header/footer customization
    */
   generateReceiptText(receipt: ReceiptDocument, width: 32 | 42 = 32): string {
     const lines: string[] = [];
@@ -278,6 +317,12 @@ export class ReceiptService {
     // Header
     lines.push(divider);
     lines.push(this.centerText(receipt.shopName.toUpperCase(), width));
+    
+    // Branch name if available
+    if ((receipt as any).branchName) {
+      lines.push(this.centerText((receipt as any).branchName, width));
+    }
+    
     if (receipt.shopAddress) {
       lines.push(this.centerText(receipt.shopAddress, width));
     }
@@ -287,6 +332,13 @@ export class ReceiptService {
     if (receipt.shopTaxPin) {
       lines.push(this.centerText(`PIN: ${receipt.shopTaxPin}`, width));
     }
+    
+    // Branch-specific header message
+    if ((receipt as any).headerMessage) {
+      lines.push(thinDivider);
+      lines.push(this.centerText((receipt as any).headerMessage, width));
+    }
+    
     lines.push(divider);
 
     // Receipt info

@@ -94,11 +94,29 @@ export class SubscriptionStatusGuard implements CanActivate {
         });
       }
 
+      // CRITICAL: Check if subscription period has actually expired
+      // The scheduled job might not have run yet to update the status
+      const now = new Date();
+      const periodEnd = subscription.currentPeriodEnd;
+      const isExpiredByDate = periodEnd && now > periodEnd;
+
+      if (isExpiredByDate && (subscription.status === SubscriptionStatus.ACTIVE || subscription.status === SubscriptionStatus.TRIAL)) {
+        this.logger.warn(`Shop ${user.shopId} subscription expired on ${periodEnd.toISOString()} but status is still ${subscription.status}. Blocking access.`);
+        throw new ForbiddenException({
+          message: 'Your subscription has expired. Please renew your subscription to continue using SmartDuka.',
+          code: 'SUBSCRIPTION_EXPIRED',
+          shopId: user.shopId,
+          requiresPayment: true,
+          expiredAt: periodEnd,
+          redirectTo: '/settings?tab=payments',
+        });
+      }
+
       // Check subscription status
       switch (subscription.status) {
         case SubscriptionStatus.ACTIVE:
         case SubscriptionStatus.TRIAL:
-          // Full access
+          // Full access (already verified not expired by date above)
           return true;
 
         case SubscriptionStatus.PAST_DUE:

@@ -143,7 +143,14 @@ export class InventoryController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
   @Get('stock/low-stock')
-  getLowStockProducts(@CurrentUser() user: any) {
+  getLowStockProducts(
+    @Query('branchId') branchId: string,
+    @CurrentUser() user: any,
+  ) {
+    // If branchId is provided, use branch-specific low stock method
+    if (branchId) {
+      return this.inventoryService.getLowStockProductsByBranch(user.shopId, branchId, 10);
+    }
     return this.inventoryService.getLowStockProducts(user.shopId, 10);
   }
 
@@ -392,11 +399,86 @@ export class InventoryController {
   /**
    * Get inventory analytics
    * GET /inventory/analytics
+   * Supports branch-specific analytics via branchId query param
    */
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
   @Get('analytics')
-  async getInventoryAnalytics(@CurrentUser() user: any) {
-    return this.inventoryService.getInventoryAnalytics(user.shopId);
+  async getInventoryAnalytics(
+    @Query('branchId') branchId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.inventoryService.getInventoryAnalytics(user.shopId, branchId);
+  }
+
+  /**
+   * Add a product to a specific branch's inventory
+   * POST /inventory/branch/:branchId/products/add
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'branch_admin', 'branch_manager')
+  @Post('branch/:branchId/products/add')
+  async addProductToBranch(
+    @Param('branchId') branchId: string,
+    @Body() dto: { productId: string; stock: number },
+    @CurrentUser() user: any,
+  ) {
+    const result = await this.inventoryService.addProductToBranch(
+      user.shopId,
+      dto.productId,
+      branchId,
+      dto.stock,
+      user.sub,
+    );
+    return {
+      success: true,
+      message: 'Product added to branch inventory',
+      data: result,
+    };
+  }
+
+  /**
+   * Bulk add products to a branch's inventory
+   * POST /inventory/branch/:branchId/products/bulk-add
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'branch_admin')
+  @Post('branch/:branchId/products/bulk-add')
+  async bulkAddProductsToBranch(
+    @Param('branchId') branchId: string,
+    @Body() dto: { products: { productId: string; stock: number }[] },
+    @CurrentUser() user: any,
+  ) {
+    const result = await this.inventoryService.bulkAddProductsToBranch(
+      user.shopId,
+      branchId,
+      dto.products,
+      user.sub,
+    );
+    return {
+      success: true,
+      message: `Added ${result.success} products to branch inventory`,
+      data: result,
+    };
+  }
+
+  /**
+   * Get products available for a specific branch
+   * GET /inventory/branch/:branchId/products
+   * Returns only products that have inventory in this branch
+   */
+  @UseGuards(JwtAuthGuard)
+  @Get('branch/:branchId/products')
+  async getBranchProducts(
+    @Param('branchId') branchId: string,
+    @Query() query: QueryProductsDto,
+    @CurrentUser() user: any,
+  ) {
+    // Override branchId in query to filter by this branch
+    const products = await this.inventoryService.listProducts(user.shopId, {
+      ...query,
+      branchId,
+    });
+    return products;
   }
 }

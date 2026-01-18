@@ -1,11 +1,7 @@
 node_modules
 
 # Environment variables
-.env
-.env.local
-.env.development
-.env.production
-.env*.local
+
 *.env
 apps/api/.env
 apps/web/.env

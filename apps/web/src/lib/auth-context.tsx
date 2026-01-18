@@ -343,7 +343,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       console.warn('Failed to cleanup hot data on logout:', err);
     }
+
+    // Clear subscription cache specifically
+    try {
+      window.localStorage.removeItem('smartduka:cache:subscription');
+      window.localStorage.removeItem('smartduka:cache:plans');
+      window.localStorage.removeItem('smartduka:cache:invoices');
+      window.localStorage.removeItem('smartduka:cache:pending_invoices');
+    } catch (err) {
+      console.warn('Failed to clear subscription cache:', err);
+    }
     
+    // Clear state immediately
     setUser(null);
     setShop(null);
     setToken(null);
@@ -352,6 +363,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Use secure session clear (handles localStorage, cookie, and session meta)
     clearSession();
     window.localStorage.removeItem(DEMO_MODE_KEY);
+
+    // Clear auth cookie explicitly
+    document.cookie = 'smartduka_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+    
+    // Force reload to clear any in-memory state and ensure clean redirect
+    // Use replace to prevent back button returning to protected page
+    window.location.replace('/login');
   };
 
   // Demo mode functions

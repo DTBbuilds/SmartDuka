@@ -1321,9 +1321,16 @@ export class SubscriptionsService {
 
     const now = new Date();
     const periodEnd = new Date(now);
-    if (subscription.billingCycle === BillingCycle.ANNUAL) {
+    
+    // Calculate period end based on billing cycle
+    if (subscription.billingCycle === BillingCycle.DAILY) {
+      // Daily billing - use numberOfDays (default 1 day)
+      const days = subscription.numberOfDays || 1;
+      periodEnd.setDate(periodEnd.getDate() + days);
+    } else if (subscription.billingCycle === BillingCycle.ANNUAL) {
       periodEnd.setFullYear(periodEnd.getFullYear() + 1);
     } else {
+      // Monthly (default)
       periodEnd.setMonth(periodEnd.getMonth() + 1);
     }
 
@@ -1339,17 +1346,19 @@ export class SubscriptionsService {
     await subscription.save();
 
     // Create new billing invoice
+    const billingCycleLabel = subscription.billingCycle === BillingCycle.ANNUAL ? 'Annual' : 
+                              subscription.billingCycle === BillingCycle.DAILY ? 'Daily' : 'Monthly';
     await this.createInvoice(
       shopId,
       subscription._id.toString(),
       InvoiceType.SUBSCRIPTION,
-      `${plan.name} Plan - ${subscription.billingCycle === BillingCycle.ANNUAL ? 'Annual' : 'Monthly'}`,
+      `${plan.name} Plan - ${billingCycleLabel}`,
       subscription.currentPrice,
       now,
       periodEnd,
     );
 
-    this.logger.log(`Reactivated subscription for shop ${shopId}`);
+    this.logger.log(`Reactivated subscription for shop ${shopId}, period ends: ${periodEnd.toISOString()}`);
 
     return this.mapSubscriptionToResponse(subscription, plan);
   }
@@ -1638,9 +1647,16 @@ export class SubscriptionsService {
       const now = new Date();
       const periodEnd = new Date(now);
       
-      if (subscription.billingCycle === BillingCycle.ANNUAL) {
+      // Calculate period end based on billing cycle
+      if (subscription.billingCycle === BillingCycle.DAILY) {
+        // Daily billing - use numberOfDays (default 1 day)
+        const days = subscription.numberOfDays || 1;
+        periodEnd.setDate(periodEnd.getDate() + days);
+        this.logger.log(`Daily subscription: setting period end to ${days} day(s) from now`);
+      } else if (subscription.billingCycle === BillingCycle.ANNUAL) {
         periodEnd.setFullYear(periodEnd.getFullYear() + 1);
       } else {
+        // Monthly (default)
         periodEnd.setMonth(periodEnd.getMonth() + 1);
       }
 
@@ -1657,7 +1673,7 @@ export class SubscriptionsService {
       subscription.failedPaymentAttempts = 0;
 
       await subscription.save();
-      this.logger.log(`Subscription activated for shop ${subscription.shopId} after payment verification`);
+      this.logger.log(`Subscription activated for shop ${subscription.shopId} after payment verification, period ends: ${periodEnd.toISOString()}`);
     }
   }
 
@@ -1892,6 +1908,60 @@ export class SubscriptionsService {
       await subscription.save();
       this.logger.log(`Suspended subscription ${subscription._id}`);
     }
+  }
+
+  /**
+   * Process DAILY billing cycle subscriptions
+   * Called more frequently (every 4 hours) to ensure daily subscriptions expire promptly
+   */
+  async processDailyBillingSubscriptions(): Promise<void> {
+    const now = new Date();
+    this.logger.log('Processing daily billing subscriptions...');
+
+    // Find all daily subscriptions that have expired
+    const expiredDaily = await this.subscriptionModel.find({
+      billingCycle: BillingCycle.DAILY,
+      status: { $in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIAL] },
+      currentPeriodEnd: { $lte: now },
+    });
+
+    this.logger.log(`Found ${expiredDaily.length} expired daily subscriptions`);
+
+    for (const subscription of expiredDaily) {
+      const plan = await this.planModel.findById(subscription.planId);
+      
+      if (subscription.autoRenew && plan) {
+        // Create renewal invoice for auto-renew subscriptions
+        const days = subscription.numberOfDays || 1;
+        const periodStart = new Date();
+        const periodEnd = new Date();
+        periodEnd.setDate(periodEnd.getDate() + days);
+
+        await this.createInvoice(
+          subscription.shopId.toString(),
+          subscription._id.toString(),
+          InvoiceType.SUBSCRIPTION,
+          `${plan.name} Plan Renewal - ${days} day(s)`,
+          subscription.currentPrice,
+          periodStart,
+          periodEnd,
+        );
+
+        // Set to PAST_DUE with grace period
+        subscription.status = SubscriptionStatus.PAST_DUE;
+        subscription.gracePeriodEndDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days grace
+        
+        this.logger.log(`Daily subscription ${subscription._id} expired, created renewal invoice, set to PAST_DUE`);
+      } else {
+        // No auto-renew - expire the subscription
+        subscription.status = SubscriptionStatus.EXPIRED;
+        this.logger.log(`Daily subscription ${subscription._id} expired (auto-renew off)`);
+      }
+
+      await subscription.save();
+    }
+
+    this.logger.log(`Processed ${expiredDaily.length} daily billing subscriptions`);
   }
 
   // ============================================

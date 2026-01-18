@@ -29,7 +29,7 @@ interface StaffMember {
   name: string;
   email: string;
   role: string;
-  branchId?: string;
+  branchId?: string | { _id: string; name: string; code?: string };
   status: 'active' | 'disabled';
 }
 
@@ -87,7 +87,7 @@ export default function StaffAssignmentPage() {
     setEditingStaff(staffMember);
     setFormData({
       userId: staffMember._id,
-      branchId: staffMember.branchId || '',
+      branchId: getBranchIdString(staffMember.branchId),
     });
     setIsDialogOpen(true);
   };
@@ -157,10 +157,22 @@ export default function StaffAssignmentPage() {
     }
   };
 
-  const getBranchName = (branchId?: string) => {
+  const getBranchName = (branchId?: string | { _id: string; name: string; code?: string }) => {
     if (!branchId) return 'Unassigned';
+    // Handle populated branchId object
+    if (typeof branchId === 'object' && branchId.name) {
+      return branchId.name;
+    }
+    // Handle string branchId - lookup from branches list
     const branch = branches.find((b) => b._id === branchId);
     return branch?.name || 'Unknown';
+  };
+
+  // Helper to get branchId as string (for API calls)
+  const getBranchIdString = (branchId?: string | { _id: string; name: string; code?: string }): string => {
+    if (!branchId) return '';
+    if (typeof branchId === 'object') return branchId._id;
+    return branchId;
   };
 
   return (
@@ -235,7 +247,7 @@ export default function StaffAssignmentPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleRemove(member._id, member.branchId!)}
+                        onClick={() => handleRemove(member._id, getBranchIdString(member.branchId))}
                         className="gap-2 text-red-600 hover:text-red-700"
                       >
                         <Trash2 className="h-4 w-4" />

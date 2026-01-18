@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/lib/auth-context';
+import { useBranch } from '@/lib/branch-context';
 import { config } from '@/lib/config';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Search, ShoppingCart, Plus, Minus, Trash2 } from 'lucide-react';
+import { Search, ShoppingCart, Plus, Minus, Trash2, Store } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 
 interface Product {
@@ -13,6 +14,7 @@ interface Product {
   name: string;
   price: number;
   stock?: number;
+  _branchStock?: number;
 }
 
 interface CartItem {
@@ -24,18 +26,20 @@ interface CartItem {
 
 export default function POSTerminalPage() {
   const { token } = useAuth();
+  const { currentBranch } = useBranch();
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [search, setSearch] = useState('');
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    fetchProducts();
-  }, []);
-
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async () => {
+    if (!token) return;
+    
     try {
-      const res = await fetch(`${config.apiUrl}/inventory/products`, {
+      setIsLoading(true);
+      // Include branchId in the request to get branch-specific inventory
+      const branchParam = currentBranch?._id ? `&branchId=${currentBranch._id}` : '';
+      const res = await fetch(`${config.apiUrl}/inventory/products?limit=200${branchParam}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const text = await res.text();
@@ -49,7 +53,12 @@ export default function POSTerminalPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [token, currentBranch?._id]);
+
+  // Initial load and reload when branch changes
+  useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
 
   const addToCart = (product: Product) => {
     const existing = cart.find((item) => item.productId === product._id);
@@ -101,6 +110,16 @@ export default function POSTerminalPage() {
   return (
     <div className="flex h-screen bg-background">
       <div className="flex-1 p-4 overflow-auto">
+        {/* Branch indicator */}
+        {currentBranch && (
+          <div className="mb-4 p-3 bg-primary/10 rounded-lg flex items-center gap-2">
+            <Store className="h-4 w-4 text-primary" />
+            <span className="text-sm font-medium">
+              {currentBranch.name} ({currentBranch.code})
+            </span>
+          </div>
+        )}
+        
         <div className="mb-4">
           <Input
             placeholder="Search products..."

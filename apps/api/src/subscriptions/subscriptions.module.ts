@@ -11,6 +11,8 @@ import { SubscriptionDunningService } from './subscription-dunning.service';
 import { SubscriptionsController } from './subscriptions.controller';
 import { SubscriptionPaymentController } from './subscription-payment.controller';
 import { SubscriptionEnforcementController } from './subscription-enforcement.controller';
+import { SubscriptionAuditController } from './subscription-audit.controller';
+import { SubscriptionAuditService } from './subscription-audit.service';
 import { Subscription, SubscriptionSchema } from './schemas/subscription.schema';
 import { SubscriptionPlan, SubscriptionPlanSchema } from './schemas/subscription-plan.schema';
 import { SubscriptionInvoice, SubscriptionInvoiceSchema } from './schemas/subscription-invoice.schema';
@@ -42,7 +44,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     PaymentsModule,
     NotificationsModule,
   ],
-  controllers: [SubscriptionsController, SubscriptionPaymentController, SubscriptionEnforcementController],
+  controllers: [SubscriptionsController, SubscriptionPaymentController, SubscriptionEnforcementController, SubscriptionAuditController],
   providers: [
     SubscriptionsService, 
     SubscriptionGuardService, 
@@ -51,6 +53,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     SubscriptionMigrationService,
     SubscriptionEnforcementService,
     SubscriptionDunningService,
+    SubscriptionAuditService,
     PaymentAttemptService,
     ActivityLogService,
   ],
@@ -61,6 +64,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     SubscriptionMigrationService, 
     SubscriptionEnforcementService,
     SubscriptionDunningService,
+    SubscriptionAuditService,
     PaymentAttemptService, 
     ActivityLogService,
   ],
