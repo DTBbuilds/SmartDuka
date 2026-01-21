@@ -86,9 +86,9 @@ export default function PrivacyPolicyPage() {
           <p className="text-gray-600 mb-6">
             If you have questions about this Privacy Policy, please contact us at:
             <br />
-            Email: privacy@smartduka.co.ke
+            Email: smartdukainfo@gmail.com
             <br />
-            Phone: +254 700 000 000
+            Phone: 0729983567 / 0104160502
           </p>
         </div>
       </div>

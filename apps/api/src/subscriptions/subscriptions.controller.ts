@@ -423,7 +423,7 @@ export class SubscriptionsController {
 
     <div class="footer">
       <p>Thank you for using SmartDuka!</p>
-      <p style="margin-top: 8px;">Questions? Contact us at <a href="mailto:support@smartduka.co.ke">support@smartduka.co.ke</a></p>
+      <p style="margin-top: 8px;">Questions? Contact us at <a href="mailto:smartdukainfo@gmail.com">smartdukainfo@gmail.com</a></p>
     </div>
   </div>
 </body>
@@ -539,6 +539,48 @@ export class SubscriptionsController {
   }
 
   /**
+   * Manually update a shop's subscription (super admin only)
+   * Allows changing plan, status, billing cycle, and period dates
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('super_admin')
+  @Put('admin/:shopId/update')
+  async adminUpdateSubscription(
+    @Param('shopId') shopId: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: {
+      planCode?: string;
+      status?: string;
+      billingCycle?: string;
+      currentPeriodEnd?: string;
+      currentPrice?: number;
+    },
+  ): Promise<{ success: boolean; message: string }> {
+    this.logger.log(`Super admin ${user.email} updating subscription for shop ${shopId}`);
+    return this.subscriptionsService.adminUpdateSubscription(shopId, dto);
+  }
+
+  /**
+   * Grant grace period to a shop's subscription (super admin only)
+   * Extends subscription period and optionally sends notification email
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('super_admin')
+  @Post('admin/:shopId/grace-period')
+  async adminGrantGracePeriod(
+    @Param('shopId') shopId: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: {
+      days: number;
+      reason?: string;
+      sendEmail?: boolean;
+    },
+  ): Promise<{ success: boolean; message: string; newExpiryDate: string }> {
+    this.logger.log(`Super admin ${user.email} granting ${dto.days} days grace period to shop ${shopId}`);
+    return this.subscriptionsService.adminGrantGracePeriod(shopId, dto);
+  }
+
+  /**
    * Suspend a shop's subscription (super admin only)
    */
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -578,5 +620,33 @@ export class SubscriptionsController {
   ): Promise<{ fixed: number; skipped: number; errors: number; details: string[] }> {
     this.logger.log(`Super admin ${user.email} fixing daily subscription periods`);
     return this.migrationService.fixDailySubscriptionPeriods();
+  }
+
+  /**
+   * Fix trial subscriptions with wrong period dates (super admin only)
+   * Trial should be 14 days from subscription creation date
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('super_admin')
+  @Post('admin/fix-trial-subscriptions')
+  async fixTrialSubscriptions(
+    @CurrentUser() user: JwtPayload,
+  ): Promise<{ fixed: number; skipped: number; details: string[] }> {
+    this.logger.log(`Super admin ${user.email} fixing trial subscription periods`);
+    return this.subscriptionsService.fixTrialSubscriptionPeriods();
+  }
+
+  /**
+   * Audit and fix subscription mismatches (super admin only)
+   * Checks for status mismatches, past_due accounts that should be suspended, etc.
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('super_admin')
+  @Post('admin/audit-subscriptions')
+  async auditSubscriptions(
+    @CurrentUser() user: JwtPayload,
+  ): Promise<{ audited: number; fixed: number; issues: string[] }> {
+    this.logger.log(`Super admin ${user.email} auditing subscriptions`);
+    return this.subscriptionsService.auditAndFixSubscriptions();
   }
 }

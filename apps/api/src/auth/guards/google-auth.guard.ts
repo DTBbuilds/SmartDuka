@@ -15,7 +15,7 @@ export class GoogleAuthGuard extends AuthGuard('google') {
     // Check for OAuth error in query params (e.g., user denied access)
     const error = request.query?.error;
     if (error) {
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+      const frontendUrl = process.env.FRONTEND_URL || 'https://smartduka-eta.vercel.app';
       let errorMessage = 'Google sign-in was cancelled or failed.';
       
       if (error === 'access_denied') {

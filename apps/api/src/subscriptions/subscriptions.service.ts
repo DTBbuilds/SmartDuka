@@ -25,6 +25,8 @@ import {
 } from './dto/subscription.dto';
 
 import { SystemConfig, SystemConfigDocument, SystemConfigType } from '../super-admin/schemas/system-config.schema';
+import { EmailService } from '../notifications/email.service';
+import { EMAIL_TEMPLATES } from '../notifications/email-templates';
 
 // Grace period in days before suspension
 const GRACE_PERIOD_DAYS = 7;
@@ -55,6 +57,7 @@ export class SubscriptionsService {
     @InjectModel(SystemConfig.name)
     private readonly systemConfigModel: Model<SystemConfigDocument>,
     private readonly configService: ConfigService,
+    private readonly emailService: EmailService,
   ) {}
 
   /**
@@ -784,8 +787,9 @@ export class SubscriptionsService {
       throw new NotFoundException(`Plan '${dto.newPlanCode}' not found`);
     }
 
-    // Same plan - no change needed
-    if (subscription.planCode === dto.newPlanCode) {
+    // Same plan - allow renewal if subscription is expired, suspended, or past_due
+    const allowRenewalStatuses = ['expired', 'suspended', 'past_due', 'cancelled', 'pending_payment'];
+    if (subscription.planCode === dto.newPlanCode && !allowRenewalStatuses.includes(subscription.status)) {
       throw new BadRequestException('Already on this plan');
     }
 
@@ -865,6 +869,35 @@ export class SubscriptionsService {
 
       await subscription.save();
       this.logger.log(`Downgraded subscription for shop ${shopId} from ${oldPlanCode} to ${newPlan.code}`);
+
+      // Send plan change notification email
+      try {
+        const shop = await this.shopModel.findById(shopId).lean();
+        const admin = await this.userModel.findOne({ shopId: new Types.ObjectId(shopId), role: 'admin' }).lean();
+        const previousPlan = currentPlan?.name || oldPlanCode;
+        
+        if (admin?.email && shop) {
+          const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'https://smartduka.co.ke';
+          const template = EMAIL_TEMPLATES.plan_changed;
+          
+          await this.emailService.sendEmail({
+            to: admin.email,
+            subject: template.subject,
+            html: template.getHtml({
+              shopName: shop.name,
+              userName: admin.name || admin.email,
+              previousPlan: previousPlan,
+              newPlan: newPlan.name,
+              changeDate: new Date().toLocaleDateString('en-KE', { dateStyle: 'long' }),
+              dashboardUrl: `${frontendUrl}/admin/dashboard`,
+            }),
+          });
+          this.logger.log(`📧 Plan change email sent to ${admin.email} (${previousPlan} → ${newPlan.name})`);
+        }
+      } catch (emailError: any) {
+        this.logger.error(`Failed to send plan change email: ${emailError.message}`);
+        // Don't fail the plan change if email fails
+      }
 
       return this.mapSubscriptionToResponse(subscription, newPlan);
     }
@@ -998,6 +1031,17 @@ export class SubscriptionsService {
     subscription.pendingUpgrade = undefined;
 
     await subscription.save();
+
+    // Reactivate the shop if it was suspended
+    const shop = await this.shopModel.findById(shopId);
+    if (shop && (shop.status === 'suspended' || shop.subscriptionStatus === 'suspended')) {
+      shop.status = 'active';
+      shop.subscriptionStatus = 'active';
+      shop.subscriptionPlan = newPlan.code;
+      shop.subscriptionExpiresAt = periodEnd;
+      await shop.save();
+      this.logger.log(`Shop ${shop.shopId} reactivated after upgrade payment verification`);
+    }
 
     this.logger.log(`✅ Activated upgrade for shop ${shopId}: ${oldPlanCode} -> ${newPlan.code}`);
 
@@ -1429,12 +1473,13 @@ export class SubscriptionsService {
 
   /**
    * Get pending invoices for a shop
+   * Includes: pending, failed, and pending_verification (Send Money awaiting admin verification)
    */
   async getPendingInvoices(shopId: string): Promise<InvoiceResponseDto[]> {
     const invoices = await this.invoiceModel
       .find({
         shopId: new Types.ObjectId(shopId),
-        status: { $in: [InvoiceStatus.PENDING, InvoiceStatus.FAILED] },
+        status: { $in: [InvoiceStatus.PENDING, InvoiceStatus.FAILED, InvoiceStatus.PENDING_VERIFICATION] },
       })
       .sort({ dueDate: 1 })
       .exec();
@@ -1674,6 +1719,16 @@ export class SubscriptionsService {
 
       await subscription.save();
       this.logger.log(`Subscription activated for shop ${subscription.shopId} after payment verification, period ends: ${periodEnd.toISOString()}`);
+
+      // Reactivate the shop if it was suspended
+      const shop = await this.shopModel.findById(subscription.shopId);
+      if (shop && (shop.status === 'suspended' || shop.subscriptionStatus === 'suspended')) {
+        shop.status = 'active';
+        shop.subscriptionStatus = 'active';
+        shop.subscriptionExpiresAt = periodEnd;
+        await shop.save();
+        this.logger.log(`Shop ${shop.shopId} reactivated after payment verification`);
+      }
     }
   }
 
@@ -2109,23 +2164,49 @@ export class SubscriptionsService {
       .sort({ createdAt: -1 })
       .lean();
 
-    return subscriptions.map((sub: any) => ({
-      shopId: sub.shopId?._id?.toString() || sub.shopId?.toString(),
-      shopName: sub.shopId?.name || 'Unknown Shop',
-      shopEmail: sub.shopId?.email || '',
-      planCode: sub.planCode,
-      planName: sub.planId?.name || sub.planCode,
-      status: sub.status,
-      billingCycle: sub.billingCycle,
-      currentPrice: sub.currentPrice,
-      currentPeriodEnd: sub.currentPeriodEnd,
-      daysRemaining: Math.ceil((new Date(sub.currentPeriodEnd).getTime() - Date.now()) / (24 * 60 * 60 * 1000)),
-      usage: {
-        shops: { current: sub.currentShopCount || 0, limit: sub.planId?.maxShops || 1 },
-        employees: { current: sub.currentEmployeeCount || 0, limit: sub.planId?.maxEmployees || 2 },
-        products: { current: sub.currentProductCount || 0, limit: sub.planId?.maxProducts || 500 },
-      },
-    }));
+    return subscriptions.map((sub: any) => {
+      const isTrial = sub.planCode === 'trial' || sub.status === SubscriptionStatus.TRIAL;
+      const daysRemaining = Math.ceil((new Date(sub.currentPeriodEnd).getTime() - Date.now()) / (24 * 60 * 60 * 1000));
+      
+      // Determine correct display status
+      // Trial plans should NEVER show "pending_payment" - they're free
+      let displayStatus = sub.status;
+      if (isTrial && sub.status === SubscriptionStatus.PENDING_PAYMENT) {
+        displayStatus = SubscriptionStatus.TRIAL;
+      }
+      // Check if subscription is expired/overdue
+      if (daysRemaining < 0 && displayStatus === SubscriptionStatus.ACTIVE) {
+        displayStatus = SubscriptionStatus.PAST_DUE;
+      }
+      
+      // For trial plans, billing display should show "X-day trial" not "Monthly"
+      let billingDisplay = sub.billingCycle;
+      if (isTrial) {
+        billingDisplay = `${Math.max(0, daysRemaining)}-Day Trial`;
+      }
+      
+      return {
+        shopId: sub.shopId?._id?.toString() || sub.shopId?.toString(),
+        shopName: sub.shopId?.name || 'Unknown Shop',
+        shopEmail: sub.shopId?.email || '',
+        planCode: sub.planCode,
+        planName: sub.planId?.name || sub.planCode,
+        status: displayStatus,
+        billingCycle: sub.billingCycle,
+        billingDisplay, // Human-readable billing info
+        currentPrice: sub.currentPrice,
+        currentPeriodStart: sub.currentPeriodStart,
+        currentPeriodEnd: sub.currentPeriodEnd,
+        daysRemaining,
+        isTrial,
+        createdAt: sub.createdAt,
+        usage: {
+          shops: { current: sub.currentShopCount || 0, limit: sub.planId?.maxShops || 1 },
+          employees: { current: sub.currentEmployeeCount || 0, limit: sub.planId?.maxEmployees || 2 },
+          products: { current: sub.currentProductCount || 0, limit: sub.planId?.maxProducts || 500 },
+        },
+      };
+    });
   }
 
   /**
@@ -2414,6 +2495,171 @@ export class SubscriptionsService {
   }
 
   /**
+   * Manually update a shop's subscription (super admin)
+   */
+  async adminUpdateSubscription(
+    shopId: string,
+    dto: {
+      planCode?: string;
+      status?: string;
+      billingCycle?: string;
+      currentPeriodEnd?: string;
+      currentPrice?: number;
+    },
+  ): Promise<{ success: boolean; message: string }> {
+    const subscription = await this.subscriptionModel.findOne({
+      shopId: new Types.ObjectId(shopId),
+    });
+
+    if (!subscription) {
+      throw new NotFoundException('Subscription not found');
+    }
+
+    // Update plan if specified
+    if (dto.planCode && dto.planCode !== subscription.planCode) {
+      const newPlan = await this.planModel.findOne({ code: dto.planCode });
+      if (newPlan) {
+        subscription.planId = newPlan._id;
+        subscription.planCode = dto.planCode;
+      }
+    }
+
+    // Update status if specified
+    if (dto.status) {
+      subscription.status = dto.status as SubscriptionStatus;
+    }
+
+    // Update billing cycle if specified
+    if (dto.billingCycle) {
+      subscription.billingCycle = dto.billingCycle as BillingCycle;
+    }
+
+    // Update period end date if specified
+    if (dto.currentPeriodEnd) {
+      const periodEnd = new Date(dto.currentPeriodEnd);
+      subscription.currentPeriodEnd = periodEnd;
+      subscription.nextBillingDate = periodEnd;
+    }
+
+    // Update price if specified
+    if (dto.currentPrice !== undefined) {
+      subscription.currentPrice = dto.currentPrice;
+    }
+
+    await subscription.save();
+
+    // Also update shop status to match subscription status
+    const shop = await this.shopModel.findById(shopId);
+    if (shop) {
+      if (dto.status === 'active' || dto.status === 'trial') {
+        shop.status = 'active';
+        shop.subscriptionStatus = dto.status;
+      } else if (dto.status === 'suspended') {
+        shop.status = 'suspended';
+        shop.subscriptionStatus = 'suspended';
+      }
+      if (dto.planCode) {
+        shop.subscriptionPlan = dto.planCode;
+      }
+      if (dto.currentPeriodEnd) {
+        shop.subscriptionExpiresAt = new Date(dto.currentPeriodEnd);
+      }
+      await shop.save();
+    }
+
+    this.logger.log(`Subscription for shop ${shopId} updated by super admin: ${JSON.stringify(dto)}`);
+
+    return { success: true, message: 'Subscription updated successfully' };
+  }
+
+  /**
+   * Grant grace period to a shop's subscription (super admin)
+   * Extends subscription period and reactivates if suspended/expired
+   */
+  async adminGrantGracePeriod(
+    shopId: string,
+    dto: {
+      days: number;
+      reason?: string;
+      sendEmail?: boolean;
+    },
+  ): Promise<{ success: boolean; message: string; newExpiryDate: string }> {
+    const subscription = await this.subscriptionModel.findOne({
+      shopId: new Types.ObjectId(shopId),
+    });
+
+    if (!subscription) {
+      throw new NotFoundException('Subscription not found');
+    }
+
+    // Calculate new expiry date
+    const currentEnd = new Date(subscription.currentPeriodEnd);
+    const newEnd = new Date(currentEnd.getTime() + dto.days * 24 * 60 * 60 * 1000);
+    
+    // Update subscription
+    subscription.currentPeriodEnd = newEnd;
+    subscription.nextBillingDate = newEnd;
+    
+    // Reactivate if suspended/expired
+    if (subscription.status === SubscriptionStatus.SUSPENDED || 
+        subscription.status === SubscriptionStatus.EXPIRED ||
+        subscription.status === SubscriptionStatus.PAST_DUE) {
+      subscription.status = SubscriptionStatus.ACTIVE;
+    }
+    
+    await subscription.save();
+
+    // Update shop status
+    const shop = await this.shopModel.findById(shopId);
+    if (shop) {
+      shop.status = 'active';
+      shop.subscriptionStatus = 'active';
+      shop.subscriptionExpiresAt = newEnd;
+      await shop.save();
+    }
+
+    // Send notification email if requested
+    if (dto.sendEmail) {
+      try {
+        const shopAdmin = await this.userModel.findOne({ 
+          shopId: new Types.ObjectId(shopId), 
+          role: 'admin' 
+        });
+        
+        if (shopAdmin?.email && shop) {
+          await this.emailService.sendEmail({
+            to: shopAdmin.email,
+            subject: '🎁 Grace Period Extended - SmartDuka',
+            html: `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #f97316;">Grace Period Extended</h2>
+                <p>Dear ${shopAdmin.name || shop.name},</p>
+                <p>Great news! Your SmartDuka subscription has been extended by <strong>${dto.days} days</strong> as a courtesy.</p>
+                ${dto.reason ? `<p><strong>Reason:</strong> ${dto.reason}</p>` : ''}
+                <p><strong>New Expiry Date:</strong> ${newEnd.toLocaleDateString('en-KE', { dateStyle: 'long' })}</p>
+                <p>Your account is now active and you can continue using all SmartDuka features.</p>
+                <p>Thank you for being a valued customer!</p>
+                <p>Best regards,<br>SmartDuka Team</p>
+              </div>
+            `,
+          });
+          this.logger.log(`Grace period email sent to ${shopAdmin.email}`);
+        }
+      } catch (emailError: any) {
+        this.logger.error(`Failed to send grace period email: ${emailError.message}`);
+      }
+    }
+
+    this.logger.log(`Grace period of ${dto.days} days granted to shop ${shopId}. New expiry: ${newEnd.toISOString()}`);
+
+    return { 
+      success: true, 
+      message: `Grace period of ${dto.days} days granted successfully`,
+      newExpiryDate: newEnd.toISOString(),
+    };
+  }
+
+  /**
    * Suspend a shop's subscription (super admin)
    */
   async adminSuspendSubscription(shopId: string): Promise<{ success: boolean; message: string }> {
@@ -2459,5 +2705,167 @@ export class SubscriptionsService {
     this.logger.log(`Subscription for shop ${shopId} reactivated by super admin`);
 
     return { success: true, message: 'Subscription reactivated successfully' };
+  }
+
+  /**
+   * Fix trial subscriptions with wrong period dates
+   * Trial should be 14 days from subscription creation date
+   */
+  async fixTrialSubscriptionPeriods(): Promise<{ fixed: number; skipped: number; details: string[] }> {
+    const details: string[] = [];
+    let fixed = 0;
+    let skipped = 0;
+
+    // Find all trial subscriptions
+    const trialSubscriptions = await this.subscriptionModel.find({
+      $or: [
+        { planCode: 'trial' },
+        { status: SubscriptionStatus.TRIAL },
+      ],
+    }).populate('shopId', 'name');
+
+    for (const sub of trialSubscriptions) {
+      try {
+        const shopName = (sub.shopId as any)?.name || sub.shopId?.toString();
+        const createdAt = new Date(sub.createdAt || sub.startDate);
+        const correctEndDate = new Date(createdAt);
+        correctEndDate.setDate(correctEndDate.getDate() + TRIAL_PERIOD_DAYS);
+
+        const currentEnd = new Date(sub.currentPeriodEnd);
+        const diffDays = Math.abs(Math.ceil((currentEnd.getTime() - correctEndDate.getTime()) / (24 * 60 * 60 * 1000)));
+
+        // Only fix if the difference is significant (more than 1 day off)
+        if (diffDays > 1) {
+          const oldEnd = sub.currentPeriodEnd;
+          sub.currentPeriodEnd = correctEndDate;
+          sub.trialEndDate = correctEndDate;
+          await sub.save();
+
+          // Also update shop
+          const shop = await this.shopModel.findById(sub.shopId);
+          if (shop) {
+            shop.subscriptionExpiresAt = correctEndDate;
+            await shop.save();
+          }
+
+          details.push(`Fixed ${shopName}: ${oldEnd.toISOString().split('T')[0]} → ${correctEndDate.toISOString().split('T')[0]} (was ${diffDays} days off)`);
+          fixed++;
+        } else {
+          skipped++;
+        }
+      } catch (error: any) {
+        details.push(`Error fixing ${sub._id}: ${error.message}`);
+      }
+    }
+
+    this.logger.log(`Fixed ${fixed} trial subscriptions, skipped ${skipped}`);
+    return { fixed, skipped, details };
+  }
+
+  /**
+   * Audit and fix subscription mismatches
+   * - past_due accounts that have been overdue too long should be suspended
+   * - expired trials should be marked as expired
+   * - status mismatches between subscription and shop
+   */
+  async auditAndFixSubscriptions(): Promise<{ audited: number; fixed: number; issues: string[] }> {
+    const issues: string[] = [];
+    let audited = 0;
+    let fixed = 0;
+    const now = new Date();
+
+    const subscriptions = await this.subscriptionModel.find().populate('shopId', 'name status subscriptionStatus');
+
+    for (const sub of subscriptions) {
+      audited++;
+      const shop = sub.shopId as any;
+      const shopName = shop?.name || sub.shopId?.toString();
+
+      try {
+        // Check 1: Trial subscriptions that have expired
+        if ((sub.planCode === 'trial' || sub.status === SubscriptionStatus.TRIAL) && 
+            sub.currentPeriodEnd < now) {
+          sub.status = SubscriptionStatus.EXPIRED;
+          await sub.save();
+          
+          if (shop && shop._id) {
+            await this.shopModel.findByIdAndUpdate(shop._id, {
+              subscriptionStatus: 'expired',
+            });
+          }
+          
+          issues.push(`${shopName}: Trial expired - marked as EXPIRED`);
+          fixed++;
+        }
+        
+        // Check 2: Past due accounts that are more than GRACE_PERIOD_DAYS overdue should be suspended
+        else if (sub.status === SubscriptionStatus.PAST_DUE) {
+          const daysOverdue = Math.ceil((now.getTime() - sub.currentPeriodEnd.getTime()) / (24 * 60 * 60 * 1000));
+          
+          if (daysOverdue > GRACE_PERIOD_DAYS) {
+            sub.status = SubscriptionStatus.SUSPENDED;
+            await sub.save();
+            
+            if (shop && shop._id) {
+              await this.shopModel.findByIdAndUpdate(shop._id, {
+                status: 'suspended',
+                subscriptionStatus: 'suspended',
+              });
+            }
+            
+            issues.push(`${shopName}: Past due ${daysOverdue} days - suspended (exceeded ${GRACE_PERIOD_DAYS} day grace period)`);
+            fixed++;
+          } else {
+            issues.push(`${shopName}: Past due ${daysOverdue} days - within grace period`);
+          }
+        }
+        
+        // Check 3: Status mismatch between subscription and shop
+        else if (shop && shop._id) {
+          const shopDoc = await this.shopModel.findById(shop._id);
+          if (shopDoc) {
+            let needsUpdate = false;
+            
+            if (sub.status === SubscriptionStatus.ACTIVE && shopDoc.subscriptionStatus !== 'active') {
+              shopDoc.subscriptionStatus = 'active';
+              needsUpdate = true;
+            } else if (sub.status === SubscriptionStatus.SUSPENDED && shopDoc.status !== 'suspended') {
+              shopDoc.status = 'suspended';
+              shopDoc.subscriptionStatus = 'suspended';
+              needsUpdate = true;
+            }
+            
+            if (needsUpdate) {
+              await shopDoc.save();
+              issues.push(`${shopName}: Fixed shop status mismatch`);
+              fixed++;
+            }
+          }
+        }
+        
+        // Check 4: Billing cycle mismatch - KES 99 should be daily, not monthly
+        if (sub.currentPrice === 99 && sub.billingCycle !== BillingCycle.DAILY) {
+          sub.billingCycle = BillingCycle.DAILY;
+          await sub.save();
+          issues.push(`${shopName}: Fixed billing cycle - KES 99 is daily plan`);
+          fixed++;
+        }
+        
+        // Check 5: Trial plans should show as trial status
+        if (sub.planCode === 'trial' && sub.status !== SubscriptionStatus.TRIAL && sub.status !== SubscriptionStatus.EXPIRED) {
+          if (sub.currentPeriodEnd > now) {
+            sub.status = SubscriptionStatus.TRIAL;
+            await sub.save();
+            issues.push(`${shopName}: Fixed trial status`);
+            fixed++;
+          }
+        }
+      } catch (error: any) {
+        issues.push(`Error auditing ${shopName}: ${error.message}`);
+      }
+    }
+
+    this.logger.log(`Audited ${audited} subscriptions, fixed ${fixed} issues`);
+    return { audited, fixed, issues };
   }
 }

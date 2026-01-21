@@ -158,7 +158,7 @@ export class SystemEventManagerService implements OnModuleInit {
       variables: {
         shopName: shop.shopName,
         userName: user.userName,
-        loginUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/login`,
+        loginUrl: `${process.env.FRONTEND_URL || 'https://smartduka-eta.vercel.app'}/login`,
         planName: data.planName || 'Free Trial',
         trialDays: data.trialDays || 14,
         billingCycle: data.billingCycle || 'month',
@@ -202,7 +202,7 @@ export class SystemEventManagerService implements OnModuleInit {
         features: data.features,
         startDate: data.startDate,
         nextBillingDate: data.nextBillingDate,
-        dashboardUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/admin/subscription`,
+        dashboardUrl: `${process.env.FRONTEND_URL || 'https://smartduka-eta.vercel.app'}/admin/subscription`,
       },
     });
 
@@ -243,7 +243,7 @@ export class SystemEventManagerService implements OnModuleInit {
         userName: user.userName,
         planName: data.planName,
         expiredDate: data.expiredDate,
-        renewUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/admin/subscription`,
+        renewUrl: `${process.env.FRONTEND_URL || 'https://smartduka-eta.vercel.app'}/admin/subscription`,
         gracePeriodDays: data.gracePeriodDays || 7,
       },
     });
@@ -332,7 +332,7 @@ export class SystemEventManagerService implements OnModuleInit {
         employeeName: data.employeeName,
         role: data.role,
         invitedBy: data.invitedBy,
-        loginUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/login`,
+        loginUrl: `${process.env.FRONTEND_URL || 'https://smartduka-eta.vercel.app'}/login`,
         tempPassword: data.tempPassword,
       },
     });
@@ -517,7 +517,7 @@ export class SystemEventManagerService implements OnModuleInit {
     <div class="footer">
       <div class="thank-you">Thank you for shopping with us!</div>
       <p>This is an electronic receipt from ${shop.shopName}.</p>
-      <p>For inquiries, contact us at ${shop.shopEmail || 'support@smartduka.co.ke'}</p>
+      <p>For inquiries, contact us at ${shop.shopEmail || 'smartdukainfo@gmail.com'}</p>
       <p style="margin-top: 15px; font-size: 10px; color: #999;">
         Powered by SmartDuka POS | www.smartduka.co.ke
       </p>

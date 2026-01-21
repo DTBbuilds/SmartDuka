@@ -192,7 +192,7 @@ export class EmailAdminController {
         variables: body.variables || {
           shopName: 'Test Shop',
           userName: 'Test User',
-          loginUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
+          loginUrl: process.env.FRONTEND_URL || 'https://smartduka-eta.vercel.app',
         },
       });
     } else {
@@ -223,8 +223,8 @@ export class EmailAdminController {
       shopName: 'Demo Shop',
       userName: 'John Doe',
       userEmail: 'john@example.com',
-      loginUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
-      dashboardUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/admin`,
+      loginUrl: process.env.FRONTEND_URL || 'https://smartduka-eta.vercel.app',
+      dashboardUrl: `${process.env.FRONTEND_URL || 'https://smartduka-eta.vercel.app'}/admin`,
       planName: 'Professional',
       price: '2,500',
       billingCycle: 'month',

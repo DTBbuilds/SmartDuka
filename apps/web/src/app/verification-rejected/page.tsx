@@ -177,8 +177,8 @@ export default function VerificationRejectedPage() {
                 <div>
                   <p className="font-medium text-slate-900">Email us</p>
                   <p className="text-sm text-slate-600">
-                    <a href="mailto:support@smartduka.co.ke" className="text-blue-600 hover:underline">
-                      support@smartduka.co.ke
+                    <a href="mailto:smartdukainfo@gmail.com" className="text-blue-600 hover:underline">
+                      smartdukainfo@gmail.com
                     </a>
                   </p>
                   <p className="text-xs text-slate-500 mt-1">Response within 24 hours</p>

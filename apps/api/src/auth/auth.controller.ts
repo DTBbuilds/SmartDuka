@@ -209,7 +209,7 @@ export class AuthController {
     // Check if Google OAuth is configured
     const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
     if (!clientId || clientId === 'not-configured') {
-      const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
+      const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'https://smartduka-eta.vercel.app';
       res.redirect(`${frontendUrl}/login?error=${encodeURIComponent('Google login is not configured')}`);
       return;
     }
@@ -224,7 +224,7 @@ export class AuthController {
   async googleAuthCashier(@Res() res: Response) {
     const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
     if (!clientId || clientId === 'not-configured') {
-      const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
+      const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'https://smartduka-eta.vercel.app';
       res.redirect(`${frontendUrl}/login?error=${encodeURIComponent('Google login is not configured')}`);
       return;
     }
@@ -255,7 +255,7 @@ export class AuthController {
   async googleAuthCallback(@Req() req: any, @Res() res: Response, @Query('state') state?: string) {
     const ipAddress = req.ip || req.connection.remoteAddress;
     const userAgent = req.get('user-agent');
-    const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'https://smartduka-eta.vercel.app';
     
     // Parse state to check if this is a cashier signup flow
     let isCashierSignup = false;

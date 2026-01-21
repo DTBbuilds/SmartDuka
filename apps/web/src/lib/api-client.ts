@@ -241,6 +241,62 @@ export function getApiUrl(endpoint: string): string {
 }
 
 /**
+ * Download a file with authentication and open in new tab
+ * Useful for PDFs, receipts, invoices that require auth
+ */
+export async function downloadWithAuth(endpoint: string, filename?: string): Promise<void> {
+  const token = getAuthToken();
+  const url = buildUrl(endpoint);
+  
+  const headers: HeadersInit = {};
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers,
+      credentials: 'include',
+    });
+    
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Session expired. Please login again.');
+      }
+      throw new Error(`Failed to download: ${response.statusText}`);
+    }
+    
+    const contentType = response.headers.get('content-type') || '';
+    const blob = await response.blob();
+    
+    // For HTML content, open in new tab
+    if (contentType.includes('text/html')) {
+      const html = await blob.text();
+      const newWindow = window.open('', '_blank');
+      if (newWindow) {
+        newWindow.document.write(html);
+        newWindow.document.close();
+      }
+      return;
+    }
+    
+    // For other files (PDF, etc.), trigger download
+    const blobUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = filename || 'download';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(blobUrl);
+  } catch (error: any) {
+    console.error('Download failed:', error);
+    throw error;
+  }
+}
+
+/**
  * Export config for backward compatibility
  */
 export { config };

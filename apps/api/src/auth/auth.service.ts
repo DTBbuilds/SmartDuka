@@ -930,7 +930,7 @@ export class AuthService {
 
     // TODO: Send email with reset link
     // For now, log the token (in production, this would be sent via email)
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const frontendUrl = process.env.FRONTEND_URL || 'https://smartduka-eta.vercel.app';
     const resetLink = `${frontendUrl}/reset-password?token=${resetToken}`;
     
     this.logger.log(`Password reset link for ${email}: ${resetLink}`);

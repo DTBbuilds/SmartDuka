@@ -116,10 +116,14 @@ export default function BillingHistoryPage() {
 
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-  const openReceipt = (invoiceId: string) => {
-    // Use full backend URL for PDF generation (bypasses Next.js routing)
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-    window.open(`${backendUrl}/api/v1/subscriptions/invoices/${invoiceId}/pdf?type=receipt`, '_blank');
+  const openReceipt = async (invoiceId: string) => {
+    try {
+      const { downloadWithAuth } = await import('@/lib/api-client');
+      await downloadWithAuth(`/subscriptions/invoices/${invoiceId}/pdf?type=receipt`);
+    } catch (error: any) {
+      console.error('Failed to open receipt:', error);
+      alert(error.message || 'Failed to open receipt');
+    }
   };
 
   if (loading) {

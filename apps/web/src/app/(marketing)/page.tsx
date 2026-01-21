@@ -435,11 +435,11 @@ export default function HomePage() {
               </p>
               <div className="flex items-center gap-2 text-sm">
                 <Phone className="h-4 w-4" />
-                <span>+254 700 000 000</span>
+                <span>0729983567 / 0104160502</span>
               </div>
               <div className="flex items-center gap-2 text-sm mt-2">
                 <Mail className="h-4 w-4" />
-                <span>support@smartduka.co.ke</span>
+                <span>smartdukainfo@gmail.com</span>
               </div>
             </div>
             

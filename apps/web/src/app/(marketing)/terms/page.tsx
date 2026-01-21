@@ -104,9 +104,9 @@ export default function TermsOfServicePage() {
           <p className="text-gray-600 mb-6">
             For questions about these Terms, contact us at:
             <br />
-            Email: legal@smartduka.co.ke
+            Email: smartdukainfo@gmail.com
             <br />
-            Phone: +254 700 000 000
+            Phone: 0729983567 / 0104160502
           </p>
         </div>
       </div>

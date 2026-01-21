@@ -331,7 +331,7 @@ export class SuperAdminCommunicationsService {
       return { success: false, error: 'Shop has no email address' };
     }
 
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const frontendUrl = process.env.FRONTEND_URL || 'https://smartduka-eta.vercel.app';
     // Direct to subscription page with invoice parameter for payment
     const paymentUrl = `${frontendUrl}/admin/subscription?invoice=${invoice._id}&pay=true`;
 

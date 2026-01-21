@@ -6,8 +6,17 @@ import {
   SubscriptionInvoice,
   SubscriptionInvoiceDocument,
 } from './schemas/subscription-invoice.schema';
+import {
+  PaymentAttempt,
+  PaymentAttemptDocument,
+  PaymentMethod,
+  PaymentAttemptStatus,
+  PaymentAttemptType,
+} from './schemas/payment-attempt.schema';
 import { Subscription, SubscriptionDocument, SubscriptionStatus } from './schemas/subscription.schema';
 import { SystemConfig, SystemConfigDocument, SystemConfigType } from '../super-admin/schemas/system-config.schema';
+import { Shop, ShopDocument } from '../shops/schemas/shop.schema';
+import { User, UserDocument } from '../users/schemas/user.schema';
 import { MpesaEncryptionService } from '../payments/services/mpesa-encryption.service';
 import type { SubscriptionsService } from './subscriptions.service';
 import {
@@ -79,6 +88,12 @@ export class SubscriptionMpesaService implements OnModuleInit {
     private readonly subscriptionModel: Model<SubscriptionDocument>,
     @InjectModel(SystemConfig.name)
     private readonly systemConfigModel: Model<SystemConfigDocument>,
+    @InjectModel(PaymentAttempt.name)
+    private readonly paymentAttemptModel: Model<PaymentAttemptDocument>,
+    @InjectModel(Shop.name)
+    private readonly shopModel: Model<ShopDocument>,
+    @InjectModel(User.name)
+    private readonly userModel: Model<UserDocument>,
     private readonly configService: ConfigService,
     private readonly encryptionService: MpesaEncryptionService,
     @Inject(forwardRef(() => require('./subscriptions.service').SubscriptionsService))
@@ -890,6 +905,17 @@ export class SubscriptionMpesaService implements OnModuleInit {
         };
       }
 
+      // Get subscription and shop details for the payment attempt record
+      const subscription = await this.subscriptionModel.findById(invoice.subscriptionId).lean();
+      const shop = await this.shopModel.findById(shopId).lean();
+      const shopAdmin = await this.userModel.findOne({ shopId: new Types.ObjectId(shopId), role: 'admin' }).lean();
+      
+      // Determine payment type based on invoice type
+      let paymentType = PaymentAttemptType.SUBSCRIPTION;
+      if (invoice.type === 'upgrade') {
+        paymentType = PaymentAttemptType.UPGRADE;
+      }
+
       // Update invoice as pending verification (NOT paid yet)
       // Admin will verify and mark as paid, which triggers activation
       await this.invoiceModel.updateOne(
@@ -914,6 +940,28 @@ export class SubscriptionMpesaService implements OnModuleInit {
         },
       );
 
+      // Create PaymentAttempt record for tracking in super admin dashboard
+      await this.paymentAttemptModel.create({
+        shopId: new Types.ObjectId(shopId),
+        shopName: shop?.name,
+        userEmail: shopAdmin?.email,
+        method: PaymentMethod.MPESA_MANUAL,
+        type: paymentType,
+        status: PaymentAttemptStatus.PENDING_APPROVAL,
+        amount: paidAmount,
+        currency: 'KES',
+        planCode: subscription?.planCode,
+        billingCycle: subscription?.billingCycle,
+        invoiceId: invoice._id.toString(),
+        invoiceNumber: invoice.invoiceNumber,
+        mpesaReceiptNumber: normalizedReceipt,
+        initiatedAt: new Date(),
+        metadata: {
+          source: 'send_money',
+          invoiceType: invoice.type,
+        },
+      });
+
       this.logger.log(`Manual payment submitted for verification - Invoice: ${invoice.invoiceNumber}, Receipt: ${normalizedReceipt}`);
 
       // NOTE: Subscription is NOT activated here
@@ -921,7 +969,7 @@ export class SubscriptionMpesaService implements OnModuleInit {
 
       return {
         success: true,
-        message: 'Payment submitted for verification. Your subscription will be activated once the payment is confirmed (usually within 24 hours).',
+        message: 'Payment submitted for verification. Your subscription will be activated once the payment is confirmed (usually within 1-5 minutes).',
         mpesaReceiptNumber: normalizedReceipt,
         transactionDate: new Date(),
         amount: paidAmount,

@@ -16,7 +16,7 @@ export function OrganizationJsonLd() {
     ],
     contactPoint: {
       '@type': 'ContactPoint',
-      telephone: '+254-700-000-000',
+      telephone: '+254-729-983-567',
       contactType: 'customer service',
       areaServed: 'KE',
       availableLanguage: ['English', 'Swahili'],
@@ -228,8 +228,8 @@ export function LocalBusinessJsonLd() {
     name: 'SmartDuka',
     description: 'Leading Point of Sale and Inventory Management Software provider in Kenya',
     url: 'https://smartduka.co.ke',
-    telephone: '+254-700-000-000',
-    email: 'support@smartduka.co.ke',
+    telephone: '+254-729-983-567',
+    email: 'smartdukainfo@gmail.com',
     address: {
       '@type': 'PostalAddress',
       streetAddress: 'Nairobi',

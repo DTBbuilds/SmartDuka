@@ -26,7 +26,7 @@ export const SMARTDUKA_LOGO_SVG = `
 // Base email wrapper with SmartDuka branding
 export const getEmailWrapper = (content: string, preheader?: string): string => {
   const currentYear = new Date().getFullYear();
-  const frontendUrl = process.env.FRONTEND_URL || 'https://smartduka.co.ke';
+  const frontendUrl = process.env.FRONTEND_URL || 'https://smartduka-eta.vercel.app';
   
   return `
 <!DOCTYPE html>
@@ -1281,6 +1281,57 @@ export const EMAIL_TEMPLATES = {
         Thank you for your continued trust in SmartDuka!
       </p>
     `, `Your SmartDuka subscription has been reactivated. Welcome back!`),
+  },
+
+  plan_changed: {
+    name: 'plan_changed',
+    subject: '📋 Your SmartDuka plan has been changed',
+    description: 'Sent when a user changes their subscription plan',
+    variables: ['shopName', 'userName', 'previousPlan', 'newPlan', 'changeDate', 'dashboardUrl'],
+    getHtml: (vars: Record<string, any>) => getEmailWrapper(`
+      <p class="greeting">Hello ${vars.userName || '{{userName}}'},</p>
+      
+      <p class="main-text">
+        Your subscription plan for <strong>${vars.shopName || '{{shopName}}'}</strong> has been changed.
+      </p>
+      
+      <div class="info-box" style="text-align: center;">
+        <p style="margin: 0; font-size: 48px;">🔄</p>
+        <p style="margin: 12px 0 0; font-size: 20px; font-weight: 700; color: #ea580c;">Plan Changed</p>
+      </div>
+      
+      <div style="background: #fef3c7; border: 1px solid #fcd34d; border-radius: 12px; padding: 20px; margin: 24px 0;">
+        <p style="margin: 0 0 16px; font-weight: 600; color: #92400e;">📋 Change Details:</p>
+        <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #fcd34d;">
+          <span style="color: #78350f;">Previous Plan</span>
+          <strong style="color: #451a03;">${vars.previousPlan || '{{previousPlan}}'}</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #fcd34d;">
+          <span style="color: #78350f;">New Plan</span>
+          <strong style="color: #451a03;">${vars.newPlan || '{{newPlan}}'}</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between; padding: 8px 0;">
+          <span style="color: #78350f;">Change Date</span>
+          <strong style="color: #451a03;">${vars.changeDate || '{{changeDate}}'}</strong>
+        </div>
+      </div>
+      
+      <p class="main-text">
+        Your subscription has been updated immediately. You now have access to all features included in your new plan.
+      </p>
+      
+      <div class="button-container">
+        <a href="${vars.dashboardUrl || '{{dashboardUrl}}'}" class="primary-button">🏠 Go to Dashboard</a>
+      </div>
+      
+      <div class="divider"></div>
+      
+      <p style="color: #6b7280; font-size: 14px;">
+        If you didn't make this change or have any questions, please contact us:<br>
+        📞 <a href="tel:+254729983567" style="color: #f97316;">0729 983 567</a> | <a href="tel:+254104160502" style="color: #f97316;">0104 160 502</a><br>
+        📧 <a href="mailto:smartdukainfo@gmail.com" style="color: #f97316;">smartdukainfo@gmail.com</a>
+      </p>
+    `, `Your SmartDuka plan has been changed from ${vars.previousPlan || ''} to ${vars.newPlan || ''}.`),
   },
 
   shop_suspended: {

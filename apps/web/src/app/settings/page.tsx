@@ -31,7 +31,7 @@ export default function SettingsPage() {
       setActiveTab(tabFromUrl);
     }
   }, [searchParams]);
-  
+
   // Settings navigation items
   const settingsNavItems = [
     { id: 'shop', label: 'Shop Settings', icon: Store, description: 'Business information' },
@@ -592,9 +592,10 @@ export default function SettingsPage() {
 // Subscription Settings Tab Component
 function SubscriptionSettingsTab() {
   const router = useRouter();
-  const { subscription, loading: subLoading, changePlan, cancelSubscription, reactivateSubscription, toggleAutoRenew } = useSubscription();
+  const searchParams = useSearchParams();
+  const { subscription, loading: subLoading, changePlan, cancelSubscription, reactivateSubscription, toggleAutoRenew, refetch: refetchSubscription } = useSubscription();
   const { plans, loading: plansLoading } = useSubscriptionPlans();
-  const { invoices, pendingInvoices, loading: billingLoading, initiatePayment, getPaymentSummary, checkStkStatus } = useBillingHistory();
+  const { invoices, pendingInvoices, loading: billingLoading, initiatePayment, getPaymentSummary, checkStkStatus, refetch: refetchBilling } = useBillingHistory();
   const { token } = useAuth();
   
   // Stripe payment hook
@@ -648,6 +649,19 @@ function SubscriptionSettingsTab() {
   const [creatingStripePayment, setCreatingStripePayment] = useState(false);
 
   const loading = subLoading || plansLoading || billingLoading;
+
+  // Auto-open upgrade modal when autoOpen=true is in URL (from Switch Plan button)
+  useEffect(() => {
+    const autoOpen = searchParams.get('autoOpen');
+    const action = searchParams.get('action');
+    if (autoOpen === 'true' && action === 'change-plan') {
+      setShowUpgradeModal(true);
+      // Clean up URL params after opening modal
+      const url = new URL(window.location.href);
+      url.searchParams.delete('autoOpen');
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, [searchParams]);
 
   // Plan color themes - minimalistic with consistent slate/primary palette
   const planColors: Record<string, { bg: string; border: string; badge: string; iconBg: string; iconColor: string; headerGradient: string }> = {
@@ -1063,7 +1077,7 @@ function SubscriptionSettingsTab() {
                   <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wide">Started</span>
                 </div>
-                <p className="text-sm sm:text-lg font-bold">{new Date(subscription.startDate).toLocaleDateString('en-KE', { month: 'short', day: 'numeric', year: '2-digit' })}</p>
+                <p className="text-sm sm:text-lg font-bold">{new Date(subscription.currentPeriodStart).toLocaleDateString('en-KE', { month: 'short', day: 'numeric', year: '2-digit' })}</p>
               </div>
               <div className="bg-gradient-to-br from-emerald-50 to-emerald-100/50 dark:from-emerald-900/20 dark:to-emerald-800/10 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-emerald-100 dark:border-emerald-800">
                 <div className="flex items-center gap-1.5 sm:gap-2 text-emerald-600 mb-1 sm:mb-2">
@@ -1413,6 +1427,14 @@ function SubscriptionSettingsTab() {
                       const isTrial = plan.code === 'trial';
                       const isDaily = plan.code === 'daily';
                       
+                      // Check if subscription needs renewal (expired, suspended, cancelled)
+                      const needsRenewal = subscription?.status === 'expired' || 
+                                          subscription?.status === 'suspended' || 
+                                          subscription?.status === 'cancelled';
+                      
+                      // Allow selecting current plan if subscription needs renewal
+                      const canSelectCurrentPlan = isCurrentPlan && needsRenewal;
+                      
                       // Calculate price based on plan type
                       let price: number;
                       let priceLabel: string;
@@ -1430,26 +1452,28 @@ function SubscriptionSettingsTab() {
                       return (
                         <div
                           key={plan.code}
-                          onClick={() => !isCurrentPlan && setSelectedPlan(plan)}
+                          onClick={() => (canSelectCurrentPlan || !isCurrentPlan) && setSelectedPlan(plan)}
                           className={`relative rounded-lg border p-3 cursor-pointer transition-all hover:shadow-md ${
                             selectedPlan?.code === plan.code ? 'ring-2 ring-primary border-primary bg-primary/5' :
-                            isCurrentPlan ? 'border-emerald-300 bg-emerald-50/50 dark:bg-emerald-900/10' :
+                            isCurrentPlan && !needsRenewal ? 'border-emerald-300 bg-emerald-50/50 dark:bg-emerald-900/10' :
+                            isCurrentPlan && needsRenewal ? 'border-orange-300 bg-orange-50/50 dark:bg-orange-900/10' :
                             isPopular ? 'border-primary/50' : 
                             isBestValue ? 'border-amber-300' : 
                             isFlexible ? 'border-orange-300' :
                             'border-border hover:border-primary/30'
-                          } ${isCurrentPlan ? 'cursor-default' : ''}`}
+                          } ${isCurrentPlan && !needsRenewal ? 'cursor-default' : ''}`}
                         >
                           {/* Badge */}
                           {(plan.badge || isCurrentPlan) && (
                             <div className={`absolute -top-2 left-3 px-2 py-0.5 text-[10px] sm:text-[11px] font-bold rounded ${
+                              isCurrentPlan && needsRenewal ? 'bg-orange-500 text-white' :
                               isCurrentPlan ? 'bg-emerald-500 text-white' :
                               isPopular ? 'bg-primary text-white' :
                               isBestValue ? 'bg-amber-500 text-white' :
                               isFlexible ? 'bg-orange-500 text-white' :
                               'bg-muted text-muted-foreground'
                             }`}>
-                              {isCurrentPlan ? 'Current' : plan.badge}
+                              {isCurrentPlan && needsRenewal ? 'Renew' : isCurrentPlan ? 'Current' : plan.badge}
                             </div>
                           )}
 
@@ -1508,10 +1532,15 @@ function SubscriptionSettingsTab() {
                     </Button>
                     <Button 
                       className="flex-1" 
-                      disabled={!selectedPlan || subscription?.planCode === selectedPlan?.code}
+                      disabled={!selectedPlan || (subscription?.planCode === selectedPlan?.code && 
+                        subscription?.status !== 'expired' && 
+                        subscription?.status !== 'suspended' && 
+                        subscription?.status !== 'cancelled')}
                       onClick={() => setUpgradeStep('confirm')}
                     >
-                      Continue
+                      {selectedPlan && subscription?.planCode === selectedPlan?.code && 
+                       (subscription?.status === 'expired' || subscription?.status === 'suspended' || subscription?.status === 'cancelled')
+                        ? 'Renew Plan' : 'Continue'}
                       <ChevronRight className="h-4 w-4 ml-1" />
                     </Button>
                   </div>
@@ -2247,15 +2276,40 @@ function SubscriptionSettingsTab() {
                                   return;
                                 }
                                 setVerifyingCode(true);
-                                // TODO: Call API to verify the code
-                                // For now, show success message
-                                setTimeout(() => {
+                                
+                                try {
+                                  // Call API to submit payment reference for verification
+                                  const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ''}/api/v1/subscriptions/payments/manual/confirm`, {
+                                    method: 'POST',
+                                    headers: { 
+                                      'Content-Type': 'application/json',
+                                      'Authorization': `Bearer ${token}`,
+                                    },
+                                    body: JSON.stringify({
+                                      invoiceId: selectedInvoiceData.id,
+                                      mpesaReceiptNumber: referenceCode.trim().toUpperCase(),
+                                      paidAmount: selectedInvoiceData.totalAmount,
+                                    }),
+                                  });
+                                  
+                                  if (response.ok) {
+                                    setVerifyingCode(false);
+                                    alert('Payment verification submitted! We will verify your payment and activate your subscription within 1-5 minutes. You will receive a confirmation email.');
+                                    resetPaymentModal();
+                                    setSendMoneyStep('instructions');
+                                    setReferenceCode('');
+                                    // Refresh subscription and billing data
+                                    refetchSubscription?.();
+                                    refetchBilling?.();
+                                  } else {
+                                    const data = await response.json();
+                                    setVerifyingCode(false);
+                                    alert(data.message || 'Failed to submit payment. Please contact support.');
+                                  }
+                                } catch (error: any) {
                                   setVerifyingCode(false);
-                                  alert('Payment verification submitted! We will verify your payment and activate your subscription within 24 hours. You will receive a confirmation SMS.');
-                                  resetPaymentModal();
-                                  setSendMoneyStep('instructions');
-                                  setReferenceCode('');
-                                }, 1500);
+                                  alert('Failed to submit payment reference. Please try again or contact support.');
+                                }
                               }}
                               disabled={verifyingCode || referenceCode.length < 8}
                             >
@@ -2536,9 +2590,13 @@ function SubscriptionSettingsTab() {
                         variant="outline" 
                         size="sm" 
                         className="flex-1"
-                        onClick={() => {
-                          // Download receipt - open invoice in new tab or generate PDF
-                          window.open(`/api/v1/subscriptions/invoices/${selectedInvoice}/pdf`, '_blank');
+                        onClick={async () => {
+                          try {
+                            const { downloadWithAuth } = await import('@/lib/api-client');
+                            await downloadWithAuth(`/subscriptions/invoices/${selectedInvoice}/pdf?type=receipt`);
+                          } catch (error: any) {
+                            console.error('Failed to open receipt:', error);
+                          }
                         }}
                       >
                         <Download className="h-3.5 w-3.5 mr-1" />
@@ -2548,9 +2606,13 @@ function SubscriptionSettingsTab() {
                         variant="outline" 
                         size="sm" 
                         className="flex-1"
-                        onClick={() => {
-                          // Download invoice
-                          window.open(`/api/v1/subscriptions/invoices/${selectedInvoice}/pdf?type=invoice`, '_blank');
+                        onClick={async () => {
+                          try {
+                            const { downloadWithAuth } = await import('@/lib/api-client');
+                            await downloadWithAuth(`/subscriptions/invoices/${selectedInvoice}/pdf?type=invoice`);
+                          } catch (error: any) {
+                            console.error('Failed to open invoice:', error);
+                          }
                         }}
                       >
                         <FileText className="h-3.5 w-3.5 mr-1" />

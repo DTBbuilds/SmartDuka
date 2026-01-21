@@ -436,7 +436,7 @@ export default function PricingPage() {
               Start Free Trial
             </Link>
             <a
-              href="tel:+254700000000"
+              href="tel:+254729983567"
               className="flex items-center gap-2 px-8 py-3 border-2 border-white text-white rounded-xl font-semibold hover:bg-white/10 transition-colors"
             >
               <Phone className="h-5 w-5" />

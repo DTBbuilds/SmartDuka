@@ -191,8 +191,8 @@ export class SuperAdminService {
               month: 'long',
               day: 'numeric',
             }),
-            loginUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/login`,
-            dashboardUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/admin`,
+            loginUrl: `${process.env.FRONTEND_URL || 'https://smartduka-eta.vercel.app'}/login`,
+            dashboardUrl: `${process.env.FRONTEND_URL || 'https://smartduka-eta.vercel.app'}/admin`,
           },
         });
         this.logger.log(`Verification email sent to ${updatedShop.email}`);

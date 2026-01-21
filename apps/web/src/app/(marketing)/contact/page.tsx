@@ -87,8 +87,8 @@ export default function ContactPage() {
               </div>
               <h3 className="text-xl font-bold text-gray-900 mb-2">Call Us</h3>
               <p className="text-gray-600 mb-4">Speak directly with our team</p>
-              <a href="tel:+254700000000" className="text-blue-600 font-semibold hover:underline">
-                +254 700 000 000
+              <a href="tel:+254729983567" className="text-blue-600 font-semibold hover:underline">
+                0729983567 / 0104160502
               </a>
               <p className="text-sm text-gray-500 mt-2">Mon-Fri, 8am-6pm EAT</p>
             </div>
@@ -99,8 +99,8 @@ export default function ContactPage() {
               </div>
               <h3 className="text-xl font-bold text-gray-900 mb-2">Email Us</h3>
               <p className="text-gray-600 mb-4">We&apos;ll respond within 24 hours</p>
-              <a href="mailto:support@smartduka.co.ke" className="text-blue-600 font-semibold hover:underline">
-                support@smartduka.co.ke
+              <a href="mailto:smartdukainfo@gmail.com" className="text-blue-600 font-semibold hover:underline">
+                smartdukainfo@gmail.com
               </a>
               <p className="text-sm text-gray-500 mt-2">For general inquiries</p>
             </div>
@@ -111,8 +111,8 @@ export default function ContactPage() {
               </div>
               <h3 className="text-xl font-bold text-gray-900 mb-2">WhatsApp</h3>
               <p className="text-gray-600 mb-4">Quick support via chat</p>
-              <a href="https://wa.me/254700000000" className="text-blue-600 font-semibold hover:underline">
-                +254 700 000 000
+              <a href="https://wa.me/254729983567" className="text-blue-600 font-semibold hover:underline">
+                0729983567
               </a>
               <p className="text-sm text-gray-500 mt-2">Available 24/7</p>
             </div>

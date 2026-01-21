@@ -117,7 +117,7 @@ async function fixExpiredDailySubscriptions() {
                     </a>
                   </div>
                   <p style="color: #666; font-size: 14px;">
-                    Need help? Contact our support team at support@smartduka.co.ke
+                    Need help? Contact our support team at smartdukainfo@gmail.com
                   </p>
                 </div>
               `,

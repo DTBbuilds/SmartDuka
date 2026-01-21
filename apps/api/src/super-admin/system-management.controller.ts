@@ -427,6 +427,22 @@ export class SystemManagementController {
   // ============================================
 
   /**
+   * Get payment attempt statistics
+   * Note: This route MUST come before the general /payment-attempts route
+   */
+  @Get('payment-attempts/stats')
+  async getPaymentAttemptStats(
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    this.logger.log('Fetching payment attempt statistics');
+    return this.paymentAttemptService.getStatistics(
+      startDate ? new Date(startDate) : undefined,
+      endDate ? new Date(endDate) : undefined,
+    );
+  }
+
+  /**
    * Get all payment attempts with filtering
    */
   @Get('payment-attempts')
@@ -449,21 +465,6 @@ export class SystemManagementController {
       limit: limit ? parseInt(limit) : 50,
       skip: skip ? parseInt(skip) : 0,
     });
-  }
-
-  /**
-   * Get payment attempt statistics
-   */
-  @Get('payment-attempts/stats')
-  async getPaymentAttemptStats(
-    @Query('startDate') startDate?: string,
-    @Query('endDate') endDate?: string,
-  ) {
-    this.logger.log('Fetching payment attempt statistics');
-    return this.paymentAttemptService.getStatistics(
-      startDate ? new Date(startDate) : undefined,
-      endDate ? new Date(endDate) : undefined,
-    );
   }
 
   // ============================================

@@ -54,6 +54,8 @@ interface PaymentAttempt {
   checkoutRequestId?: string;
   paymentIntentId?: string;
   mpesaReceiptNumber?: string;
+  invoiceId?: string;
+  invoiceNumber?: string;
   errorCode?: string;
   errorMessage?: string;
   createdAt: string;
@@ -106,6 +108,23 @@ interface PendingSubscriptionPayment {
   createdAt: string;
 }
 
+interface PendingSubscriptionInvoice {
+  _id: string;
+  invoiceNumber: string;
+  shopId: string;
+  shopName?: string;
+  shopEmail?: string;
+  totalAmount: number;
+  mpesaReceiptNumber?: string;
+  currentPlan?: string;
+  manualPayment?: {
+    submittedAt?: string;
+    phoneNumber?: string;
+    paidAmount?: number;
+  };
+  updatedAt: string;
+}
+
 interface InvoicePaymentStats {
   totalAmount: number;
   byMethod: Record<string, number>;
@@ -124,11 +143,13 @@ interface PaymentStats {
 const statusColors: Record<string, string> = {
   initiated: 'bg-blue-100 text-blue-800',
   pending: 'bg-yellow-100 text-yellow-800',
+  pending_approval: 'bg-amber-100 text-amber-800',
   processing: 'bg-purple-100 text-purple-800',
   success: 'bg-green-100 text-green-800',
   failed: 'bg-red-100 text-red-800',
   cancelled: 'bg-gray-100 text-gray-800',
   expired: 'bg-orange-100 text-orange-800',
+  rejected: 'bg-red-100 text-red-800',
 };
 
 const methodIcons: Record<string, React.ReactNode> = {
@@ -187,6 +208,7 @@ function SuperAdminPaymentsContent() {
   // Pending approvals state
   const [pendingInvoicePayments, setPendingInvoicePayments] = useState<PendingInvoicePayment[]>([]);
   const [pendingSubscriptionPayments, setPendingSubscriptionPayments] = useState<PendingSubscriptionPayment[]>([]);
+  const [pendingSubscriptionInvoices, setPendingSubscriptionInvoices] = useState<PendingSubscriptionInvoice[]>([]);
   const [pendingLoading, setPendingLoading] = useState(false);
   const [approving, setApproving] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<string | null>(null);
@@ -248,19 +270,92 @@ function SuperAdminPaymentsContent() {
     if (!token) return;
     try {
       setPendingLoading(true);
-      const res = await api.get<{
-        invoicePayments: PendingInvoicePayment[];
-        subscriptionPayments: PendingSubscriptionPayment[];
-      }>('/super-admin/system/pending-approvals');
+      
+      // Fetch both regular pending approvals AND pending subscription invoices (Send Money)
+      const [approvalsRes, subscriptionInvoicesRes] = await Promise.all([
+        api.get<{
+          invoicePayments: PendingInvoicePayment[];
+          subscriptionPayments: PendingSubscriptionPayment[];
+        }>('/super-admin/system/pending-approvals'),
+        api.get<{
+          invoices: PendingSubscriptionInvoice[];
+          total: number;
+        }>('/super-admin/payments/pending'),
+      ]);
 
-      setPendingInvoicePayments(res.invoicePayments || []);
-      setPendingSubscriptionPayments(res.subscriptionPayments || []);
+      setPendingInvoicePayments(approvalsRes.invoicePayments || []);
+      setPendingSubscriptionPayments(approvalsRes.subscriptionPayments || []);
+      setPendingSubscriptionInvoices(subscriptionInvoicesRes.invoices || []);
     } catch (error) {
       console.error('Failed to load pending approvals:', error);
     } finally {
       setPendingLoading(false);
     }
   }, [token]);
+
+  // Verify a Send Money subscription invoice payment
+  const verifySubscriptionInvoice = async (invoiceId: string) => {
+    try {
+      setApproving(`sub-invoice-${invoiceId}`);
+      await api.post(`/super-admin/payments/verify/${invoiceId}`, {});
+      await loadPendingApprovals();
+      await loadData();
+    } catch (error) {
+      console.error('Failed to verify subscription invoice:', error);
+    } finally {
+      setApproving(null);
+    }
+  };
+
+  // Verify a payment attempt directly from the table (for Send Money payments)
+  const verifyPaymentAttempt = async (attempt: PaymentAttempt) => {
+    if (!attempt.invoiceId) {
+      console.error('No invoice ID found for payment attempt');
+      return;
+    }
+    try {
+      setApproving(`attempt-${attempt._id}`);
+      await api.post(`/super-admin/payments/verify/${attempt.invoiceId}`, {});
+      await loadPendingApprovals();
+      await loadData();
+    } catch (error) {
+      console.error('Failed to verify payment attempt:', error);
+    } finally {
+      setApproving(null);
+    }
+  };
+
+  // Reject a payment attempt directly from the table
+  const rejectPaymentAttempt = async (attempt: PaymentAttempt, reason: string) => {
+    if (!attempt.invoiceId) {
+      console.error('No invoice ID found for payment attempt');
+      return;
+    }
+    try {
+      setRejecting(`attempt-${attempt._id}`);
+      await api.post(`/super-admin/payments/reject/${attempt.invoiceId}`, { reason });
+      await loadPendingApprovals();
+      await loadData();
+    } catch (error) {
+      console.error('Failed to reject payment attempt:', error);
+    } finally {
+      setRejecting(null);
+    }
+  };
+
+  // Reject a Send Money subscription invoice payment
+  const rejectSubscriptionInvoice = async (invoiceId: string, reason: string) => {
+    try {
+      setRejecting(`sub-invoice-${invoiceId}`);
+      await api.post(`/super-admin/payments/reject/${invoiceId}`, { reason });
+      await loadPendingApprovals();
+      await loadData();
+    } catch (error) {
+      console.error('Failed to reject subscription invoice:', error);
+    } finally {
+      setRejecting(null);
+    }
+  };
 
   const approveInvoicePayment = async (invoiceId: string, paymentId: string) => {
     try {
@@ -559,10 +654,13 @@ function SuperAdminPaymentsContent() {
                 <option value="">All Statuses</option>
                 <option value="initiated">Initiated</option>
                 <option value="pending">Pending</option>
+                <option value="pending_approval">Pending Approval</option>
                 <option value="processing">Processing</option>
                 <option value="success">Success</option>
                 <option value="failed">Failed</option>
                 <option value="cancelled">Cancelled</option>
+                <option value="expired">Expired</option>
+                <option value="rejected">Rejected</option>
               </select>
 
               {(statusFilter || methodFilter || searchQuery) && (
@@ -592,7 +690,91 @@ function SuperAdminPaymentsContent() {
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0 md:p-6">
-          <div className="overflow-x-auto">
+          {/* Mobile Card View */}
+          <div className="md:hidden space-y-3 p-4">
+            {filteredAttempts.length === 0 ? (
+              <div className="py-8 text-center text-muted-foreground">
+                No payment attempts found
+              </div>
+            ) : (
+              filteredAttempts.map((attempt) => (
+                <div key={attempt._id} className="border rounded-lg p-4 space-y-3">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <div className="font-medium text-sm">{attempt.shopName || 'Unknown Shop'}</div>
+                      <div className="text-xs text-muted-foreground">{attempt.userEmail}</div>
+                    </div>
+                    <Badge className={statusColors[attempt.status] || 'bg-gray-100'}>
+                      {attempt.status}
+                    </Badge>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <span className="text-muted-foreground">Amount:</span>
+                      <div className="font-medium">{formatCurrency(attempt.amount)}</div>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Method:</span>
+                      <div className="flex items-center gap-1">
+                        {methodIcons[attempt.method]}
+                        <span className="text-xs">{methodLabels[attempt.method] || attempt.method}</span>
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Type:</span>
+                      <div className="capitalize">{attempt.type}</div>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Time:</span>
+                      <div className="text-xs">{formatDate(attempt.createdAt)}</div>
+                    </div>
+                  </div>
+                  {attempt.mpesaReceiptNumber && (
+                    <div className="text-xs font-mono bg-muted p-2 rounded">
+                      Receipt: {attempt.mpesaReceiptNumber}
+                    </div>
+                  )}
+                  {attempt.status === 'pending_approval' && attempt.invoiceId && (
+                    <div className="flex gap-2 pt-2 border-t">
+                      <Button
+                        size="sm"
+                        className="flex-1 bg-green-600 hover:bg-green-700"
+                        onClick={() => verifyPaymentAttempt(attempt)}
+                        disabled={approving === `attempt-${attempt._id}`}
+                      >
+                        {approving === `attempt-${attempt._id}` ? (
+                          <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                        ) : (
+                          <CheckCircle className="h-4 w-4 mr-1" />
+                        )}
+                        Verify
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        className="flex-1"
+                        onClick={() => {
+                          const reason = prompt('Enter rejection reason:');
+                          if (reason) rejectPaymentAttempt(attempt, reason);
+                        }}
+                        disabled={rejecting === `attempt-${attempt._id}`}
+                      >
+                        {rejecting === `attempt-${attempt._id}` ? (
+                          <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                        ) : (
+                          <XCircle className="h-4 w-4 mr-1" />
+                        )}
+                        Reject
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Desktop Table View */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b text-left text-sm text-muted-foreground">
@@ -603,12 +785,13 @@ function SuperAdminPaymentsContent() {
                   <th className="pb-3 font-medium">Amount</th>
                   <th className="pb-3 font-medium">Status</th>
                   <th className="pb-3 font-medium">Details</th>
+                  <th className="pb-3 font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredAttempts.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-8 text-center text-muted-foreground">
+                    <td colSpan={8} className="py-8 text-center text-muted-foreground">
                       No payment attempts found
                     </td>
                   </tr>
@@ -673,6 +856,42 @@ function SuperAdminPaymentsContent() {
                           <div className="text-xs text-red-600 max-w-[200px] truncate" title={attempt.errorMessage}>
                             {attempt.errorMessage}
                           </div>
+                        )}
+                      </td>
+                      <td className="py-3">
+                        {attempt.status === 'pending_approval' && attempt.invoiceId ? (
+                          <div className="flex gap-1">
+                            <Button
+                              size="sm"
+                              className="bg-green-600 hover:bg-green-700 h-7 px-2"
+                              onClick={() => verifyPaymentAttempt(attempt)}
+                              disabled={approving === `attempt-${attempt._id}`}
+                            >
+                              {approving === `attempt-${attempt._id}` ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <CheckCircle className="h-3 w-3" />
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              className="h-7 px-2"
+                              onClick={() => {
+                                const reason = prompt('Enter rejection reason:');
+                                if (reason) rejectPaymentAttempt(attempt, reason);
+                              }}
+                              disabled={rejecting === `attempt-${attempt._id}`}
+                            >
+                              {rejecting === `attempt-${attempt._id}` ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <XCircle className="h-3 w-3" />
+                              )}
+                            </Button>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">-</span>
                         )}
                       </td>
                     </tr>
@@ -1157,6 +1376,111 @@ function SuperAdminPaymentsContent() {
                                 disabled={rejecting === `subscription-${payment._id}`}
                               >
                                 {rejecting === `subscription-${payment._id}` ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <>
+                                    <XCircle className="h-4 w-4 mr-1" />
+                                    Reject
+                                  </>
+                                )}
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Pending Send Money Subscription Invoices */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Phone className="h-5 w-5 text-green-500" />
+                    Send Money Payments (Pending Verification)
+                  </CardTitle>
+                  <CardDescription>
+                    {pendingSubscriptionInvoices.length} Send Money payment(s) awaiting verification
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {pendingSubscriptionInvoices.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <CheckCircle className="h-12 w-12 mx-auto mb-2 text-green-500" />
+                      <p>No pending Send Money payments</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {pendingSubscriptionInvoices.map((invoice) => (
+                        <div key={invoice._id} className="border rounded-lg p-4 bg-green-50">
+                          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <Badge className="bg-green-100 text-green-800">
+                                  <Phone className="h-3 w-3 mr-1" />
+                                  Send Money
+                                </Badge>
+                                <span className="font-mono text-sm">{invoice.invoiceNumber}</span>
+                              </div>
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                                <div>
+                                  <span className="text-muted-foreground">Shop:</span>
+                                  <p className="font-medium">{invoice.shopName || 'Unknown'}</p>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">Email:</span>
+                                  <p className="font-medium text-xs">{invoice.shopEmail || 'N/A'}</p>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">Plan:</span>
+                                  <p className="font-medium capitalize">{invoice.currentPlan || 'N/A'}</p>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">Amount:</span>
+                                  <p className="font-bold text-green-600">{formatCurrency(invoice.totalAmount)}</p>
+                                </div>
+                              </div>
+                              {invoice.mpesaReceiptNumber && (
+                                <div className="mt-2 p-2 bg-white rounded border">
+                                  <span className="text-xs text-muted-foreground">M-Pesa Reference:</span>
+                                  <p className="font-mono font-bold text-green-700">{invoice.mpesaReceiptNumber}</p>
+                                </div>
+                              )}
+                              <p className="text-xs text-muted-foreground mt-2">
+                                Submitted: {formatDate(invoice.updatedAt)}
+                              </p>
+                            </div>
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                className="bg-green-600 hover:bg-green-700"
+                                onClick={() => verifySubscriptionInvoice(invoice._id)}
+                                disabled={approving === `sub-invoice-${invoice._id}`}
+                              >
+                                {approving === `sub-invoice-${invoice._id}` ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <>
+                                    <CheckCircle className="h-4 w-4 mr-1" />
+                                    Verify & Activate
+                                  </>
+                                )}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => {
+                                  const reason = prompt('Enter rejection reason (min 10 characters):');
+                                  if (reason && reason.length >= 10) {
+                                    rejectSubscriptionInvoice(invoice._id, reason);
+                                  } else if (reason) {
+                                    alert('Reason must be at least 10 characters');
+                                  }
+                                }}
+                                disabled={rejecting === `sub-invoice-${invoice._id}`}
+                              >
+                                {rejecting === `sub-invoice-${invoice._id}` ? (
                                   <Loader2 className="h-4 w-4 animate-spin" />
                                 ) : (
                                   <>

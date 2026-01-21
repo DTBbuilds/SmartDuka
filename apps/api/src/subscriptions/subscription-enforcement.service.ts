@@ -162,6 +162,19 @@ export class SubscriptionEnforcementService {
           const daysUntilSuspension = subscription.gracePeriodEndDate
             ? Math.max(0, Math.ceil((subscription.gracePeriodEndDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)))
             : 0;
+          
+          // If grace period has ended or no grace period, BLOCK the shop
+          if (daysUntilSuspension <= 0) {
+            return {
+              accessLevel: SubscriptionAccessLevel.BLOCKED,
+              status: subscription.status,
+              message: 'Your subscription has expired. Please pay to restore access.',
+              daysRemaining: 0,
+              daysUntilSuspension: 0,
+              canMakePayment: true,
+              subscription: subscriptionInfo,
+            };
+          }
 
           return {
             accessLevel: SubscriptionAccessLevel.READ_ONLY,

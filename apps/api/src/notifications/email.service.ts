@@ -300,8 +300,8 @@ export class EmailService {
       <p>${footerText || 'This is an automated message from SmartDuka.'}</p>
       <p>© ${new Date().getFullYear()} SmartDuka. All rights reserved.</p>
       <p style="margin-top: 10px;">
-        <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}" style="color: #2563eb; text-decoration: none;">Visit SmartDuka</a> |
-        <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/help" style="color: #2563eb; text-decoration: none;">Help Center</a>
+        <a href="${process.env.FRONTEND_URL || 'https://smartduka-eta.vercel.app'}" style="color: #2563eb; text-decoration: none;">Visit SmartDuka</a> |
+        <a href="${process.env.FRONTEND_URL || 'https://smartduka-eta.vercel.app'}/help" style="color: #2563eb; text-decoration: none;">Help Center</a>
       </p>
     </div>
   </div>

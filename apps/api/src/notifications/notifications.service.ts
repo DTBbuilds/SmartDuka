@@ -133,7 +133,7 @@ export class NotificationsService {
         shopName,
         productCount: products.length,
         productList: `<ul>${productList}</ul>`,
-        dashboardUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/admin/inventory`,
+        dashboardUrl: `${process.env.FRONTEND_URL || 'https://smartduka-eta.vercel.app'}/admin/inventory`,
       },
     });
   }
@@ -177,7 +177,7 @@ export class NotificationsService {
         totalSales: data.totalSales.toLocaleString(),
         orderCount: data.orderCount,
         topProducts: topProductsHtml,
-        dashboardUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/admin/analytics/sales`,
+        dashboardUrl: `${process.env.FRONTEND_URL || 'https://smartduka-eta.vercel.app'}/admin/analytics/sales`,
       },
     });
   }
@@ -218,7 +218,7 @@ export class NotificationsService {
           day: 'numeric' 
         }),
         daysLeft,
-        renewUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/admin/subscription`,
+        renewUrl: `${process.env.FRONTEND_URL || 'https://smartduka-eta.vercel.app'}/admin/subscription`,
       },
     });
   }

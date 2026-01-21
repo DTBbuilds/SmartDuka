@@ -72,9 +72,12 @@ interface ShopSubscription {
   planName: string;
   status: string;
   billingCycle: string;
+  billingDisplay?: string;
   currentPrice: number;
   currentPeriodEnd: string;
   daysRemaining: number;
+  isTrial?: boolean;
+  createdAt?: string;
   subscriptionId?: string;
   usage: {
     shops: { current: number; limit: number };
@@ -141,6 +144,21 @@ function SuperAdminSubscriptionsContent() {
     subscription?: ShopSubscription;
   }>({ open: false, type: 'suspend' });
   
+  // Edit Plan Dialog
+  const [editDialog, setEditDialog] = useState<ShopSubscription | null>(null);
+  const [editForm, setEditForm] = useState({
+    planCode: '',
+    status: '',
+    billingCycle: '',
+    currentPeriodEnd: '',
+    currentPrice: 0,
+  });
+  
+  // Grace Period Dialog
+  const [graceDialog, setGraceDialog] = useState<ShopSubscription | null>(null);
+  const [graceDays, setGraceDays] = useState(7);
+  const [graceReason, setGraceReason] = useState('');
+  
   // Messages
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -182,8 +200,10 @@ function SuperAdminSubscriptionsContent() {
       subscriptionCache.data = subsData || [];
       subscriptionCache.stats = statsData || null;
       subscriptionCache.timestamp = now;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to fetch subscriptions:', error);
+      const errorMsg = error?.message || 'Failed to fetch subscriptions. Please ensure you are logged in as super admin.';
+      setMessage({ type: 'error', text: errorMsg });
       setSubscriptions([]);
       setStats(null);
     } finally {
@@ -269,6 +289,98 @@ function SuperAdminSubscriptionsContent() {
       setMessage({ type: 'success', text: `Invoice sent to ${sub.shopEmail}` });
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message || 'Failed to send invoice' });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Open edit dialog
+  const openEditDialog = (sub: ShopSubscription) => {
+    setEditForm({
+      planCode: sub.planCode,
+      status: sub.status,
+      billingCycle: sub.billingCycle,
+      currentPeriodEnd: new Date(sub.currentPeriodEnd).toISOString().split('T')[0],
+      currentPrice: sub.currentPrice,
+    });
+    setEditDialog(sub);
+  };
+
+  // Handle manual plan update
+  const handleUpdatePlan = async () => {
+    if (!editDialog) return;
+    
+    try {
+      setActionLoading(editDialog.shopId);
+      await api.put(`/subscriptions/admin/${editDialog.shopId}/update`, {
+        planCode: editForm.planCode,
+        status: editForm.status,
+        billingCycle: editForm.billingCycle,
+        currentPeriodEnd: new Date(editForm.currentPeriodEnd).toISOString(),
+        currentPrice: editForm.currentPrice,
+      });
+      setMessage({ type: 'success', text: `${editDialog.shopName} subscription updated successfully` });
+      setEditDialog(null);
+      await fetchData(true);
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message || 'Failed to update subscription' });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Handle fix trial subscriptions
+  const handleFixTrialSubscriptions = async () => {
+    try {
+      setActionLoading('maintenance');
+      const result = await api.post<{ fixed: number; skipped: number; details: string[] }>('/subscriptions/admin/fix-trial-subscriptions');
+      setMessage({ 
+        type: 'success', 
+        text: `Fixed ${result.fixed} trial subscriptions. ${result.details.slice(0, 3).join(', ')}${result.details.length > 3 ? '...' : ''}` 
+      });
+      await fetchData(true);
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message || 'Failed to fix trial subscriptions' });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Handle audit subscriptions
+  const handleAuditSubscriptions = async () => {
+    try {
+      setActionLoading('maintenance');
+      const result = await api.post<{ audited: number; fixed: number; issues: string[] }>('/subscriptions/admin/audit-subscriptions');
+      setMessage({ 
+        type: 'success', 
+        text: `Audited ${result.audited} subscriptions, fixed ${result.fixed} issues. ${result.issues.slice(0, 3).join(', ')}${result.issues.length > 3 ? '...' : ''}` 
+      });
+      await fetchData(true);
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message || 'Failed to audit subscriptions' });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Handle grace period grant
+  const handleGrantGracePeriod = async () => {
+    if (!graceDialog) return;
+    
+    try {
+      setActionLoading(graceDialog.shopId);
+      await api.post(`/subscriptions/admin/${graceDialog.shopId}/grace-period`, {
+        days: graceDays,
+        reason: graceReason,
+        sendEmail: true,
+      });
+      setMessage({ type: 'success', text: `Grace period of ${graceDays} days granted to ${graceDialog.shopName}` });
+      setGraceDialog(null);
+      setGraceDays(7);
+      setGraceReason('');
+      await fetchData(true);
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message || 'Failed to grant grace period' });
     } finally {
       setActionLoading(null);
     }
@@ -367,6 +479,30 @@ function SuperAdminSubscriptionsContent() {
               </DropdownMenuContent>
             </DropdownMenu>
           )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="gap-2">
+                <FileText className="h-4 w-4" />
+                <span className="hidden sm:inline">Maintenance</span>
+                <ChevronDown className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem onClick={handleFixTrialSubscriptions}>
+                <Clock className="h-4 w-4 mr-2" />
+                Fix Trial Periods (14 days)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleAuditSubscriptions}>
+                <AlertCircle className="h-4 w-4 mr-2" />
+                Audit & Fix Mismatches
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => fetchData(true)}>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Refresh Data
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button
             variant="outline"
             onClick={() => fetchData(true)}
@@ -575,7 +711,7 @@ function SuperAdminSubscriptionsContent() {
                     <td className="px-4 py-4 hidden lg:table-cell">
                       <div>
                         <p className="font-medium">KES {sub.currentPrice.toLocaleString()}</p>
-                        <p className="text-xs text-gray-500 capitalize">{sub.billingCycle}</p>
+                        <p className="text-xs text-gray-500 capitalize">{sub.billingDisplay || sub.billingCycle}</p>
                       </div>
                     </td>
                     <td className="px-4 py-4 hidden xl:table-cell">
@@ -624,9 +760,20 @@ function SuperAdminSubscriptionsContent() {
                               <Eye className="h-4 w-4 mr-2" />
                               View Details
                             </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openEditDialog(sub)}>
+                              <Edit className="h-4 w-4 mr-2" />
+                              Edit Plan
+                            </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleSendInvoice(sub)}>
                               <Mail className="h-4 w-4 mr-2" />
                               Send Invoice
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={() => setGraceDialog(sub)}
+                              className="text-blue-600"
+                            >
+                              <Calendar className="h-4 w-4 mr-2" />
+                              Grant Grace Period
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             {sub.status === 'suspended' || sub.status === 'cancelled' ? (
@@ -786,6 +933,155 @@ function SuperAdminSubscriptionsContent() {
             }}>
               <Mail className="h-4 w-4 mr-2" />
               Send Invoice
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Plan Dialog */}
+      <Dialog open={!!editDialog} onOpenChange={() => setEditDialog(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Edit className="h-5 w-5" />
+              Edit Subscription
+            </DialogTitle>
+            <DialogDescription>
+              Manually configure {editDialog?.shopName}'s subscription
+            </DialogDescription>
+          </DialogHeader>
+          {editDialog && (
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium text-gray-700">Plan</label>
+                <Select value={editForm.planCode} onValueChange={(v) => setEditForm(prev => ({ ...prev, planCode: v }))}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="trial">Trial (Free - 14 days)</SelectItem>
+                    <SelectItem value="starter">Starter (Daily KES 99)</SelectItem>
+                    <SelectItem value="basic">Basic (Monthly KES 1,500)</SelectItem>
+                    <SelectItem value="silver">Silver (Monthly KES 3,000)</SelectItem>
+                    <SelectItem value="gold">Gold (Monthly KES 4,500)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700">Status</label>
+                <Select value={editForm.status} onValueChange={(v) => setEditForm(prev => ({ ...prev, status: v }))}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="trial">Trial</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="past_due">Past Due</SelectItem>
+                    <SelectItem value="suspended">Suspended</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                    <SelectItem value="expired">Expired</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700">Billing Cycle</label>
+                <Select value={editForm.billingCycle} onValueChange={(v) => setEditForm(prev => ({ ...prev, billingCycle: v }))}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="daily">Daily</SelectItem>
+                    <SelectItem value="monthly">Monthly</SelectItem>
+                    <SelectItem value="annual">Annual</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700">Period End Date</label>
+                <Input
+                  type="date"
+                  value={editForm.currentPeriodEnd}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, currentPeriodEnd: e.target.value }))}
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700">Price (KES)</label>
+                <Input
+                  type="number"
+                  value={editForm.currentPrice}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, currentPrice: Number(e.target.value) }))}
+                  className="mt-1"
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={() => setEditDialog(null)} disabled={actionLoading !== null}>
+              Cancel
+            </Button>
+            <Button onClick={handleUpdatePlan} disabled={actionLoading !== null}>
+              {actionLoading === editDialog?.shopId && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Grace Period Dialog */}
+      <Dialog open={!!graceDialog} onOpenChange={() => setGraceDialog(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Calendar className="h-5 w-5 text-blue-500" />
+              Grant Grace Period
+            </DialogTitle>
+            <DialogDescription>
+              Extend {graceDialog?.shopName}'s subscription as compensation
+            </DialogDescription>
+          </DialogHeader>
+          {graceDialog && (
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium text-gray-700">Number of Days</label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={90}
+                  value={graceDays}
+                  onChange={(e) => setGraceDays(Number(e.target.value))}
+                  className="mt-1"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  New expiry: {new Date(new Date(graceDialog.currentPeriodEnd).getTime() + graceDays * 24 * 60 * 60 * 1000).toLocaleDateString()}
+                </p>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700">Reason (optional)</label>
+                <Input
+                  value={graceReason}
+                  onChange={(e) => setGraceReason(e.target.value)}
+                  placeholder="e.g., Service downtime compensation"
+                  className="mt-1"
+                />
+              </div>
+              <div className="bg-blue-50 p-3 rounded-lg text-sm text-blue-800">
+                <p>This will:</p>
+                <ul className="list-disc list-inside mt-1 space-y-1">
+                  <li>Extend subscription by {graceDays} days</li>
+                  <li>Reactivate account if suspended/expired</li>
+                  <li>Send notification email to shop owner</li>
+                </ul>
+              </div>
+            </div>
+          )}
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={() => setGraceDialog(null)} disabled={actionLoading !== null}>
+              Cancel
+            </Button>
+            <Button onClick={handleGrantGracePeriod} disabled={actionLoading !== null}>
+              {actionLoading === graceDialog?.shopId && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Grant Grace Period
             </Button>
           </DialogFooter>
         </DialogContent>

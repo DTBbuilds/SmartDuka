@@ -126,10 +126,14 @@ export default function InvoicesPage() {
     );
   };
 
-  const openInvoice = (invoiceId: string, type: 'invoice' | 'receipt') => {
-    // Use full backend URL for PDF generation (bypasses Next.js routing)
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-    window.open(`${backendUrl}/api/v1/subscriptions/invoices/${invoiceId}/pdf?type=${type}`, '_blank');
+  const openInvoice = async (invoiceId: string, type: 'invoice' | 'receipt') => {
+    try {
+      const { downloadWithAuth } = await import('@/lib/api-client');
+      await downloadWithAuth(`/subscriptions/invoices/${invoiceId}/pdf?type=${type}`);
+    } catch (error: any) {
+      console.error('Failed to open document:', error);
+      alert(error.message || 'Failed to open document');
+    }
   };
 
   if (loading) {

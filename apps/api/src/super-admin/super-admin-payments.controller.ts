@@ -31,8 +31,11 @@ import {
 } from '../subscriptions/schemas/payment-attempt.schema';
 import { Subscription, SubscriptionDocument } from '../subscriptions/schemas/subscription.schema';
 import { Shop, ShopDocument } from '../shops/schemas/shop.schema';
+import { User, UserDocument } from '../users/schemas/user.schema';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { SystemAuditService } from './services/system-audit.service';
+import { EmailService } from '../notifications/email.service';
+import { EMAIL_TEMPLATES } from '../notifications/email-templates';
 
 /**
  * Super Admin Payment Verification Controller
@@ -59,8 +62,11 @@ export class SuperAdminPaymentsController {
     private readonly subscriptionModel: Model<SubscriptionDocument>,
     @InjectModel(Shop.name)
     private readonly shopModel: Model<ShopDocument>,
+    @InjectModel(User.name)
+    private readonly userModel: Model<UserDocument>,
     private readonly subscriptionsService: SubscriptionsService,
     private readonly auditService: SystemAuditService,
+    private readonly emailService: EmailService,
   ) {}
 
   /**
@@ -241,6 +247,20 @@ export class SuperAdminPaymentsController {
       },
     );
 
+    // Update the PaymentAttempt record if it exists (for Send Money payments)
+    await this.attemptModel.updateOne(
+      { invoiceId: invoiceId },
+      {
+        $set: {
+          status: PaymentAttemptStatus.SUCCESS,
+          completedAt: new Date(),
+          approvedAt: new Date(),
+          approvedBy: admin.sub,
+          approvedByEmail: admin.email,
+        },
+      },
+    );
+
     // Log the verification
     await this.auditService.log({
       category: 'payment' as any,
@@ -263,6 +283,8 @@ export class SuperAdminPaymentsController {
 
     // Check if this is for a pending upgrade and activate it
     let upgradeActivated = false;
+    let subscriptionActivated = false;
+    
     if (invoice.type === 'upgrade') {
       const result = await this.subscriptionsService.activatePendingUpgrade(
         invoice.shopId.toString(),
@@ -272,12 +294,64 @@ export class SuperAdminPaymentsController {
         upgradeActivated = true;
         this.logger.log(`✅ Upgrade activated for shop ${invoice.shopId} after payment verification`);
       }
+    } else {
+      // For regular subscription invoices (renewal, new subscription), activate the subscription
+      try {
+        await this.subscriptionsService.verifyAndActivatePayment(invoiceId, admin.sub);
+        subscriptionActivated = true;
+        this.logger.log(`✅ Subscription activated for shop ${invoice.shopId} after payment verification`);
+      } catch (activationError: any) {
+        this.logger.warn(`Subscription activation skipped or failed: ${activationError.message}`);
+        // Continue - invoice is already marked as paid
+      }
+    }
+
+    // Send payment confirmation email
+    try {
+      const shop = await this.shopModel.findById(invoice.shopId).lean();
+      const shopAdmin = await this.userModel.findOne({ 
+        shopId: invoice.shopId, 
+        role: 'admin' 
+      }).lean();
+      const subscription = await this.subscriptionModel.findById(invoice.subscriptionId).lean();
+
+      if (shopAdmin?.email && shop) {
+        const template = EMAIL_TEMPLATES.payment_successful;
+        const frontendUrl = process.env.FRONTEND_URL || 'https://smartduka.co.ke';
+        
+        await this.emailService.sendEmail({
+          to: shopAdmin.email,
+          subject: template.subject
+            .replace('{{amount}}', `KES ${invoice.totalAmount.toLocaleString()}`)
+            .replace('{{currency}}', 'KES'),
+          html: template.getHtml({
+            shopName: shop.name,
+            userName: shopAdmin.name || shopAdmin.email,
+            amount: `KES ${invoice.totalAmount.toLocaleString()}`,
+            currency: 'KES',
+            paymentMethod: 'M-Pesa Send Money',
+            transactionId: invoice.mpesaReceiptNumber || invoice.invoiceNumber,
+            planName: subscription?.planCode || 'Subscription',
+            receiptUrl: `${frontendUrl}/admin/subscription?tab=invoices`,
+            date: new Date().toLocaleDateString('en-KE', { 
+              dateStyle: 'long' 
+            }),
+          }),
+        });
+
+        this.logger.log(`📧 Payment confirmation email sent to ${shopAdmin.email}`);
+      }
+    } catch (emailError: any) {
+      this.logger.error(`Failed to send payment confirmation email: ${emailError.message}`);
+      // Don't fail the verification if email fails
     }
 
     return {
       success: true,
       message: upgradeActivated
         ? 'Payment verified and subscription upgraded successfully!'
+        : subscriptionActivated
+        ? 'Payment verified and subscription activated successfully!'
         : 'Payment verified successfully!',
       upgradeActivated,
     };
