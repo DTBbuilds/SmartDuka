@@ -121,13 +121,68 @@ export class SuperAdminService {
   }
 
   /**
-   * Get shop details
+   * Get shop details with subscription information
    */
-  async getShopDetails(shopId: string): Promise<ShopDocument> {
+  async getShopDetails(shopId: string): Promise<ShopDocument & { subscription?: any }> {
     const shop = await this.shopModel.findById(new Types.ObjectId(shopId)).exec();
     if (!shop) {
       throw new NotFoundException('Shop not found');
     }
+    
+    // Fetch subscription to ensure status sync
+    const subscription = await this.subscriptionModel.findOne({
+      shopId: new Types.ObjectId(shopId),
+    }).exec();
+    
+    // Sync shop status with subscription status if there's a mismatch
+    if (subscription) {
+      const subStatus = subscription.status;
+      let shouldUpdate = false;
+      let newShopStatus = shop.status;
+      
+      // If subscription is suspended/expired but shop shows active, sync it
+      if ((subStatus === SubscriptionStatus.SUSPENDED || subStatus === SubscriptionStatus.EXPIRED) 
+          && shop.status === 'active') {
+        newShopStatus = 'suspended';
+        shouldUpdate = true;
+      }
+      // If subscription is active but shop shows suspended (due to subscription), reactivate
+      else if (subStatus === SubscriptionStatus.ACTIVE && shop.subscriptionStatus === 'suspended') {
+        newShopStatus = 'active';
+        shouldUpdate = true;
+      }
+      
+      if (shouldUpdate) {
+        // Use findByIdAndUpdate to avoid full document validation (some shops may lack optional fields like county)
+        await this.shopModel.findByIdAndUpdate(
+          new Types.ObjectId(shopId),
+          { 
+            status: newShopStatus, 
+            subscriptionStatus: subStatus,
+            updatedAt: new Date(),
+          },
+          { runValidators: false }
+        ).exec();
+        
+        // Update local shop object for return
+        shop.status = newShopStatus;
+        shop.subscriptionStatus = subStatus;
+        this.logger.log(`Synced shop ${shopId} status to ${newShopStatus} (subscription: ${subStatus})`);
+      }
+      
+      // Return shop with subscription info
+      const shopObj = shop.toObject();
+      return {
+        ...shopObj,
+        subscription: {
+          status: subscription.status,
+          planCode: subscription.planCode,
+          currentPeriodEnd: subscription.currentPeriodEnd,
+          gracePeriodEndDate: subscription.gracePeriodEndDate,
+        },
+      } as ShopDocument & { subscription?: any };
+    }
+    
     return shop;
   }
 

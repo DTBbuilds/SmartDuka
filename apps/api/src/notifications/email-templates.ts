@@ -17,11 +17,12 @@
  * - Website: smartduka.co.ke
  */
 
-// SmartDuka Cart Logo SVG (inline for email compatibility)
-export const SMARTDUKA_LOGO_SVG = `
-<svg viewBox="0 0 24 24" fill="#f97316" xmlns="http://www.w3.org/2000/svg">
-  <path d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zM1 2v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25l.03-.12.9-1.63h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49c.08-.14.12-.31.12-.48 0-.55-.45-1-1-1H5.21l-.94-2H1zm16 16c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2z"/>
-</svg>`;
+// SmartDuka Cart Logo - Using emoji and text for maximum email client compatibility
+// SVG doesn't render reliably in all email clients (Gmail, Outlook, etc.)
+// Using a simple cart emoji + styled text that works everywhere
+export const SMARTDUKA_LOGO_HTML = `
+<div style="font-size: 36px; line-height: 1;">🛒</div>
+`;
 
 // Base email wrapper with SmartDuka branding
 export const getEmailWrapper = (content: string, preheader?: string): string => {
@@ -399,7 +400,7 @@ export const getEmailWrapper = (content: string, preheader?: string): string => 
             <!-- Header -->
             <div class="email-header">
               <div class="logo-container">
-                ${SMARTDUKA_LOGO_SVG}
+                ${SMARTDUKA_LOGO_HTML}
               </div>
               <h1 class="brand-name">SmartDuka</h1>
               <p class="brand-tagline">Smart POS & Inventory Management</p>

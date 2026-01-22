@@ -157,7 +157,17 @@ function SuperAdminSubscriptionsContent() {
   // Grace Period Dialog
   const [graceDialog, setGraceDialog] = useState<ShopSubscription | null>(null);
   const [graceDays, setGraceDays] = useState(7);
+  const [graceStartDate, setGraceStartDate] = useState('');
+  const [graceEndDate, setGraceEndDate] = useState('');
   const [graceReason, setGraceReason] = useState('');
+  
+  // Calculate days when dates change
+  const calculateGraceDays = (start: string, end: string) => {
+    if (!start || !end) return 0;
+    const startMs = new Date(start).getTime();
+    const endMs = new Date(end).getTime();
+    return Math.max(0, Math.ceil((endMs - startMs) / (24 * 60 * 60 * 1000)));
+  };
   
   // Messages
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -367,16 +377,30 @@ function SuperAdminSubscriptionsContent() {
   const handleGrantGracePeriod = async () => {
     if (!graceDialog) return;
     
+    // Calculate days from date range if dates are provided, otherwise use manual days
+    const calculatedDays = graceEndDate && graceStartDate 
+      ? calculateGraceDays(graceStartDate, graceEndDate) 
+      : graceDays;
+    
+    if (calculatedDays < 1) {
+      setMessage({ type: 'error', text: 'Please select a valid date range (end date must be after start date)' });
+      return;
+    }
+    
     try {
       setActionLoading(graceDialog.shopId);
       await api.post(`/subscriptions/admin/${graceDialog.shopId}/grace-period`, {
-        days: graceDays,
+        days: calculatedDays,
+        startDate: graceStartDate || undefined,
+        endDate: graceEndDate || undefined,
         reason: graceReason,
         sendEmail: true,
       });
-      setMessage({ type: 'success', text: `Grace period of ${graceDays} days granted to ${graceDialog.shopName}` });
+      setMessage({ type: 'success', text: `Grace period of ${calculatedDays} days granted to ${graceDialog.shopName}` });
       setGraceDialog(null);
       setGraceDays(7);
+      setGraceStartDate('');
+      setGraceEndDate('');
       setGraceReason('');
       await fetchData(true);
     } catch (error: any) {
@@ -1028,47 +1052,141 @@ function SuperAdminSubscriptionsContent() {
         </DialogContent>
       </Dialog>
 
-      {/* Grace Period Dialog */}
-      <Dialog open={!!graceDialog} onOpenChange={() => setGraceDialog(null)}>
-        <DialogContent className="max-w-md">
+      {/* Grace Period Dialog - Calendar-based Date Selection */}
+      <Dialog open={!!graceDialog} onOpenChange={() => {
+        setGraceDialog(null);
+        setGraceStartDate('');
+        setGraceEndDate('');
+        setGraceDays(7);
+        setGraceReason('');
+      }}>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Calendar className="h-5 w-5 text-blue-500" />
               Grant Grace Period
             </DialogTitle>
             <DialogDescription>
-              Extend {graceDialog?.shopName}'s subscription as compensation
+              Extend {graceDialog?.shopName}'s subscription. Choose a date range or enter days manually.
             </DialogDescription>
           </DialogHeader>
           {graceDialog && (
             <div className="space-y-4">
-              <div>
-                <label className="text-sm font-medium text-gray-700">Number of Days</label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={90}
-                  value={graceDays}
-                  onChange={(e) => setGraceDays(Number(e.target.value))}
-                  className="mt-1"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  New expiry: {new Date(new Date(graceDialog.currentPeriodEnd).getTime() + graceDays * 24 * 60 * 60 * 1000).toLocaleDateString()}
-                </p>
+              {/* Current subscription info */}
+              <div className="bg-gray-50 p-3 rounded-lg text-sm">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600">Current Expiry:</span>
+                  <span className="font-medium">{new Date(graceDialog.currentPeriodEnd).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                </div>
+                <div className="flex justify-between items-center mt-1">
+                  <span className="text-gray-600">Status:</span>
+                  <Badge variant={graceDialog.status === 'active' ? 'default' : 'destructive'}>
+                    {graceDialog.status}
+                  </Badge>
+                </div>
               </div>
+
+              {/* Date Range Selection */}
+              <div className="border rounded-lg p-4 space-y-3">
+                <p className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                  <Calendar className="h-4 w-4" />
+                  Select Date Range
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-gray-500">Start Date</label>
+                    <Input
+                      type="date"
+                      value={graceStartDate}
+                      onChange={(e) => {
+                        setGraceStartDate(e.target.value);
+                        // Auto-calculate days when both dates are set
+                        if (graceEndDate) {
+                          setGraceDays(calculateGraceDays(e.target.value, graceEndDate));
+                        }
+                      }}
+                      min={new Date().toISOString().split('T')[0]}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500">End Date</label>
+                    <Input
+                      type="date"
+                      value={graceEndDate}
+                      onChange={(e) => {
+                        setGraceEndDate(e.target.value);
+                        // Auto-calculate days when both dates are set
+                        if (graceStartDate) {
+                          setGraceDays(calculateGraceDays(graceStartDate, e.target.value));
+                        }
+                      }}
+                      min={graceStartDate || new Date().toISOString().split('T')[0]}
+                      className="mt-1"
+                    />
+                  </div>
+                </div>
+                {graceStartDate && graceEndDate && (
+                  <p className="text-sm text-center text-blue-600 font-medium">
+                    = {calculateGraceDays(graceStartDate, graceEndDate)} days extension
+                  </p>
+                )}
+              </div>
+
+              {/* OR Divider */}
+              <div className="flex items-center gap-3">
+                <div className="flex-1 border-t border-gray-200"></div>
+                <span className="text-xs text-gray-400 font-medium">OR</span>
+                <div className="flex-1 border-t border-gray-200"></div>
+              </div>
+
+              {/* Manual Days Entry */}
+              <div>
+                <label className="text-sm font-medium text-gray-700">Enter Days Manually</label>
+                <div className="flex gap-2 mt-1">
+                  <Input
+                    type="number"
+                    min={1}
+                    max={365}
+                    value={graceDays}
+                    onChange={(e) => {
+                      setGraceDays(Number(e.target.value));
+                      // Clear date selection when manually entering days
+                      setGraceStartDate('');
+                      setGraceEndDate('');
+                    }}
+                    className="w-24"
+                  />
+                  <span className="flex items-center text-sm text-gray-500">days from current expiry</span>
+                </div>
+                {!graceStartDate && !graceEndDate && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    New expiry: {new Date(new Date(graceDialog.currentPeriodEnd).getTime() + graceDays * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  </p>
+                )}
+              </div>
+
+              {/* Reason */}
               <div>
                 <label className="text-sm font-medium text-gray-700">Reason (optional)</label>
                 <Input
                   value={graceReason}
                   onChange={(e) => setGraceReason(e.target.value)}
-                  placeholder="e.g., Service downtime compensation"
+                  placeholder="e.g., Service downtime compensation, Customer loyalty"
                   className="mt-1"
                 />
               </div>
-              <div className="bg-blue-50 p-3 rounded-lg text-sm text-blue-800">
-                <p>This will:</p>
+
+              {/* Summary */}
+              <div className="bg-green-50 border border-green-200 p-3 rounded-lg text-sm text-green-800">
+                <p className="font-medium">This action will:</p>
                 <ul className="list-disc list-inside mt-1 space-y-1">
-                  <li>Extend subscription by {graceDays} days</li>
+                  <li>Extend subscription by <strong>{graceEndDate && graceStartDate ? calculateGraceDays(graceStartDate, graceEndDate) : graceDays}</strong> days</li>
+                  <li>Set new expiry to <strong>{
+                    graceEndDate 
+                      ? new Date(graceEndDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+                      : new Date(new Date(graceDialog.currentPeriodEnd).getTime() + graceDays * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+                  }</strong></li>
                   <li>Reactivate account if suspended/expired</li>
                   <li>Send notification email to shop owner</li>
                 </ul>
@@ -1076,10 +1194,20 @@ function SuperAdminSubscriptionsContent() {
             </div>
           )}
           <DialogFooter className="flex-col sm:flex-row gap-2">
-            <Button variant="outline" onClick={() => setGraceDialog(null)} disabled={actionLoading !== null}>
+            <Button variant="outline" onClick={() => {
+              setGraceDialog(null);
+              setGraceStartDate('');
+              setGraceEndDate('');
+              setGraceDays(7);
+              setGraceReason('');
+            }} disabled={actionLoading !== null}>
               Cancel
             </Button>
-            <Button onClick={handleGrantGracePeriod} disabled={actionLoading !== null}>
+            <Button 
+              onClick={handleGrantGracePeriod} 
+              disabled={actionLoading !== null || (Boolean(graceStartDate || graceEndDate) && calculateGraceDays(graceStartDate, graceEndDate) < 1)}
+              className="bg-green-600 hover:bg-green-700"
+            >
               {actionLoading === graceDialog?.shopId && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Grant Grace Period
             </Button>

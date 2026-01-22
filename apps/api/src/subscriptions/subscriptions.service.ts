@@ -2575,11 +2575,14 @@ export class SubscriptionsService {
   /**
    * Grant grace period to a shop's subscription (super admin)
    * Extends subscription period and reactivates if suspended/expired
+   * Accepts either days (from current expiry) or startDate/endDate for precise date range
    */
   async adminGrantGracePeriod(
     shopId: string,
     dto: {
       days: number;
+      startDate?: string;
+      endDate?: string;
       reason?: string;
       sendEmail?: boolean;
     },
@@ -2592,9 +2595,14 @@ export class SubscriptionsService {
       throw new NotFoundException('Subscription not found');
     }
 
-    // Calculate new expiry date
-    const currentEnd = new Date(subscription.currentPeriodEnd);
-    const newEnd = new Date(currentEnd.getTime() + dto.days * 24 * 60 * 60 * 1000);
+    // Calculate new expiry date - use endDate if provided, otherwise calculate from days
+    let newEnd: Date;
+    if (dto.endDate) {
+      newEnd = new Date(dto.endDate);
+    } else {
+      const currentEnd = new Date(subscription.currentPeriodEnd);
+      newEnd = new Date(currentEnd.getTime() + dto.days * 24 * 60 * 60 * 1000);
+    }
     
     // Update subscription
     subscription.currentPeriodEnd = newEnd;
@@ -2708,6 +2716,80 @@ export class SubscriptionsService {
   }
 
   /**
+   * Send payment reminder email to shop owner
+   */
+  private async sendPaymentReminderEmail(
+    shopId: string | undefined,
+    shopName: string,
+    type: 'trial_expired' | 'past_due' | 'suspended' | 'expired',
+    daysRemaining?: number,
+  ): Promise<void> {
+    if (!shopId) return;
+    
+    try {
+      const shopAdmin = await this.userModel.findOne({ 
+        shopId: new Types.ObjectId(shopId), 
+        role: 'admin' 
+      });
+      
+      if (!shopAdmin?.email) return;
+
+      const subjects: Record<string, string> = {
+        trial_expired: '⏰ Your SmartDuka Trial Has Ended - Choose a Plan',
+        past_due: '⚠️ Payment Required - SmartDuka Subscription',
+        suspended: '🚫 Account Suspended - Payment Required',
+        expired: '⏰ Subscription Expired - Renew Now',
+      };
+
+      const messages: Record<string, string> = {
+        trial_expired: `
+          <p>Your 14-day free trial has ended. To continue using SmartDuka and access all features, please subscribe to a plan.</p>
+          <p>Choose from our affordable plans starting at <strong>KES 99/day</strong> or <strong>KES 2,500/month</strong>.</p>
+        `,
+        past_due: `
+          <p>Your subscription payment is overdue. You have <strong>${daysRemaining || 0} days</strong> remaining in your grace period.</p>
+          <p>Please make payment immediately to avoid account suspension.</p>
+        `,
+        suspended: `
+          <p>Your SmartDuka account has been <strong>suspended</strong> due to non-payment.</p>
+          <p>You cannot access POS, inventory, or any SmartDuka features until payment is made.</p>
+          <p>Make payment now to restore your account immediately.</p>
+        `,
+        expired: `
+          <p>Your SmartDuka subscription has expired.</p>
+          <p>Please renew your subscription to continue using all features.</p>
+        `,
+      };
+
+      await this.emailService.sendEmail({
+        to: shopAdmin.email,
+        subject: subjects[type],
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: ${type === 'suspended' ? '#dc2626' : '#f97316'};">${subjects[type].replace(/^[^\s]+\s/, '')}</h2>
+            <p>Dear ${shopAdmin.name || shopName},</p>
+            ${messages[type]}
+            <div style="margin: 24px 0;">
+              <a href="${process.env.FRONTEND_URL || 'https://smartduka.co.ke'}/settings?tab=subscription" 
+                 style="background-color: #f97316; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+                ${type === 'trial_expired' ? 'Choose a Plan' : 'Make Payment Now'}
+              </a>
+            </div>
+            <p style="color: #666; font-size: 14px;">
+              <strong>M-Pesa:</strong> Pay to <strong>0729983567</strong> (SmartDuka)
+            </p>
+            <p>Best regards,<br>SmartDuka Team</p>
+          </div>
+        `,
+      });
+      
+      this.logger.log(`Payment reminder email (${type}) sent to ${shopAdmin.email}`);
+    } catch (error: any) {
+      this.logger.error(`Failed to send payment reminder email: ${error.message}`);
+    }
+  }
+
+  /**
    * Fix trial subscriptions with wrong period dates
    * Trial should be 14 days from subscription creation date
    */
@@ -2791,10 +2873,14 @@ export class SubscriptionsService {
           if (shop && shop._id) {
             await this.shopModel.findByIdAndUpdate(shop._id, {
               subscriptionStatus: 'expired',
+              status: 'suspended',
             });
           }
           
-          issues.push(`${shopName}: Trial expired - marked as EXPIRED`);
+          // Send payment reminder email for expired trial
+          await this.sendPaymentReminderEmail(sub.shopId?.toString(), shopName, 'trial_expired');
+          
+          issues.push(`${shopName}: Trial expired - marked as EXPIRED, payment reminder sent`);
           fixed++;
         }
         
@@ -2813,10 +2899,15 @@ export class SubscriptionsService {
               });
             }
             
-            issues.push(`${shopName}: Past due ${daysOverdue} days - suspended (exceeded ${GRACE_PERIOD_DAYS} day grace period)`);
+            // Send suspension notification with payment reminder
+            await this.sendPaymentReminderEmail(sub.shopId?.toString(), shopName, 'suspended');
+            
+            issues.push(`${shopName}: Past due ${daysOverdue} days - suspended, payment reminder sent`);
             fixed++;
           } else {
-            issues.push(`${shopName}: Past due ${daysOverdue} days - within grace period`);
+            // Send grace period reminder
+            await this.sendPaymentReminderEmail(sub.shopId?.toString(), shopName, 'past_due', GRACE_PERIOD_DAYS - daysOverdue);
+            issues.push(`${shopName}: Past due ${daysOverdue} days - grace period reminder sent`);
           }
         }
         

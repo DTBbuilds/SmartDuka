@@ -133,7 +133,7 @@ export function SubscriptionStatusCard({
   if (compact) {
     return (
       <Link 
-        href="/admin/subscription"
+        href="/settings?tab=subscription"
         className={`flex items-center gap-3 p-3 rounded-lg border transition-colors hover:bg-gray-50 ${config.borderColor} ${className}`}
       >
         <div className={`p-1.5 rounded-md ${config.bgColor}`}>
@@ -241,7 +241,7 @@ export function SubscriptionStatusCard({
         {/* Actions */}
         <div className="mt-4 pt-4 border-t flex items-center justify-between">
           <Link
-            href="/admin/subscription"
+            href="/settings?tab=subscription"
             className="text-sm text-gray-600 hover:text-gray-900 flex items-center gap-1"
           >
             Manage Subscription
@@ -249,7 +249,7 @@ export function SubscriptionStatusCard({
           </Link>
           {showUpgradeButton && subscription.status !== 'suspended' && (
             <Link
-              href="/admin/subscription"
+              href="/settings?tab=subscription"
               className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
             >
               <TrendingUp className="h-4 w-4" />
@@ -342,7 +342,7 @@ export function SubscriptionAlertBanner() {
           </div>
           <div className="flex items-center gap-2">
             <Link
-              href="/admin/subscription"
+              href="/settings?tab=subscription"
               className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                 subscription.status === 'past_due' 
                   ? 'bg-yellow-600 text-white hover:bg-yellow-700'
@@ -374,7 +374,7 @@ export function SubscriptionBadge({ className = '' }: { className?: string }) {
 
   return (
     <Link
-      href="/admin/subscription"
+      href="/settings?tab=subscription"
       className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold transition-colors hover:opacity-80 ${config.bgColor} ${config.textOnBg} border ${config.borderColor} ${className}`}
     >
       <Crown className="h-3 w-3" />

@@ -60,14 +60,18 @@ import {
 
 interface EmailLog {
   _id: string;
-  to?: string;
-  subject?: string;
+  to: string;
+  subject: string;
   templateName?: string;
-  type?: string; // maps Notification.type
-  status: 'pending' | 'sent' | 'failed'; // Notification.status
-  emailSentAt?: string; // Notification.emailSentAt
-  errorMessage?: string; // Notification.emailError
+  category?: string;
+  status: 'pending' | 'sent' | 'delivered' | 'failed' | 'bounced';
+  sentAt?: string;
+  failedAt?: string;
+  errorMessage?: string;
   retryCount?: number;
+  shopName?: string;
+  userName?: string;
+  messageId?: string;
   createdAt: string;
 }
 
@@ -121,6 +125,14 @@ function SuperAdminEmailsContent() {
   const [templateFilter, setTemplateFilter] = useState('all');
   const [dateRange, setDateRange] = useState('7days');
   
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalEmails, setTotalEmails] = useState(0);
+  const [pageSize, setPageSize] = useState(20);
+  
+  // Sort state
+  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest' | 'status' | 'recipient'>('newest');
+  
   // Dialog states
   const [testEmailOpen, setTestEmailOpen] = useState(false);
   const [templateEditOpen, setTemplateEditOpen] = useState(false);
@@ -130,6 +142,10 @@ function SuperAdminEmailsContent() {
   // Log actions state
   const [selectedEmail, setSelectedEmail] = useState<EmailLog | null>(null);
   const [emailDetailsOpen, setEmailDetailsOpen] = useState(false);
+  
+  // Audit state
+  const [auditReport, setAuditReport] = useState<any>(null);
+  const [auditLoading, setAuditLoading] = useState(false);
   
   // Form states
   const [testEmailForm, setTestEmailForm] = useState({
@@ -142,7 +158,7 @@ function SuperAdminEmailsContent() {
 
   useEffect(() => {
     loadData();
-  }, [activeTab, statusFilter, typeFilter, templateFilter, dateRange]);
+  }, [activeTab, statusFilter, typeFilter, templateFilter, dateRange, currentPage, sortOrder, pageSize]);
 
   const loadData = async () => {
     try {
@@ -192,12 +208,14 @@ function SuperAdminEmailsContent() {
     }
   };
 
-  const loadEmails = async () => {
+  const loadEmails = async (page = currentPage) => {
+    const skip = (page - 1) * pageSize;
     const params = new URLSearchParams({
-      limit: '100',
+      limit: String(pageSize),
+      skip: String(skip),
       ...(statusFilter !== 'all' && { status: statusFilter }),
-      ...(typeFilter !== 'all' && { type: typeFilter }),
-      // backend currently supports type/status; template/search/date can be added later
+      ...(typeFilter !== 'all' && { category: typeFilter }),
+      ...(templateFilter !== 'all' && { templateName: templateFilter }),
     });
 
     const res = await fetch(`${config.apiUrl}/admin/emails/logs?${params}`, {
@@ -207,7 +225,20 @@ function SuperAdminEmailsContent() {
     const logsData = logsText ? JSON.parse(logsText) : {};
     
     if (res.ok) {
-      setEmails(logsData.logs || logsData);
+      let emailList = logsData.logs || logsData || [];
+      
+      // Client-side sorting
+      if (sortOrder === 'oldest') {
+        emailList = [...emailList].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      } else if (sortOrder === 'status') {
+        emailList = [...emailList].sort((a, b) => a.status.localeCompare(b.status));
+      } else if (sortOrder === 'recipient') {
+        emailList = [...emailList].sort((a, b) => (a.to || '').localeCompare(b.to || ''));
+      }
+      // 'newest' is default from backend
+      
+      setEmails(emailList);
+      setTotalEmails(logsData.total || emailList.length);
     }
   };
 
@@ -337,7 +368,7 @@ function SuperAdminEmailsContent() {
       (email.subject || '').toLowerCase().includes(searchQuery.toLowerCase());
     
     const matchesStatus = statusFilter === 'all' || email.status === statusFilter;
-    const matchesType = typeFilter === 'all' || email.type === typeFilter;
+    const matchesType = typeFilter === 'all' || email.category === typeFilter;
     const matchesTemplate = templateFilter === 'all' || email.templateName === templateFilter;
     
     return matchesSearch && matchesStatus && matchesType && matchesTemplate;
@@ -385,6 +416,48 @@ function SuperAdminEmailsContent() {
       alert('Copied to clipboard');
     } catch {
       alert('Failed to copy');
+    }
+  };
+
+  // ===== Audit functions =====
+  
+  const loadAuditReport = async () => {
+    try {
+      setAuditLoading(true);
+      const res = await fetch(`${config.apiUrl}/admin/emails/audit/report`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAuditReport(data);
+      }
+    } catch (err: any) {
+      console.error('Failed to load audit report:', err);
+    } finally {
+      setAuditLoading(false);
+    }
+  };
+
+  const fixEmailStatuses = async () => {
+    if (!confirm('This will fix all mismatched email statuses. Continue?')) return;
+    try {
+      setAuditLoading(true);
+      const res = await fetch(`${config.apiUrl}/admin/emails/audit/fix-statuses`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        alert(`Fixed ${data.fixed} email statuses`);
+        await loadData();
+        await loadAuditReport();
+      } else {
+        throw new Error('Failed to fix email statuses');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to fix email statuses');
+    } finally {
+      setAuditLoading(false);
     }
   };
 
@@ -557,29 +630,8 @@ function SuperAdminEmailsContent() {
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div>
                       {getStatusBadge(email.status)}
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem>
-                            <Eye className="h-4 w-4 mr-2" />
-                            View Details
-                          </DropdownMenuItem>
-                          <DropdownMenuItem>
-                            <RefreshCw className="h-4 w-4 mr-2" />
-                            Retry
-                          </DropdownMenuItem>
-                          <DropdownMenuItem className="text-red-600">
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
                     </div>
                   </div>
                 ))}
@@ -686,12 +738,36 @@ function SuperAdminEmailsContent() {
               <CardTitle>Email Logs</CardTitle>
               <div className="flex items-center justify-between gap-4">
                 <CardDescription>
-                  {filteredEmails.length} emails found
+                  {totalEmails} emails found • Page {currentPage} of {Math.ceil(totalEmails / pageSize) || 1}
                 </CardDescription>
-                <Button variant="outline" size="sm" className="gap-2" onClick={handleDownloadCsv}>
-                  <Download className="h-4 w-4" />
-                  Download CSV
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Select value={sortOrder} onValueChange={(v: any) => setSortOrder(v)}>
+                    <SelectTrigger className="w-36">
+                      <SelectValue placeholder="Sort by" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="newest">Newest First</SelectItem>
+                      <SelectItem value="oldest">Oldest First</SelectItem>
+                      <SelectItem value="status">By Status</SelectItem>
+                      <SelectItem value="recipient">By Recipient</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setCurrentPage(1); }}>
+                    <SelectTrigger className="w-20">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="10">10</SelectItem>
+                      <SelectItem value="20">20</SelectItem>
+                      <SelectItem value="50">50</SelectItem>
+                      <SelectItem value="100">100</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button variant="outline" size="sm" className="gap-2" onClick={handleDownloadCsv}>
+                    <Download className="h-4 w-4" />
+                    CSV
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -725,10 +801,10 @@ function SuperAdminEmailsContent() {
                           <Badge variant="outline">{email.templateName}</Badge>
                         )}
                       </TableCell>
-                      <TableCell>{email.type || '-'}</TableCell>
+                      <TableCell>{email.category || '-'}</TableCell>
                       <TableCell>
-                        {email.emailSentAt 
-                          ? new Date(email.emailSentAt).toLocaleString()
+                        {email.sentAt 
+                          ? new Date(email.sentAt).toLocaleString()
                           : new Date(email.createdAt).toLocaleString()
                         }
                       </TableCell>
@@ -768,6 +844,52 @@ function SuperAdminEmailsContent() {
                   ))}
                 </TableBody>
               </Table>
+              
+              {/* Pagination Controls */}
+              {totalEmails > pageSize && (
+                <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                  <div className="text-sm text-muted-foreground">
+                    Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, totalEmails)} of {totalEmails}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(1)}
+                      disabled={currentPage === 1}
+                    >
+                      First
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                    >
+                      Previous
+                    </Button>
+                    <span className="px-3 py-1 text-sm font-medium">
+                      Page {currentPage} of {Math.ceil(totalEmails / pageSize)}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(p => Math.min(Math.ceil(totalEmails / pageSize), p + 1))}
+                      disabled={currentPage >= Math.ceil(totalEmails / pageSize)}
+                    >
+                      Next
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(Math.ceil(totalEmails / pageSize))}
+                      disabled={currentPage >= Math.ceil(totalEmails / pageSize)}
+                    >
+                      Last
+                    </Button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -856,6 +978,80 @@ function SuperAdminEmailsContent() {
 
         {/* Analytics Tab */}
         <TabsContent value="analytics" className="space-y-6">
+          {/* Database Audit Section */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Email Database Audit</CardTitle>
+                <CardDescription>Check and fix email status issues in the database</CardDescription>
+              </div>
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline" 
+                  onClick={loadAuditReport} 
+                  disabled={auditLoading}
+                  className="gap-2"
+                >
+                  {auditLoading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                  Run Audit
+                </Button>
+                {auditReport?.issues?.statusMismatch > 0 && (
+                  <Button 
+                    onClick={fixEmailStatuses} 
+                    disabled={auditLoading}
+                    className="gap-2"
+                  >
+                    <CheckCircle className="h-4 w-4" />
+                    Fix {auditReport.issues.statusMismatch} Issues
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+            {auditReport && (
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                  <div className="p-3 bg-gray-50 rounded-lg text-center">
+                    <div className="text-2xl font-bold">{auditReport.summary?.total || 0}</div>
+                    <div className="text-xs text-muted-foreground">Total Emails</div>
+                  </div>
+                  <div className="p-3 bg-green-50 rounded-lg text-center">
+                    <div className="text-2xl font-bold text-green-600">{auditReport.summary?.statusSent || 0}</div>
+                    <div className="text-xs text-muted-foreground">Sent</div>
+                  </div>
+                  <div className="p-3 bg-yellow-50 rounded-lg text-center">
+                    <div className="text-2xl font-bold text-yellow-600">{auditReport.summary?.statusPending || 0}</div>
+                    <div className="text-xs text-muted-foreground">Pending</div>
+                  </div>
+                  <div className="p-3 bg-red-50 rounded-lg text-center">
+                    <div className="text-2xl font-bold text-red-600">{auditReport.summary?.statusFailed || 0}</div>
+                    <div className="text-xs text-muted-foreground">Failed</div>
+                  </div>
+                </div>
+                
+                {auditReport.issues?.statusMismatch > 0 && (
+                  <Alert variant="destructive" className="mb-4">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription>
+                      Found {auditReport.issues.statusMismatch} emails with mismatched status (emailSent=true but status=pending).
+                      Click "Fix Issues" to correct them.
+                    </AlertDescription>
+                  </Alert>
+                )}
+                
+                {auditReport.recommendations?.length > 0 && (
+                  <div className="space-y-2">
+                    <h4 className="font-medium text-sm">Recommendations:</h4>
+                    <ul className="text-sm text-muted-foreground space-y-1">
+                      {auditReport.recommendations.map((rec: string, i: number) => (
+                        <li key={i}>• {rec}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </CardContent>
+            )}
+          </Card>
+
           {stats && (
             <>
               {/* Performance Metrics */}
@@ -1023,7 +1219,7 @@ function SuperAdminEmailsContent() {
             <div className="space-y-2 text-sm">
               <p><span className="font-medium">To:</span> {selectedEmail.to || '-'}</p>
               <p><span className="font-medium">Subject:</span> {selectedEmail.subject || '-'}</p>
-              <p><span className="font-medium">Type:</span> {selectedEmail.type || '-'}</p>
+              <p><span className="font-medium">Category:</span> {selectedEmail.category || '-'}</p>
               <p><span className="font-medium">Template:</span> {selectedEmail.templateName || '-'}</p>
               <p><span className="font-medium">Status:</span> {selectedEmail.status}</p>
               <p>
@@ -1032,8 +1228,8 @@ function SuperAdminEmailsContent() {
               </p>
               <p>
                 <span className="font-medium">Sent At:</span>{' '}
-                {selectedEmail.emailSentAt
-                  ? new Date(selectedEmail.emailSentAt).toLocaleString()
+                {selectedEmail.sentAt
+                  ? new Date(selectedEmail.sentAt).toLocaleString()
                   : '-'}
               </p>
               {selectedEmail.errorMessage && (

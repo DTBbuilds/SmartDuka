@@ -109,7 +109,8 @@ export function SubscriptionBlocker({ children }: { children: React.ReactNode })
     if (isTrialPlan) {
       // Trial/Starter plans always have access to free features - never block
       setIsBlocked(false);
-    } else if (status === 'expired' || status === 'suspended' || status === 'cancelled') {
+    } else if (status === 'expired' || status === 'suspended' || status === 'cancelled' || status === 'past_due') {
+      // IMMEDIATE blocking for any non-active subscription status
       setIsBlocked(true);
       if (status === 'expired') {
         setBlockTitle('Subscription Expired');
@@ -117,12 +118,15 @@ export function SubscriptionBlocker({ children }: { children: React.ReactNode })
       } else if (status === 'suspended') {
         setBlockTitle('Account Suspended');
         setBlockReason('Your account has been suspended due to non-payment. Please pay your outstanding balance to restore access.');
+      } else if (status === 'past_due') {
+        setBlockTitle('Payment Overdue');
+        setBlockReason('Your subscription payment is overdue. Please pay immediately to restore access to SmartDuka.');
       } else {
         setBlockTitle('Subscription Cancelled');
         setBlockReason('Your subscription has been cancelled. Please reactivate to continue using SmartDuka.');
       }
     } else if (expiredByDate && status === 'active') {
-      // Only block PAID plans (not trial) when period expires
+      // IMMEDIATE blocking when period expires (even if status hasn't updated yet)
       setIsBlocked(true);
       setBlockTitle('Subscription Period Ended');
       setBlockReason('Your subscription period has ended. Please make a payment to continue using SmartDuka.');

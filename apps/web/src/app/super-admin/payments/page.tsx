@@ -205,6 +205,10 @@ function SuperAdminPaymentsContent() {
   const [invoiceMethodFilter, setInvoiceMethodFilter] = useState<string>('');
   const [invoiceStatusFilter, setInvoiceStatusFilter] = useState<string>('');
   
+  // Sort state
+  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest' | 'amount_high' | 'amount_low' | 'status'>('newest');
+  const [invoiceSortOrder, setInvoiceSortOrder] = useState<'newest' | 'oldest' | 'amount_high' | 'amount_low'>('newest');
+  
   // Pending approvals state
   const [pendingInvoicePayments, setPendingInvoicePayments] = useState<PendingInvoicePayment[]>([]);
   const [pendingSubscriptionPayments, setPendingSubscriptionPayments] = useState<PendingSubscriptionPayment[]>([]);
@@ -448,6 +452,20 @@ function SuperAdminPaymentsContent() {
       a.mpesaReceiptNumber?.toLowerCase().includes(query) ||
       a.planCode?.toLowerCase().includes(query)
     );
+  }).sort((a, b) => {
+    switch (sortOrder) {
+      case 'oldest':
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      case 'amount_high':
+        return b.amount - a.amount;
+      case 'amount_low':
+        return a.amount - b.amount;
+      case 'status':
+        return a.status.localeCompare(b.status);
+      case 'newest':
+      default:
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    }
   });
 
   const formatCurrency = (amount: number) => {
@@ -661,6 +679,18 @@ function SuperAdminPaymentsContent() {
                 <option value="cancelled">Cancelled</option>
                 <option value="expired">Expired</option>
                 <option value="rejected">Rejected</option>
+              </select>
+
+              <select
+                value={sortOrder}
+                onChange={(e) => setSortOrder(e.target.value as any)}
+                className="px-3 py-2 border rounded-lg text-sm"
+              >
+                <option value="newest">Newest First</option>
+                <option value="oldest">Oldest First</option>
+                <option value="amount_high">Amount (High-Low)</option>
+                <option value="amount_low">Amount (Low-High)</option>
+                <option value="status">By Status</option>
               </select>
 
               {(statusFilter || methodFilter || searchQuery) && (
@@ -1001,6 +1031,17 @@ function SuperAdminPaymentsContent() {
                     <option value="partial">Partial</option>
                   </select>
 
+                  <select
+                    value={invoiceSortOrder}
+                    onChange={(e) => setInvoiceSortOrder(e.target.value as any)}
+                    className="px-3 py-2 border rounded-lg text-sm"
+                  >
+                    <option value="newest">Newest First</option>
+                    <option value="oldest">Oldest First</option>
+                    <option value="amount_high">Amount (High-Low)</option>
+                    <option value="amount_low">Amount (Low-High)</option>
+                  </select>
+
                   {(invoiceMethodFilter || invoiceStatusFilter) && (
                     <Button
                       variant="ghost"
@@ -1055,7 +1096,19 @@ function SuperAdminPaymentsContent() {
                           </td>
                         </tr>
                       ) : (
-                        invoicePayments.map((payment) => (
+                        [...invoicePayments].sort((a, b) => {
+                          switch (invoiceSortOrder) {
+                            case 'oldest':
+                              return new Date(a.paymentDate).getTime() - new Date(b.paymentDate).getTime();
+                            case 'amount_high':
+                              return b.amount - a.amount;
+                            case 'amount_low':
+                              return a.amount - b.amount;
+                            case 'newest':
+                            default:
+                              return new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime();
+                          }
+                        }).map((payment) => (
                           <tr key={payment._id} className={`border-b hover:bg-muted/50 ${payment.approvalStatus === 'pending' ? 'bg-yellow-50' : ''}`}>
                             <td className="py-3 text-sm">
                               {formatDate(payment.paymentDate)}

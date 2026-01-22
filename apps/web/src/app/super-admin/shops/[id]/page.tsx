@@ -20,6 +20,7 @@ type ShopDetails = {
   businessType?: string;
   kraPin?: string;
   status: string;
+  subscriptionStatus?: string;
   complianceScore: number;
   chargebackRate: number;
   refundRate: number;
@@ -34,6 +35,12 @@ type ShopDetails = {
   suspensionDate?: string;
   createdAt: string;
   updatedAt: string;
+  subscription?: {
+    status: string;
+    planCode: string;
+    currentPeriodEnd: string;
+    gracePeriodEndDate?: string;
+  };
 };
 
 function ShopDetailsContent() {
@@ -318,11 +325,31 @@ function ShopDetailsContent() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
-                  <p className="text-sm text-muted-foreground">Current Status</p>
+                  <p className="text-sm text-muted-foreground">Shop Status</p>
                   <Badge variant={shop.status === 'active' ? 'default' : 'secondary'} className="mt-2">
                     {shop.status}
                   </Badge>
                 </div>
+                {shop.subscription && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">Subscription Status</p>
+                    <Badge 
+                      variant={shop.subscription.status === 'active' ? 'default' : 'destructive'} 
+                      className="mt-2"
+                    >
+                      {shop.subscription.status}
+                    </Badge>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Plan: {shop.subscription.planCode} • Expires: {new Date(shop.subscription.currentPeriodEnd).toLocaleDateString()}
+                    </p>
+                  </div>
+                )}
+                {shop.subscription?.status === 'suspended' && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <p className="text-sm font-medium text-red-900">⚠️ Subscription Suspended</p>
+                    <p className="text-xs text-red-700 mt-1">User cannot access SmartDuka features</p>
+                  </div>
+                )}
                 {shop.isFlagged && (
                   <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
                     <p className="text-sm font-medium text-orange-900">🚩 Flagged for Review</p>

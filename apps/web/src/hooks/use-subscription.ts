@@ -13,7 +13,7 @@ const CACHE_KEYS = {
 };
 
 const CACHE_TTL = {
-  SUBSCRIPTION: 5 * 60 * 1000, // 5 minutes
+  SUBSCRIPTION: 30 * 1000, // 30 seconds - short cache for quick updates after admin actions
   PLANS: 30 * 60 * 1000, // 30 minutes (plans rarely change)
   INVOICES: 2 * 60 * 1000, // 2 minutes
 };
@@ -474,6 +474,31 @@ export function useSubscription() {
       fetchedRef.current = true;
       fetchSubscription();
     }
+  }, [fetchSubscription]);
+
+  // Force refresh when user returns to the tab (visibility change)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        // Clear cache and force refresh when user returns to tab
+        clearCache(CACHE_KEYS.SUBSCRIPTION);
+        fetchSubscription(true);
+      }
+    };
+
+    // Also refresh on window focus (covers more cases)
+    const handleFocus = () => {
+      clearCache(CACHE_KEYS.SUBSCRIPTION);
+      fetchSubscription(true);
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
   }, [fetchSubscription]);
 
   // Listen for refresh events that should trigger subscription refetch (force refresh)

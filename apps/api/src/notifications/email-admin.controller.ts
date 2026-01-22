@@ -7,6 +7,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { EmailService } from './email.service';
 import { EmailTemplate, EmailTemplateDocument } from './email-template.schema';
 import { Notification, NotificationDocument } from './notification.schema';
+import { EmailLog, EmailLogDocument } from '../super-admin/schemas/email-log.schema';
 
 /**
  * Super Admin Email Management Controller
@@ -27,6 +28,8 @@ export class EmailAdminController {
     private readonly templateModel: Model<EmailTemplateDocument>,
     @InjectModel(Notification.name)
     private readonly notificationModel: Model<NotificationDocument>,
+    @InjectModel(EmailLog.name)
+    private readonly emailLogModel: Model<EmailLogDocument>,
   ) {}
 
   // ==================== TEMPLATE MANAGEMENT ====================
@@ -95,7 +98,7 @@ export class EmailAdminController {
   // ==================== EMAIL LOGS & STATISTICS ====================
 
   /**
-   * Get email statistics
+   * Get email statistics from EmailLog collection
    */
   @Get('stats')
   async getStats(
@@ -111,62 +114,159 @@ export class EmailAdminController {
       matchStage.createdAt = dateFilter;
     }
 
-    const [stats] = await this.notificationModel.aggregate([
+    // Use EmailLog model for accurate email statistics
+    const [stats] = await this.emailLogModel.aggregate([
       { $match: matchStage },
       {
         $group: {
           _id: null,
           total: { $sum: 1 },
-          sent: { $sum: { $cond: [{ $eq: ['$emailSent', true] }, 1, 0] } },
+          sent: { $sum: { $cond: [{ $eq: ['$status', 'sent'] }, 1, 0] } },
+          delivered: { $sum: { $cond: [{ $eq: ['$status', 'delivered'] }, 1, 0] } },
           failed: { $sum: { $cond: [{ $eq: ['$status', 'failed'] }, 1, 0] } },
           pending: { $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] } },
+          bounced: { $sum: { $cond: [{ $eq: ['$status', 'bounced'] }, 1, 0] } },
+          opened: { $sum: { $cond: [{ $eq: ['$opened', true] }, 1, 0] } },
+          clicked: { $sum: { $cond: [{ $eq: ['$clicked', true] }, 1, 0] } },
         },
       },
     ]);
 
-    const byType = await this.notificationModel.aggregate([
+    // Get breakdown by category
+    const byCategory = await this.emailLogModel.aggregate([
       { $match: matchStage },
       {
         $group: {
-          _id: '$type',
+          _id: '$category',
           count: { $sum: 1 },
-          sent: { $sum: { $cond: [{ $eq: ['$emailSent', true] }, 1, 0] } },
+          sent: { $sum: { $cond: [{ $eq: ['$status', 'sent'] }, 1, 0] } },
         },
       },
       { $sort: { count: -1 } },
     ]);
 
+    // Get breakdown by template
+    const byTemplate = await this.emailLogModel.aggregate([
+      { $match: { ...matchStage, templateName: { $ne: null } } },
+      {
+        $group: {
+          _id: '$templateName',
+          count: { $sum: 1 },
+          sent: { $sum: { $cond: [{ $eq: ['$status', 'sent'] }, 1, 0] } },
+        },
+      },
+      { $sort: { count: -1 } },
+      { $limit: 10 },
+    ]);
+
+    // Calculate delivery rate and open rate
+    // Note: 'sent' status means successfully delivered by SMTP provider
+    const total = stats?.total || 0;
+    const sentCount = (stats?.sent || 0) + (stats?.delivered || 0);
+    const deliveryRate = total > 0 ? Math.round((sentCount / total) * 100 * 10) / 10 : 0;
+    const openRate = sentCount > 0 ? Math.round(((stats?.opened || 0) / sentCount) * 100 * 10) / 10 : 0;
+
     return {
-      summary: stats || { total: 0, sent: 0, failed: 0, pending: 0 },
-      byType,
+      summary: {
+        total,
+        sent: stats?.sent || 0,
+        delivered: (stats?.sent || 0) + (stats?.delivered || 0),
+        failed: stats?.failed || 0,
+        pending: stats?.pending || 0,
+        bounced: stats?.bounced || 0,
+        opened: stats?.opened || 0,
+        clicked: stats?.clicked || 0,
+        deliveryRate,
+        openRate,
+      },
+      byCategory: Object.fromEntries(byCategory.map(c => [c._id || 'other', c.count])),
+      byTemplate: Object.fromEntries(byTemplate.map(t => [t._id || 'custom', t.count])),
     };
   }
 
   /**
-   * Get recent email logs
+   * Get recent email logs from EmailLog collection
    */
   @Get('logs')
   async getLogs(
     @Query('limit') limit?: string,
     @Query('skip') skip?: string,
-    @Query('type') type?: string,
+    @Query('category') category?: string,
     @Query('status') status?: string,
+    @Query('templateName') templateName?: string,
   ) {
     const query: any = {};
-    if (type) query.type = type;
+    if (category) query.category = category;
     if (status) query.status = status;
+    if (templateName) query.templateName = templateName;
 
     const [logs, total] = await Promise.all([
-      this.notificationModel
+      this.emailLogModel
         .find(query)
         .sort({ createdAt: -1 })
         .skip(parseInt(skip || '0', 10))
         .limit(parseInt(limit || '50', 10))
+        .select('to subject status category templateName sentAt failedAt createdAt errorMessage retryCount shopName userName messageId')
         .exec(),
-      this.notificationModel.countDocuments(query),
+      this.emailLogModel.countDocuments(query),
     ]);
 
     return { logs, total };
+  }
+
+  /**
+   * Get single email log details
+   */
+  @Get('logs/:id')
+  async getEmailLog(@Param('id') id: string) {
+    const log = await this.emailLogModel.findById(id).exec();
+    if (!log) {
+      return { error: 'Email log not found' };
+    }
+    return log;
+  }
+
+  /**
+   * Retry a failed email
+   */
+  @Post('logs/:id/retry')
+  async retryEmail(@Param('id') id: string) {
+    const log = await this.emailLogModel.findById(id).exec();
+    if (!log) {
+      return { error: 'Email log not found' };
+    }
+    
+    if (log.status !== 'failed') {
+      return { error: 'Can only retry failed emails' };
+    }
+
+    // Resend the email
+    const result = await this.emailService.sendEmail({
+      to: log.to,
+      subject: log.subject,
+      html: log.htmlContent || '<p>Email content not available</p>',
+      templateName: log.templateName,
+      shopId: log.shopId?.toString(),
+      shopName: log.shopName,
+      userId: log.userId?.toString(),
+      userName: log.userName,
+      category: log.category,
+    });
+
+    return {
+      success: result.success,
+      message: result.success ? 'Email resent successfully' : `Failed to resend: ${result.error}`,
+      newEmailLogId: result.emailLogId,
+    };
+  }
+
+  /**
+   * Delete an email log
+   */
+  @Delete('logs/:id')
+  async deleteEmailLog(@Param('id') id: string) {
+    const result = await this.emailLogModel.findByIdAndDelete(id);
+    return { deleted: !!result };
   }
 
   // ==================== TEST EMAIL ====================
@@ -265,62 +365,15 @@ export class EmailAdminController {
     return { success: true, message: 'Templates reseeded successfully' };
   }
 
-  // ==================== EMAIL LOG MANAGEMENT ====================
-
-  /**
-   * Get detailed email log by ID
-   */
-  @Get('logs/:id')
-  async getEmailLog(@Param('id') id: string) {
-    const log = await this.notificationModel.findById(id).exec();
-    if (!log) {
-      return { error: 'Email log not found' };
-    }
-    return log;
-  }
-
-  /**
-   * Delete email log
-   */
-  @Delete('logs/:id')
-  async deleteEmailLog(@Param('id') id: string) {
-    const result = await this.notificationModel.deleteOne({ _id: id });
-    return { deleted: result.deletedCount > 0 };
-  }
-
   /**
    * Bulk delete email logs
    */
   @Delete('logs/bulk')
   async bulkDeleteEmailLogs(@Body() body: { ids: string[] }) {
-    const result = await this.notificationModel.deleteMany({ 
+    const result = await this.emailLogModel.deleteMany({ 
       _id: { $in: body.ids } 
     });
     return { deleted: result.deletedCount };
-  }
-
-  /**
-   * Retry failed email
-   */
-  @Post('logs/:id/retry')
-  async retryEmail(@Param('id') id: string) {
-    const log = await this.notificationModel.findById(id).exec();
-    if (!log) {
-      return { error: 'Email log not found' };
-    }
-    
-    if (log.status !== 'failed') {
-      return { error: 'Only failed emails can be retried' };
-    }
-
-    // Mark as pending for retry
-    log.status = 'pending';
-    log.retryCount = (log.retryCount || 0) + 1;
-    log.lastRetryAt = new Date();
-    await log.save();
-
-    // Trigger retry logic (this would be handled by a background job)
-    return { success: true, message: 'Email queued for retry' };
   }
 
   // ==================== EMAIL SETTINGS & CONFIGURATION ====================
@@ -577,6 +630,105 @@ export class EmailAdminController {
       successful: results.filter(r => r.success).length,
       failed: results.filter(r => !r.success).length,
       results,
+    };
+  }
+
+  /**
+   * Audit and fix email statuses in database
+   * Updates emails that have emailSent=true but status='pending' to status='sent'
+   */
+  @Post('audit/fix-statuses')
+  async fixEmailStatuses() {
+    // Find emails where emailSent=true but status is still 'pending'
+    const mismatchedEmails = await this.notificationModel.find({
+      emailSent: true,
+      status: 'pending',
+    });
+
+    let fixed = 0;
+    for (const email of mismatchedEmails) {
+      email.status = 'sent';
+      if (!email.emailSentAt) {
+        email.emailSentAt = new Date();
+      }
+      await email.save();
+      fixed++;
+    }
+
+    // Get current stats after fix
+    const stats = await this.notificationModel.aggregate([
+      {
+        $group: {
+          _id: null,
+          total: { $sum: 1 },
+          sent: { $sum: { $cond: [{ $eq: ['$status', 'sent'] }, 1, 0] } },
+          pending: { $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] } },
+          failed: { $sum: { $cond: [{ $eq: ['$status', 'failed'] }, 1, 0] } },
+          emailSentTrue: { $sum: { $cond: [{ $eq: ['$emailSent', true] }, 1, 0] } },
+        },
+      },
+    ]);
+
+    return {
+      success: true,
+      message: `Fixed ${fixed} email statuses`,
+      fixed,
+      currentStats: stats[0] || { total: 0, sent: 0, pending: 0, failed: 0 },
+    };
+  }
+
+  /**
+   * Get database email audit report
+   */
+  @Get('audit/report')
+  async getAuditReport() {
+    const [statusCounts] = await this.notificationModel.aggregate([
+      {
+        $group: {
+          _id: null,
+          total: { $sum: 1 },
+          statusPending: { $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] } },
+          statusSent: { $sum: { $cond: [{ $eq: ['$status', 'sent'] }, 1, 0] } },
+          statusFailed: { $sum: { $cond: [{ $eq: ['$status', 'failed'] }, 1, 0] } },
+          emailSentTrue: { $sum: { $cond: [{ $eq: ['$emailSent', true] }, 1, 0] } },
+          emailSentFalse: { $sum: { $cond: [{ $eq: ['$emailSent', false] }, 1, 0] } },
+          missingTo: { $sum: { $cond: [{ $or: [{ $eq: ['$to', null] }, { $eq: ['$to', ''] }] }, 1, 0] } },
+          missingSubject: { $sum: { $cond: [{ $or: [{ $eq: ['$subject', null] }, { $eq: ['$subject', ''] }] }, 1, 0] } },
+        },
+      },
+    ]);
+
+    // Find mismatched statuses (emailSent=true but status=pending)
+    const mismatchCount = await this.notificationModel.countDocuments({
+      emailSent: true,
+      status: 'pending',
+    });
+
+    // Get recent emails with issues
+    const recentIssues = await this.notificationModel.find({
+      $or: [
+        { emailSent: true, status: 'pending' },
+        { to: { $in: [null, ''] } },
+        { subject: { $in: [null, ''] } },
+      ],
+    })
+      .sort({ createdAt: -1 })
+      .limit(20)
+      .select('_id to subject status emailSent type createdAt')
+      .exec();
+
+    return {
+      summary: statusCounts || {},
+      issues: {
+        statusMismatch: mismatchCount,
+        description: 'Emails where emailSent=true but status=pending',
+      },
+      recentIssues,
+      recommendations: [
+        mismatchCount > 0 ? `Run POST /admin/emails/audit/fix-statuses to fix ${mismatchCount} mismatched emails` : null,
+        statusCounts?.missingTo > 0 ? `${statusCounts.missingTo} emails missing recipient (to) field` : null,
+        statusCounts?.missingSubject > 0 ? `${statusCounts.missingSubject} emails missing subject field` : null,
+      ].filter(Boolean),
     };
   }
 

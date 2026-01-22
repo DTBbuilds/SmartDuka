@@ -563,6 +563,7 @@ export class SubscriptionsController {
   /**
    * Grant grace period to a shop's subscription (super admin only)
    * Extends subscription period and optionally sends notification email
+   * Accepts either days (from current expiry) or startDate/endDate for precise date range
    */
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('super_admin')
@@ -572,11 +573,13 @@ export class SubscriptionsController {
     @CurrentUser() user: JwtPayload,
     @Body() dto: {
       days: number;
+      startDate?: string;
+      endDate?: string;
       reason?: string;
       sendEmail?: boolean;
     },
   ): Promise<{ success: boolean; message: string; newExpiryDate: string }> {
-    this.logger.log(`Super admin ${user.email} granting ${dto.days} days grace period to shop ${shopId}`);
+    this.logger.log(`Super admin ${user.email} granting ${dto.days} days grace period to shop ${shopId}${dto.startDate ? ` (${dto.startDate} to ${dto.endDate})` : ''}`);
     return this.subscriptionsService.adminGrantGracePeriod(shopId, dto);
   }
 

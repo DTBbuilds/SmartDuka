@@ -20,8 +20,8 @@ export class Shop {
   @Prop({ required: false, trim: true })
   address?: string;
 
-  @Prop({ required: true, trim: true })
-  county: string;
+  @Prop({ required: false, trim: true })
+  county?: string;
 
   @Prop({ required: true, trim: true })
   city: string;

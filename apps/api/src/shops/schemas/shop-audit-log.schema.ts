@@ -12,7 +12,7 @@ export class ShopAuditLog {
   performedBy: Types.ObjectId;
 
   @Prop({
-    enum: ['verify', 'reject', 'suspend', 'reactivate', 'flag', 'unflag', 'update', 'create'],
+    enum: ['verify', 'reject', 'suspend', 'reactivate', 'flag', 'unflag', 'update', 'create', 'delete', 'restore'],
     required: true,
   })
   action: string;
