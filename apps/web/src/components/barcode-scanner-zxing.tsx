@@ -621,6 +621,13 @@ export function BarcodeScannerZXing({
       // Reset scan completed flag when opening scanner
       scanCompletedRef.current = false;
       
+      // Detect mobile platforms - CRITICAL for user gesture requirement
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      const isAndroid = /Android/.test(navigator.userAgent);
+      const isMobile = isIOS || isAndroid;
+      
+      console.log('[Scanner] useEffect - isOpen:', isOpen, 'isMobile:', isMobile, 'permissionState:', cameraPermission.state);
+      
       // Check if we need to request permission first (mobile-friendly approach)
       const initCamera = async () => {
         // Prevent duplicate initialization
@@ -637,11 +644,37 @@ export function BarcodeScannerZXing({
           return;
         }
         
-        // If permission is already granted, initialize camera directly
+        // CRITICAL MOBILE FIX: On mobile, ALWAYS require user gesture
+        // Mobile browsers are strict about camera access - even if permission was
+        // previously granted, the browser may still require a user gesture.
+        // This prevents the "camera starts then immediately fails" issue.
+        if (isMobile) {
+          console.log('[Scanner] Mobile detected - requiring user gesture before camera access');
+          // If permission is denied, show error with instructions
+          if (cameraPermission.isDenied) {
+            setScanStatus("error");
+            setError("Camera permission denied. Please check: 1) Browser settings 2) Android Settings > Apps > Chrome > Permissions > Camera");
+            return;
+          }
+          // If permission is unavailable, show error
+          if (cameraPermission.isUnavailable) {
+            setScanStatus("error");
+            setError(cameraPermission.error || "Camera not available on this device.");
+            return;
+          }
+          // For all other states (granted, prompt), show "Start Camera" button
+          // This ensures user gesture requirement is always met
+          setShowPermissionRequest(true);
+          setScanStatus("idle");
+          setMessage("");
+          return;
+        }
+        
+        // DESKTOP: Can auto-start if permission is already granted
         if (cameraPermission.isGranted) {
           // Only initialize if not already running
           if (!codeReaderRef.current && !isInitializingRef.current) {
-            console.log('[Scanner] Permission granted, initializing camera...');
+            console.log('[Scanner] Desktop + permission granted, initializing camera...');
             initZXing();
           }
           return;
@@ -661,9 +694,7 @@ export function BarcodeScannerZXing({
           return;
         }
         
-        // Permission is 'prompt' - on mobile, we need user gesture
-        // Show permission request UI instead of auto-requesting
-        // This is more reliable across different mobile browsers
+        // Permission is 'prompt' - show permission request UI
         setShowPermissionRequest(true);
         setScanStatus("idle");
         setMessage("");
@@ -675,7 +706,7 @@ export function BarcodeScannerZXing({
     // Update refs for next render comparison
     prevIsOpenRef.current = isOpen;
     prevScanModeRef.current = scanMode;
-  }, [isOpen, scanMode, cameraPermission.isPrompt, cameraPermission.isGranted, cameraPermission.isDenied, cameraPermission.isChecking, cameraPermission.isUnavailable, cameraPermission.error, initZXing]);
+  }, [isOpen, scanMode, cameraPermission.isPrompt, cameraPermission.isGranted, cameraPermission.isDenied, cameraPermission.isChecking, cameraPermission.isUnavailable, cameraPermission.error, cameraPermission.state, initZXing]);
 
   /**
    * CRITICAL FIX: Separate cleanup effect that ONLY runs when dialog closes or mode changes
