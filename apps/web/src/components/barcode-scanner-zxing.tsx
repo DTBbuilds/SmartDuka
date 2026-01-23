@@ -202,46 +202,48 @@ export function BarcodeScannerZXing({
         host: window.location.host,
       });
 
-      // NOTE: We removed the direct camera test here because:
-      // 1. ZXing's decodeFromConstraints already calls getUserMedia
-      // 2. Double camera access can cause "camera in use" errors on mobile
-      // 3. The permission prompt will be triggered by ZXing's getUserMedia call
-      console.log('[Scanner] Proceeding to ZXing initialization (getUserMedia will be called by ZXing)...');
-
       // Dynamically import ZXing-JS
+      console.log('[Scanner] Importing ZXing library...');
       const { BrowserMultiFormatReader } = await import("@zxing/browser");
       
       // Create code reader instance
       const codeReader = new BrowserMultiFormatReader();
       codeReaderRef.current = codeReader;
 
-      // List available video devices (static method)
-      console.log('[Scanner] Requesting camera list...');
-      const devices = await BrowserMultiFormatReader.listVideoInputDevices();
-      console.log('[Scanner] Cameras found:', devices.length, devices.map(d => ({ id: d.deviceId, label: d.label })));
+      // CRITICAL MOBILE FIX: Skip device enumeration on mobile
+      // listVideoInputDevices() calls enumerateDevices() which can fail or return
+      // empty results on mobile before permission is granted. Instead, we use
+      // facingMode:'environment' constraint directly which is more reliable.
+      let deviceId: string | undefined = undefined;
       
-      if (devices.length === 0) {
-        throw new Error("No camera found on this device");
+      if (!isMobile) {
+        // Desktop: enumerate devices to allow camera selection
+        try {
+          console.log('[Scanner] Desktop: Requesting camera list...');
+          const devices = await BrowserMultiFormatReader.listVideoInputDevices();
+          console.log('[Scanner] Cameras found:', devices.length, devices.map(d => ({ id: d.deviceId, label: d.label })));
+          
+          if (devices.length > 0) {
+            setCameraDevices(devices);
+            
+            // Select back camera if available
+            const backCamera = devices.find((device: MediaDeviceInfo) =>
+              device.label.toLowerCase().includes("back") ||
+              device.label.toLowerCase().includes("rear") ||
+              device.label.toLowerCase().includes("environment")
+            );
+            
+            deviceId = backCamera?.deviceId || devices[0].deviceId;
+            setSelectedDeviceId(deviceId);
+            console.log('[Scanner] Selected camera:', deviceId, backCamera?.label || devices[0].label);
+          }
+        } catch (enumErr) {
+          console.warn('[Scanner] Device enumeration failed, will use facingMode instead:', enumErr);
+          // Continue without device ID - will use facingMode
+        }
+      } else {
+        console.log('[Scanner] Mobile: Skipping device enumeration, will use facingMode:environment');
       }
-
-      setCameraDevices(devices);
-      
-      // Select back camera if available (mobile), otherwise first camera
-      // Try multiple detection methods for back camera
-      let backCamera = devices.find((device: MediaDeviceInfo) =>
-        device.label.toLowerCase().includes("back") ||
-        device.label.toLowerCase().includes("rear") ||
-        device.label.toLowerCase().includes("environment")
-      );
-      
-      // On mobile, if no label match, prefer the last camera (usually back camera)
-      if (!backCamera && (isIOS || isAndroid) && devices.length > 1) {
-        backCamera = devices[devices.length - 1];
-      }
-      
-      const deviceId = backCamera?.deviceId || devices[0].deviceId;
-      setSelectedDeviceId(deviceId);
-      console.log('[Scanner] Selected camera:', deviceId, backCamera?.label || devices[0].label);
 
       // Ensure video element exists
       if (!videoRef.current) {
@@ -252,18 +254,27 @@ export function BarcodeScannerZXing({
       setMessage("✓ Scanner ready - Point at barcode");
       console.log('[Scanner] ✅ Camera ready, starting decode...');
 
-      // Use decodeFromConstraints for mobile-optimized camera settings
-      // This gives us more control over camera selection and resolution
-      // IMPORTANT: On mobile, avoid 'exact' constraints - use 'ideal' instead
-      // 'exact' can fail if device is busy or constraints can't be satisfied
-      const videoConstraints: MediaTrackConstraints = {
-        deviceId: deviceId ? { ideal: deviceId } : undefined,
-        facingMode: deviceId ? undefined : { ideal: 'environment' },
-        // Use lower resolution for better performance on mobile
-        // iOS specifically works better with lower resolutions
-        width: { ideal: isIOS ? 640 : 1280, max: 1920 },
-        height: { ideal: isIOS ? 480 : 720, max: 1080 },
-      };
+      // Use decodeFromConstraints for camera access
+      // CRITICAL MOBILE FIX: On mobile, use ONLY facingMode - no deviceId, no resolution constraints
+      // Mobile browsers work best with minimal constraints
+      let videoConstraints: MediaTrackConstraints;
+      
+      if (isMobile) {
+        // Mobile: Use minimal constraints - just facingMode
+        // This is the most reliable approach on mobile browsers
+        videoConstraints = {
+          facingMode: { ideal: 'environment' }
+        };
+        console.log('[Scanner] Mobile: Using minimal constraints (facingMode only)');
+      } else {
+        // Desktop: Can use more specific constraints
+        videoConstraints = {
+          deviceId: deviceId ? { ideal: deviceId } : undefined,
+          facingMode: deviceId ? undefined : { ideal: 'environment' },
+          width: { ideal: 1280, max: 1920 },
+          height: { ideal: 720, max: 1080 },
+        };
+      }
 
       // Wrap in timeout to prevent hanging on mobile
       console.log('[Scanner] Starting ZXing decode with constraints:', JSON.stringify(videoConstraints));
