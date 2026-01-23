@@ -202,25 +202,11 @@ export function BarcodeScannerZXing({
         host: window.location.host,
       });
 
-      // MOBILE FIX: First test if we can get camera access at all
-      // This helps identify permission issues before ZXing tries to access
-      console.log('[Scanner] Testing direct camera access...');
-      let testStream: MediaStream | null = null;
-      try {
-        testStream = await navigator.mediaDevices.getUserMedia({ 
-          video: isMobile ? { facingMode: { ideal: 'environment' } } : true 
-        });
-        console.log('[Scanner] ✅ Direct camera access successful');
-        // Stop the test stream immediately
-        testStream.getTracks().forEach(track => track.stop());
-        testStream = null;
-        // Wait for camera to be released
-        await new Promise(resolve => setTimeout(resolve, 300));
-      } catch (directErr: any) {
-        console.error('[Scanner] ❌ Direct camera access failed:', directErr.name, directErr.message);
-        // Re-throw with more context
-        throw new Error(`CAMERA_ACCESS_FAILED: ${directErr.name} - ${directErr.message || 'Camera access denied or unavailable'}`);
-      }
+      // NOTE: We removed the direct camera test here because:
+      // 1. ZXing's decodeFromConstraints already calls getUserMedia
+      // 2. Double camera access can cause "camera in use" errors on mobile
+      // 3. The permission prompt will be triggered by ZXing's getUserMedia call
+      console.log('[Scanner] Proceeding to ZXing initialization (getUserMedia will be called by ZXing)...');
 
       // Dynamically import ZXing-JS
       const { BrowserMultiFormatReader } = await import("@zxing/browser");
@@ -436,11 +422,13 @@ export function BarcodeScannerZXing({
         );
       } else if (errorDetails.name === "NotAllowedError" || errorDetails.name === "PermissionDeniedError") {
         // NotAllowedError can occur due to:
-        // 1. User denied permission
-        // 2. Permission policy blocks camera
-        // 3. No user gesture (autoplay policy)
+        // 1. User denied permission in browser
+        // 2. Permission denied at OS level (Android Settings > Apps > Chrome > Permissions > Camera)
+        // 3. Permission policy blocks camera
+        // 4. No user gesture (autoplay policy)
+        console.error('[Scanner] Permission denied - check both browser AND Android OS settings');
         setError(
-          "Camera permission denied. Please click 'Allow' when prompted, or enable camera access in your browser settings (Site Settings > Camera)."
+          "Camera permission denied. Please check: 1) Browser prompted for permission - click 'Allow', 2) Android Settings > Apps > Chrome > Permissions > Camera must be enabled. Then tap Retry."
         );
       } else if (errorDetails.name === "NotFoundError" || errorDetails.message.includes("No camera found")) {
         setError("No camera found on this device. Use hardware scanner or manual entry.");
@@ -454,10 +442,6 @@ export function BarcodeScannerZXing({
         setError("Camera constraints could not be satisfied. Try switching cameras or use manual entry.");
       } else if (errorDetails.name === "SecurityError") {
         setError("Camera access blocked by security policy. Check browser permissions.");
-      } else if (errorDetails.message.includes('CAMERA_ACCESS_FAILED')) {
-        // Direct camera access failed - extract the actual error
-        const actualError = errorDetails.message.replace('CAMERA_ACCESS_FAILED: ', '');
-        setError(`Camera access failed: ${actualError}. Please check camera permissions and try again.`);
       } else if (errorDetails.message.includes('ZXING_DECODE_FAILED')) {
         // ZXing library failed to start scanning
         const actualError = errorDetails.message.replace('ZXING_DECODE_FAILED: ', '');
@@ -942,15 +926,15 @@ export function BarcodeScannerZXing({
                           size="sm"
                           className="flex-1"
                           onClick={async () => {
+                            // SIMPLIFIED FIX: Directly retry camera initialization
+                            console.log('[Scanner] Retry clicked - calling initZXing directly');
                             setScanStatus("initializing");
-                            setMessage("📷 Requesting camera access...");
+                            setMessage("📷 Retrying camera...");
                             setError(null);
-                            const granted = await cameraPermission.requestPermission();
-                            if (granted) {
-                              // MOBILE FIX: Longer delay for mobile browsers to release camera
-                              await new Promise(resolve => setTimeout(resolve, 500));
-                              initZXing();
-                            }
+                            setShowPermissionRequest(false);
+                            
+                            await new Promise(resolve => setTimeout(resolve, 100));
+                            initZXing();
                           }}
                         >
                           <RefreshCw className="h-3 w-3 mr-1" />
@@ -963,27 +947,20 @@ export function BarcodeScannerZXing({
                       <Button
                         className="w-full"
                         onClick={async () => {
+                          // SIMPLIFIED FIX: Directly call initZXing on user gesture
+                          // This triggers getUserMedia which will prompt for permission
+                          // Don't go through permission hook - it adds complexity and can fail
+                          console.log('[Scanner] Start Camera clicked - calling initZXing directly');
                           setShowPermissionRequest(false);
                           setScanStatus("initializing");
-                          setMessage("📷 Requesting camera access...");
+                          setMessage("📷 Starting camera...");
                           setError(null);
                           
-                          try {
-                            const granted = await cameraPermission.requestPermission();
-                            if (granted) {
-                              // MOBILE FIX: Longer delay (500ms) for mobile browsers
-                              // Camera needs time to be fully released after permission request
-                              await new Promise(resolve => setTimeout(resolve, 500));
-                              initZXing();
-                            } else {
-                              setScanStatus("error");
-                              setError("Camera permission was not granted. Please try again or use manual entry.");
-                            }
-                          } catch (err: any) {
-                            console.error("Permission request failed:", err);
-                            setScanStatus("error");
-                            setError(err?.message || "Failed to request camera permission.");
-                          }
+                          // Small delay to ensure UI updates before camera init
+                          await new Promise(resolve => setTimeout(resolve, 100));
+                          
+                          // initZXing will handle the actual camera access and permission prompt
+                          initZXing();
                         }}
                       >
                         <Camera className="h-4 w-4 mr-2" />
