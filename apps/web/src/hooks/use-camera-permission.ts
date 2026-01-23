@@ -185,8 +185,13 @@ export function useCameraPermission(): CameraPermissionResult {
       const result = await requestCameraAccess({ preferBackCamera: true });
       
       if (result.stream) {
-        // Permission granted - stop the stream immediately
+        // Permission granted - stop the stream
         stopMediaStream(result.stream);
+        
+        // MOBILE FIX: Wait for camera to be fully released
+        // Mobile browsers need time to release camera resources
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
         setState('granted');
         return true;
       } else {

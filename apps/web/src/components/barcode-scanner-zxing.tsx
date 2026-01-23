@@ -78,6 +78,63 @@ export function BarcodeScannerZXing({
   
   // Flag to prevent multiple detections after successful scan
   const scanCompletedRef = useRef(false);
+  
+  // Track if camera is being released to prevent race conditions
+  const cameraReleasingRef = useRef(false);
+
+  /**
+   * Extract error message from various error types
+   * ZXing and some mobile browsers return non-standard error objects
+   */
+  const extractErrorDetails = (err: any): { name: string; message: string } => {
+    if (!err) return { name: 'Unknown', message: 'Unknown error' };
+    
+    // Handle string errors
+    if (typeof err === 'string') {
+      return { name: 'Error', message: err };
+    }
+    
+    // Handle DOMException and standard Error objects
+    const name = err.name || err.constructor?.name || 'Error';
+    let message = err.message || '';
+    
+    // Some mobile browsers put details in different properties
+    if (!message && err.constraintName) {
+      message = `Constraint failed: ${err.constraintName}`;
+    }
+    if (!message && err.constraint) {
+      message = `Constraint failed: ${err.constraint}`;
+    }
+    
+    // Check for nested error
+    if (!message && err.error) {
+      const nested = extractErrorDetails(err.error);
+      message = nested.message;
+    }
+    
+    // Fallback to toString
+    if (!message) {
+      try {
+        message = String(err);
+      } catch {
+        message = 'Unknown error occurred';
+      }
+    }
+    
+    return { name, message };
+  };
+
+  /**
+   * Wait for camera to be fully released
+   * Mobile browsers need time to release camera resources
+   */
+  const waitForCameraRelease = async (delayMs: number = 500): Promise<void> => {
+    if (cameraReleasingRef.current) {
+      // Wait for ongoing release to complete
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+    return new Promise(resolve => setTimeout(resolve, 100));
+  };
 
   /**
    * Initialize ZXing-JS CodeReader
@@ -87,6 +144,16 @@ export function BarcodeScannerZXing({
       setScanStatus("initializing");
       setError(null);
       setMessage("🔄 Initializing camera...");
+
+      // MOBILE FIX: Ensure any previous camera stream is fully released
+      // This prevents "camera in use" errors on mobile browsers
+      await waitForCameraRelease(300);
+      
+      // Also clean up any existing ZXing instance
+      if (codeReaderRef.current || scanControlsRef.current) {
+        cleanupZXing();
+        await waitForCameraRelease(200);
+      }
 
       // Check for secure context (HTTPS or localhost required for camera access)
       if (typeof window !== "undefined" && !window.isSecureContext) {
@@ -102,9 +169,13 @@ export function BarcodeScannerZXing({
         );
       }
 
-      // Detect iOS for special handling
+      // Detect mobile platforms for special handling
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
       const isAndroid = /Android/.test(navigator.userAgent);
+      const isMobile = isIOS || isAndroid;
+      
+      // Log platform detection for debugging
+      console.log(`[Scanner] Platform detection: iOS=${isIOS}, Android=${isAndroid}, Mobile=${isMobile}`);
 
       // Dynamically import ZXing-JS
       const { BrowserMultiFormatReader } = await import("@zxing/browser");
@@ -114,7 +185,9 @@ export function BarcodeScannerZXing({
       codeReaderRef.current = codeReader;
 
       // List available video devices (static method)
+      console.log('[Scanner] Requesting camera list...');
       const devices = await BrowserMultiFormatReader.listVideoInputDevices();
+      console.log('[Scanner] Cameras found:', devices.length, devices.map(d => ({ id: d.deviceId, label: d.label })));
       
       if (devices.length === 0) {
         throw new Error("No camera found on this device");
@@ -137,6 +210,7 @@ export function BarcodeScannerZXing({
       
       const deviceId = backCamera?.deviceId || devices[0].deviceId;
       setSelectedDeviceId(deviceId);
+      console.log('[Scanner] Selected camera:', deviceId, backCamera?.label || devices[0].label);
 
       // Ensure video element exists
       if (!videoRef.current) {
@@ -145,6 +219,7 @@ export function BarcodeScannerZXing({
 
       setScanStatus("ready");
       setMessage("✓ Scanner ready - Point at barcode");
+      console.log('[Scanner] ✅ Camera ready, starting decode...');
 
       // Use decodeFromConstraints for mobile-optimized camera settings
       // This gives us more control over camera selection and resolution
@@ -226,10 +301,12 @@ export function BarcodeScannerZXing({
       console.log("✅ ZXing-JS initialized successfully");
 
     } catch (err: any) {
-      console.error("Camera initialization error:", err);
+      // Extract error details using our robust error extractor
+      const errorDetails = extractErrorDetails(err);
+      console.error("Camera initialization error:", errorDetails.name, errorDetails.message, err);
       
       // For OverconstrainedError, try fallback with simpler constraints
-      if (err.name === "OverconstrainedError" && retryCount === 0) {
+      if (errorDetails.name === "OverconstrainedError" && retryCount === 0) {
         console.log("OverconstrainedError - retrying with basic constraints...");
         setRetryCount(1);
         // Try again with minimal constraints
@@ -268,27 +345,36 @@ export function BarcodeScannerZXing({
         }
       }
       
-      // Retry logic for transient failures
-      if (retryCount < MAX_RETRIES && 
-          (err.name === "NotReadableError" || err.name === "AbortError")) {
-        console.log(`Retrying camera initialization (${retryCount + 1}/${MAX_RETRIES})...`);
+      // Retry logic for transient failures (including unknown errors on mobile)
+      // Mobile browsers often have transient camera errors that resolve on retry
+      const isTransientError = 
+        errorDetails.name === "NotReadableError" || 
+        errorDetails.name === "AbortError" ||
+        errorDetails.name === "Unknown" ||
+        errorDetails.message.includes("Unknown");
+        
+      if (retryCount < MAX_RETRIES && isTransientError) {
+        console.log(`[Scanner] Retrying camera initialization (${retryCount + 1}/${MAX_RETRIES})...`);
         setRetryCount(prev => prev + 1);
-        setTimeout(() => initZXing(), 1000); // Retry after 1 second
+        // Use longer delay for mobile - camera needs time to fully release
+        const retryDelay = 1000 + (retryCount * 500); // Exponential backoff
+        setMessage(`📷 Camera busy, retrying in ${retryDelay/1000}s...`);
+        setTimeout(() => initZXing(), retryDelay);
         return;
       }
       
       setScanStatus("error");
 
-      // User-friendly error messages
-      if (err.message?.includes("INSECURE_CONTEXT")) {
+      // User-friendly error messages based on extracted error details
+      if (errorDetails.message.includes("INSECURE_CONTEXT")) {
         setError(
           "Camera requires HTTPS. Please access this page via https:// or use localhost for development."
         );
-      } else if (err.message?.includes("MEDIA_DEVICES_UNAVAILABLE")) {
+      } else if (errorDetails.message.includes("MEDIA_DEVICES_UNAVAILABLE")) {
         setError(
           "Camera API not available. Please use a modern browser (Chrome, Firefox, Safari, Edge)."
         );
-      } else if (err.name === "NotAllowedError") {
+      } else if (errorDetails.name === "NotAllowedError" || errorDetails.name === "PermissionDeniedError") {
         // NotAllowedError can occur due to:
         // 1. User denied permission
         // 2. Permission policy blocks camera
@@ -296,32 +382,38 @@ export function BarcodeScannerZXing({
         setError(
           "Camera permission denied. Please click 'Allow' when prompted, or enable camera access in your browser settings (Site Settings > Camera)."
         );
-      } else if (err.name === "NotFoundError" || err.message?.includes("No camera found")) {
+      } else if (errorDetails.name === "NotFoundError" || errorDetails.message.includes("No camera found")) {
         setError("No camera found on this device. Use hardware scanner or manual entry.");
-      } else if (err.name === "NotReadableError") {
+      } else if (errorDetails.name === "NotReadableError" || errorDetails.name === "TrackStartError") {
         setError("Camera is already in use by another application. Please close other apps and try again.");
-      } else if (err.name === "AbortError") {
+      } else if (errorDetails.name === "AbortError") {
         setError("Camera initialization was canceled. Please try again.");
-      } else if (err.message?.includes("timeout") || err.message?.includes("Camera initialization timeout")) {
+      } else if (errorDetails.message.includes("timeout") || errorDetails.message.includes("Camera initialization timeout")) {
         setError("Camera took too long to start. Please try again or use manual entry.");
-      } else if (err.name === "OverconstrainedError") {
-        // On iOS, try again with simpler constraints
+      } else if (errorDetails.name === "OverconstrainedError") {
         setError("Camera constraints could not be satisfied. Try switching cameras or use manual entry.");
-      } else if (err.name === "SecurityError") {
+      } else if (errorDetails.name === "SecurityError") {
         setError("Camera access blocked by security policy. Check browser permissions.");
       } else {
-        setError(`Camera error: ${err.message || "Unknown error"}. Falling back to manual entry.`);
+        // MOBILE FIX: Provide more helpful message for unknown errors
+        // These are often transient mobile browser issues
+        setError(`Camera error: ${errorDetails.message}. Try closing other apps using the camera, or use manual entry.`);
       }
 
       // Fallback to hardware scanner mode
       setScanMode("hardware");
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [retryCount, lastScannedBarcode]);
 
   /**
    * Cleanup ZXing-JS on unmount or mode change
+   * MOBILE FIX: Track camera release state to prevent race conditions
    */
   const cleanupZXing = useCallback(() => {
+    // Mark camera as releasing to prevent race conditions
+    cameraReleasingRef.current = true;
+    
     // Stop the scanner controls
     if (scanControlsRef.current) {
       try {
@@ -349,6 +441,12 @@ export function BarcodeScannerZXing({
 
     // Clear the code reader reference
     codeReaderRef.current = null;
+    
+    // MOBILE FIX: Mark camera as released after a short delay
+    // Mobile browsers need time to fully release camera resources
+    setTimeout(() => {
+      cameraReleasingRef.current = false;
+    }, 300);
   }, []);
 
   /**
@@ -670,10 +768,13 @@ export function BarcodeScannerZXing({
                         // Force retry - some browsers need user interaction first
                         setError(null);
                         setScanStatus("initializing");
+                        setMessage("📷 Checking camera access...");
                         await cameraPermission.checkPermission();
                         if (cameraPermission.isGranted || cameraPermission.isPrompt) {
                           const granted = await cameraPermission.requestPermission();
                           if (granted) {
+                            // MOBILE FIX: Longer delay for mobile browsers to release camera
+                            await new Promise(resolve => setTimeout(resolve, 500));
                             initZXing();
                           }
                         }
@@ -736,8 +837,13 @@ export function BarcodeScannerZXing({
                           size="sm"
                           className="flex-1"
                           onClick={async () => {
+                            setScanStatus("initializing");
+                            setMessage("📷 Requesting camera access...");
+                            setError(null);
                             const granted = await cameraPermission.requestPermission();
                             if (granted) {
+                              // MOBILE FIX: Longer delay for mobile browsers to release camera
+                              await new Promise(resolve => setTimeout(resolve, 500));
                               initZXing();
                             }
                           }}
@@ -760,8 +866,9 @@ export function BarcodeScannerZXing({
                           try {
                             const granted = await cameraPermission.requestPermission();
                             if (granted) {
-                              // Small delay to ensure permission state is updated
-                              await new Promise(resolve => setTimeout(resolve, 100));
+                              // MOBILE FIX: Longer delay (500ms) for mobile browsers
+                              // Camera needs time to be fully released after permission request
+                              await new Promise(resolve => setTimeout(resolve, 500));
                               initZXing();
                             } else {
                               setScanStatus("error");

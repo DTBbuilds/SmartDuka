@@ -91,11 +91,33 @@ export function BarcodeScannerHtml5({
       setError(null);
       setMessage('📷 Starting camera...');
 
+      // MOBILE LOGGING: Log initialization start with device info
+      console.log('[Scanner] Initializing...', {
+        isMobile: browserInfo.isMobile,
+        browser: browserInfo.browser,
+        isSecureContext: window.isSecureContext,
+        protocol: window.location.protocol,
+        host: window.location.host,
+        userAgent: navigator.userAgent,
+      });
+
+      // Check for secure context FIRST - camera requires HTTPS or localhost
+      if (typeof window !== 'undefined' && !window.isSecureContext) {
+        const currentUrl = window.location.href;
+        throw new Error(
+          `INSECURE_CONTEXT: Camera access requires HTTPS. ` +
+          `You're accessing via: ${window.location.protocol}//${window.location.host}. ` +
+          `Please access this page via https:// or use localhost.`
+        );
+      }
+
       // Dynamically import html5-qrcode
       const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import('html5-qrcode');
 
       // Get available cameras
+      console.log('[Scanner] Requesting camera list...');
       const devices = await Html5Qrcode.getCameras();
+      console.log('[Scanner] Cameras found:', devices.length, devices.map(d => ({ id: d.id, label: d.label })));
       
       if (devices.length === 0) {
         throw new Error('No cameras found on this device');
@@ -146,6 +168,7 @@ export function BarcodeScannerHtml5({
       };
 
       // Start scanning
+      console.log('[Scanner] Starting camera with config:', { cameraId, config });
       await scanner.start(
         cameraId,
         config,
@@ -167,6 +190,7 @@ export function BarcodeScannerHtml5({
 
       setScanStatus('ready');
       setMessage('✓ Scanner ready - Point at barcode');
+      console.log('[Scanner] ✅ Camera started successfully');
       
       // Check torch support
       try {
@@ -185,14 +209,20 @@ export function BarcodeScannerHtml5({
       setScanStatus('error');
       
       // User-friendly error messages
-      if (err.name === 'NotAllowedError' || err.message?.includes('Permission')) {
+      if (err.message?.includes('INSECURE_CONTEXT')) {
+        // Provide clear instructions for HTTPS requirement
+        setError(
+          `Camera requires HTTPS connection. You're on HTTP (${window.location.host}). ` +
+          `Options: 1) Access via https:// 2) Use localhost:3000 on this device 3) Use hardware scanner or manual entry.`
+        );
+      } else if (err.name === 'NotAllowedError' || err.message?.includes('Permission')) {
         setError(browserInfo ? getCameraIssueMessage(browserInfo) : 'Camera permission denied');
       } else if (err.name === 'NotFoundError' || err.message?.includes('No cameras')) {
         setError('No camera found. Use manual entry or hardware scanner.');
       } else if (err.name === 'NotReadableError') {
         setError('Camera is in use by another app. Please close other apps and try again.');
-      } else if (err.message?.includes('HTTPS')) {
-        setError('Camera requires HTTPS. Please use a secure connection.');
+      } else if (err.message?.includes('HTTPS') || err.message?.includes('secure context')) {
+        setError('Camera requires HTTPS. Please use a secure connection or localhost.');
       } else {
         setError(`Camera error: ${err.message || 'Unknown error'}`);
       }

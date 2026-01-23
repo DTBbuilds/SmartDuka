@@ -215,12 +215,17 @@ export async function requestCameraAccess(options?: {
     // Mobile: Start with back camera ideal, then simpler constraints
     // NOTE: Order matters - iOS Safari works better with 'ideal' facingMode
     // 'exact' facingMode can fail if device is busy
+    // MOBILE FIX: Add more constraint options for better compatibility
     constraints.push(
-      // 1. Back camera with ideal constraint (most reliable on mobile)
+      // 1. Back camera with ideal constraint and lower resolution (most reliable on mobile)
+      { video: { facingMode: { ideal: 'environment' }, width: { ideal: 640 }, height: { ideal: 480 } } },
+      // 2. Back camera with ideal constraint only
       { video: { facingMode: { ideal: 'environment' } } },
-      // 2. Back camera preference (may fail on some devices)
+      // 3. Back camera preference (may fail on some devices)
       { video: { facingMode: 'environment' } },
-      // 3. Simplest - just video (fallback)
+      // 4. Any camera with low resolution (helps on constrained devices)
+      { video: { width: { ideal: 640 }, height: { ideal: 480 } } },
+      // 5. Simplest - just video (final fallback)
       { video: true },
     );
   } else {
@@ -263,7 +268,15 @@ export async function requestCameraAccess(options?: {
 function getErrorMessage(err: any): string {
   if (!err) return 'Unknown camera error';
 
-  switch (err.name) {
+  // Handle string errors
+  if (typeof err === 'string') {
+    return err;
+  }
+
+  // Get error name, handling various error object shapes
+  const errorName = err.name || err.constructor?.name || 'Unknown';
+  
+  switch (errorName) {
     case 'NotAllowedError':
     case 'PermissionDeniedError':
       return 'Camera permission denied. Please allow camera access in your browser settings.';
@@ -289,7 +302,21 @@ function getErrorMessage(err: any): string {
       return 'Invalid camera configuration. Please try again.';
     
     default:
-      return err.message || `Camera error: ${err.name}`;
+      // MOBILE FIX: Try to extract message from various properties
+      const message = err.message || err.error?.message || '';
+      if (message) {
+        return message;
+      }
+      // Try toString as last resort
+      try {
+        const str = String(err);
+        if (str && str !== '[object Object]') {
+          return str;
+        }
+      } catch {
+        // Ignore toString errors
+      }
+      return `Camera error: ${errorName}`;
   }
 }
 
