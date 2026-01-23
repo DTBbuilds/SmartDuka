@@ -243,13 +243,17 @@ export function BarcodeScannerHtml5({
    * Cleanup scanner
    */
   const cleanupScanner = useCallback(async () => {
-    if (scannerRef.current) {
+    const scanner = scannerRef.current;
+    if (scanner) {
       try {
-        const state = scannerRef.current.getState?.();
+        const state = scanner.getState?.();
         if (state === 2) { // Html5QrcodeScannerState.SCANNING
-          await scannerRef.current.stop();
+          await scanner.stop();
         }
-        await scannerRef.current.clear();
+        // Check again after await - scanner might have been cleared
+        if (scannerRef.current) {
+          await scanner.clear();
+        }
         console.log('✅ Scanner stopped and cleared');
       } catch (err) {
         console.error('Error stopping scanner:', err);
