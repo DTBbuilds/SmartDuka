@@ -82,8 +82,12 @@ export function BarcodeScannerZXing({
   // Track if camera is being released to prevent race conditions
   const cameraReleasingRef = useRef(false);
   
-  // CRITICAL FIX: Track if scanner is actively running to prevent cleanup on re-renders
-  const scannerActiveRef = useRef(false);
+  // CRITICAL FIX: Track if camera is currently initializing to prevent duplicate calls
+  const isInitializingRef = useRef(false);
+  
+  // Track previous isOpen and scanMode to detect actual changes
+  const prevIsOpenRef = useRef(false);
+  const prevScanModeRef = useRef<ScanMode>("camera");
 
   /**
    * Extract error message from various error types
@@ -143,6 +147,16 @@ export function BarcodeScannerZXing({
    * Initialize ZXing-JS CodeReader
    */
   const initZXing = useCallback(async () => {
+    // CRITICAL FIX: Prevent duplicate initialization
+    if (isInitializingRef.current) {
+      console.log('[Scanner] initZXing: Already initializing, skipping');
+      return;
+    }
+    
+    // Mark as initializing
+    isInitializingRef.current = true;
+    console.log('[Scanner] initZXing: Starting initialization...');
+    
     try {
       setScanStatus("initializing");
       setError(null);
@@ -188,10 +202,27 @@ export function BarcodeScannerZXing({
         host: window.location.host,
       });
 
+      // MOBILE FIX: First test if we can get camera access at all
+      // This helps identify permission issues before ZXing tries to access
+      console.log('[Scanner] Testing direct camera access...');
+      let testStream: MediaStream | null = null;
+      try {
+        testStream = await navigator.mediaDevices.getUserMedia({ 
+          video: isMobile ? { facingMode: { ideal: 'environment' } } : true 
+        });
+        console.log('[Scanner] ✅ Direct camera access successful');
+        // Stop the test stream immediately
+        testStream.getTracks().forEach(track => track.stop());
+        testStream = null;
+        // Wait for camera to be released
+        await new Promise(resolve => setTimeout(resolve, 300));
+      } catch (directErr: any) {
+        console.error('[Scanner] ❌ Direct camera access failed:', directErr.name, directErr.message);
+        // Re-throw with more context
+        throw new Error(`CAMERA_ACCESS_FAILED: ${directErr.name} - ${directErr.message || 'Camera access denied or unavailable'}`);
+      }
+
       // Dynamically import ZXing-JS
-      // NOTE: We removed the direct camera test as it was causing issues on mobile
-      // The test would acquire and release the camera, then ZXing would try to acquire it again
-      // This caused race conditions on mobile browsers where the camera wasn't fully released
       const { BrowserMultiFormatReader } = await import("@zxing/browser");
       
       // Create code reader instance
@@ -322,10 +353,12 @@ export function BarcodeScannerZXing({
       }
       
       setRetryCount(0); // Reset retry count on success
-      scannerActiveRef.current = true; // Mark scanner as active
+      isInitializingRef.current = false; // CRITICAL FIX: Mark initialization complete
       console.log("✅ ZXing-JS initialized successfully");
 
     } catch (err: any) {
+      // CRITICAL FIX: Reset initialization flag on error
+      isInitializingRef.current = false;
       // Extract error details using our robust error extractor
       const errorDetails = extractErrorDetails(err);
       console.error("Camera initialization error:", errorDetails.name, errorDetails.message, err);
@@ -384,6 +417,8 @@ export function BarcodeScannerZXing({
         // Use longer delay for mobile - camera needs time to fully release
         const retryDelay = 1000 + (retryCount * 500); // Exponential backoff
         setMessage(`📷 Camera busy, retrying in ${retryDelay/1000}s...`);
+        // CRITICAL FIX: Reset flag before retry so initZXing can run again
+        isInitializingRef.current = false;
         setTimeout(() => initZXing(), retryDelay);
         return;
       }
@@ -419,6 +454,10 @@ export function BarcodeScannerZXing({
         setError("Camera constraints could not be satisfied. Try switching cameras or use manual entry.");
       } else if (errorDetails.name === "SecurityError") {
         setError("Camera access blocked by security policy. Check browser permissions.");
+      } else if (errorDetails.message.includes('CAMERA_ACCESS_FAILED')) {
+        // Direct camera access failed - extract the actual error
+        const actualError = errorDetails.message.replace('CAMERA_ACCESS_FAILED: ', '');
+        setError(`Camera access failed: ${actualError}. Please check camera permissions and try again.`);
       } else if (errorDetails.message.includes('ZXING_DECODE_FAILED')) {
         // ZXing library failed to start scanning
         const actualError = errorDetails.message.replace('ZXING_DECODE_FAILED: ', '');
@@ -430,7 +469,6 @@ export function BarcodeScannerZXing({
       }
 
       // Fallback to hardware scanner mode
-      scannerActiveRef.current = false; // Mark scanner as inactive on error
       setScanMode("hardware");
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -441,8 +479,11 @@ export function BarcodeScannerZXing({
    * MOBILE FIX: Track camera release state to prevent race conditions
    */
   const cleanupZXing = useCallback(() => {
-    // Mark scanner as inactive
-    scannerActiveRef.current = false;
+    console.log('[Scanner] cleanupZXing called');
+    
+    // CRITICAL FIX: Reset initialization flag
+    isInitializingRef.current = false;
+    
     // Mark camera as releasing to prevent race conditions
     cameraReleasingRef.current = true;
     
@@ -584,28 +625,41 @@ export function BarcodeScannerZXing({
    * 
    * IMPORTANT: Mobile browsers require explicit user gesture for camera access.
    * We show a "Start Camera" button if permission state is uncertain.
+   * 
+   * CRITICAL FIX: This useEffect should ONLY cleanup when:
+   * 1. Dialog closes (isOpen: true -> false)
+   * 2. Mode changes away from camera (scanMode: "camera" -> something else)
+   * NOT when permission state changes!
    */
   useEffect(() => {
-    // CRITICAL FIX: Only initialize if dialog is open, mode is camera, and scanner is not already active
-    if (isOpen && scanMode === "camera" && !scannerActiveRef.current) {
+    // CRITICAL FIX: Only run initialization logic, not cleanup based on permission changes
+    if (isOpen && scanMode === "camera") {
       // Reset scan completed flag when opening scanner
       scanCompletedRef.current = false;
       
       // Check if we need to request permission first (mobile-friendly approach)
       const initCamera = async () => {
+        // Prevent duplicate initialization
+        if (isInitializingRef.current) {
+          console.log('[Scanner] Already initializing, skipping duplicate call');
+          return;
+        }
+        
         // Wait for permission check to complete
         if (cameraPermission.isChecking) {
           setMessage("📷 Checking camera availability...");
           setScanStatus("initializing");
-          // Don't proceed until checking is complete - the effect will re-run
+          // Don't proceed until checking is complete
           return;
         }
         
         // If permission is already granted, initialize camera directly
         if (cameraPermission.isGranted) {
-          // Mark scanner as active BEFORE initializing to prevent re-entry
-          scannerActiveRef.current = true;
-          initZXing();
+          // Only initialize if not already running
+          if (!codeReaderRef.current && !isInitializingRef.current) {
+            console.log('[Scanner] Permission granted, initializing camera...');
+            initZXing();
+          }
           return;
         }
         
@@ -633,18 +687,23 @@ export function BarcodeScannerZXing({
       
       initCamera();
     }
+    
+    // Update refs for next render comparison
+    prevIsOpenRef.current = isOpen;
+    prevScanModeRef.current = scanMode;
+  }, [isOpen, scanMode, cameraPermission.isPrompt, cameraPermission.isGranted, cameraPermission.isDenied, cameraPermission.isChecking, cameraPermission.isUnavailable, cameraPermission.error, initZXing]);
 
-    // CRITICAL FIX: Only cleanup when dialog closes or mode changes away from camera
-    // NOT on every re-render!
+  /**
+   * CRITICAL FIX: Separate cleanup effect that ONLY runs when dialog closes or mode changes
+   * This prevents the camera from being stopped when permission state changes
+   */
+  useEffect(() => {
     return () => {
-      if (!isOpen || scanMode !== "camera") {
-        scannerActiveRef.current = false;
-        cleanupZXing();
-      }
+      // Only cleanup when dialog is actually closing or mode changes from camera
+      console.log('[Scanner] Cleanup effect running - isOpen:', isOpen, 'scanMode:', scanMode);
+      cleanupZXing();
     };
-  // CRITICAL FIX: Remove initZXing from dependencies to prevent re-running on state changes
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, scanMode, cameraPermission.isPrompt, cameraPermission.isGranted, cameraPermission.isDenied, cameraPermission.isChecking, cameraPermission.isUnavailable, cameraPermission.error]);
+  }, [isOpen, scanMode, cleanupZXing]);
 
   /**
    * Focus manual input when in manual mode
@@ -661,7 +720,7 @@ export function BarcodeScannerZXing({
    * Handle dialog close
    */
   const handleClose = () => {
-    scannerActiveRef.current = false; // Ensure scanner is marked inactive
+    console.log('[Scanner] handleClose called');
     cleanupZXing();
     setScanMode("camera");
     setScanStatus("idle");
@@ -675,6 +734,7 @@ export function BarcodeScannerZXing({
     setRetryCount(0);
     setShowPermissionRequest(false); // Reset permission request state
     scanCompletedRef.current = false; // Reset for next scan session
+    isInitializingRef.current = false; // CRITICAL FIX: Reset initialization flag
     onClose();
   };
 
@@ -682,7 +742,7 @@ export function BarcodeScannerZXing({
    * Switch scan mode
    */
   const switchMode = (mode: ScanMode) => {
-    scannerActiveRef.current = false; // Ensure scanner is marked inactive
+    console.log('[Scanner] switchMode called:', mode);
     cleanupZXing();
     setScanMode(mode);
     setScanStatus("idle");
@@ -690,6 +750,7 @@ export function BarcodeScannerZXing({
     setMessage("");
     setShowPermissionRequest(false); // Reset permission request state
     scanCompletedRef.current = false; // Reset for new scan mode
+    isInitializingRef.current = false; // CRITICAL FIX: Reset initialization flag
   };
 
   return (

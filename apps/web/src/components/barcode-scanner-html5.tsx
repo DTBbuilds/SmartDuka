@@ -111,10 +111,25 @@ export function BarcodeScannerHtml5({
         );
       }
 
+      // MOBILE FIX: First test if we can get camera access at all
+      // This helps identify permission issues before html5-qrcode tries to access
+      console.log('[Scanner] Testing direct camera access...');
+      try {
+        const testStream = await navigator.mediaDevices.getUserMedia({ 
+          video: browserInfo.isMobile ? { facingMode: { ideal: 'environment' } } : true 
+        });
+        console.log('[Scanner] ✅ Direct camera access successful');
+        // Stop the test stream immediately
+        testStream.getTracks().forEach(track => track.stop());
+        // Wait for camera to be released
+        await new Promise(resolve => setTimeout(resolve, 300));
+      } catch (directErr: any) {
+        console.error('[Scanner] ❌ Direct camera access failed:', directErr.name, directErr.message);
+        // Re-throw with more context
+        throw new Error(`CAMERA_ACCESS_FAILED: ${directErr.name} - ${directErr.message || 'Camera access denied or unavailable'}`);
+      }
+
       // Dynamically import html5-qrcode
-      // NOTE: We removed the direct camera test as it was causing issues on mobile
-      // The test would acquire and release the camera, then html5-qrcode would try to acquire it again
-      // This caused race conditions on mobile browsers where the camera wasn't fully released
       const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import('html5-qrcode');
 
       // Get available cameras
@@ -218,6 +233,19 @@ export function BarcodeScannerHtml5({
           `Camera requires HTTPS connection. You're on HTTP (${window.location.host}). ` +
           `Options: 1) Access via https:// 2) Use localhost:3000 on this device 3) Use hardware scanner or manual entry.`
         );
+      } else if (err.message?.includes('CAMERA_ACCESS_FAILED')) {
+        // Direct camera access failed - extract the actual error
+        const actualError = err.message.replace('CAMERA_ACCESS_FAILED: ', '');
+        console.error('[Scanner] Camera access failed with:', actualError);
+        if (actualError.includes('NotAllowedError')) {
+          setError('Camera permission denied. Please allow camera access in your browser settings.');
+        } else if (actualError.includes('NotFoundError')) {
+          setError('No camera found on this device.');
+        } else if (actualError.includes('NotReadableError')) {
+          setError('Camera is in use by another app. Please close other apps and try again.');
+        } else {
+          setError(`Camera access failed: ${actualError}. Please check camera permissions.`);
+        }
       } else if (err.name === 'NotAllowedError' || err.message?.includes('Permission')) {
         setError(browserInfo ? getCameraIssueMessage(browserInfo) : 'Camera permission denied');
       } else if (err.name === 'NotFoundError' || err.message?.includes('No cameras')) {
