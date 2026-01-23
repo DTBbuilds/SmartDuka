@@ -175,7 +175,35 @@ export function BarcodeScannerZXing({
       const isMobile = isIOS || isAndroid;
       
       // Log platform detection for debugging
-      console.log(`[Scanner] Platform detection: iOS=${isIOS}, Android=${isAndroid}, Mobile=${isMobile}`);
+      console.log(`[Scanner] Platform detection:`, {
+        iOS: isIOS,
+        Android: isAndroid,
+        Mobile: isMobile,
+        userAgent: navigator.userAgent,
+        isSecureContext: window.isSecureContext,
+        protocol: window.location.protocol,
+        host: window.location.host,
+      });
+
+      // MOBILE FIX: First test if we can get camera access at all
+      // This helps identify permission issues before ZXing tries to access
+      console.log('[Scanner] Testing direct camera access...');
+      let testStream: MediaStream | null = null;
+      try {
+        testStream = await navigator.mediaDevices.getUserMedia({ 
+          video: isMobile ? { facingMode: { ideal: 'environment' } } : true 
+        });
+        console.log('[Scanner] ✅ Direct camera access successful');
+        // Stop the test stream immediately
+        testStream.getTracks().forEach(track => track.stop());
+        testStream = null;
+        // Wait for camera to be released
+        await new Promise(resolve => setTimeout(resolve, 300));
+      } catch (directErr: any) {
+        console.error('[Scanner] ❌ Direct camera access failed:', directErr.name, directErr.message);
+        // Re-throw with more context
+        throw new Error(`CAMERA_ACCESS_FAILED: ${directErr.name} - ${directErr.message || 'Camera access denied or unavailable'}`);
+      }
 
       // Dynamically import ZXing-JS
       const { BrowserMultiFormatReader } = await import("@zxing/browser");
@@ -235,35 +263,45 @@ export function BarcodeScannerZXing({
       };
 
       // Wrap in timeout to prevent hanging on mobile
-      const decodePromise = codeReader.decodeFromConstraints(
-        { video: videoConstraints },
-        videoRef.current,
-        (result, error) => {
-          // CRITICAL: Stop processing if scan already completed
-          if (scanCompletedRef.current) {
-            return;
-          }
-          
-          if (result) {
-            const barcode = result.getText();
-            // Debounce: prevent duplicate scans of same barcode within 2 seconds
-            if (barcode !== lastScannedBarcode) {
-              // Mark as completed BEFORE processing to prevent race conditions
-              scanCompletedRef.current = true;
-              setLastScannedBarcode(barcode);
-              handleBarcodeDetected(barcode);
+      console.log('[Scanner] Starting ZXing decode with constraints:', JSON.stringify(videoConstraints));
+      
+      let controls: any = null;
+      try {
+        const decodePromise = codeReader.decodeFromConstraints(
+          { video: videoConstraints },
+          videoRef.current,
+          (result, error) => {
+            // CRITICAL: Stop processing if scan already completed
+            if (scanCompletedRef.current) {
+              return;
             }
+            
+            if (result) {
+              const barcode = result.getText();
+              console.log('[Scanner] Barcode detected:', barcode);
+              // Debounce: prevent duplicate scans of same barcode within 2 seconds
+              if (barcode !== lastScannedBarcode) {
+                // Mark as completed BEFORE processing to prevent race conditions
+                scanCompletedRef.current = true;
+                setLastScannedBarcode(barcode);
+                handleBarcodeDetected(barcode);
+              }
+            }
+            // Ignore errors during scanning (continuous process)
           }
-          // Ignore errors during scanning (continuous process)
-        }
-      );
+        );
 
-      // Add timeout for mobile - 15 seconds should be enough
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Camera initialization timeout')), 15000);
-      });
+        // Add timeout for mobile - 15 seconds should be enough
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('TIMEOUT: Camera initialization took too long')), 15000);
+        });
 
-      const controls = await Promise.race([decodePromise, timeoutPromise]) as any;
+        controls = await Promise.race([decodePromise, timeoutPromise]);
+        console.log('[Scanner] ✅ ZXing decodeFromConstraints succeeded');
+      } catch (decodeErr: any) {
+        console.error('[Scanner] ❌ ZXing decodeFromConstraints failed:', decodeErr);
+        throw new Error(`ZXING_DECODE_FAILED: ${decodeErr.name || 'Unknown'} - ${decodeErr.message || 'Failed to start barcode scanning'}`);
+      }
 
       scanControlsRef.current = controls;
 
@@ -394,6 +432,14 @@ export function BarcodeScannerZXing({
         setError("Camera constraints could not be satisfied. Try switching cameras or use manual entry.");
       } else if (errorDetails.name === "SecurityError") {
         setError("Camera access blocked by security policy. Check browser permissions.");
+      } else if (errorDetails.message.includes('CAMERA_ACCESS_FAILED')) {
+        // Direct camera access failed - extract the actual error
+        const actualError = errorDetails.message.replace('CAMERA_ACCESS_FAILED: ', '');
+        setError(`Camera access failed: ${actualError}. Please check camera permissions and try again.`);
+      } else if (errorDetails.message.includes('ZXING_DECODE_FAILED')) {
+        // ZXing library failed to start scanning
+        const actualError = errorDetails.message.replace('ZXING_DECODE_FAILED: ', '');
+        setError(`Scanner failed to start: ${actualError}. Try refreshing the page.`);
       } else {
         // MOBILE FIX: Provide more helpful message for unknown errors
         // These are often transient mobile browser issues
