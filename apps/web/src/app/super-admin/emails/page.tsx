@@ -492,26 +492,27 @@ function SuperAdminEmailsContent() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="p-4 md:p-6 space-y-4 md:space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold flex items-center gap-3">
-            <Mail className="h-8 w-8" />
+          <h1 className="text-xl md:text-3xl font-bold flex items-center gap-2 md:gap-3">
+            <Mail className="h-6 w-6 md:h-8 md:w-8" />
             Email Management
           </h1>
-          <p className="text-muted-foreground mt-2">
+          <p className="text-sm md:text-base text-muted-foreground mt-1 md:mt-2">
             Monitor and manage all email communications
           </p>
         </div>
         <div className="flex gap-2">
-          <Button onClick={() => setTestEmailOpen(true)} className="gap-2">
+          <Button onClick={() => setTestEmailOpen(true)} className="gap-2" size="sm">
             <TestTube className="h-4 w-4" />
-            Test Email
+            <span className="hidden sm:inline">Test Email</span>
+            <span className="sm:hidden">Test</span>
           </Button>
-          <Button variant="outline" onClick={loadData} className="gap-2">
+          <Button variant="outline" onClick={loadData} className="gap-2" size="sm">
             <RefreshCw className="h-4 w-4" />
-            Refresh
+            <span className="hidden sm:inline">Refresh</span>
           </Button>
         </div>
       </div>
@@ -525,23 +526,26 @@ function SuperAdminEmailsContent() {
       )}
 
       {/* Main Content */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="overview" className="gap-2">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 md:space-y-6">
+        <TabsList className="grid w-full grid-cols-4 h-auto">
+          <TabsTrigger value="overview" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-2 md:py-1.5 text-xs md:text-sm">
             <BarChart3 className="h-4 w-4" />
-            Overview
+            <span className="hidden sm:inline">Overview</span>
+            <span className="sm:hidden">Stats</span>
           </TabsTrigger>
-          <TabsTrigger value="logs" className="gap-2">
+          <TabsTrigger value="logs" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-2 md:py-1.5 text-xs md:text-sm">
             <FileText className="h-4 w-4" />
-            Email Logs
+            <span>Logs</span>
           </TabsTrigger>
-          <TabsTrigger value="templates" className="gap-2">
+          <TabsTrigger value="templates" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-2 md:py-1.5 text-xs md:text-sm">
             <Settings className="h-4 w-4" />
-            Templates
+            <span className="hidden sm:inline">Templates</span>
+            <span className="sm:hidden">Tmpl</span>
           </TabsTrigger>
-          <TabsTrigger value="analytics" className="gap-2">
+          <TabsTrigger value="analytics" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-2 md:py-1.5 text-xs md:text-sm">
             <TrendingUp className="h-4 w-4" />
-            Analytics
+            <span className="hidden sm:inline">Analytics</span>
+            <span className="sm:hidden">Data</span>
           </TabsTrigger>
         </TabsList>
 
@@ -560,7 +564,7 @@ function SuperAdminEmailsContent() {
 
           {/* Stats Cards */}
           {stats && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">Total Emails</CardTitle>
@@ -641,14 +645,14 @@ function SuperAdminEmailsContent() {
         </TabsContent>
 
         {/* Email Logs Tab */}
-        <TabsContent value="logs" className="space-y-6">
+        <TabsContent value="logs" className="space-y-4 md:space-y-6">
           {/* Filters */}
           <Card>
-            <CardHeader>
-              <CardTitle>Filters</CardTitle>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base md:text-lg">Filters</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4">
                 <div>
                   <Label htmlFor="search">Search</Label>
                   <div className="relative">
@@ -770,7 +774,67 @@ function SuperAdminEmailsContent() {
                 </div>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-0 md:p-6">
+              {/* Mobile Card View */}
+              <div className="md:hidden space-y-3 p-4">
+                {filteredEmails.length === 0 ? (
+                  <div className="py-8 text-center text-muted-foreground">
+                    No emails found
+                  </div>
+                ) : (
+                  filteredEmails.map((email) => (
+                    <div key={email._id} className="border rounded-lg p-4 space-y-3">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-sm truncate">{email.subject}</div>
+                          <div className="text-xs text-muted-foreground truncate">{email.to}</div>
+                        </div>
+                        <div className="flex items-center gap-2 ml-2">
+                          {getStatusIcon(email.status)}
+                          {getStatusBadge(email.status)}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div>
+                          <span className="text-muted-foreground text-xs">Template:</span>
+                          <div className="text-xs">{email.templateName || '-'}</div>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground text-xs">Type:</span>
+                          <div className="text-xs">{email.category || '-'}</div>
+                        </div>
+                        <div className="col-span-2">
+                          <span className="text-muted-foreground text-xs">Sent:</span>
+                          <div className="text-xs">
+                            {email.sentAt 
+                              ? new Date(email.sentAt).toLocaleString()
+                              : new Date(email.createdAt).toLocaleString()
+                            }
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex gap-2 pt-2 border-t">
+                        <Button variant="outline" size="sm" className="flex-1" onClick={() => handleViewEmail(email)}>
+                          <Eye className="h-3 w-3 mr-1" />
+                          View
+                        </Button>
+                        {email.status === 'failed' && (
+                          <Button variant="outline" size="sm" className="flex-1" onClick={() => handleRetryEmail(email._id)}>
+                            <RefreshCw className="h-3 w-3 mr-1" />
+                            Retry
+                          </Button>
+                        )}
+                        <Button variant="ghost" size="sm" onClick={() => handleDeleteEmail(email._id)}>
+                          <Trash2 className="h-3 w-3 text-red-500" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Desktop Table View */}
+              <div className="hidden md:block">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -844,19 +908,21 @@ function SuperAdminEmailsContent() {
                   ))}
                 </TableBody>
               </Table>
+              </div>
               
               {/* Pagination Controls */}
               {totalEmails > pageSize && (
-                <div className="flex items-center justify-between mt-4 pt-4 border-t">
-                  <div className="text-sm text-muted-foreground">
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-4 pt-4 border-t px-4 md:px-0">
+                  <div className="text-xs sm:text-sm text-muted-foreground text-center sm:text-left">
                     Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, totalEmails)} of {totalEmails}
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1 sm:gap-2">
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => setCurrentPage(1)}
                       disabled={currentPage === 1}
+                      className="hidden sm:inline-flex"
                     >
                       First
                     </Button>
@@ -866,10 +932,11 @@ function SuperAdminEmailsContent() {
                       onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                       disabled={currentPage === 1}
                     >
-                      Previous
+                      <span className="hidden sm:inline">Previous</span>
+                      <span className="sm:hidden">Prev</span>
                     </Button>
-                    <span className="px-3 py-1 text-sm font-medium">
-                      Page {currentPage} of {Math.ceil(totalEmails / pageSize)}
+                    <span className="px-2 sm:px-3 py-1 text-xs sm:text-sm font-medium">
+                      {currentPage} / {Math.ceil(totalEmails / pageSize)}
                     </span>
                     <Button
                       variant="outline"
@@ -884,6 +951,7 @@ function SuperAdminEmailsContent() {
                       size="sm"
                       onClick={() => setCurrentPage(Math.ceil(totalEmails / pageSize))}
                       disabled={currentPage >= Math.ceil(totalEmails / pageSize)}
+                      className="hidden sm:inline-flex"
                     >
                       Last
                     </Button>

@@ -34,14 +34,6 @@ export class StripePaymentService {
   ) {}
 
   /**
-   * Generate idempotency key for payment operations
-   * Ensures safe retries and prevents duplicate payments
-   */
-  private generateIdempotencyKey(shopId: string, orderId: string, type: string): string {
-    return `${shopId}_${orderId}_${type}_${Date.now()}`;
-  }
-
-  /**
    * Create a payment intent for POS sale
    * Returns client secret for frontend to complete payment
    * 
@@ -424,6 +416,13 @@ export class StripePaymentService {
     );
 
     this.logger.log(`Updated payment ${paymentIntent.id} status to ${paymentIntent.status}`);
+  }
+
+  /**
+   * Generate idempotency key for payment operations
+   */
+  private generateIdempotencyKey(shopId: string, identifier: string, type: string): string {
+    return `${shopId}_${identifier}_${type}_${Date.now()}`;
   }
 
   /**

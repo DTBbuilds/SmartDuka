@@ -2,6 +2,7 @@ import { Controller, Post, Body, Get, UseGuards, Req, Res, Query, Delete, Param 
 import type { Response, Request } from 'express';
 import { AuthService } from './auth.service';
 import { TokenService } from './token.service';
+import { OtpService } from './services/otp.service';
 import { RegisterShopDto } from './dto/register-shop.dto';
 import { LoginDto } from './dto/login.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
@@ -22,6 +23,7 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly tokenService: TokenService,
+    private readonly otpService: OtpService,
     private readonly configService: ConfigService,
     private readonly cookieService: CookieService,
   ) {}
@@ -272,22 +274,27 @@ export class AuthController {
       const result = await this.authService.googleLoginWithTokens(req.user, ipAddress, userAgent);
       
       if (result.isNewUser) {
-        // New user - check if they want to sign up as cashier or register a shop
-        const profileData = encodeURIComponent(JSON.stringify(result.googleProfile));
-        
+        // SECURITY: For cashier signup, they MUST have a PIN from their admin
+        // Redirect to PIN verification page where they must prove they're a registered cashier
         if (isCashierSignup) {
-          // Cashier signup - redirect to PIN verification page
+          const profileData = encodeURIComponent(JSON.stringify(result.googleProfile));
           res.redirect(`${frontendUrl}/auth/cashier-google-signup?google=${profileData}`);
         } else {
-          // Shop registration - redirect to shop registration page
+          // For admin/shop registration - redirect to shop registration page
+          // This is intentional: admins can register new shops with Google
+          const profileData = encodeURIComponent(JSON.stringify(result.googleProfile));
           res.redirect(`${frontendUrl}/register-shop?google=${profileData}`);
         }
       } else {
-        // Existing user - pass tokens via URL for cross-origin support
-        // This is necessary because frontend (Vercel) and backend (Render) are on different domains
-        // Cookies won't work cross-origin without SameSite=None which has browser compatibility issues
-        // The token is short-lived (30min) and immediately stored client-side, then cleared from URL
-        // Include refresh token for localStorage fallback in cross-origin scenarios
+        // Existing user - verify they have the correct role if this is a cashier flow
+        if (isCashierSignup && result.user?.role !== 'cashier') {
+          // User exists but is not a cashier - reject with clear message
+          const errorMsg = 'This Google account is linked to an admin account, not a cashier account. Please use the Admin login instead.';
+          res.redirect(`${frontendUrl}/login?error=${encodeURIComponent(errorMsg)}`);
+          return;
+        }
+        
+        // Existing user with valid role - pass tokens via URL for cross-origin support
         if (result.tokens) {
           const tokenParam = `token=${encodeURIComponent(result.tokens.accessToken)}&csrf=${encodeURIComponent(result.tokens.csrfToken)}&refresh=${encodeURIComponent(result.tokens.refreshToken)}`;
           res.redirect(`${frontendUrl}/auth/callback?success=true&${tokenParam}`);
@@ -499,5 +506,79 @@ export class AuthController {
     const csrfToken = require('crypto').randomBytes(32).toString('hex');
     this.cookieService.setCsrfTokenCookie(res, csrfToken);
     return { csrfToken };
+  }
+
+  // ==================== OTP Verification ====================
+
+  /**
+   * Send OTP for registration verification
+   * Rate limited: 3 requests per minute per IP
+   */
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
+  @Post('send-otp')
+  @SkipCsrf()
+  async sendOtp(
+    @Body() body: { email: string; shopName: string },
+    @Req() req: any,
+  ) {
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.get('user-agent');
+    return this.otpService.sendRegistrationOtp(
+      body.email,
+      body.shopName,
+      ipAddress,
+      userAgent,
+    );
+  }
+
+  /**
+   * Verify OTP code
+   * Rate limited: 5 attempts per minute per IP
+   */
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Post('verify-otp')
+  @SkipCsrf()
+  async verifyOtp(
+    @Body() body: { email: string; code: string; type?: 'registration' | 'password_reset' | 'email_verification' },
+  ) {
+    return this.otpService.verifyOtp(
+      body.email,
+      body.code,
+      body.type || 'registration',
+    );
+  }
+
+  /**
+   * Resend OTP code
+   * Rate limited: 2 requests per minute per IP
+   */
+  @Throttle({ default: { limit: 2, ttl: 60000 } })
+  @Post('resend-otp')
+  @SkipCsrf()
+  async resendOtp(
+    @Body() body: { email: string; shopName: string; type?: 'registration' | 'password_reset' | 'email_verification' },
+    @Req() req: any,
+  ) {
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.get('user-agent');
+    return this.otpService.resendOtp(
+      body.email,
+      body.shopName,
+      body.type || 'registration',
+      ipAddress,
+      userAgent,
+    );
+  }
+
+  /**
+   * Check if email has been verified (for registration flow)
+   */
+  @Post('check-email-verified')
+  @SkipCsrf()
+  async checkEmailVerified(
+    @Body() body: { email: string },
+  ) {
+    const isVerified = await this.otpService.isEmailRecentlyVerified(body.email, 'registration');
+    return { verified: isVerified };
   }
 }

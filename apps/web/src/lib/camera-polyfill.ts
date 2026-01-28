@@ -212,19 +212,29 @@ export async function requestCameraAccess(options?: {
   const constraints: MediaStreamConstraints[] = [];
 
   if (isMobile) {
-    // Mobile: Start with back camera ideal, then simpler constraints
+    // Mobile: Start with back camera + continuous focus for barcode scanning
+    // FOCUS FIX: focusMode: 'continuous' is CRITICAL for auto-focusing on barcodes
     // NOTE: Order matters - iOS Safari works better with 'ideal' facingMode
-    // 'exact' facingMode can fail if device is busy
-    // MOBILE FIX: Add more constraint options for better compatibility
+    // Note: focusMode is supported by mobile browsers but not in TS MediaTrackConstraints type
+    const focusConstraints = { 
+      facingMode: { ideal: 'environment' }, 
+      width: { ideal: 1280 }, 
+      height: { ideal: 720 } 
+    } as MediaTrackConstraints;
+    (focusConstraints as any).focusMode = 'continuous'; // Critical for barcode scanning
+    
+    const focusOnlyConstraints = { facingMode: { ideal: 'environment' } } as MediaTrackConstraints;
+    (focusOnlyConstraints as any).focusMode = 'continuous';
+    
     constraints.push(
-      // 1. Back camera with ideal constraint and lower resolution (most reliable on mobile)
-      { video: { facingMode: { ideal: 'environment' }, width: { ideal: 640 }, height: { ideal: 480 } } },
-      // 2. Back camera with ideal constraint only
+      // 1. Back camera with continuous focus and good resolution (optimal for barcodes)
+      { video: focusConstraints },
+      // 2. Back camera with focus only (fallback if resolution fails)
+      { video: focusOnlyConstraints },
+      // 3. Back camera with ideal constraint only (fallback if focus not supported)
       { video: { facingMode: { ideal: 'environment' } } },
-      // 3. Back camera preference (may fail on some devices)
+      // 4. Back camera preference (may fail on some devices)
       { video: { facingMode: 'environment' } },
-      // 4. Any camera with low resolution (helps on constrained devices)
-      { video: { width: { ideal: 640 }, height: { ideal: 480 } } },
       // 5. Simplest - just video (final fallback)
       { video: true },
     );

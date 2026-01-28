@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api-client';
+import { useRefreshEvent } from '@/lib/refresh-events';
 import { AuthGuard } from '@/components/auth-guard';
 import {
   Card,
@@ -116,7 +117,7 @@ const subscriptionCache: { data: ShopSubscription[] | null; stats: SubscriptionS
   stats: null,
   timestamp: 0,
 };
-const CACHE_DURATION = 60000; // 1 minute cache
+const CACHE_DURATION = 10000; // 10 seconds cache for faster updates
 
 const ITEMS_PER_PAGE = 20;
 
@@ -172,10 +173,6 @@ function SuperAdminSubscriptionsContent() {
   // Messages
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  useEffect(() => {
-    fetchData();
-  }, [token]);
-
   // Auto-clear messages
   useEffect(() => {
     if (message) {
@@ -220,6 +217,20 @@ function SuperAdminSubscriptionsContent() {
       setLoading(false);
     }
   }, [token]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  // Listen for refresh events that should trigger data refetch
+  useRefreshEvent(
+    ['shop:updated', 'subscription:updated', 'payment:completed', 'invoice:paid'],
+    () => {
+      // Force refresh when payments are verified or subscriptions are updated
+      fetchData(true);
+    },
+    [fetchData]
+  );
 
   const filteredSubscriptions = useMemo(() => {
     return subscriptions.filter((sub) => {

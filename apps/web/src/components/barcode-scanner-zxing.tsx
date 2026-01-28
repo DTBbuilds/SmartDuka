@@ -255,17 +255,21 @@ export function BarcodeScannerZXing({
       console.log('[Scanner] ✅ Camera ready, starting decode...');
 
       // Use decodeFromConstraints for camera access
-      // CRITICAL MOBILE FIX: On mobile, use ONLY facingMode - no deviceId, no resolution constraints
-      // Mobile browsers work best with minimal constraints
+      // PERFORMANCE FIX: Add focus mode for mobile barcode scanning
       let videoConstraints: MediaTrackConstraints;
       
       if (isMobile) {
-        // Mobile: Use minimal constraints - just facingMode
-        // This is the most reliable approach on mobile browsers
+        // Mobile: Use facingMode + focus mode for optimal barcode scanning
+        // focusMode: 'continuous' is CRITICAL for auto-focusing on close barcodes
+        // Note: focusMode is supported by mobile browsers but not in TS types
         videoConstraints = {
-          facingMode: { ideal: 'environment' }
-        };
-        console.log('[Scanner] Mobile: Using minimal constraints (facingMode only)');
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        } as MediaTrackConstraints;
+        // Apply focusMode via advanced constraints (supported on mobile)
+        (videoConstraints as any).focusMode = 'continuous';
+        console.log('[Scanner] Mobile: Using optimized constraints with continuous focus');
       } else {
         // Desktop: Can use more specific constraints
         videoConstraints = {

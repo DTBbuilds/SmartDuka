@@ -6,6 +6,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { TokenService } from './token.service';
+import { OtpService } from './services/otp.service';
 import { UsersModule } from '../users/users.module';
 import { ShopsModule } from '../shops/shops.module';
 import { ActivityModule } from '../activity/activity.module';
@@ -20,6 +21,7 @@ import { Subscription, SubscriptionSchema } from '../subscriptions/schemas/subsc
 import { RefreshToken, RefreshTokenSchema } from './schemas/refresh-token.schema';
 import { PasswordResetToken, PasswordResetTokenSchema } from './schemas/password-reset-token.schema';
 import { Session, SessionSchema } from './schemas/session.schema';
+import { Otp, OtpSchema } from './schemas/otp.schema';
 import { CookieService } from './services/cookie.service';
 import { CsrfService } from './services/csrf.service';
 import { CsrfGuard } from './guards/csrf.guard';
@@ -57,6 +59,10 @@ import { JwtCookieAuthGuard } from './guards/jwt-cookie-auth.guard';
         name: Session.name,
         schema: SessionSchema,
       },
+      {
+        name: Otp.name,
+        schema: OtpSchema,
+      },
     ]),
     JwtModule.registerAsync({
       inject: [ConfigService],
@@ -69,6 +75,7 @@ import { JwtCookieAuthGuard } from './guards/jwt-cookie-auth.guard';
   providers: [
     AuthService,
     TokenService,
+    OtpService,
     CookieService,
     CsrfService,
     JwtStrategy,
@@ -82,6 +89,7 @@ import { JwtCookieAuthGuard } from './guards/jwt-cookie-auth.guard';
   exports: [
     AuthService,
     TokenService,
+    OtpService,
     CookieService,
     CsrfService,
     SubscriptionStatusGuard,

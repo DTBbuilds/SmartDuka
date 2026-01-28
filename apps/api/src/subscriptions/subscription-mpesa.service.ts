@@ -854,6 +854,7 @@ export class SubscriptionMpesaService implements OnModuleInit {
     shopId: string,
     mpesaReceiptNumber: string,
     paidAmount: number,
+    senderPhoneNumber?: string,
   ): Promise<PaymentConfirmation> {
     try {
       const invoice = await this.invoiceModel.findOne({
@@ -916,6 +917,9 @@ export class SubscriptionMpesaService implements OnModuleInit {
         paymentType = PaymentAttemptType.UPGRADE;
       }
 
+      // Normalize sender phone number if provided
+      const normalizedSenderPhone = senderPhoneNumber?.replace(/\D/g, '') || null;
+
       // Update invoice as pending verification (NOT paid yet)
       // Admin will verify and mark as paid, which triggers activation
       await this.invoiceModel.updateOne(
@@ -928,6 +932,7 @@ export class SubscriptionMpesaService implements OnModuleInit {
             paidAmount,
             'manualPayment': {
               receiptNumber: normalizedReceipt,
+              senderPhoneNumber: normalizedSenderPhone,
               submittedAt: new Date(),
               pendingVerification: true,
               verifiedAt: null,
@@ -955,14 +960,16 @@ export class SubscriptionMpesaService implements OnModuleInit {
         invoiceId: invoice._id.toString(),
         invoiceNumber: invoice.invoiceNumber,
         mpesaReceiptNumber: normalizedReceipt,
+        phoneNumber: normalizedSenderPhone,
         initiatedAt: new Date(),
         metadata: {
           source: 'send_money',
           invoiceType: invoice.type,
+          senderPhoneNumber: normalizedSenderPhone,
         },
       });
 
-      this.logger.log(`Manual payment submitted for verification - Invoice: ${invoice.invoiceNumber}, Receipt: ${normalizedReceipt}`);
+      this.logger.log(`Manual payment submitted for verification - Invoice: ${invoice.invoiceNumber}, Receipt: ${normalizedReceipt}, Sender: ${normalizedSenderPhone || 'not provided'}`);
 
       // NOTE: Subscription is NOT activated here
       // It will be activated when admin verifies the payment or via automated verification
@@ -1037,6 +1044,9 @@ export class SubscriptionMpesaService implements OnModuleInit {
 
         // Activate subscription after successful payment
         await this.activateSubscriptionAfterPayment(invoice.shopId.toString(), invoice._id.toString());
+
+        // Emit refresh events for real-time UI updates
+        this.emitRefreshEvents(invoice.shopId.toString(), invoice._id.toString());
 
         this.logger.log(`Payment successful for invoice ${invoice.invoiceNumber}: ${mpesaReceiptNumber}`);
       } else {
@@ -1286,6 +1296,26 @@ export class SubscriptionMpesaService implements OnModuleInit {
       this.logger.log(`Subscription activated for shop ${shopId} until ${periodEnd}`);
     } catch (error: any) {
       this.logger.error(`Failed to activate subscription for shop ${shopId}:`, error.message);
+    }
+  }
+
+  /**
+   * Emit refresh events for real-time UI updates after payment verification
+   * TODO: Implement WebSocket/SSE for real-time updates
+   */
+  private emitRefreshEvents(shopId: string, invoiceId: string): void {
+    try {
+      // For now, just log the events that should be emitted
+      // These will be picked up by the frontend polling mechanisms
+      this.logger.log(`Payment verified for shop ${shopId}, invoice ${invoiceId} - UI should refresh subscription status`);
+      
+      // TODO: Implement actual WebSocket/SSE event emission:
+      // - payment:completed event for user who paid
+      // - subscription:updated event for subscription page refresh
+      // - invoice:paid event for billing history refresh
+      // - admin:payment_verified event for super admin dashboard
+    } catch (error) {
+      this.logger.warn(`Failed to log refresh events: ${error.message}`);
     }
   }
 

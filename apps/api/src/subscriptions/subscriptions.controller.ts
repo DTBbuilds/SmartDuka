@@ -332,12 +332,31 @@ export class SubscriptionsController {
   }
 
   /**
-   * Generate invoice/receipt HTML
+   * Generate invoice/receipt HTML - Clean, minimalistic, professional design
    */
   private generateInvoiceHtml(invoice: InvoiceResponseDto, type: 'invoice' | 'receipt'): string {
     const isReceipt = type === 'receipt';
     const title = isReceipt ? 'Payment Receipt' : 'Invoice';
     const statusColor = invoice.status === 'paid' ? '#10b981' : invoice.status === 'pending' ? '#f59e0b' : '#ef4444';
+    const paymentMethodLabel = invoice.paymentMethod 
+      ? invoice.paymentMethod.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+      : 'Pending';
+    
+    // Format phone number for display
+    const formatPhone = (phone?: string) => {
+      if (!phone) return null;
+      // Format as 07XX XXX XXX
+      const cleaned = phone.replace(/\D/g, '');
+      if (cleaned.length === 12 && cleaned.startsWith('254')) {
+        return `0${cleaned.slice(3, 6)} ${cleaned.slice(6, 9)} ${cleaned.slice(9)}`;
+      }
+      if (cleaned.length === 10 && cleaned.startsWith('0')) {
+        return `${cleaned.slice(0, 4)} ${cleaned.slice(4, 7)} ${cleaned.slice(7)}`;
+      }
+      return phone;
+    };
+
+    const senderPhone = formatPhone(invoice.manualPayment?.senderPhoneNumber);
     
     return `
 <!DOCTYPE html>
@@ -348,82 +367,122 @@ export class SubscriptionsController {
   <title>${title} - ${invoice.invoiceNumber}</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f8fafc; padding: 20px; }
-    .container { max-width: 800px; margin: 0 auto; background: white; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); overflow: hidden; }
-    .header { background: linear-gradient(135deg, #1e293b 0%, #334155 100%); color: white; padding: 32px; }
-    .header h1 { font-size: 28px; font-weight: 700; }
-    .header p { opacity: 0.8; margin-top: 4px; }
-    .badge { display: inline-block; padding: 6px 16px; border-radius: 20px; font-size: 12px; font-weight: 600; text-transform: uppercase; background: ${statusColor}; color: white; margin-top: 12px; }
-    .content { padding: 32px; }
-    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 32px; }
-    .info-box { background: #f8fafc; padding: 16px; border-radius: 8px; }
-    .info-box h3 { font-size: 12px; text-transform: uppercase; color: #64748b; margin-bottom: 8px; letter-spacing: 0.5px; }
-    .info-box p { color: #1e293b; font-weight: 500; }
-    .table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
-    .table th { background: #f1f5f9; padding: 12px 16px; text-align: left; font-size: 12px; text-transform: uppercase; color: #64748b; }
-    .table td { padding: 16px; border-bottom: 1px solid #e2e8f0; }
-    .table .amount { text-align: right; font-weight: 600; }
-    .total-row { background: #f8fafc; }
-    .total-row td { font-weight: 700; font-size: 18px; color: #1e293b; }
-    .footer { background: #f8fafc; padding: 24px 32px; text-align: center; color: #64748b; font-size: 14px; }
-    .footer a { color: #3b82f6; text-decoration: none; }
-    @media print { body { background: white; padding: 0; } .container { box-shadow: none; } }
-    @media (max-width: 600px) { .info-grid { grid-template-columns: 1fr; } }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #ffffff; padding: 40px 20px; color: #1f2937; line-height: 1.5; }
+    .container { max-width: 600px; margin: 0 auto; }
+    .header { text-align: center; padding-bottom: 32px; border-bottom: 2px solid #f97316; margin-bottom: 32px; }
+    .logo { font-size: 32px; margin-bottom: 8px; }
+    .brand { font-size: 24px; font-weight: 700; color: #f97316; letter-spacing: -0.5px; }
+    .title { font-size: 14px; color: #6b7280; text-transform: uppercase; letter-spacing: 2px; margin-top: 16px; }
+    .status { display: inline-block; padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; background: ${statusColor}; color: white; margin-top: 8px; }
+    .section { margin-bottom: 28px; }
+    .section-title { font-size: 11px; text-transform: uppercase; color: #9ca3af; letter-spacing: 1px; margin-bottom: 12px; font-weight: 600; }
+    .detail-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f3f4f6; }
+    .detail-row:last-child { border-bottom: none; }
+    .detail-label { color: #6b7280; font-size: 14px; }
+    .detail-value { font-weight: 500; font-size: 14px; text-align: right; }
+    .detail-value.mono { font-family: 'SF Mono', Monaco, monospace; letter-spacing: 0.5px; }
+    .detail-value.highlight { color: #f97316; font-weight: 600; }
+    .amount-section { background: #fef7ed; border-radius: 8px; padding: 20px; margin: 24px 0; }
+    .amount-row { display: flex; justify-content: space-between; padding: 6px 0; }
+    .amount-row.total { border-top: 2px solid #fed7aa; margin-top: 12px; padding-top: 12px; }
+    .amount-label { color: #92400e; font-size: 14px; }
+    .amount-value { font-weight: 600; font-size: 14px; color: #92400e; }
+    .amount-row.total .amount-label, .amount-row.total .amount-value { font-size: 18px; font-weight: 700; color: #c2410c; }
+    .footer { text-align: center; padding-top: 32px; border-top: 1px solid #e5e7eb; margin-top: 32px; }
+    .footer p { color: #9ca3af; font-size: 12px; margin: 4px 0; }
+    .footer a { color: #f97316; text-decoration: none; }
+    .footer .contact { margin-top: 12px; }
+    @media print { body { padding: 20px; } }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="header">
-      <h1>SmartDuka</h1>
-      <p>${title}</p>
-      <span class="badge">${invoice.status.toUpperCase()}</span>
+      <div class="logo">🛒</div>
+      <div class="brand">SmartDuka</div>
+      <div class="title">${title}</div>
+      <span class="status">${invoice.status === 'paid' ? '✓ Paid' : invoice.status.toUpperCase()}</span>
     </div>
-    
-    <div class="content">
-      <div class="info-grid">
-        <div class="info-box">
-          <h3>${isReceipt ? 'Receipt Number' : 'Invoice Number'}</h3>
-          <p>${invoice.invoiceNumber}</p>
-        </div>
-        <div class="info-box">
-          <h3>${isReceipt ? 'Payment Date' : 'Due Date'}</h3>
-          <p>${isReceipt && invoice.paidAt ? new Date(invoice.paidAt).toLocaleDateString('en-KE', { year: 'numeric', month: 'long', day: 'numeric' }) : new Date(invoice.dueDate).toLocaleDateString('en-KE', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
-        </div>
-        ${invoice.mpesaReceiptNumber ? `
-        <div class="info-box">
-          <h3>M-Pesa Receipt</h3>
-          <p>${invoice.mpesaReceiptNumber}</p>
-        </div>
-        ` : ''}
-        <div class="info-box">
-          <h3>Payment Method</h3>
-          <p>${invoice.paymentMethod ? invoice.paymentMethod.replace('_', ' ').toUpperCase() : 'Pending'}</p>
-        </div>
-      </div>
 
-      <table class="table">
-        <thead>
-          <tr>
-            <th>Description</th>
-            <th class="amount">Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>${invoice.description}</td>
-            <td class="amount">KES ${invoice.totalAmount.toLocaleString()}</td>
-          </tr>
-          <tr class="total-row">
-            <td>Total ${isReceipt ? 'Paid' : 'Due'}</td>
-            <td class="amount">KES ${invoice.totalAmount.toLocaleString()}</td>
-          </tr>
-        </tbody>
-      </table>
+    <div class="section">
+      <div class="section-title">Document Details</div>
+      <div class="detail-row">
+        <span class="detail-label">${isReceipt ? 'Receipt' : 'Invoice'} Number</span>
+        <span class="detail-value mono">${invoice.invoiceNumber}</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">${isReceipt ? 'Payment Date' : 'Due Date'}</span>
+        <span class="detail-value">${isReceipt && invoice.paidAt 
+          ? new Date(invoice.paidAt).toLocaleDateString('en-KE', { year: 'numeric', month: 'short', day: 'numeric' }) 
+          : new Date(invoice.dueDate).toLocaleDateString('en-KE', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+      </div>
+      ${invoice.periodStart && invoice.periodEnd ? `
+      <div class="detail-row">
+        <span class="detail-label">Billing Period</span>
+        <span class="detail-value">${new Date(invoice.periodStart).toLocaleDateString('en-KE', { month: 'short', day: 'numeric' })} - ${new Date(invoice.periodEnd).toLocaleDateString('en-KE', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+      </div>
+      ` : ''}
+    </div>
+
+    ${isReceipt ? `
+    <div class="section">
+      <div class="section-title">Payment Information</div>
+      <div class="detail-row">
+        <span class="detail-label">Payment Method</span>
+        <span class="detail-value">${paymentMethodLabel}</span>
+      </div>
+      ${invoice.mpesaReceiptNumber ? `
+      <div class="detail-row">
+        <span class="detail-label">M-Pesa Reference</span>
+        <span class="detail-value mono highlight">${invoice.mpesaReceiptNumber}</span>
+      </div>
+      ` : ''}
+      ${senderPhone ? `
+      <div class="detail-row">
+        <span class="detail-label">Sender Phone</span>
+        <span class="detail-value mono">${senderPhone}</span>
+      </div>
+      ` : ''}
+      ${invoice.manualPayment?.verifiedAt ? `
+      <div class="detail-row">
+        <span class="detail-label">Verified On</span>
+        <span class="detail-value">${new Date(invoice.manualPayment.verifiedAt).toLocaleDateString('en-KE', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+      </div>
+      ` : ''}
+    </div>
+    ` : ''}
+
+    <div class="amount-section">
+      <div class="section-title" style="color: #92400e;">Amount Summary</div>
+      <div class="amount-row">
+        <span class="amount-label">${invoice.description}</span>
+        <span class="amount-value">KES ${invoice.amount.toLocaleString()}</span>
+      </div>
+      ${invoice.discount > 0 ? `
+      <div class="amount-row">
+        <span class="amount-label">Discount</span>
+        <span class="amount-value">- KES ${invoice.discount.toLocaleString()}</span>
+      </div>
+      ` : ''}
+      ${invoice.tax > 0 ? `
+      <div class="amount-row">
+        <span class="amount-label">Tax (VAT 16%)</span>
+        <span class="amount-value">KES ${invoice.tax.toLocaleString()}</span>
+      </div>
+      ` : ''}
+      <div class="amount-row total">
+        <span class="amount-label">Total ${isReceipt ? 'Paid' : 'Due'}</span>
+        <span class="amount-value">KES ${invoice.totalAmount.toLocaleString()}</span>
+      </div>
     </div>
 
     <div class="footer">
-      <p>Thank you for using SmartDuka!</p>
-      <p style="margin-top: 8px;">Questions? Contact us at <a href="mailto:smartdukainfo@gmail.com">smartdukainfo@gmail.com</a></p>
+      <p><strong>Thank you for using SmartDuka!</strong></p>
+      <p>The smart way to manage your business</p>
+      <div class="contact">
+        <p>📧 <a href="mailto:smartdukainfo@gmail.com">smartdukainfo@gmail.com</a></p>
+        <p>📞 0729 983 567 | 0104 160 502</p>
+      </div>
     </div>
   </div>
 </body>
@@ -651,5 +710,19 @@ export class SubscriptionsController {
   ): Promise<{ audited: number; fixed: number; issues: string[] }> {
     this.logger.log(`Super admin ${user.email} auditing subscriptions`);
     return this.subscriptionsService.auditAndFixSubscriptions();
+  }
+
+  /**
+   * Cancel incorrectly created trial renewal invoices (super admin only)
+   * Trial plans cannot be renewed - users must upgrade to a paid plan
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('super_admin')
+  @Post('admin/cancel-trial-invoices')
+  async cancelTrialRenewalInvoices(
+    @CurrentUser() user: JwtPayload,
+  ): Promise<{ cancelled: number; invoices: string[] }> {
+    this.logger.log(`Super admin ${user.email} cancelling trial renewal invoices`);
+    return this.subscriptionsService.cancelTrialRenewalInvoices();
   }
 }

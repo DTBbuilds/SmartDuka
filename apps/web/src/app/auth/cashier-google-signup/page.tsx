@@ -42,26 +42,38 @@ export default function CashierGoogleSignupPage() {
   const [googleProfile, setGoogleProfile] = useState<GoogleProfile | null>(null);
   const [shops, setShops] = useState<Shop[]>([]);
   const [selectedShopId, setSelectedShopId] = useState('');
+  const [preselectedShopName, setPreselectedShopName] = useState('');
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [loadingShops, setLoadingShops] = useState(true);
   const [success, setSuccess] = useState(false);
 
-  // Parse Google profile from URL
+  // Parse Google profile from URL and check for preselected shop from login page
   useEffect(() => {
     const googleParam = searchParams.get('google');
     if (googleParam) {
       try {
         const profile = JSON.parse(decodeURIComponent(googleParam)) as GoogleProfile;
         setGoogleProfile(profile);
+        
+        // Check if shop was preselected on login page (stored in sessionStorage)
+        const preselectedShopId = sessionStorage.getItem('smartduka:cashier_google_shopId');
+        const preselectedName = sessionStorage.getItem('smartduka:cashier_google_shopName');
+        if (preselectedShopId) {
+          setSelectedShopId(preselectedShopId);
+          setPreselectedShopName(preselectedName || '');
+          // Clear the sessionStorage after using
+          sessionStorage.removeItem('smartduka:cashier_google_shopId');
+          sessionStorage.removeItem('smartduka:cashier_google_shopName');
+        }
       } catch (err) {
         console.error('Failed to parse Google profile:', err);
         setError('Invalid Google profile data. Please try again.');
       }
     } else {
-      // No Google profile - redirect to login
-      router.push('/login');
+      // No Google profile - redirect to login with error
+      router.push('/login?error=' + encodeURIComponent('You must be a registered cashier to sign in. Contact your shop admin to create your account.'));
     }
   }, [searchParams, router]);
 
@@ -269,15 +281,41 @@ export default function CashierGoogleSignupPage() {
                 <div>
                   <label className="block text-sm font-medium text-foreground mb-2 flex items-center gap-2">
                     <span className="inline-flex items-center justify-center w-5 h-5 bg-primary text-primary-foreground text-xs font-bold rounded-full">1</span>
-                    Select Your Shop
+                    {preselectedShopName ? 'Your Shop' : 'Select Your Shop'}
                   </label>
-                  <ShopSelector
-                    shops={shops}
-                    selectedShopId={selectedShopId}
-                    onShopChange={setSelectedShopId}
-                    disabled={isLoading}
-                    placeholder="Choose your shop..."
-                  />
+                  {preselectedShopName && selectedShopId ? (
+                    <div className="flex items-center gap-3 p-3 bg-primary/5 border border-primary/20 rounded-xl">
+                      <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                        <Star className="h-5 w-5 text-primary" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-foreground truncate">
+                          {preselectedShopName}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          Selected from login page
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPreselectedShopName('');
+                          setSelectedShopId('');
+                        }}
+                        className="text-xs text-primary hover:underline"
+                      >
+                        Change
+                      </button>
+                    </div>
+                  ) : (
+                    <ShopSelector
+                      shops={shops}
+                      selectedShopId={selectedShopId}
+                      onShopChange={setSelectedShopId}
+                      disabled={isLoading}
+                      placeholder="Choose your shop..."
+                    />
+                  )}
                 </div>
 
                 {/* Step 2: PIN Entry */}

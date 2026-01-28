@@ -139,10 +139,13 @@ export class SubscriptionInvoice {
   @Prop({ type: Object, required: false })
   manualPayment?: {
     receiptNumber?: string;
+    senderPhoneNumber?: string; // Phone number used for Send Money payment
+    paidAmount?: number; // Amount paid by sender
     submittedAt?: Date;
     pendingVerification?: boolean;
     verifiedAt?: Date;
     verifiedBy?: string;
+    verificationNotes?: string;
     rejectedAt?: Date;
     rejectionReason?: string;
   };

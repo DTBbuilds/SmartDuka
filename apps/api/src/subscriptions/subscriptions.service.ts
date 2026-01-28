@@ -1912,8 +1912,16 @@ export class SubscriptionsService {
     });
 
     for (const subscription of expired) {
+      // Trial plans cannot be renewed - skip them (should not happen but extra safety)
+      if (subscription.planCode === 'trial') {
+        subscription.status = SubscriptionStatus.EXPIRED;
+        await subscription.save();
+        this.logger.log(`Trial subscription ${subscription._id} expired - user must upgrade to continue`);
+        continue;
+      }
+      
       if (subscription.autoRenew) {
-        // Create renewal invoice
+        // Create renewal invoice for non-trial plans only
         const plan = await this.planModel.findById(subscription.planId);
         if (plan) {
           const periodStart = new Date();
@@ -1985,8 +1993,16 @@ export class SubscriptionsService {
     for (const subscription of expiredDaily) {
       const plan = await this.planModel.findById(subscription.planId);
       
+      // Trial plans cannot be renewed - they must upgrade to a paid plan
+      if (subscription.status === SubscriptionStatus.TRIAL || subscription.planCode === 'trial') {
+        subscription.status = SubscriptionStatus.EXPIRED;
+        await subscription.save();
+        this.logger.log(`Trial subscription ${subscription._id} expired - user must upgrade to continue`);
+        continue;
+      }
+      
       if (subscription.autoRenew && plan) {
-        // Create renewal invoice for auto-renew subscriptions
+        // Create renewal invoice for auto-renew subscriptions (non-trial only)
         const days = subscription.numberOfDays || 1;
         const periodStart = new Date();
         const periodEnd = new Date();
@@ -2118,6 +2134,13 @@ export class SubscriptionsService {
       paymentReference: invoice.mpesaReceiptNumber || invoice.paymentReference,
       mpesaReceiptNumber: invoice.mpesaReceiptNumber,
       createdAt: invoice.createdAt!,
+      // Include manual payment details (Send Money)
+      manualPayment: invoice.manualPayment ? {
+        senderPhoneNumber: invoice.manualPayment.senderPhoneNumber,
+        paidAmount: invoice.manualPayment.paidAmount,
+        submittedAt: invoice.manualPayment.submittedAt,
+        verifiedAt: invoice.manualPayment.verifiedAt,
+      } : undefined,
     };
   }
 
@@ -2288,6 +2311,12 @@ export class SubscriptionsService {
 
     for (const subscription of dueSubscriptions) {
       try {
+        // Trial plans cannot be renewed - skip them
+        if (subscription.planCode === 'trial') {
+          this.logger.log(`Skipping trial subscription ${subscription._id} - trials cannot be renewed`);
+          continue;
+        }
+        
         const plan = await this.planModel.findById(subscription.planId);
         if (!plan) continue;
 
@@ -2958,5 +2987,44 @@ export class SubscriptionsService {
 
     this.logger.log(`Audited ${audited} subscriptions, fixed ${fixed} issues`);
     return { audited, fixed, issues };
+  }
+
+  /**
+   * Cancel/void any incorrectly created trial plan renewal invoices
+   * Trial plans cannot be renewed - users must upgrade to a paid plan
+   */
+  async cancelTrialRenewalInvoices(): Promise<{ cancelled: number; invoices: string[] }> {
+    this.logger.log('Cancelling incorrectly created trial renewal invoices...');
+    
+    // Find all trial subscriptions
+    const trialSubscriptions = await this.subscriptionModel.find({
+      $or: [
+        { status: SubscriptionStatus.TRIAL },
+        { planCode: 'trial' },
+      ],
+    });
+
+    const trialSubscriptionIds = trialSubscriptions.map(s => s._id);
+    
+    // Find pending/unpaid invoices for trial subscriptions that look like renewal invoices
+    const trialRenewalInvoices = await this.invoiceModel.find({
+      subscriptionId: { $in: trialSubscriptionIds },
+      status: { $in: [InvoiceStatus.PENDING, InvoiceStatus.DRAFT] },
+      type: InvoiceType.SUBSCRIPTION, // Renewal invoices are of type SUBSCRIPTION
+      totalAmount: 0, // Trial renewals would be KES 0
+    });
+
+    const cancelledInvoices: string[] = [];
+    
+    for (const invoice of trialRenewalInvoices) {
+      invoice.status = InvoiceStatus.CANCELLED;
+      invoice.notes = 'Cancelled: Trial plans cannot be renewed. User must upgrade to a paid plan.';
+      await invoice.save();
+      cancelledInvoices.push(invoice.invoiceNumber);
+      this.logger.log(`Cancelled trial renewal invoice ${invoice.invoiceNumber}`);
+    }
+
+    this.logger.log(`Cancelled ${cancelledInvoices.length} trial renewal invoices`);
+    return { cancelled: cancelledInvoices.length, invoices: cancelledInvoices };
   }
 }

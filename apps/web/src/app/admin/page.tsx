@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   Badge,
   Button,
@@ -26,7 +26,12 @@ import {
   MapPin, 
   Grid3x3,
   Home,
-  ArrowRight
+  ArrowRight,
+  ChevronDown,
+  ChevronUp,
+  X,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
@@ -52,6 +57,28 @@ function AdminDashboardContent() {
 
   const [loading, setLoading] = useState(false);
   const [showBranchModal, setShowBranchModal] = useState(false);
+  const [warningsCollapsed, setWarningsCollapsed] = useState(false);
+
+  // Load collapsed state from localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('smartduka:warnings_collapsed');
+      if (stored === 'true') {
+        setWarningsCollapsed(true);
+      }
+    }
+  }, []);
+
+  // Toggle warnings visibility
+  const toggleWarnings = useCallback(() => {
+    setWarningsCollapsed(prev => {
+      const newState = !prev;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('smartduka:warnings_collapsed', String(newState));
+      }
+      return newState;
+    });
+  }, []);
 
   // Show branch selection modal on first load if required
   useEffect(() => {
@@ -188,82 +215,143 @@ function AdminDashboardContent() {
           </div>
         </div>
 
-        {/* M-Pesa Configuration Alert */}
-        {mpesaStatus && !mpesaStatus.isConfigured && (
-          <Card className="mb-6 border-orange-500/40 bg-orange-500/10">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between flex-wrap gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-orange-500/20">
-                    <Smartphone className="h-5 w-5 text-orange-600" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-orange-700 dark:text-orange-400 text-lg">
-                      M-Pesa Setup Required
-                    </CardTitle>
-                    <CardDescription className="text-orange-600/80">
-                      Configure your Paybill/Till number to accept mobile payments
-                    </CardDescription>
-                  </div>
+        {/* Warnings Section - Collapsible */}
+        {((mpesaStatus && !mpesaStatus.isConfigured) || lowStockProducts.length > 0) && (
+          <div className="mb-6">
+            {/* Collapsed View - Show only icons */}
+            {warningsCollapsed ? (
+              <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-xl border border-border">
+                <div className="flex items-center gap-2 flex-1">
+                  <span className="text-xs text-muted-foreground font-medium">Alerts:</span>
+                  {mpesaStatus && !mpesaStatus.isConfigured && (
+                    <button
+                      onClick={() => router.push('/settings?tab=mpesa')}
+                      className="p-2 rounded-lg bg-orange-500/20 hover:bg-orange-500/30 transition-colors group relative"
+                      title="M-Pesa Setup Required"
+                    >
+                      <Smartphone className="h-4 w-4 text-orange-600" />
+                      <span className="absolute -top-1 -right-1 w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
+                    </button>
+                  )}
+                  {lowStockProducts.length > 0 && (
+                    <button
+                      onClick={() => router.push('/admin/products')}
+                      className="p-2 rounded-lg bg-yellow-500/20 hover:bg-yellow-500/30 transition-colors group relative"
+                      title={`${lowStockProducts.length} products low on stock`}
+                    >
+                      <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                      <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-yellow-500 rounded-full text-[10px] font-bold text-white flex items-center justify-center">
+                        {lowStockProducts.length}
+                      </span>
+                    </button>
+                  )}
                 </div>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="ghost"
                   size="sm"
-                  className="border-orange-500/40 text-orange-700 hover:bg-orange-500/10"
-                  onClick={() => router.push('/settings?tab=mpesa')}
+                  onClick={toggleWarnings}
+                  className="gap-1 text-xs text-muted-foreground hover:text-foreground"
                 >
-                  <Settings className="h-4 w-4 mr-2" />
-                  Configure Now
+                  <Eye className="h-3.5 w-3.5" />
+                  Show
                 </Button>
               </div>
-            </CardHeader>
-          </Card>
-        )}
+            ) : (
+              /* Expanded View - Full warnings */
+              <div className="space-y-4">
+                {/* Hide Button */}
+                <div className="flex justify-end">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={toggleWarnings}
+                    className="gap-1 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    <EyeOff className="h-3.5 w-3.5" />
+                    Hide Alerts
+                  </Button>
+                </div>
 
-        {/* Low Stock Alert */}
-        {lowStockProducts.length > 0 && (
-          <Card className="mb-6 border-yellow-500/40 bg-yellow-500/10">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between flex-wrap gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-yellow-500/20">
-                    <AlertTriangle className="h-5 w-5 text-yellow-600" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-yellow-700 dark:text-yellow-400 text-lg">
-                      Low Stock Alert
-                    </CardTitle>
-                    <CardDescription className="text-yellow-600/80">
-                      {lowStockProducts.length} product(s) below threshold
-                    </CardDescription>
-                  </div>
-                </div>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  className="border-yellow-500/40 text-yellow-700 hover:bg-yellow-500/10"
-                  onClick={() => router.push('/admin/products')}
-                >
-                  View Products
-                  <ArrowRight className="h-4 w-4 ml-2" />
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <div className="flex flex-wrap gap-2">
-                {lowStockProducts.slice(0, 5).map((product) => (
-                  <Badge key={product._id} variant="secondary" className="text-yellow-700 bg-yellow-500/20">
-                    {product.name}: {product.stock ?? 0} left
-                  </Badge>
-                ))}
-                {lowStockProducts.length > 5 && (
-                  <Badge variant="secondary" className="text-yellow-700 bg-yellow-500/20">
-                    +{lowStockProducts.length - 5} more
-                  </Badge>
+                {/* M-Pesa Configuration Alert */}
+                {mpesaStatus && !mpesaStatus.isConfigured && (
+                  <Card className="border-orange-500/40 bg-orange-500/10">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center justify-between flex-wrap gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 rounded-lg bg-orange-500/20">
+                            <Smartphone className="h-5 w-5 text-orange-600" />
+                          </div>
+                          <div>
+                            <CardTitle className="text-orange-700 dark:text-orange-400 text-lg">
+                              M-Pesa Setup Required
+                            </CardTitle>
+                            <CardDescription className="text-orange-600/80">
+                              Configure your Paybill/Till number to accept mobile payments
+                            </CardDescription>
+                          </div>
+                        </div>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          className="border-orange-500/40 text-orange-700 hover:bg-orange-500/10"
+                          onClick={() => router.push('/settings?tab=mpesa')}
+                        >
+                          <Settings className="h-4 w-4 mr-2" />
+                          Configure Now
+                        </Button>
+                      </div>
+                    </CardHeader>
+                  </Card>
+                )}
+
+                {/* Low Stock Alert */}
+                {lowStockProducts.length > 0 && (
+                  <Card className="border-yellow-500/40 bg-yellow-500/10">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center justify-between flex-wrap gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 rounded-lg bg-yellow-500/20">
+                            <AlertTriangle className="h-5 w-5 text-yellow-600" />
+                          </div>
+                          <div>
+                            <CardTitle className="text-yellow-700 dark:text-yellow-400 text-lg">
+                              Low Stock Alert
+                            </CardTitle>
+                            <CardDescription className="text-yellow-600/80">
+                              {lowStockProducts.length} product(s) below threshold
+                            </CardDescription>
+                          </div>
+                        </div>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          className="border-yellow-500/40 text-yellow-700 hover:bg-yellow-500/10"
+                          onClick={() => router.push('/admin/products')}
+                        >
+                          View Products
+                          <ArrowRight className="h-4 w-4 ml-2" />
+                        </Button>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                      <div className="flex flex-wrap gap-2">
+                        {lowStockProducts.slice(0, 5).map((product) => (
+                          <Badge key={product._id} variant="secondary" className="text-yellow-700 bg-yellow-500/20">
+                            {product.name}: {product.stock ?? 0} left
+                          </Badge>
+                        ))}
+                        {lowStockProducts.length > 5 && (
+                          <Badge variant="secondary" className="text-yellow-700 bg-yellow-500/20">
+                            +{lowStockProducts.length - 5} more
+                          </Badge>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
                 )}
               </div>
-            </CardContent>
-          </Card>
+            )}
+          </div>
         )}
 
         {/* Stats Cards */}

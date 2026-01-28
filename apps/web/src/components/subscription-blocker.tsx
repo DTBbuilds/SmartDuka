@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSubscription, useBillingHistory } from '@/hooks/use-subscription';
 import { useAuth } from '@/lib/auth-context';
+import { api } from '@/lib/api-client';
 import { 
   AlertTriangle, CreditCard, Clock, Shield, RefreshCw, 
   Smartphone, Send, X, Phone, Loader2, Check, 
@@ -30,6 +31,8 @@ export function SubscriptionBlocker({ children }: { children: React.ReactNode })
   const { subscription, loading, refetch } = useSubscription();
   const { pendingInvoices, initiatePayment, loading: billingLoading, refetch: refetchBilling } = useBillingHistory();
   const [isBlocked, setIsBlocked] = useState(false);
+  // Track if we've done the initial subscription check - prevents flashing
+  const [hasInitialized, setHasInitialized] = useState(false);
   const [blockReason, setBlockReason] = useState<string>('');
   const [blockTitle, setBlockTitle] = useState<string>('');
   
@@ -49,6 +52,7 @@ export function SubscriptionBlocker({ children }: { children: React.ReactNode })
   
   // Send Money specific state
   const [sendMoneyReference, setSendMoneyReference] = useState('');
+  const [senderPhoneNumber, setSenderPhoneNumber] = useState('');
   const [referenceSubmitted, setReferenceSubmitted] = useState(false);
   const [copiedNumber, setCopiedNumber] = useState(false);
   
@@ -82,7 +86,13 @@ export function SubscriptionBlocker({ children }: { children: React.ReactNode })
   };
 
   useEffect(() => {
-    if (loading) return;
+    // Don't process during initial load - wait for data
+    if (loading && !hasInitialized) return;
+    
+    // Mark as initialized once we've loaded at least once
+    if (!loading && !hasInitialized) {
+      setHasInitialized(true);
+    }
     
     // Super admins bypass subscription checks
     if (user?.role === 'super_admin') {
@@ -101,16 +111,19 @@ export function SubscriptionBlocker({ children }: { children: React.ReactNode })
     const expiredByDate = isExpiredByDate();
 
     // Determine if we should block and why
-    // IMPORTANT: Trial plans should NEVER be blocked - they have access to free features
-    // Only paid plans that expire should be blocked
+    // IMPORTANT: Only FREE trial status with remaining days should NOT be blocked
+    // All paid plans that are overdue/expired MUST be blocked immediately
     const planCode = subscription.planCode?.toLowerCase();
-    const isTrialPlan = planCode === 'trial' || planCode === 'starter' || status === 'trial';
     
-    if (isTrialPlan) {
-      // Trial/Starter plans always have access to free features - never block
+    // Only actual trial status with remaining time is exempt - NOT starter or other paid plans
+    const isActiveTrial = status === 'trial' && !expiredByDate;
+    
+    if (isActiveTrial) {
+      // Active trial period - allow access
       setIsBlocked(false);
     } else if (status === 'expired' || status === 'suspended' || status === 'cancelled' || status === 'past_due') {
       // IMMEDIATE blocking for any non-active subscription status
+      // No grace period - block immediately when payment is overdue
       setIsBlocked(true);
       if (status === 'expired') {
         setBlockTitle('Subscription Expired');
@@ -119,13 +132,13 @@ export function SubscriptionBlocker({ children }: { children: React.ReactNode })
         setBlockTitle('Account Suspended');
         setBlockReason('Your account has been suspended due to non-payment. Please pay your outstanding balance to restore access.');
       } else if (status === 'past_due') {
-        setBlockTitle('Payment Overdue');
-        setBlockReason('Your subscription payment is overdue. Please pay immediately to restore access to SmartDuka.');
+        setBlockTitle('Payment Required');
+        setBlockReason('Your subscription payment is overdue. All shop operations are blocked until payment is completed. Please pay now to restore access.');
       } else {
         setBlockTitle('Subscription Cancelled');
         setBlockReason('Your subscription has been cancelled. Please reactivate to continue using SmartDuka.');
       }
-    } else if (expiredByDate && status === 'active') {
+    } else if (expiredByDate && (status === 'active' || status === 'trial')) {
       // IMMEDIATE blocking when period expires (even if status hasn't updated yet)
       setIsBlocked(true);
       setBlockTitle('Subscription Period Ended');
@@ -137,7 +150,7 @@ export function SubscriptionBlocker({ children }: { children: React.ReactNode })
     } else {
       setIsBlocked(false);
     }
-  }, [loading, subscription, user]);
+  }, [loading, subscription, user, hasInitialized]);
 
   // Update verification pending state based on invoice status
   useEffect(() => {
@@ -235,6 +248,7 @@ export function SubscriptionBlocker({ children }: { children: React.ReactNode })
     setPaymentError(null);
     setPaymentSuccess(false);
     setSendMoneyReference('');
+    setSenderPhoneNumber('');
     setReferenceSubmitted(false);
     setCopiedNumber(false);
   };
@@ -253,6 +267,17 @@ export function SubscriptionBlocker({ children }: { children: React.ReactNode })
       return;
     }
     
+    if (!senderPhoneNumber.trim()) {
+      setPaymentError('Please enter the phone number you used to send money');
+      return;
+    }
+    
+    // Validate sender phone number
+    if (!isValidKenyanPhone(senderPhoneNumber)) {
+      setPaymentError('Please enter a valid Kenyan phone number (e.g., 0712345678)');
+      return;
+    }
+    
     setProcessing(true);
     setPaymentError(null);
     
@@ -265,21 +290,17 @@ export function SubscriptionBlocker({ children }: { children: React.ReactNode })
       }
       
       // Call API to record send money payment attempt using existing manual payment endpoint
-      const token = localStorage.getItem('smartduka:token') || sessionStorage.getItem('smartduka:token');
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ''}/api/v1/subscriptions/payments/manual/confirm`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
+      const result = await api.post<{ success: boolean; message: string; mpesaReceiptNumber?: string }>(
+        '/subscriptions/payments/manual/confirm',
+        {
           invoiceId: invoice.id,
           mpesaReceiptNumber: sendMoneyReference.trim().toUpperCase(),
+          senderPhoneNumber: senderPhoneNumber.trim(),
           paidAmount: pendingAmount,
-        }),
-      });
+        }
+      );
       
-      if (response.ok) {
+      if (result.success) {
         setReferenceSubmitted(true);
         setPaymentSuccess(true);
         // Start fast polling immediately
@@ -289,11 +310,10 @@ export function SubscriptionBlocker({ children }: { children: React.ReactNode })
         await refetchBilling();
         await refetch();
       } else {
-        const data = await response.json();
-        setPaymentError(data.message || 'Failed to submit payment. Please contact support.');
+        setPaymentError(result.message || 'Failed to submit payment. Please contact support.');
       }
     } catch (error: any) {
-      setPaymentError('Failed to submit payment reference. Please contact support.');
+      setPaymentError(error.message || 'Failed to submit payment reference. Please contact support.');
     } finally {
       setProcessing(false);
     }
@@ -309,8 +329,17 @@ export function SubscriptionBlocker({ children }: { children: React.ReactNode })
     return subscription.planName || 'N/A';
   };
 
-  if (loading) {
-    return <>{children}</>;
+  // CRITICAL FIX: Don't render children during initial load
+  // This prevents the flash where users briefly see protected content
+  if (!hasInitialized && loading) {
+    return (
+      <div className="fixed inset-0 z-50 bg-white flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-10 h-10 animate-spin text-blue-600" />
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
   }
 
   if (!isBlocked) {
@@ -341,6 +370,14 @@ export function SubscriptionBlocker({ children }: { children: React.ReactNode })
   
   const pendingAmount = getCorrectRenewalAmount();
   const formatCurrency = (value: number) => `KES ${value.toLocaleString('en-KE')}`;
+
+  // Detect if this is an expired trial that needs to upgrade to a paid plan
+  // Trial subscriptions have 0 amount, so after trial ends, they need to choose a plan
+  const isExpiredTrial = (
+    subscription?.planCode?.toLowerCase() === 'trial' || 
+    subscription?.status === 'trial' ||
+    (subscription?.currentPrice === 0 && pendingAmount === 0)
+  ) && isBlocked;
 
   // Calculate time since verification submitted for display
   const getTimeSinceSubmit = () => {
@@ -510,6 +547,130 @@ export function SubscriptionBlocker({ children }: { children: React.ReactNode })
                   <LogOut className="w-4 h-4" />
                   Sign Out
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show special UI for expired trial - prompt to choose a paid plan
+  if (isExpiredTrial) {
+    return (
+      <div className="fixed inset-0 z-50 bg-gradient-to-br from-purple-900 via-indigo-800 to-blue-900 overflow-auto">
+        <div className="min-h-screen flex items-center justify-center p-4 md:p-8">
+          <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden">
+            {/* Header Banner - Purple/Blue theme for trial end */}
+            <div className="bg-gradient-to-r from-purple-500 to-indigo-600 p-6 md:p-8 text-white">
+              <div className="flex flex-col items-center text-center gap-4">
+                <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center">
+                  <Clock className="w-10 h-10" />
+                </div>
+                <div>
+                  <h1 className="text-2xl md:text-3xl font-bold">Your Free Trial Has Ended</h1>
+                  <p className="text-white/90 mt-2 text-base md:text-lg">
+                    Thank you for trying SmartDuka! Choose a plan to continue using all features.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 md:p-8 space-y-6">
+              {/* Trial Summary */}
+              <div className="bg-purple-50 border border-purple-200 rounded-xl p-5">
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
+                    <CheckCircle2 className="w-6 h-6 text-purple-600" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-purple-900 text-lg">14-Day Trial Completed</h3>
+                    <p className="text-purple-700 mt-1">
+                      Your free trial period has ended. To continue managing your shop with SmartDuka, 
+                      please select a subscription plan that fits your business needs.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* What You Get */}
+              <div className="bg-gray-50 rounded-xl p-5">
+                <h3 className="font-semibold text-gray-900 mb-4">What&apos;s included in paid plans:</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { icon: ShoppingCart, label: 'Point of Sale' },
+                    { icon: Package, label: 'Inventory Management' },
+                    { icon: BarChart3, label: 'Sales Reports' },
+                    { icon: Users, label: 'Employee Management' },
+                    { icon: UserCircle, label: 'Customer Records' },
+                    { icon: CreditCard, label: 'M-Pesa Integration' },
+                  ].map((item, i) => (
+                    <div key={i} className="flex items-center gap-2 text-gray-700 text-sm">
+                      <Check className="w-4 h-4 text-green-600" />
+                      <item.icon className="w-4 h-4 text-gray-500" />
+                      <span>{item.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* CTA Button */}
+              <Link
+                href="/settings?tab=subscription&autoOpen=true&action=change-plan"
+                className="w-full py-4 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl font-semibold hover:from-purple-700 hover:to-indigo-700 transition-all flex items-center justify-center gap-3 text-lg shadow-lg"
+              >
+                <CreditCard className="w-6 h-6" />
+                Choose a Plan
+                <ArrowRight className="w-5 h-5" />
+              </Link>
+
+              {/* Plan options preview */}
+              <div className="text-center text-sm text-gray-500">
+                <p>Plans starting from <strong className="text-gray-900">KES 1,000/month</strong></p>
+                <p className="mt-1">Daily, monthly, and annual billing options available</p>
+              </div>
+
+              {/* Other Actions */}
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => refetch()}
+                  className="flex-1 py-3 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  Refresh
+                </button>
+                <button
+                  onClick={() => {
+                    logout();
+                    router.push('/login');
+                  }}
+                  className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors flex items-center justify-center gap-2"
+                >
+                  <LogOut className="w-4 h-4" />
+                  Sign Out
+                </button>
+              </div>
+
+              {/* Support */}
+              <div className="bg-blue-50 rounded-xl p-4 mt-4">
+                <p className="text-sm text-blue-800 font-medium mb-2">Need help choosing a plan?</p>
+                <div className="flex flex-wrap gap-4 text-sm">
+                  <a 
+                    href="mailto:smartdukainfo@gmail.com" 
+                    className="flex items-center gap-2 text-blue-700 hover:text-blue-900"
+                  >
+                    <Mail className="w-4 h-4" />
+                    smartdukainfo@gmail.com
+                  </a>
+                  <a 
+                    href="tel:0729983567" 
+                    className="flex items-center gap-2 text-blue-700 hover:text-blue-900"
+                  >
+                    <Phone className="w-4 h-4" />
+                    0729983567
+                  </a>
+                </div>
               </div>
             </div>
           </div>
@@ -888,12 +1049,36 @@ export function SubscriptionBlocker({ children }: { children: React.ReactNode })
                           </p>
                         </div>
 
-                      {paymentError && (
-                        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-red-700 text-sm flex items-start gap-2">
-                          <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                          {paymentError}
+                        {/* Sender Phone Number Input */}
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Your Phone Number <span className="text-red-500">*</span>
+                          </label>
+                          <div className="relative">
+                            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                            <input
+                              type="tel"
+                              placeholder="0712345678"
+                              value={senderPhoneNumber}
+                              onChange={(e) => {
+                                setSenderPhoneNumber(e.target.value.replace(/[^0-9]/g, ''));
+                                setPaymentError(null);
+                              }}
+                              className="w-full pl-10 pr-4 py-3 border-2 border-gray-300 rounded-lg focus:border-green-500 focus:ring-2 focus:ring-green-200"
+                              maxLength={12}
+                            />
+                          </div>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Enter the phone number you used to send the money
+                          </p>
                         </div>
-                      )}
+
+                        {paymentError && (
+                          <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-red-700 text-sm flex items-start gap-2">
+                            <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                            {paymentError}
+                          </div>
+                        )}
 
                         <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
                           <p className="text-sm text-amber-800">
@@ -904,7 +1089,7 @@ export function SubscriptionBlocker({ children }: { children: React.ReactNode })
 
                         <button
                           onClick={handleSendMoneySubmit}
-                          disabled={processing || !sendMoneyReference.trim()}
+                          disabled={processing || !sendMoneyReference.trim() || !senderPhoneNumber.trim()}
                           className="w-full py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                         >
                           {processing ? (

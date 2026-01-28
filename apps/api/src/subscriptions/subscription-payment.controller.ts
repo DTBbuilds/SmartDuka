@@ -186,7 +186,7 @@ export class SubscriptionPaymentController {
   /**
    * Confirm manual M-Pesa payment
    * 
-   * Customer enters their M-Pesa receipt number after sending money
+   * Customer enters their M-Pesa receipt number and sender phone number after sending money
    */
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
@@ -194,19 +194,20 @@ export class SubscriptionPaymentController {
   @HttpCode(HttpStatus.OK)
   async confirmManualPayment(
     @CurrentUser() user: JwtPayload,
-    @Body() dto: { invoiceId: string; mpesaReceiptNumber: string; paidAmount: number },
+    @Body() dto: { invoiceId: string; mpesaReceiptNumber: string; senderPhoneNumber?: string; paidAmount: number },
   ): Promise<{
     success: boolean;
     message: string;
     mpesaReceiptNumber?: string;
   }> {
-    this.logger.log(`Confirming manual payment for invoice ${dto.invoiceId}`);
+    this.logger.log(`Confirming manual payment for invoice ${dto.invoiceId} from phone ${dto.senderPhoneNumber || 'not provided'}`);
 
     const result = await this.mpesaService.confirmManualPayment(
       dto.invoiceId,
       user.shopId,
       dto.mpesaReceiptNumber,
       dto.paidAmount,
+      dto.senderPhoneNumber,
     );
 
     return result;

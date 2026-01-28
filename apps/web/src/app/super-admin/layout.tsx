@@ -113,12 +113,12 @@ export default function SuperAdminLayout({
           </div>
         </aside>
 
-        {/* Main Content */}
-        <main className="flex-1 overflow-auto pb-20 md:pb-0">
+        {/* Main Content - pt-16 on mobile for fixed header, no padding needed on desktop */}
+        <main className="flex-1 overflow-auto pt-16 md:pt-0">
           {children}
         </main>
 
-        {/* Mobile Bottom Navigation */}
+        {/* Mobile Hamburger Navigation */}
         <SuperAdminMobileNav />
       </div>
     </SuperAdminGuard>

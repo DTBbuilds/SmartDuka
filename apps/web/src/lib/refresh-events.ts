@@ -22,7 +22,8 @@ type RefreshEventType =
   | 'invoice:paid'
   | 'user:created'
   | 'user:updated'
-  | 'user:deleted';
+  | 'user:deleted'
+  | 'notification:show';
 
 type RefreshCallback = (data?: any) => void;
 

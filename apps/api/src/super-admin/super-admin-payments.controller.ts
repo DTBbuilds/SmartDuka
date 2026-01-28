@@ -36,6 +36,7 @@ import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { SystemAuditService } from './services/system-audit.service';
 import { EmailService } from '../notifications/email.service';
 import { EMAIL_TEMPLATES } from '../notifications/email-templates';
+import { EventsGateway } from '../events/events.gateway';
 
 /**
  * Super Admin Payment Verification Controller
@@ -67,6 +68,7 @@ export class SuperAdminPaymentsController {
     private readonly subscriptionsService: SubscriptionsService,
     private readonly auditService: SystemAuditService,
     private readonly emailService: EmailService,
+    private readonly eventsGateway: EventsGateway,
   ) {}
 
   /**
@@ -306,6 +308,9 @@ export class SuperAdminPaymentsController {
       }
     }
 
+    // Emit refresh events for instant UI updates
+    this.emitPaymentVerifiedEvents(invoice.shopId.toString(), invoiceId, upgradeActivated || subscriptionActivated);
+
     // Send payment confirmation email
     try {
       const shop = await this.shopModel.findById(invoice.shopId).lean();
@@ -318,6 +323,12 @@ export class SuperAdminPaymentsController {
       if (shopAdmin?.email && shop) {
         const template = EMAIL_TEMPLATES.payment_successful;
         const frontendUrl = process.env.FRONTEND_URL || 'https://smartduka.co.ke';
+        const apiUrl = process.env.API_URL || 'https://smarduka.onrender.com';
+        
+        // Format sender phone if available
+        const senderPhone = invoice.manualPayment?.senderPhoneNumber;
+        const formattedPhone = senderPhone ? 
+          senderPhone.replace(/(\d{4})(\d{3})(\d{3})/, '$1 $2 $3') : null;
         
         await this.emailService.sendEmail({
           to: shopAdmin.email,
@@ -329,10 +340,10 @@ export class SuperAdminPaymentsController {
             userName: shopAdmin.name || shopAdmin.email,
             amount: `KES ${invoice.totalAmount.toLocaleString()}`,
             currency: 'KES',
-            paymentMethod: 'M-Pesa Send Money',
+            paymentMethod: formattedPhone ? `M-Pesa Send Money (${formattedPhone})` : 'M-Pesa Send Money',
             transactionId: invoice.mpesaReceiptNumber || invoice.invoiceNumber,
             planName: subscription?.planCode || 'Subscription',
-            receiptUrl: `${frontendUrl}/admin/subscription?tab=invoices`,
+            receiptUrl: `${frontendUrl}/settings/billing`,
             date: new Date().toLocaleDateString('en-KE', { 
               dateStyle: 'long' 
             }),
@@ -575,5 +586,43 @@ export class SuperAdminPaymentsController {
         ? `Upgrade forcefully activated to ${result.planCode}`
         : 'Failed to activate upgrade',
     };
+  }
+
+  /**
+   * Emit refresh events for instant UI updates after payment verification
+   */
+  private emitPaymentVerifiedEvents(shopId: string, invoiceId: string, subscriptionActivated: boolean): void {
+    try {
+      this.logger.log(`🔄 Payment verified for shop ${shopId}, invoice ${invoiceId}${subscriptionActivated ? ' - subscription activated' : ''}`);
+      
+      // Emit real-time WebSocket events for instant UI updates
+      this.eventsGateway.emitPaymentVerified({
+        shopId,
+        invoiceId,
+        status: subscriptionActivated ? 'subscription_activated' : 'payment_verified',
+        data: {
+          subscriptionActivated,
+          timestamp: new Date().toISOString(),
+        },
+      });
+
+      if (subscriptionActivated) {
+        // Also emit subscription updated event
+        this.eventsGateway.emitSubscriptionUpdated({
+          shopId,
+          subscriptionId: undefined, // Will be populated by the gateway if needed
+          status: 'subscription_activated',
+          data: {
+            activatedAt: new Date().toISOString(),
+            trigger: 'payment_verification',
+          },
+        });
+      }
+
+      this.logger.log(`📡 Real-time events emitted for instant UI refresh`);
+    } catch (error) {
+      this.logger.warn(`Failed to emit payment verification events: ${error.message}`);
+      // Don't fail payment verification if WebSocket fails
+    }
   }
 }

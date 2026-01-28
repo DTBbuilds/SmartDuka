@@ -170,6 +170,13 @@ export class InvoiceResponseDto {
   paymentReference?: string;
   mpesaReceiptNumber?: string;
   createdAt: Date;
+  // Manual payment details (Send Money)
+  manualPayment?: {
+    senderPhoneNumber?: string;
+    paidAmount?: number;
+    submittedAt?: Date;
+    verifiedAt?: Date;
+  };
 }
 
 /**

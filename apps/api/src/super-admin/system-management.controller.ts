@@ -10,6 +10,7 @@ import {
   UseGuards,
   Logger,
   Res,
+  NotFoundException,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -334,13 +335,6 @@ export class SystemManagementController {
     );
   }
 
-  /**
-   * Retry a failed email
-   */
-  @Post('emails/:id/retry')
-  async retryEmail(@Param('id') emailId: string) {
-    return this.emailLogService.retryEmail(emailId);
-  }
 
   /**
    * Get emails for a specific shop
@@ -356,6 +350,29 @@ export class SystemManagementController {
       limit ? parseInt(limit) : 50,
       skip ? parseInt(skip) : 0,
     );
+  }
+
+  /**
+   * Get failed emails for a specific user email
+   */
+  @Get('emails/failed/user/:email')
+  async getFailedEmailsByUser(
+    @Param('email') email: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.emailLogService.query({
+      to: email,
+      status: 'failed',
+      limit: limit ? parseInt(limit) : 10,
+    });
+  }
+
+  /**
+   * Retry a failed email
+   */
+  @Post('emails/:id/retry')
+  async retryEmail(@Param('id') emailId: string) {
+    return this.emailLogService.retryFailedEmail(emailId);
   }
 
   /**

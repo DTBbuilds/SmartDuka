@@ -159,30 +159,14 @@ export class SubscriptionEnforcementService {
           };
 
         case SubscriptionStatus.PAST_DUE:
-          const daysUntilSuspension = subscription.gracePeriodEndDate
-            ? Math.max(0, Math.ceil((subscription.gracePeriodEndDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)))
-            : 0;
-          
-          // If grace period has ended or no grace period, BLOCK the shop
-          if (daysUntilSuspension <= 0) {
-            return {
-              accessLevel: SubscriptionAccessLevel.BLOCKED,
-              status: subscription.status,
-              message: 'Your subscription has expired. Please pay to restore access.',
-              daysRemaining: 0,
-              daysUntilSuspension: 0,
-              canMakePayment: true,
-              subscription: subscriptionInfo,
-            };
-          }
-
+          // IMMEDIATE blocking for past_due - no grace period for operations
+          // Users must pay to restore access, no read-only mode
           return {
-            accessLevel: SubscriptionAccessLevel.READ_ONLY,
+            accessLevel: SubscriptionAccessLevel.BLOCKED,
             status: subscription.status,
-            message: `Payment overdue. ${daysUntilSuspension} days until suspension. Please pay to continue operations.`,
+            message: 'Your subscription payment is overdue. All shop operations are blocked. Please pay immediately to restore access.',
             daysRemaining: 0,
-            daysUntilSuspension,
-            gracePeriodEndDate: subscription.gracePeriodEndDate,
+            daysUntilSuspension: 0,
             canMakePayment: true,
             subscription: subscriptionInfo,
           };
@@ -435,21 +419,16 @@ export class SubscriptionEnforcementService {
           break;
 
         case SubscriptionStatus.PAST_DUE:
-          const daysUntilSuspension = subscription.gracePeriodEndDate
-            ? Math.max(0, Math.ceil((subscription.gracePeriodEndDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)))
-            : 0;
-
+          // Past due = immediate blocking, no grace period for operations
           warnings.push({
             type: 'past_due',
-            severity: daysUntilSuspension <= 2 ? 'critical' : 'error',
-            title: 'Payment Overdue',
-            message: daysUntilSuspension > 0
-              ? `Your payment is overdue. You have ${daysUntilSuspension} days to pay before your account is suspended. During this time, you can only view data.`
-              : 'Your payment is overdue. Your account will be suspended soon.',
-            daysUntilSuspension,
+            severity: 'critical',
+            title: 'Payment Required - Account Blocked',
+            message: 'Your subscription payment is overdue. All shop operations are blocked until payment is completed. Pay now to restore access.',
+            daysUntilSuspension: 0,
             actionRequired: true,
             actionLabel: 'Pay Now',
-            actionUrl: '/admin/subscription',
+            actionUrl: '/settings?tab=subscription',
           });
           break;
 

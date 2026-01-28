@@ -17,6 +17,7 @@ import { connectionMonitor } from "@/lib/connection-monitor";
 import { tabVisibilityManager } from "@/lib/tab-visibility";
 import { inactivityManager } from "@/lib/inactivity-manager";
 import { useMobileKeyboard } from "@/lib/use-mobile-keyboard";
+import { websocketClient } from "@/lib/websocket-client";
 import "@/lib/i18n";
 
 function SystemMonitors() {
@@ -33,10 +34,25 @@ function SystemMonitors() {
     // Initialize inactivity tracking for auto-logout
     inactivityManager.initialize();
 
+    // Initialize WebSocket client for real-time updates
+    // The websocketClient is already initialized on import, but we can trigger reconnection
+    // if the user logs in after the initial page load
+    const reconnectWebSocket = () => {
+      websocketClient.reconnect();
+    };
+
+    // Listen for auth changes to reconnect WebSocket
+    window.addEventListener('storage', (e) => {
+      if (e.key === 'smartduka:token' && e.newValue) {
+        reconnectWebSocket();
+      }
+    });
+
     return () => {
       connectionMonitor.stopMonitoring();
       tabVisibilityManager.cleanup();
       inactivityManager.cleanup();
+      websocketClient.disconnect();
     };
   }, []);
 

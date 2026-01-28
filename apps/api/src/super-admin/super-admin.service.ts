@@ -196,6 +196,12 @@ export class SuperAdminService {
   ): Promise<ShopDocument> {
     const shop = await this.getShopDetails(shopId);
 
+    // If already active, return silently (idempotent)
+    if (shop.status === 'active') {
+      this.logger.log(`Shop ${shopId} is already active, skipping verification`);
+      return shop;
+    }
+
     if (shop.status !== 'pending') {
       throw new BadRequestException(`Cannot verify shop with status: ${shop.status}`);
     }

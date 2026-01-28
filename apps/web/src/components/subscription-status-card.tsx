@@ -202,7 +202,11 @@ export function SubscriptionStatusCard({
           <div>
             <p className="text-sm text-gray-500">Billing</p>
             <p className="font-medium">
-              KES {subscription.currentPrice.toLocaleString()}/{subscription.billingCycle === 'annual' ? 'year' : 'month'}
+              {subscription.planCode === 'trial' ? (
+                '14 Days Trial - FREE'
+              ) : (
+                `KES ${subscription.currentPrice.toLocaleString()}/${subscription.billingCycle === 'annual' ? 'year' : 'month'}`
+              )}
             </p>
           </div>
           <div>

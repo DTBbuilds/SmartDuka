@@ -101,7 +101,7 @@ export function ShopSelector({
       return (
         <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
           <Sparkles className="h-2.5 w-2.5" />
-          Demo
+          Trial
         </span>
       );
     }

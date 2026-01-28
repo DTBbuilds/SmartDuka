@@ -119,8 +119,9 @@ interface PendingSubscriptionInvoice {
   currentPlan?: string;
   manualPayment?: {
     submittedAt?: string;
-    phoneNumber?: string;
+    senderPhoneNumber?: string;
     paidAmount?: number;
+    receiptNumber?: string;
   };
   updatedAt: string;
 }
@@ -1494,14 +1495,30 @@ function SuperAdminPaymentsContent() {
                                   <p className="font-bold text-green-600">{formatCurrency(invoice.totalAmount)}</p>
                                 </div>
                               </div>
-                              {invoice.mpesaReceiptNumber && (
-                                <div className="mt-2 p-2 bg-white rounded border">
-                                  <span className="text-xs text-muted-foreground">M-Pesa Reference:</span>
-                                  <p className="font-mono font-bold text-green-700">{invoice.mpesaReceiptNumber}</p>
+                              {(invoice.mpesaReceiptNumber || invoice.manualPayment?.senderPhoneNumber) && (
+                                <div className="mt-2 p-2 bg-white rounded border space-y-1">
+                                  {invoice.mpesaReceiptNumber && (
+                                    <div>
+                                      <span className="text-xs text-muted-foreground">M-Pesa Reference:</span>
+                                      <p className="font-mono font-bold text-green-700">{invoice.mpesaReceiptNumber}</p>
+                                    </div>
+                                  )}
+                                  {invoice.manualPayment?.senderPhoneNumber && (
+                                    <div>
+                                      <span className="text-xs text-muted-foreground">Sender Phone:</span>
+                                      <p className="font-mono font-medium text-blue-700">{invoice.manualPayment.senderPhoneNumber}</p>
+                                    </div>
+                                  )}
+                                  {invoice.manualPayment?.paidAmount && (
+                                    <div>
+                                      <span className="text-xs text-muted-foreground">Paid Amount:</span>
+                                      <p className="font-medium text-green-600">KES {invoice.manualPayment.paidAmount.toLocaleString()}</p>
+                                    </div>
+                                  )}
                                 </div>
                               )}
                               <p className="text-xs text-muted-foreground mt-2">
-                                Submitted: {formatDate(invoice.updatedAt)}
+                                Submitted: {formatDate(invoice.manualPayment?.submittedAt || invoice.updatedAt)}
                               </p>
                             </div>
                             <div className="flex gap-2">

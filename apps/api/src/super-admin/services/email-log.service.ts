@@ -1,7 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types, FilterQuery } from 'mongoose';
 import { EmailLog, EmailLogDocument } from '../schemas/email-log.schema';
+import { EmailService } from '../../notifications/email.service';
 
 export interface CreateEmailLogDto {
   to: string;
@@ -42,6 +43,8 @@ export class EmailLogService {
   constructor(
     @InjectModel(EmailLog.name)
     private readonly emailLogModel: Model<EmailLogDocument>,
+    @Inject(forwardRef(() => EmailService))
+    private readonly emailService: EmailService,
   ) {}
 
   /**
@@ -340,6 +343,53 @@ export class EmailLogService {
       },
       { new: true },
     ).exec();
+  }
+
+  /**
+   * Retry failed email by actually resending it
+   */
+  async retryFailedEmail(emailLogId: string): Promise<{ success: boolean; message: string; emailLogId?: string }> {
+    const emailLog = await this.emailLogModel.findById(new Types.ObjectId(emailLogId)).exec();
+    if (!emailLog) {
+      return { success: false, message: 'Email log not found' };
+    }
+
+    if (emailLog.status !== 'failed') {
+      return { success: false, message: 'Email is not in failed status' };
+    }
+
+    if (!emailLog.to || !emailLog.subject || !emailLog.htmlContent) {
+      return { success: false, message: 'Email missing required data for retry' };
+    }
+
+    try {
+      const result = await this.emailService.sendEmail({
+        to: emailLog.to,
+        subject: emailLog.subject,
+        html: emailLog.htmlContent,
+        text: emailLog.textContent,
+        shopId: emailLog.shopId?.toString(),
+        shopName: emailLog.shopName,
+        userId: emailLog.userId?.toString(),
+        userName: emailLog.userName,
+        category: emailLog.category,
+        templateName: emailLog.templateName,
+        templateVariables: emailLog.templateVariables,
+        triggeredBy: 'manual_retry',
+      });
+
+      return {
+        success: result.success,
+        message: result.success ? 'Email retry successful' : `Retry failed: ${result.error}`,
+        emailLogId: result.emailLogId,
+      };
+    } catch (error: any) {
+      await this.markFailed(emailLogId, error.message);
+      return {
+        success: false,
+        message: `Retry failed: ${error.message}`,
+      };
+    }
   }
 
   /**

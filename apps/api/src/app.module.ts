@@ -44,6 +44,7 @@ import { QueueModule } from './queue/queue.module';
 import { AiModule } from './ai/ai.module';
 import { WhatsAppModule } from './whatsapp/whatsapp.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { EventsModule } from './events/events.module';
 
 @Module({
   imports: [
@@ -119,6 +120,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
     AiModule,
     WhatsAppModule,
     AnalyticsModule,
+    EventsModule,
   ],
   controllers: [AppController],
   providers: [

@@ -13,9 +13,9 @@ const CACHE_KEYS = {
 };
 
 const CACHE_TTL = {
-  SUBSCRIPTION: 30 * 1000, // 30 seconds - short cache for quick updates after admin actions
+  SUBSCRIPTION: 5 * 1000, // 5 seconds - very short cache for instant updates after payments
   PLANS: 30 * 60 * 1000, // 30 minutes (plans rarely change)
-  INVOICES: 2 * 60 * 1000, // 2 minutes
+  INVOICES: 10 * 1000, // 10 seconds - short cache for payment status updates
 };
 
 interface CacheEntry<T> {
@@ -238,14 +238,19 @@ export function useSubscription() {
     return getCache<Subscription>(CACHE_KEYS.SUBSCRIPTION);
   });
   const [loading, setLoading] = useState(true);
+  // Separate state for background refreshes - prevents flashing during polling
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fetchedRef = useRef(false);
+  // Track if initial load is complete
+  const initialLoadCompleteRef = useRef(false);
 
   const fetchSubscription = useCallback(async (forceRefresh = false) => {
     // Skip if no auth token - prevents unnecessary 401 errors
     if (!hasAuthToken()) {
       setLoading(false);
       setSubscription(null);
+      initialLoadCompleteRef.current = true;
       return;
     }
 
@@ -254,6 +259,7 @@ export function useSubscription() {
       setLoading(false);
       setSubscription(null);
       setError(null);
+      initialLoadCompleteRef.current = true;
       return;
     }
 
@@ -263,12 +269,19 @@ export function useSubscription() {
       if (cached) {
         setSubscription(cached);
         setLoading(false);
+        initialLoadCompleteRef.current = true;
         return;
       }
     }
 
     try {
-      setLoading(true);
+      // CRITICAL FIX: Only set loading=true for initial load, not background refreshes
+      // This prevents the flashing issue when polling for subscription updates
+      if (!initialLoadCompleteRef.current) {
+        setLoading(true);
+      } else {
+        setIsRefreshing(true);
+      }
       setError(null);
       const data = await api.get<Subscription | null>('/subscriptions/current');
       
@@ -305,6 +318,8 @@ export function useSubscription() {
       }
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
+      initialLoadCompleteRef.current = true;
     }
   }, []);
 
@@ -501,6 +516,25 @@ export function useSubscription() {
     };
   }, [fetchSubscription]);
 
+  // Aggressive polling when subscription is in payment-pending states
+  useEffect(() => {
+    if (!subscription) return;
+
+    const isPendingPayment = subscription.status === 'pending_payment' || 
+                            subscription.status === 'past_due' ||
+                            subscription.status === 'suspended';
+    
+    if (isPendingPayment) {
+      // More aggressive polling (every 3 seconds) for payment-related status changes
+      const interval = setInterval(() => {
+        clearCache(CACHE_KEYS.SUBSCRIPTION);
+        fetchSubscription(true);
+      }, 3000);
+
+      return () => clearInterval(interval);
+    }
+  }, [subscription?.status, fetchSubscription]);
+
   // Listen for refresh events that should trigger subscription refetch (force refresh)
   useRefreshEvent(
     ['subscription:updated', 'subscription:created', 'subscription:reactivated', 'payment:completed'],
@@ -514,6 +548,7 @@ export function useSubscription() {
   return {
     subscription,
     loading,
+    isRefreshing,
     error,
     refetch: () => fetchSubscription(true),
     createSubscription,
@@ -716,6 +751,20 @@ export function useBillingHistory() {
       fetchHistory();
     }
   }, [fetchHistory]);
+
+  // Aggressive polling when there are pending invoices
+  useEffect(() => {
+    if (pendingInvoices.length > 0) {
+      // More aggressive polling (every 5 seconds) when there are pending invoices
+      const interval = setInterval(() => {
+        clearCache(CACHE_KEYS.INVOICES);
+        clearCache(CACHE_KEYS.PENDING_INVOICES);
+        fetchHistory(20, 0, true);
+      }, 5000);
+
+      return () => clearInterval(interval);
+    }
+  }, [pendingInvoices.length, fetchHistory]);
 
   // Listen for refresh events that should trigger billing refetch (force refresh)
   useRefreshEvent(

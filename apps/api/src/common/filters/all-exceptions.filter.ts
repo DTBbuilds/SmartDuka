@@ -63,6 +63,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
       errorResponse.errors = errors;
     }
 
-    response.status(status).json(errorResponse);
+    // Check if response has already been sent (e.g., by redirects)
+    if (!response.headersSent) {
+      response.status(status).json(errorResponse);
+    }
   }
 }

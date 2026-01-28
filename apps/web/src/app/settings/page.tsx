@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { useRefreshEvent } from '@/lib/refresh-events';
 import { config } from "@/lib/config";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Tabs, TabsContent, TabsList, TabsTrigger, Input, Label, Button, Textarea, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@smartduka/ui";
 import { Switch } from "@/components/ui/switch";
@@ -597,6 +598,17 @@ function SubscriptionSettingsTab() {
   const { plans, loading: plansLoading } = useSubscriptionPlans();
   const { invoices, pendingInvoices, loading: billingLoading, initiatePayment, getPaymentSummary, checkStkStatus, refetch: refetchBilling } = useBillingHistory();
   const { token } = useAuth();
+
+  // Listen for refresh events that should trigger subscription/billing refetch
+  useRefreshEvent(
+    ['payment:completed', 'subscription:updated', 'invoice:paid'],
+    () => {
+      // Refresh both subscription and billing data when payment events occur
+      refetchSubscription();
+      refetchBilling();
+    },
+    [refetchSubscription, refetchBilling]
+  );
   
   // Stripe payment hook
   const { 
@@ -626,6 +638,7 @@ function SubscriptionSettingsTab() {
   const [upgradeStep, setUpgradeStep] = useState<'plans' | 'confirm' | 'payment'>('plans');
   const [sendMoneyStep, setSendMoneyStep] = useState<'instructions' | 'verify'>('instructions');
   const [referenceCode, setReferenceCode] = useState('');
+  const [senderPhone, setSenderPhone] = useState('');
   const [verifyingCode, setVerifyingCode] = useState(false);
   const [autoRenewLoading, setAutoRenewLoading] = useState(false);
   
@@ -975,6 +988,7 @@ function SubscriptionSettingsTab() {
     setMpesaError(null);
     setStkSentTime(null);
     setReferenceCode('');
+    setSenderPhone('');
     setVerifyingCode(false);
     // Reset Stripe state
     setStripePaymentClientSecret(null);
@@ -1031,7 +1045,10 @@ function SubscriptionSettingsTab() {
                   <h2 className="text-2xl font-bold">{subscription.planName} Plan</h2>
                   <p className="text-white/80 flex items-center gap-2 mt-1">
                     {subscription.planCode === 'trial' ? (
-                      <span className="text-lg font-semibold">FREE</span>
+                      <>
+                        <span className="text-lg font-semibold">14 Days Trial</span>
+                        <span className="text-white/60">FREE</span>
+                      </>
                     ) : subscription.planCode === 'daily' ? (
                       <>
                         <span className="text-lg font-semibold">KES 99</span>
@@ -1059,11 +1076,22 @@ function SubscriptionSettingsTab() {
                   subscription.status === 'active' ? 'bg-white text-emerald-700' :
                   subscription.status === 'trial' ? 'bg-white text-blue-700' :
                   subscription.status === 'past_due' ? 'bg-amber-100 text-amber-800' :
+                  subscription.status === 'expired' ? 'bg-red-100 text-red-800' :
+                  subscription.status === 'suspended' ? 'bg-red-100 text-red-800' :
+                  subscription.status === 'cancelled' ? 'bg-gray-100 text-gray-800' :
                   'bg-white/20 text-white'
                 }`}>
                   {statusColors[subscription.status]?.icon}
-                  <span className="hidden xs:inline">{(subscription.status || 'unknown').replace('_', ' ').toUpperCase()}</span>
-                  <span className="xs:hidden">{(subscription.status || '?').charAt(0).toUpperCase()}</span>
+                  <span>
+                    {subscription.status === 'active' ? 'Active' :
+                     subscription.status === 'trial' ? 'Trial' :
+                     subscription.status === 'past_due' ? 'Past Due' :
+                     subscription.status === 'expired' ? 'Expired' :
+                     subscription.status === 'suspended' ? 'Suspended' :
+                     subscription.status === 'cancelled' ? 'Cancelled' :
+                     subscription.status === 'pending_payment' ? 'Pending' :
+                     (subscription.status || 'Unknown').replace('_', ' ')}
+                  </span>
                 </span>
               </div>
             </div>
@@ -2263,6 +2291,25 @@ function SubscriptionSettingsTab() {
                             </p>
                           </div>
 
+                          <div className="bg-muted/30 rounded-lg p-4 border">
+                            <Label htmlFor="senderPhone" className="text-base font-semibold flex items-center gap-2">
+                              <Phone className="h-5 w-5 text-emerald-600" />
+                              Your Phone Number
+                            </Label>
+                            <Input
+                              id="senderPhone"
+                              type="tel"
+                              value={senderPhone}
+                              onChange={(e) => setSenderPhone(e.target.value.replace(/[^0-9]/g, ''))}
+                              placeholder="0712345678"
+                              className="mt-3 h-14 text-xl text-center tracking-wider"
+                              maxLength={12}
+                            />
+                            <p className="text-sm text-muted-foreground mt-2 text-center">
+                              Enter the phone number you used to send the money
+                            </p>
+                          </div>
+
                           <div className="bg-amber-50 dark:bg-amber-950/30 rounded-lg p-4 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200">
                             <p className="text-sm">We'll verify your payment and activate your subscription within minutes.</p>
                           </div>
@@ -2273,6 +2320,10 @@ function SubscriptionSettingsTab() {
                               onClick={async () => {
                                 if (referenceCode.length < 8) {
                                   alert('Please enter a valid M-Pesa transaction code');
+                                  return;
+                                }
+                                if (senderPhone.length < 9) {
+                                  alert('Please enter a valid phone number');
                                   return;
                                 }
                                 setVerifyingCode(true);
@@ -2288,6 +2339,7 @@ function SubscriptionSettingsTab() {
                                     body: JSON.stringify({
                                       invoiceId: selectedInvoiceData.id,
                                       mpesaReceiptNumber: referenceCode.trim().toUpperCase(),
+                                      senderPhoneNumber: senderPhone.trim(),
                                       paidAmount: selectedInvoiceData.totalAmount,
                                     }),
                                   });
@@ -2298,6 +2350,7 @@ function SubscriptionSettingsTab() {
                                     resetPaymentModal();
                                     setSendMoneyStep('instructions');
                                     setReferenceCode('');
+                                    setSenderPhone('');
                                     // Refresh subscription and billing data
                                     refetchSubscription?.();
                                     refetchBilling?.();
@@ -2311,7 +2364,7 @@ function SubscriptionSettingsTab() {
                                   alert('Failed to submit payment reference. Please try again or contact support.');
                                 }
                               }}
-                              disabled={verifyingCode || referenceCode.length < 8}
+                              disabled={verifyingCode || referenceCode.length < 8 || senderPhone.length < 9}
                             >
                               {verifyingCode ? (
                                 <><Loader2 className="h-5 w-5 animate-spin mr-2" /> Verifying...</>
