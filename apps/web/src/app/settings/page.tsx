@@ -1090,7 +1090,7 @@ function SubscriptionSettingsTab() {
                      subscription.status === 'suspended' ? 'Suspended' :
                      subscription.status === 'cancelled' ? 'Cancelled' :
                      subscription.status === 'pending_payment' ? 'Pending' :
-                     (subscription.status || 'Unknown').replace('_', ' ')}
+                     String(subscription.status || 'Unknown').replace('_', ' ')}
                   </span>
                 </span>
               </div>
