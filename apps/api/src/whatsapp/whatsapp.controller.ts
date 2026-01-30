@@ -84,7 +84,7 @@ export class WhatsAppController {
     @CurrentUser() user: JwtPayload,
     @Body() dto: UpdateWhatsAppConfigDto,
   ) {
-    const config = await this.whatsAppService.upsertConfig(user.shopId, dto as any);
+    const config = await this.whatsAppService.upsertConfig(user.shopId, dto as Partial<import('./schemas/whatsapp-config.schema').WhatsAppConfig>);
     return {
       success: true,
       data: config,
