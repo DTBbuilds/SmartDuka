@@ -27,3 +27,10 @@ test-mongo.js
 # OS
 .DS_Store
 Thumbs.db
+
+# Android signing keys (NEVER commit these)
+*.keystore
+*.jks
+*.base64
+smartduka-release.keystore
+smartduka-keystore.base64
