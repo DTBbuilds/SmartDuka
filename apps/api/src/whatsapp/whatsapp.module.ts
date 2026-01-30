@@ -24,7 +24,6 @@ import { WhatsAppController } from './whatsapp.controller';
 
 // Queue module - use forwardRef to handle circular dependency
 import { QueueModule } from '../queue/queue.module';
-import { QueueService } from '../queue/queue.service';
 
 const REDIS_URL = process.env.REDIS_URL;
 

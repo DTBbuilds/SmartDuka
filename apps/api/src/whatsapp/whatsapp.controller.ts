@@ -5,7 +5,6 @@ import {
   Patch,
   Body,
   Query,
-  Param,
   UseGuards,
   HttpCode,
   HttpStatus,
@@ -25,10 +24,14 @@ import {
   UpdateWhatsAppConfigDto,
   VerifyPhoneDto,
   ConfirmVerificationDto,
-  SendTextMessageDto,
   MetaWebhookDto,
 } from './dto';
-import { WhatsAppConfig } from './schemas/whatsapp-config.schema';
+
+// Type for Meta webhook value structure
+type MetaWebhookValue = {
+  statuses?: Array<{ id: string; status: string; timestamp: string; errors?: Array<{ title?: string }> }>;
+  messages?: Array<{ from?: string; type?: string; text?: { body?: string } }>;
+};
 
 /**
  * WhatsApp Controller
@@ -261,7 +264,7 @@ _SmartDuka POS_`;
   @Get('status')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
-  async getProviderStatus() {
+  getProviderStatus() {
     return {
       success: true,
       data: {
@@ -277,7 +280,7 @@ _SmartDuka POS_`;
    * Meta WhatsApp webhook verification (GET)
    */
   @Get('webhook')
-  async verifyWebhook(
+  verifyWebhook(
     @Query('hub.mode') mode: string,
     @Query('hub.verify_token') token: string,
     @Query('hub.challenge') challenge: string,
@@ -319,8 +322,9 @@ _SmartDuka POS_`;
     // Process webhook
     try {
       await this.processMetaWebhook(body);
-    } catch (error: any) {
-      this.logger.error(`Webhook processing error: ${error.message}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Webhook processing error: ${message}`);
     }
 
     return { success: true };
@@ -331,14 +335,15 @@ _SmartDuka POS_`;
 
     for (const entry of body.entry || []) {
       for (const change of entry.changes || []) {
-        const value = change.value;
+        const value = change.value as MetaWebhookValue;
 
         // Handle status updates
         if (value.statuses) {
           for (const status of value.statuses) {
+            const statusType = status.status as 'delivered' | 'read' | 'failed';
             await this.whatsAppService.updateMessageStatus(
               status.id,
-              status.status as any,
+              statusType,
               new Date(parseInt(status.timestamp) * 1000),
               status.errors?.[0]?.title,
             );
@@ -347,11 +352,11 @@ _SmartDuka POS_`;
 
         // Handle incoming messages (e.g., STOP to unsubscribe)
         if (value.messages) {
-          for (const message of value.messages) {
-            if (message.type === 'text' && message.text?.body) {
-              const text = message.text.body.toUpperCase().trim();
+          for (const msg of value.messages) {
+            if (msg.type === 'text' && msg.text?.body) {
+              const text = msg.text.body.toUpperCase().trim();
               if (text === 'STOP' || text === 'UNSUBSCRIBE') {
-                this.logger.log(`Opt-out request from ${message.from}`);
+                this.logger.log(`Opt-out request from ${msg.from}`);
                 // TODO: Find shop by phone and opt out
               }
             }

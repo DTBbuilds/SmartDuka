@@ -3,6 +3,10 @@ import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { WhatsAppProvider, MessageResult, MessageStatus, TemplateParams } from './whatsapp-provider.interface';
 
+// Response types for Twilio API
+type TwilioSendResponse = { sid?: string; message?: string; code?: number; status?: string };
+type TwilioStatusResponse = { status?: string };
+
 @Injectable()
 export class TwilioProvider implements WhatsAppProvider {
   readonly name = 'twilio';
@@ -48,15 +52,16 @@ export class TwilioProvider implements WhatsAppProvider {
         body: formData.toString(),
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as TwilioSendResponse;
 
       if (!response.ok) {
-        return { success: false, error: data.message || 'Unknown error', errorCode: data.code?.toString() };
+        return { success: false, error: data.message ?? 'Unknown error', errorCode: data.code?.toString() };
       }
 
       return { success: true, messageId: data.sid };
-    } catch (error: any) {
-      return { success: false, error: error.message };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { success: false, error: message };
     }
   }
 
@@ -75,14 +80,15 @@ export class TwilioProvider implements WhatsAppProvider {
         headers: { 'Authorization': `Basic ${credentials}` },
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as TwilioStatusResponse;
       const statusMap: Record<string, MessageStatus['status']> = {
         queued: 'queued', sending: 'sent', sent: 'sent', delivered: 'delivered', read: 'read', failed: 'failed', undelivered: 'failed',
       };
 
-      return { messageId, status: statusMap[data.status] || 'sent' };
-    } catch (error: any) {
-      return { messageId, status: 'failed', error: error.message };
+      return { messageId, status: statusMap[data.status ?? ''] || 'sent' };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { messageId, status: 'failed', error: message };
     }
   }
 

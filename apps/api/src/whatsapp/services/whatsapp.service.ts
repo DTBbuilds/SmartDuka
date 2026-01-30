@@ -283,7 +283,7 @@ export class WhatsAppService {
 
     // Add to queue for async processing
     await this.queueService.addWhatsAppMessage({
-      messageId: (message as any)._id.toString(),
+      messageId: message._id.toString(),
       shopId,
       to,
       content,
@@ -349,7 +349,7 @@ export class WhatsAppService {
     timestamp?: Date,
     error?: string,
   ): Promise<void> {
-    const updateData: any = { status };
+    const updateData: Record<string, unknown> = { status };
     
     if (status === 'delivered') {
       updateData.deliveredAt = timestamp || new Date();
@@ -358,7 +358,8 @@ export class WhatsAppService {
       // Update delivered count
       const message = await this.messageModel.findOne({ providerMessageId });
       if (message) {
-        await this.incrementDeliveredCount(message.shopId.toString());
+        const shopIdStr = message.shopId?.toString?.() ?? String(message.shopId);
+        await this.incrementDeliveredCount(shopIdStr);
       }
     } else if (status === 'read') {
       updateData.readAt = timestamp || new Date();
@@ -378,7 +379,7 @@ export class WhatsAppService {
     shopId: string,
     options: { category?: string; limit?: number; skip?: number } = {},
   ): Promise<WhatsAppMessageDocument[]> {
-    const query: any = { shopId: new Types.ObjectId(shopId) };
+    const query: Record<string, unknown> = { shopId: new Types.ObjectId(shopId) };
     if (options.category) query.category = options.category;
 
     return this.messageModel

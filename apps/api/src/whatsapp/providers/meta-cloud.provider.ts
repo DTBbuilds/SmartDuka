@@ -3,6 +3,10 @@ import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { WhatsAppProvider, MessageResult, MessageStatus, TemplateParams } from './whatsapp-provider.interface';
 
+// Response types for Meta API
+type MetaError = { message?: string; code?: number };
+type MetaSendResponse = { messages?: { id?: string }[]; error?: MetaError };
+
 @Injectable()
 export class MetaCloudProvider implements WhatsAppProvider {
   readonly name = 'meta';
@@ -50,17 +54,18 @@ export class MetaCloudProvider implements WhatsAppProvider {
         }),
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as MetaSendResponse;
 
       if (!response.ok) {
         this.logger.error(`Meta API error: ${JSON.stringify(data)}`);
-        return { success: false, error: data.error?.message || 'Unknown error', errorCode: data.error?.code?.toString() };
+        return { success: false, error: data.error?.message ?? 'Unknown error', errorCode: data.error?.code?.toString() };
       }
 
       return { success: true, messageId: data.messages?.[0]?.id };
-    } catch (error: any) {
-      this.logger.error(`Failed to send message: ${error.message}`);
-      return { success: false, error: error.message };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to send message: ${message}`);
+      return { success: false, error: message };
     }
   }
 
@@ -89,20 +94,21 @@ export class MetaCloudProvider implements WhatsAppProvider {
         }),
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as MetaSendResponse;
 
       if (!response.ok) {
-        return { success: false, error: data.error?.message || 'Unknown error', errorCode: data.error?.code?.toString() };
+        return { success: false, error: data.error?.message ?? 'Unknown error', errorCode: data.error?.code?.toString() };
       }
 
       return { success: true, messageId: data.messages?.[0]?.id };
-    } catch (error: any) {
-      return { success: false, error: error.message };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { success: false, error: message };
     }
   }
 
-  async getMessageStatus(messageId: string): Promise<MessageStatus> {
-    return { messageId, status: 'sent' };
+  getMessageStatus(messageId: string): Promise<MessageStatus> {
+    return Promise.resolve({ messageId, status: 'sent' });
   }
 
   verifyWebhookSignature(payload: string, signature: string): boolean {

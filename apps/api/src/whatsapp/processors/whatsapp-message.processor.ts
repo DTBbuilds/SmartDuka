@@ -25,15 +25,16 @@ export class WhatsAppMessageProcessor extends WorkerHost {
   }
 
   async process(job: Job<WhatsAppMessageJobData>): Promise<void> {
-    const { messageId, shopId, to } = job.data;
+    const { messageId, to } = job.data;
     
     this.logger.debug(`Processing WhatsApp message ${messageId} to ${to}`);
 
     try {
       await this.whatsAppService.sendMessageNow(messageId);
       this.logger.log(`WhatsApp message sent: ${messageId}`);
-    } catch (error: any) {
-      this.logger.error(`Failed to send WhatsApp message ${messageId}: ${error.message}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to send WhatsApp message ${messageId}: ${message}`);
       throw error; // Let BullMQ handle retry
     }
   }
