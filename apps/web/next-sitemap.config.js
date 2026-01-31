@@ -1,6 +1,6 @@
 /** @type {import('next-sitemap').IConfig} */
 module.exports = {
-  siteUrl: process.env.SITE_URL || 'https://smartduka.co.ke',
+  siteUrl: process.env.SITE_URL || 'https://smartduka-eta.vercel.app',
   generateRobotsTxt: true,
   generateIndexSitemap: false,
   
