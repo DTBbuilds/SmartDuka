@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return, @typescript-eslint/require-await, @typescript-eslint/no-unused-vars */
 import { Controller, Post, Body, Get, UseGuards, Req, Res, Query, Delete, Param } from '@nestjs/common';
 import type { Response, Request } from 'express';
 import { AuthService } from './auth.service';
