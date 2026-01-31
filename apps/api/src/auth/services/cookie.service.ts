@@ -101,10 +101,16 @@ export class CookieService {
    * Clear all auth cookies
    */
   clearAuthCookies(res: Response): void {
-    const clearOptions = {
+    const clearOptions: {
+      httpOnly: boolean;
+      secure: boolean;
+      sameSite: 'none' | 'lax' | 'strict';
+      path: string;
+      domain: string | undefined;
+    } = {
       httpOnly: true,
       secure: this.isProduction,
-      sameSite: (this.isCrossOrigin ? 'none' : 'lax') as 'none' | 'lax',
+      sameSite: this.isCrossOrigin ? 'none' : 'lax',
       path: '/',
       domain: this.cookieDomain,
     };

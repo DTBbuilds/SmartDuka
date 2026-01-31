@@ -284,7 +284,7 @@ export class WhatsAppService {
 
     // Add to queue for async processing
     await this.queueService.addWhatsAppMessage({
-      messageId: message._id.toString(),
+      messageId: String(message._id),
       shopId,
       to,
       content,
