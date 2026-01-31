@@ -24,6 +24,8 @@ const eslintConfig = defineConfig([
       'react-hooks/set-state-in-effect': 'off',
       'react-hooks/static-components': 'off',
       'react-hooks/purity': 'off',
+      'react-hooks/use-memo': 'off',
+      'react-hooks/refs': 'off',
       'jsx-a11y/role-has-required-aria-props': 'off',
       '@next/next/no-html-link-for-pages': 'off',
       '@next/next/no-img-element': 'off',
