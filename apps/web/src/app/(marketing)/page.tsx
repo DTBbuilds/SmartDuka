@@ -16,6 +16,7 @@ import {
   Globe,
   Phone,
   Mail,
+  Download,
 } from 'lucide-react';
 
 export const metadata: Metadata = {
@@ -197,7 +198,7 @@ export default function HomePage() {
                 Built for Kenyan retailers.
               </p>
               
-              <div className="flex flex-col sm:flex-row gap-4 mb-8">
+              <div className="flex flex-col sm:flex-row gap-4 mb-4">
                 <Link 
                   href="/register-shop" 
                   className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-blue-600 text-white rounded-xl font-bold text-lg hover:bg-blue-700 transition-all shadow-lg hover:shadow-xl"
@@ -211,6 +212,22 @@ export default function HomePage() {
                 >
                   View Pricing
                 </Link>
+              </div>
+              
+              {/* Android App Download */}
+              <div className="mb-8">
+                <a 
+                  href="https://github.com/DTBbuilds/SmartDuka/releases/latest/download/smartduka.apk"
+                  className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition-all shadow-md hover:shadow-lg"
+                  download
+                >
+                  <Download className="h-5 w-5" />
+                  Download Android App
+                  <span className="text-xs bg-green-500 px-2 py-0.5 rounded-full ml-1">APK</span>
+                </a>
+                <p className="text-sm text-gray-500 mt-2">
+                  Install directly on your Android phone for the best experience
+                </p>
               </div>
               
               <div className="flex items-center gap-6 text-sm text-gray-500">
