@@ -1,0 +1,70 @@
+import { IsOptional, IsString, IsEnum, Matches, MaxLength, IsIn, ValidateIf } from 'class-validator';
+import { Transform } from 'class-transformer';
+
+// Kenya counties
+const KENYA_COUNTIES = [
+  "Baringo", "Bomet", "Bungoma", "Busia", "Elgeyo-Marakwet", "Embu", "Garissa",
+  "Homa Bay", "Isiolo", "Kajiado", "Kakamega", "Kericho", "Kiambu", "Kilifi",
+  "Kirinyaga", "Kisii", "Kisumu", "Kitui", "Kwale", "Laikipia", "Lamu", "Machakos",
+  "Makueni", "Mandera", "Marsabit", "Meru", "Migori", "Mombasa", "Murang'a",
+  "Nairobi", "Nakuru", "Nandi", "Narok", "Nyamira", "Nyandarua", "Nyeri", "Samburu",
+  "Siaya", "Taita-Taveta", "Tana River", "Tharaka-Nithi", "Trans-Nzoia", "Turkana",
+  "Uasin Gishu", "Vihiga", "Wajir", "West Pokot"
+];
+
+export class UpdateShopDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  address?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(KENYA_COUNTIES, { message: 'Please select a valid county' })
+  county?: string;
+
+  @IsOptional()
+  @IsString()
+  city?: string;
+
+  @IsOptional()
+  @IsString()
+  businessType?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      const trimmed = value.trim().toUpperCase();
+      return trimmed || undefined; // Return undefined if empty string
+    }
+    return undefined;
+  })
+  @ValidateIf((o) => o.kraPin !== undefined && o.kraPin !== null && o.kraPin !== '')
+  @IsString()
+  @Matches(/^[A-Z][0-9]{9}[A-Z]$/, { 
+    message: 'Invalid KRA PIN format (e.g., A123456789B)',
+  })
+  kraPin?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  description?: string;
+
+  @IsOptional()
+  @IsString()
+  tillNumber?: string;
+
+  @IsOptional()
+  @IsEnum(['pending', 'verified', 'active', 'suspended', 'rejected', 'flagged'])
+  status?: 'pending' | 'verified' | 'active' | 'suspended' | 'rejected' | 'flagged';
+
+  @IsOptional()
+  @IsString()
+  verificationNotes?: string;
+}

@@ -1,0 +1,116 @@
+services:
+  - type: web
+    name: smartduka-api
+    runtime: node
+    region: singapore
+    plan: free
+    rootDir: apps/api
+    buildCommand: corepack enable && pnpm install && pnpm run build
+    startCommand: pnpm run start:prod
+    envVars:
+      # ==================== CORE ====================
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: LOG_LEVEL
+        value: info
+      
+      # ==================== DATABASE ====================
+      - key: MONGODB_URI
+        sync: false
+      
+      # ==================== JWT & SECURITY ====================
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRY
+        value: 7d
+      - key: REFRESH_TOKEN_SECRET
+        generateValue: true
+      - key: REFRESH_TOKEN_EXPIRY
+        value: 30d
+      - key: ENCRYPTION_KEY
+        sync: false
+      
+      # ==================== FRONTEND ====================
+      - key: FRONTEND_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      
+      # ==================== M-PESA ====================
+      - key: MPESA_CONSUMER_KEY
+        sync: false
+      - key: MPESA_CONSUMER_SECRET
+        sync: false
+      - key: MPESA_PASSKEY
+        sync: false
+      - key: MPESA_SHORTCODE
+        sync: false
+      - key: MPESA_CALLBACK_URL
+        sync: false
+      # Environment: 'sandbox' or 'production'
+      - key: MPESA_ENV
+        value: sandbox
+      - key: MPESA_ENCRYPTION_KEY
+        sync: false
+      
+      # ==================== STRIPE ====================
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_PUBLISHABLE_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      
+      # ==================== SMTP EMAIL ====================
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: 465
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      
+      # ==================== REDIS (Optional) ====================
+      - key: REDIS_URL
+        sync: false
+      
+      # ==================== API BASE URL ====================
+      - key: API_BASE_URL
+        sync: false
+      
+      # ==================== GOOGLE OAUTH (Optional) ====================
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_CALLBACK_URL
+        sync: false
+      
+      # ==================== WHATSAPP (Optional) ====================
+      - key: WHATSAPP_PROVIDER
+        value: meta
+      - key: META_WHATSAPP_TOKEN
+        sync: false
+      - key: META_WHATSAPP_PHONE_ID
+        sync: false
+      
+      # ==================== AI REPORTS ====================
+      - key: AI_REPORTS_ENABLED
+        value: true
+    healthCheckPath: /health
+    autoDeploy: true
+
+  # Cron job to keep the free-tier web service alive
+  - type: cron
+    name: smartduka-keep-alive
+    runtime: node
+    region: singapore
+    plan: free
+    schedule: "*/5 * * * *"
+    buildCommand: echo "No build needed"
+    startCommand: curl -s https://smartduka-api.onrender.com/health/live || true

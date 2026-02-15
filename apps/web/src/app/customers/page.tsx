@@ -1,0 +1,449 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/lib/auth-context";
+import { useBranch } from "@/lib/branch-context";
+import { config } from "@/lib/config";
+import { Button, Input, Label, Textarea } from "@smartduka/ui";
+import { Plus, Pencil, Trash2, Users, Eye, Star, Award } from "lucide-react";
+import { DataTable, Column } from "@/components/shared/data-table";
+import { FormModal } from "@/components/shared/form-modal";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { EmptyState } from "@/components/shared/empty-state";
+import { TableSkeleton } from "@/components/shared/loading-skeleton";
+
+interface Customer {
+  _id: string;
+  name: string;
+  phone: string;
+  email?: string;
+  address?: string;
+  notes?: string;
+  totalPurchases: number;
+  totalSpent: number;
+  lastPurchaseDate?: string;
+  status: string;
+  segment?: 'vip' | 'regular' | 'inactive';
+  loyaltyPoints?: number;
+}
+
+export default function CustomersPage() {
+  const { token } = useAuth();
+  const { currentBranch } = useBranch();
+  const router = useRouter();
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  const [deletingCustomer, setDeletingCustomer] = useState<Customer | null>(null);
+
+  const [formData, setFormData] = useState({
+    name: "",
+    phone: "",
+    email: "",
+    address: "",
+    notes: "",
+  });
+
+  useEffect(() => {
+    fetchCustomers();
+  }, [currentBranch]);
+
+  const fetchCustomers = async () => {
+    try {
+      const base = config.apiUrl;
+      const branchParam = currentBranch ? `?branchId=${currentBranch._id}` : '';
+      const res = await fetch(`${base}/customers${branchParam}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : [];
+      
+      if (res.ok) {
+        setCustomers(data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch customers:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleAdd = () => {
+    setEditingCustomer(null);
+    setFormData({
+      name: "",
+      phone: "",
+      email: "",
+      address: "",
+      notes: "",
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleEdit = (customer: Customer) => {
+    setEditingCustomer(customer);
+    setFormData({
+      name: customer.name,
+      phone: customer.phone,
+      email: customer.email || "",
+      address: customer.address || "",
+      notes: customer.notes || "",
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleDelete = (customer: Customer) => {
+    setDeletingCustomer(customer);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const handleSubmit = async () => {
+    if (!formData.name || !formData.phone) {
+      alert("Name and phone are required");
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      const base = config.apiUrl;
+      const url = editingCustomer
+        ? `${base}/customers/${editingCustomer._id}`
+        : `${base}/customers`;
+      const method = editingCustomer ? "PUT" : "POST";
+
+      const res = await fetch(url, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(formData),
+      });
+
+      if (res.ok) {
+        await fetchCustomers();
+        setIsModalOpen(false);
+      } else {
+        throw new Error("Failed to save customer");
+      }
+    } catch (error) {
+      console.error("Failed to save customer:", error);
+      alert("Failed to save customer. Please try again.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deletingCustomer) return;
+
+    try {
+      const base = config.apiUrl;
+      const res = await fetch(`${base}/customers/${deletingCustomer._id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (res.ok) {
+        await fetchCustomers();
+        setIsDeleteDialogOpen(false);
+        setDeletingCustomer(null);
+      } else {
+        throw new Error("Failed to delete customer");
+      }
+    } catch (error) {
+      console.error("Failed to delete customer:", error);
+      alert("Failed to delete customer. Please try again.");
+    }
+  };
+
+  const columns: Column<Customer>[] = [
+    {
+      key: "name",
+      header: "Name",
+      sortable: true,
+    },
+    {
+      key: "phone",
+      header: "Phone",
+      sortable: true,
+    },
+    {
+      key: "email",
+      header: "Email",
+      render: (customer) => customer.email || "—",
+    },
+    {
+      key: "totalPurchases",
+      header: "Visits",
+      render: (customer) => (
+        <div className="flex items-center gap-1">
+          <span className="font-medium">{customer.totalPurchases || 0}</span>
+          <span className="text-xs text-muted-foreground">orders</span>
+        </div>
+      ),
+      sortable: true,
+    },
+    {
+      key: "loyaltyPoints",
+      header: "Points",
+      render: (customer) => (
+        <div className="flex items-center gap-1">
+          <Star className="h-3.5 w-3.5 text-amber-500" />
+          <span className="font-medium">{customer.loyaltyPoints || 0}</span>
+        </div>
+      ),
+      sortable: true,
+    },
+    {
+      key: "segment",
+      header: "Status",
+      render: (customer) => {
+        const segmentStyles = {
+          vip: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
+          regular: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
+          inactive: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
+        };
+        const segment = customer.segment || 'regular';
+        return (
+          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${segmentStyles[segment]}`}>
+            {segment === 'vip' && <Award className="h-3 w-3" />}
+            {segment.charAt(0).toUpperCase() + segment.slice(1)}
+          </span>
+        );
+      },
+      sortable: true,
+    },
+    {
+      key: "totalSpent",
+      header: "Total Spent",
+      render: (customer) => `KES ${(customer.totalSpent || 0).toLocaleString()}`,
+      sortable: true,
+    },
+    {
+      key: "lastPurchaseDate",
+      header: "Last Purchase",
+      render: (customer) =>
+        customer.lastPurchaseDate
+          ? new Date(customer.lastPurchaseDate).toLocaleDateString()
+          : "—",
+      sortable: true,
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      render: (customer) => (
+        <div className="flex gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              router.push(`/customers/${customer._id}`);
+            }}
+            aria-label="View details"
+          >
+            <Eye className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleEdit(customer);
+            }}
+            aria-label="Edit customer"
+          >
+            <Pencil className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDelete(customer);
+            }}
+            aria-label="Delete customer"
+          >
+            <Trash2 className="h-4 w-4 text-destructive" />
+          </Button>
+        </div>
+      ),
+    },
+  ];
+
+  if (isLoading) {
+    return (
+      <div className="container py-8">
+        <TableSkeleton />
+      </div>
+    );
+  }
+
+  return (
+    <div className="container py-8">
+      <div className="mb-8 flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Customers</h1>
+          <p className="text-muted-foreground">Manage your customer database</p>
+        </div>
+        <Button onClick={handleAdd}>
+          <Plus className="mr-2 h-4 w-4" />
+          Add Customer
+        </Button>
+      </div>
+
+      {customers.length === 0 ? (
+        <EmptyState
+          icon={Users}
+          title="No customers yet"
+          description="Start building your customer database"
+          actionLabel="Add Customer"
+          onAction={handleAdd}
+        />
+      ) : (
+        <>
+          <div className="mb-6 grid gap-4 md:grid-cols-4">
+            <div className="rounded-lg border p-4">
+              <p className="text-sm text-muted-foreground">Total Customers</p>
+              <p className="text-2xl font-bold">{customers.length}</p>
+            </div>
+            <div className="rounded-lg border p-4">
+              <p className="text-sm text-muted-foreground">Total Revenue</p>
+              <p className="text-2xl font-bold">
+                KES{" "}
+                {customers
+                  .reduce((sum, c) => sum + (c.totalSpent || 0), 0)
+                  .toLocaleString()}
+              </p>
+            </div>
+            <div className="rounded-lg border p-4">
+              <p className="text-sm text-muted-foreground">Total Purchases</p>
+              <p className="text-2xl font-bold">
+                {customers.reduce((sum, c) => sum + (c.totalPurchases || 0), 0)}
+              </p>
+            </div>
+            <div className="rounded-lg border p-4">
+              <p className="text-sm text-muted-foreground">Avg. per Customer</p>
+              <p className="text-2xl font-bold">
+                KES{" "}
+                {customers.length > 0
+                  ? Math.round(
+                      customers.reduce((sum, c) => sum + (c.totalSpent || 0), 0) /
+                        customers.length
+                    ).toLocaleString()
+                  : 0}
+              </p>
+            </div>
+          </div>
+
+          <DataTable
+            data={customers}
+            columns={columns}
+            searchable
+            searchPlaceholder="Search customers..."
+            emptyMessage="No customers found"
+          />
+        </>
+      )}
+
+      <FormModal
+        open={isModalOpen}
+        onOpenChange={setIsModalOpen}
+        title={editingCustomer ? "Edit Customer" : "Add Customer"}
+        description={
+          editingCustomer
+            ? "Update customer information"
+            : "Add a new customer to your database"
+        }
+        onSubmit={handleSubmit}
+        loading={isSaving}
+        submitLabel={editingCustomer ? "Update" : "Add"}
+        size="lg"
+      >
+        <div className="grid grid-cols-2 gap-4">
+          {/* Left column */}
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">
+                Name <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="Customer name"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="phone">
+                Phone <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="phone"
+                type="tel"
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                placeholder="+254 712 345 678"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                placeholder="customer@example.com"
+              />
+            </div>
+          </div>
+
+          {/* Right column */}
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="address">Address</Label>
+              <Input
+                id="address"
+                value={formData.address}
+                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                placeholder="Customer address"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="notes">Notes</Label>
+              <Textarea
+                id="notes"
+                value={formData.notes}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                placeholder="Additional notes"
+                rows={4}
+              />
+            </div>
+          </div>
+        </div>
+      </FormModal>
+
+      <ConfirmDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+        title="Delete Customer"
+        description={`Are you sure you want to delete "${deletingCustomer?.name}"? This action cannot be undone.`}
+        confirmText="Delete"
+        variant="destructive"
+        onConfirm={confirmDelete}
+      />
+    </div>
+  );
+}

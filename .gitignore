@@ -1,0 +1,39 @@
+node_modules
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Next.js
+.next
+
+
+# Turbo
+.turbo
+
+# Build outputs
+dist
+apps/api/dist
+
+# Logs
+*.log
+logs/
+
+# Test files
+test-mongo.js
+
+# IDE
+.idea
+.vscode
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Android signing keys (NEVER commit these)
+*.keystore
+*.jks
+*.base64
+smartduka-release.keystore
+smartduka-keystore.base64

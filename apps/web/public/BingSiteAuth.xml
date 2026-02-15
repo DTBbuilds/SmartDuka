@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<!--
+  Bing Webmaster Tools Verification File
+  
+  INSTRUCTIONS:
+  1. Go to Bing Webmaster Tools: https://www.bing.com/webmasters
+  2. Add your site: https://smartduka.org
+  3. Choose "XML file" verification method
+  4. Download the BingSiteAuth.xml file
+  5. Replace this file with the downloaded one
+  6. Click "Verify" in Bing Webmaster Tools
+-->
+<users>
+  <user>REPLACE_WITH_YOUR_BING_VERIFICATION_CODE</user>
+</users>

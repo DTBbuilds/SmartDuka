@@ -1,0 +1,16 @@
+# SMARTDUKA SIMPLE PRODUCT IMPORT TEMPLATE
+# Version: 2.0 | For Quick Import
+#
+# QUICK INSTRUCTIONS:
+# 1. Delete these 8 header lines
+# 2. Fill in Product Name* and Selling Price* (required fields)
+# 3. Fill in other fields as needed
+# 4. Save as CSV and upload
+#
+# Required fields marked with *
+# Category must exist in your shop before import
+#
+Product Name*,SKU,Barcode/UPC,Selling Price (KES)*,Cost Price (KES),Stock Quantity,Category,Brand,Description,Tax Rate (%),Status,Tags
+Afia Mixed Fruit Juice 500ml,AFI-JUI-001,6008459000972,80,55,150,Beverages,Afia,Delicious mixed fruit juice with no added sugar,16,active,"drinks,juice,beverages"
+Oraimo Lite Wireless Earbuds,ORA-EAR-001,4895180775291,350,220,50,Electronics,Oraimo,True wireless earbuds with 10-hour battery life,16,active,"electronics,audio,earbuds"
+Fresh Whole Milk 500ml,MLK-FRE-001,2000001234567,120,80,30,Dairy Products,KCC,Fresh pasteurized whole milk,0,active,"dairy,milk"

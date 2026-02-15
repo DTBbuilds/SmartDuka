@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1e3a8a"/>
+      <stop offset="50%" style="stop-color:#2563eb"/>
+      <stop offset="100%" style="stop-color:#3b82f6"/>
+    </linearGradient>
+    <linearGradient id="cardGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff"/>
+      <stop offset="100%" style="stop-color:#f8fafc"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-opacity="0.25"/>
+    </filter>
+    <linearGradient id="iconBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#2563eb"/>
+      <stop offset="100%" style="stop-color:#1d4ed8"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="1280" height="720" fill="url(#bgGrad)"/>
+  
+  <!-- Decorative circles -->
+  <circle cx="100" cy="100" r="200" fill="white" opacity="0.03"/>
+  <circle cx="1200" cy="600" r="300" fill="white" opacity="0.03"/>
+  <circle cx="900" cy="100" r="150" fill="white" opacity="0.02"/>
+  
+  <!-- Main content card -->
+  <rect x="80" y="120" width="1120" height="480" rx="24" fill="url(#cardGrad)" filter="url(#shadow)"/>
+  
+  <!-- SmartDuka Logo/Icon -->
+  <g transform="translate(140, 180)">
+    <rect width="80" height="80" rx="16" fill="url(#iconBg)"/>
+    <g fill="white" transform="translate(12, 12) scale(0.11)">
+      <!-- Store icon -->
+      <path d="M96 200 L256 100 L416 200 L416 220 L96 220 Z"/>
+      <rect x="120" y="220" width="272" height="180" rx="8"/>
+      <rect x="216" y="300" width="80" height="100" rx="4" fill="#2563eb"/>
+      <rect x="144" y="260" width="56" height="56" rx="4" fill="#2563eb"/>
+      <rect x="312" y="260" width="56" height="56" rx="4" fill="#2563eb"/>
+    </g>
+  </g>
+  
+  <!-- SmartDuka text -->
+  <text x="240" y="235" font-family="system-ui, -apple-system, sans-serif" font-size="42" font-weight="700" fill="#1e293b">SmartDuka</text>
+  
+  <!-- Tagline -->
+  <text x="140" y="310" font-family="system-ui, -apple-system, sans-serif" font-size="28" font-weight="600" fill="#1e293b">POS &amp; Inventory Management System</text>
+  <text x="140" y="350" font-family="system-ui, -apple-system, sans-serif" font-size="20" fill="#64748b">All-in-one solution for retail businesses</text>
+  
+  <!-- Feature boxes -->
+  <g transform="translate(140, 400)">
+    <!-- Feature 1 -->
+    <rect width="220" height="140" rx="12" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1"/>
+    <circle cx="35" cy="35" r="20" fill="#2563eb"/>
+    <text x="28" y="42" font-family="system-ui" font-size="20" fill="white">✓</text>
+    <text x="65" y="40" font-family="system-ui" font-size="16" font-weight="600" fill="#1e293b">Point of Sale</text>
+    <text x="20" y="75" font-family="system-ui" font-size="13" fill="#64748b">Fast checkout with</text>
+    <text x="20" y="95" font-family="system-ui" font-size="13" fill="#64748b">barcode scanning</text>
+    <text x="20" y="115" font-family="system-ui" font-size="13" fill="#64748b">&amp; offline mode</text>
+  </g>
+  
+  <g transform="translate(380, 400)">
+    <!-- Feature 2 -->
+    <rect width="220" height="140" rx="12" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1"/>
+    <circle cx="35" cy="35" r="20" fill="#16a34a"/>
+    <text x="28" y="42" font-family="system-ui" font-size="20" fill="white">✓</text>
+    <text x="65" y="40" font-family="system-ui" font-size="16" font-weight="600" fill="#1e293b">Inventory</text>
+    <text x="20" y="75" font-family="system-ui" font-size="13" fill="#64748b">Real-time stock</text>
+    <text x="20" y="95" font-family="system-ui" font-size="13" fill="#64748b">tracking &amp; low</text>
+    <text x="20" y="115" font-family="system-ui" font-size="13" fill="#64748b">stock alerts</text>
+  </g>
+  
+  <g transform="translate(620, 400)">
+    <!-- Feature 3 -->
+    <rect width="220" height="140" rx="12" fill="#faf5ff" stroke="#e9d5ff" stroke-width="1"/>
+    <circle cx="35" cy="35" r="20" fill="#9333ea"/>
+    <text x="28" y="42" font-family="system-ui" font-size="20" fill="white">✓</text>
+    <text x="65" y="40" font-family="system-ui" font-size="16" font-weight="600" fill="#1e293b">Analytics</text>
+    <text x="20" y="75" font-family="system-ui" font-size="13" fill="#64748b">Sales reports &amp;</text>
+    <text x="20" y="95" font-family="system-ui" font-size="13" fill="#64748b">business insights</text>
+    <text x="20" y="115" font-family="system-ui" font-size="13" fill="#64748b">in real-time</text>
+  </g>
+  
+  <g transform="translate(860, 400)">
+    <!-- Feature 4 -->
+    <rect width="220" height="140" rx="12" fill="#fefce8" stroke="#fef08a" stroke-width="1"/>
+    <circle cx="35" cy="35" r="20" fill="#ca8a04"/>
+    <text x="28" y="42" font-family="system-ui" font-size="20" fill="white">✓</text>
+    <text x="65" y="40" font-family="system-ui" font-size="16" font-weight="600" fill="#1e293b">Multi-Store</text>
+    <text x="20" y="75" font-family="system-ui" font-size="13" fill="#64748b">Manage multiple</text>
+    <text x="20" y="95" font-family="system-ui" font-size="13" fill="#64748b">locations from</text>
+    <text x="20" y="115" font-family="system-ui" font-size="13" fill="#64748b">one dashboard</text>
+  </g>
+  
+  <!-- CTA Button -->
+  <rect x="860" y="180" width="280" height="56" rx="12" fill="#2563eb"/>
+  <text x="920" y="216" font-family="system-ui" font-size="18" font-weight="600" fill="white">Start Free Trial →</text>
+  
+  <!-- URL -->
+  <text x="860" y="260" font-family="system-ui" font-size="16" fill="#64748b">smartduka.org</text>
+  
+  <!-- Bottom bar -->
+  <rect x="0" y="680" width="1280" height="40" fill="#1e3a8a"/>
+  <text x="640" y="706" font-family="system-ui" font-size="14" fill="white" text-anchor="middle">smartduka.org • POS • Inventory • Analytics • Multi-Store Support</text>
+</svg>
