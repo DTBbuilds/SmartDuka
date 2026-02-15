@@ -1,4 +1,5 @@
 import { Controller, Get } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import {
   HealthCheckService,
   HealthCheck,
@@ -9,6 +10,7 @@ import {
 import { SkipSubscriptionCheck } from '../auth/guards/subscription-status.guard';
 
 @Controller('health')
+@SkipThrottle() // Health probes must never be rate-limited
 @SkipSubscriptionCheck() // Health checks should always be accessible
 export class HealthController {
   constructor(
