@@ -39,27 +39,19 @@ const KENYA_COUNTIES = [
   "Uasin Gishu", "Vihiga", "Wajir", "West Pokot"
 ];
 
-// Business types for dropdown
-const BUSINESS_TYPES = [
-  "General Store / Duka",
-  "Supermarket",
-  "Mini Supermarket",
-  "Wholesale Shop",
-  "Pharmacy / Chemist",
-  "Hardware Store",
-  "Electronics Shop",
-  "Clothing & Apparel",
-  "Grocery Store",
-  "Butchery",
-  "Bakery",
-  "Restaurant / Cafe",
-  "Stationery Shop",
-  "Mobile Phone Shop",
-  "Beauty & Cosmetics",
-  "Auto Parts Shop",
-  "Agro-Vet Shop",
-  "Other"
-];
+// Business types from shared package
+import { getBusinessTypeOptions, getCategoryLabel } from '@smartduka/business-types';
+
+const BUSINESS_TYPE_OPTIONS = getBusinessTypeOptions();
+
+// Group business types by category for the dropdown
+const BUSINESS_TYPES_GROUPED = BUSINESS_TYPE_OPTIONS.reduce((acc, bt) => {
+  if (!acc[bt.category]) acc[bt.category] = [];
+  acc[bt.category].push(bt);
+  return acc;
+}, {} as Record<string, typeof BUSINESS_TYPE_OPTIONS>);
+
+const CATEGORY_ORDER = ['retail', 'food_beverage', 'health', 'service', 'specialty'];
 
 // Plan color configurations
 const planColors: Record<string, { 
@@ -117,7 +109,9 @@ function RegisterShopContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { registerShop, registerShopWithGoogle, loginWithGoogle } = useAuth();
-  const [step, setStep] = useState(1); // 1: Plan selection, 2: Shop info, 3: Admin info
+  // FREE_MODE: Skip plan selection — start at shop info (step 2)
+  const FREE_MODE = true;
+  const [step, setStep] = useState(FREE_MODE ? 2 : 1); // 1: Plan selection (disabled), 2: Shop info, 3: Admin info
   const [googleProfile, setGoogleProfile] = useState<GoogleProfile | null>(null);
   const [isGoogleFlow, setIsGoogleFlow] = useState(false);
   const [googleConfigured, setGoogleConfigured] = useState(true);
@@ -159,14 +153,19 @@ function RegisterShopContent() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  // Fetch subscription plans on mount
+  // Fetch subscription plans on mount (skip in FREE_MODE)
   useEffect(() => {
+    if (FREE_MODE) {
+      // Auto-select starter plan as default for backend compatibility
+      setSelectedPlan({ _id: 'free', code: 'starter', name: 'Free', monthlyPrice: 0, annualPrice: 0, setupPrice: 0, maxShops: 999, maxEmployees: 999, maxProducts: 999, features: [] } as SubscriptionPlan);
+      setLoadingPlans(false);
+      return;
+    }
     const fetchPlans = async () => {
       try {
         const plans = await api.get<SubscriptionPlan[]>('/subscriptions/plans');
         const activePlans = (plans || []).filter((p: SubscriptionPlan) => p.code !== 'free');
         setPlans(activePlans);
-        // Auto-select the first plan (usually Starter)
         if (activePlans.length > 0) {
           setSelectedPlan(activePlans[0]);
         }
@@ -377,7 +376,7 @@ function RegisterShopContent() {
             </div>
             <div className="flex items-center gap-3 bg-white/10 rounded-lg p-3">
               <Shield className="h-5 w-5 text-primary" />
-              <span className="text-sm text-white">24-day free trial period</span>
+              <span className="text-sm text-white">100% free &amp; open source</span>
             </div>
             <div className="flex items-center gap-3 bg-white/10 rounded-lg p-3">
               <BarChart3 className="h-5 w-5 text-primary" />
@@ -410,26 +409,33 @@ function RegisterShopContent() {
             <div>
               <h2 className="text-xl font-bold text-foreground">Register Your Shop</h2>
               <p className="text-muted-foreground text-sm">
-                Step {step} of 3: {step === 1 ? 'Choose Plan' : step === 2 ? 'Shop Information' : 'Admin Account'}
+                {FREE_MODE
+                  ? `Step ${step - 1} of 2: ${step === 2 ? 'Shop Information' : 'Admin Account'}`
+                  : `Step ${step} of 3: ${step === 1 ? 'Choose Plan' : step === 2 ? 'Shop Information' : 'Admin Account'}`
+                }
               </p>
             </div>
             
             {/* Progress Indicator */}
             <div className="flex items-center gap-1.5">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all ${step >= 1 ? "bg-primary text-white" : "bg-gray-200 dark:bg-gray-700"}`}>
-                {step > 1 ? <Check className="h-4 w-4" /> : "1"}
-              </div>
-              <div className="w-8 h-1 bg-gray-200 dark:bg-gray-700 rounded">
-                <div className={`h-full rounded transition-all bg-primary ${step >= 2 ? "w-full" : "w-0"}`} />
-              </div>
+              {!FREE_MODE && (
+                <>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all ${step >= 1 ? "bg-primary text-white" : "bg-gray-200 dark:bg-gray-700"}`}>
+                    {step > 1 ? <Check className="h-4 w-4" /> : "1"}
+                  </div>
+                  <div className="w-8 h-1 bg-gray-200 dark:bg-gray-700 rounded">
+                    <div className={`h-full rounded transition-all bg-primary ${step >= 2 ? "w-full" : "w-0"}`} />
+                  </div>
+                </>
+              )}
               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all ${step >= 2 ? "bg-primary text-white" : "bg-gray-200 dark:bg-gray-700"}`}>
-                {step > 2 ? <Check className="h-4 w-4" /> : "2"}
+                {step > 2 ? <Check className="h-4 w-4" /> : (FREE_MODE ? "1" : "2")}
               </div>
               <div className="w-8 h-1 bg-gray-200 dark:bg-gray-700 rounded">
                 <div className={`h-full rounded transition-all bg-primary ${step >= 3 ? "w-full" : "w-0"}`} />
               </div>
               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all ${step >= 3 ? "bg-primary text-white" : "bg-gray-200 dark:bg-gray-700"}`}>
-                3
+                {FREE_MODE ? "2" : "3"}
               </div>
             </div>
           </div>
@@ -637,8 +643,14 @@ function RegisterShopContent() {
                     className="mt-1.5 w-full h-10 px-3 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                   >
                     <option value="">Select business type...</option>
-                    {BUSINESS_TYPES.map((type) => (
-                      <option key={type} value={type}>{type}</option>
+                    {CATEGORY_ORDER.map((cat) => (
+                      BUSINESS_TYPES_GROUPED[cat] ? (
+                        <optgroup key={cat} label={getCategoryLabel(cat)}>
+                          {BUSINESS_TYPES_GROUPED[cat].map((bt) => (
+                            <option key={bt.value} value={bt.value}>{bt.label}</option>
+                          ))}
+                        </optgroup>
+                      ) : null
                     ))}
                   </select>
                 </div>
@@ -757,49 +769,43 @@ function RegisterShopContent() {
                 </Button>
               </div>
 
-              {/* Google Signup Option - only show when configured */}
+            </form>
+          ) : (
+            <form onSubmit={handleAdminSubmit} className="space-y-5">
+              {/* Google signup promoted as primary option */}
               {!isGoogleFlow && googleConfigured && (
                 <>
-                  <div className="relative my-4">
+                  <div className="space-y-3">
+                    <Button
+                      type="button"
+                      className="w-full flex items-center justify-center gap-3 h-12 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 shadow-sm dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-200 dark:border-gray-600"
+                      onClick={() => loginWithGoogle()}
+                    >
+                      <svg className="h-5 w-5" viewBox="0 0 24 24">
+                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                      </svg>
+                      <span className="font-medium">Continue with Google</span>
+                    </Button>
+                    <p className="text-center text-xs text-muted-foreground flex items-center justify-center gap-1.5">
+                      <svg className="h-3.5 w-3.5 text-green-500" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" /></svg>
+                      Recommended &mdash; no password needed, faster setup
+                    </p>
+                  </div>
+
+                  <div className="relative">
                     <div className="absolute inset-0 flex items-center">
                       <span className="w-full border-t border-border" />
                     </div>
                     <div className="relative flex justify-center text-xs uppercase">
-                      <span className="bg-background px-2 text-muted-foreground">Or register with</span>
+                      <span className="bg-background px-2 text-muted-foreground">Or register with email</span>
                     </div>
                   </div>
-
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full flex items-center justify-center gap-2"
-                    onClick={() => loginWithGoogle()}
-                  >
-                    <svg className="h-5 w-5" viewBox="0 0 24 24">
-                      <path
-                        fill="#4285F4"
-                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                      />
-                      <path
-                        fill="#34A853"
-                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                      />
-                      <path
-                        fill="#FBBC05"
-                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                      />
-                      <path
-                        fill="#EA4335"
-                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                      />
-                    </svg>
-                    Continue with Google
-                  </Button>
                 </>
               )}
-            </form>
-          ) : (
-            <form onSubmit={handleAdminSubmit} className="space-y-5">
+
               <div className="flex items-center gap-2 text-primary mb-4">
                 <User className="h-5 w-5" />
                 <h3 className="font-semibold">Admin Account</h3>

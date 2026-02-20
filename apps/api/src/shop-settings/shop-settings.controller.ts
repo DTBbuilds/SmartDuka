@@ -106,4 +106,76 @@ export class ShopSettingsController {
     }
     return result;
   }
+
+  // =========================================================================
+  // Business Type Configuration Endpoints
+  // =========================================================================
+
+  /**
+   * Get all available business types for registration/dropdown.
+   * Public endpoint - no auth required for registration forms.
+   */
+  @Get('business-types/all')
+  getAvailableBusinessTypes() {
+    return this.service.getAvailableBusinessTypes();
+  }
+
+  /**
+   * Get business types grouped by category.
+   */
+  @Get('business-types/grouped')
+  getBusinessTypesGrouped() {
+    return this.service.getBusinessTypesGrouped();
+  }
+
+  /**
+   * Get full profile details for a specific business type.
+   */
+  @Get('business-types/profile/:typeId')
+  getBusinessTypeProfile(@Param('typeId') typeId: string) {
+    return this.service.getBusinessTypeProfile(typeId);
+  }
+
+  /**
+   * Get the active business type configuration for a shop.
+   */
+  @Get(':shopId/business-type-config')
+  async getBusinessTypeConfig(@Param('shopId') shopId: string) {
+    if (!shopId) {
+      throw new BadRequestException('Shop ID is required');
+    }
+    return this.service.getBusinessTypeConfig(shopId);
+  }
+
+  /**
+   * Apply/change a business type profile to a shop.
+   */
+  @Post(':shopId/business-type-config')
+  async applyBusinessTypeConfig(
+    @Param('shopId') shopId: string,
+    @Body() body: { businessType: string; overrides?: Record<string, any> },
+  ) {
+    if (!shopId) {
+      throw new BadRequestException('Shop ID is required');
+    }
+    if (!body.businessType) {
+      throw new BadRequestException('Business type is required');
+    }
+    return this.service.applyBusinessTypeConfig(shopId, body.businessType, body.overrides);
+  }
+
+  /**
+   * Toggle a specific feature for a shop.
+   */
+  @Put(':shopId/business-type-config/features/:featureName')
+  async updateBusinessTypeFeature(
+    @Param('shopId') shopId: string,
+    @Param('featureName') featureName: string,
+    @Body() body: { enabled: boolean },
+  ) {
+    if (!shopId || !featureName) {
+      throw new BadRequestException('Shop ID and feature name are required');
+    }
+    return this.service.updateBusinessTypeFeature(shopId, featureName, body.enabled);
+  }
 }

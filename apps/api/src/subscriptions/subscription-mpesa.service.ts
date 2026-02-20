@@ -1571,6 +1571,7 @@ export class SubscriptionMpesaService implements OnModuleInit {
         shopId: options.shopId,
         shopName: options.shopName,
         triggeredBy: 'payment_system',
+        templateName: 'payment_received_notification',
       });
 
       this.logger.log(`Payment notification sent to super admin for shop ${options.shopName}`);

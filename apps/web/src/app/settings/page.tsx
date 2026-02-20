@@ -37,7 +37,7 @@ export default function SettingsPage() {
   const settingsNavItems = [
     { id: 'shop', label: 'Shop Settings', icon: Store, description: 'Business information' },
     { id: 'mpesa', label: 'M-Pesa', icon: Smartphone, description: 'Payment configuration' },
-    { id: 'subscription', label: 'Subscription', icon: Crown, description: 'Plan & billing' },
+    { id: 'subscription', label: 'Plan', icon: Crown, description: 'Free plan details' },
     { id: 'profile', label: 'Profile', icon: User, description: 'Personal information' },
     { id: 'security', label: 'Security', icon: Lock, description: 'Password & access' },
   ];
@@ -590,8 +590,66 @@ export default function SettingsPage() {
   );
 }
 
+// FREE_MODE: SmartDuka is free for all users. Set to false to re-enable subscription management.
+const FREE_MODE = true;
+
 // Subscription Settings Tab Component
 function SubscriptionSettingsTab() {
+  // FREE_MODE: Show simple "Free Plan" card instead of complex subscription management
+  if (FREE_MODE) {
+    return (
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+              <Check className="h-5 w-5 text-green-600 dark:text-green-400" />
+            </div>
+            <div>
+              <CardTitle className="text-lg">Free Plan — Full Access</CardTitle>
+              <CardDescription>SmartDuka is 100% free and open source</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {['Unlimited Shops', 'Unlimited Staff', 'Unlimited Products', 'Full POS System', 'M-Pesa Integration', 'Barcode Scanning', 'Sales Analytics', 'Inventory Tracking', 'Smart Invoicing'].map((feature) => (
+              <div key={feature} className="flex items-center gap-2">
+                <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
+                <span className="text-sm text-foreground">{feature}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="bg-muted/50 rounded-xl p-4 space-y-2">
+            <div className="flex items-center gap-2">
+              <Shield className="h-4 w-4 text-primary" />
+              <span className="text-sm font-medium text-foreground">Open Source & Privacy-First</span>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              No subscriptions, no hidden fees, no user data collected at any level. 
+              Your business data stays completely private.
+            </p>
+          </div>
+
+          <div className="bg-rose-50 dark:bg-rose-950/20 rounded-xl p-4 border border-rose-200 dark:border-rose-800">
+            <p className="text-sm text-muted-foreground mb-3">
+              SmartDuka is built by a small team. If you find it valuable, consider supporting us with a voluntary donation.
+            </p>
+            <a 
+              href="https://wa.me/254729983567?text=Hello%20SmartDuka%2C%20I%20would%20like%20to%20make%20a%20donation%20to%20support%20the%20project"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
+            >
+              Donate via M-Pesa
+            </a>
+            <span className="ml-3 text-xs text-muted-foreground">Send to 0729 983 567</span>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   const router = useRouter();
   const searchParams = useSearchParams();
   const { subscription, loading: subLoading, changePlan, cancelSubscription, reactivateSubscription, toggleAutoRenew, refetch: refetchSubscription } = useSubscription();

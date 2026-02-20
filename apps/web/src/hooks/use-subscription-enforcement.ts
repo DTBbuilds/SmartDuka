@@ -54,18 +54,34 @@ function hasAuthToken(): boolean {
   return !!(localStorage.getItem('smartduka:token') || sessionStorage.getItem('smartduka:token'));
 }
 
+// FREE_MODE: SmartDuka is free for all users. Set to false to re-enable subscription enforcement.
+const FREE_MODE = true;
+
 /**
  * Hook to check subscription access level and enforce restrictions
  * This is the main hook for subscription enforcement on the frontend
  */
 export function useSubscriptionEnforcement() {
-  const [access, setAccess] = useState<SubscriptionAccessResult | null>(null);
+  const [access, setAccess] = useState<SubscriptionAccessResult | null>(
+    FREE_MODE ? {
+      accessLevel: 'full',
+      status: 'active',
+      message: 'SmartDuka is free for all users',
+      daysRemaining: 9999,
+      canMakePayment: false,
+    } : null
+  );
   const [warnings, setWarnings] = useState<SubscriptionWarning[]>([]);
-  const [permissions, setPermissions] = useState<OperationPermissions | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [permissions, setPermissions] = useState<OperationPermissions | null>(
+    FREE_MODE ? { canRead: true, canWrite: true, canUsePOS: true, canViewReports: true } : null
+  );
+  const [loading, setLoading] = useState(!FREE_MODE);
   const [error, setError] = useState<string | null>(null);
 
   const fetchAccess = useCallback(async () => {
+    // FREE_MODE: Skip all API calls — full access granted locally
+    if (FREE_MODE) return;
+
     if (!hasAuthToken()) {
       setLoading(false);
       setAccess(null);
@@ -86,14 +102,12 @@ export function useSubscriptionEnforcement() {
       setWarnings(warningsResult.warnings || []);
       setPermissions(permissionsResult);
     } catch (err: any) {
-      // 401 means not authenticated - don't show error
       if (err.statusCode === 401) {
         setAccess(null);
         setWarnings([]);
         setPermissions(null);
       } else {
         setError(err.message || 'Failed to check subscription status');
-        // On error, assume full access to not block users due to system errors
         setAccess({
           accessLevel: 'full',
           status: null,
@@ -115,31 +129,27 @@ export function useSubscriptionEnforcement() {
   useRefreshEvent(
     ['subscription:updated', 'subscription:created', 'subscription:reactivated', 'payment:completed'],
     () => {
-      fetchAccess();
+      if (!FREE_MODE) fetchAccess();
     },
     [fetchAccess]
   );
 
   // Computed properties
-  const isBlocked = access?.accessLevel === 'blocked' || access?.accessLevel === 'none';
-  const isReadOnly = access?.accessLevel === 'read_only';
-  const hasFullAccess = access?.accessLevel === 'full';
-  const requiresPayment = access?.canMakePayment && isBlocked;
+  const isBlocked = FREE_MODE ? false : (access?.accessLevel === 'blocked' || access?.accessLevel === 'none');
+  const isReadOnly = FREE_MODE ? false : access?.accessLevel === 'read_only';
+  const hasFullAccess = FREE_MODE ? true : access?.accessLevel === 'full';
+  const requiresPayment = FREE_MODE ? false : (access?.canMakePayment && isBlocked);
   
-  // Get the most critical warning
   const criticalWarning = warnings.find(w => w.severity === 'critical');
   const hasWarnings = warnings.length > 0;
   const hasActionRequired = warnings.some(w => w.actionRequired);
 
   return {
-    // Access state
     access,
     warnings,
     permissions,
     loading,
     error,
-    
-    // Computed properties
     isBlocked,
     isReadOnly,
     hasFullAccess,
@@ -147,8 +157,6 @@ export function useSubscriptionEnforcement() {
     criticalWarning,
     hasWarnings,
     hasActionRequired,
-    
-    // Actions
     refetch: fetchAccess,
   };
 }

@@ -59,6 +59,155 @@ export class Product {
   @Prop({ required: false })
   lotNumber?: string;
 
+  // --- Unit of Measure & Weight ---
+  @Prop({ required: false, default: 'piece' })
+  unitOfMeasure?: string;
+
+  @Prop({ required: false, min: 0 })
+  weight?: number;
+
+  @Prop({ required: false })
+  weightUnit?: string;
+
+  @Prop({ required: false, min: 0 })
+  pricePerUnit?: number;
+
+  // --- Serial / IMEI Tracking ---
+  @Prop({ required: false })
+  serialNumber?: string;
+
+  @Prop({ required: false })
+  imeiNumber?: string;
+
+  @Prop({ required: false, min: 0, default: 0 })
+  warrantyMonths?: number;
+
+  @Prop({ required: false })
+  warrantyExpiry?: Date;
+
+  // --- Pharmacy / Chemist Fields ---
+  @Prop({ required: false, enum: ['OTC', 'POM', 'P', 'controlled_II', 'controlled_III', 'controlled_IV', 'controlled_V', 'unscheduled'] })
+  drugSchedule?: string;
+
+  @Prop({ required: false })
+  dosageForm?: string;
+
+  @Prop({ required: false })
+  strength?: string;
+
+  @Prop({ required: false })
+  activeIngredient?: string;
+
+  @Prop({ required: false, default: false })
+  requiresPrescription?: boolean;
+
+  @Prop({ required: false })
+  storageConditions?: string;
+
+  @Prop({ required: false })
+  manufacturer?: string;
+
+  // --- Restaurant / Food Fields ---
+  @Prop({ type: [String], default: [] })
+  ingredients?: string[];
+
+  @Prop({ type: [String], default: [] })
+  allergens?: string[];
+
+  @Prop({ required: false, min: 0 })
+  preparationTime?: number;
+
+  @Prop({ required: false, min: 0 })
+  calorieCount?: number;
+
+  @Prop({ type: [Object], default: [] })
+  modifiers?: Array<{
+    name: string;
+    options: Array<{
+      label: string;
+      price: number;
+    }>;
+    required?: boolean;
+    multiSelect?: boolean;
+  }>;
+
+  // --- Clothing / Variant Fields ---
+  @Prop({ required: false })
+  size?: string;
+
+  @Prop({ required: false })
+  color?: string;
+
+  @Prop({ required: false })
+  material?: string;
+
+  @Prop({ required: false })
+  season?: string;
+
+  @Prop({ type: [Object], default: [] })
+  variants?: Array<{
+    sku?: string;
+    barcode?: string;
+    size?: string;
+    color?: string;
+    price: number;
+    cost?: number;
+    stock: number;
+  }>;
+
+  // --- Auto Parts Fields ---
+  @Prop({ required: false })
+  vehicleMake?: string;
+
+  @Prop({ required: false })
+  vehicleModel?: string;
+
+  @Prop({ required: false })
+  vehicleYear?: string;
+
+  @Prop({ required: false })
+  partNumber?: string;
+
+  @Prop({ required: false })
+  oemNumber?: string;
+
+  @Prop({ required: false, min: 0 })
+  coreCharge?: number;
+
+  // --- Hardware Fields ---
+  @Prop({ type: Object, default: {} })
+  dimensions?: {
+    length?: number;
+    width?: number;
+    height?: number;
+    unit?: string;
+  };
+
+  // --- Agro-Vet Fields ---
+  @Prop({ type: [String], default: [] })
+  targetSpecies?: string[];
+
+  @Prop({ required: false })
+  withdrawalPeriod?: string;
+
+  // --- Tiered / Volume Pricing ---
+  @Prop({ type: [Object], default: [] })
+  tieredPricing?: Array<{
+    minQuantity: number;
+    price: number;
+  }>;
+
+  // --- Tags ---
+  @Prop({ type: [String], default: [] })
+  tags?: string[];
+
+  // --- Service-based fields ---
+  @Prop({ required: false, min: 0 })
+  duration?: number;
+
+  @Prop({ required: false, default: false })
+  isService?: boolean;
+
   // PHASE 3: Reorder automation fields
   @Prop({ required: false, min: 0, default: 0 })
   reorderPoint?: number; // Minimum stock level to trigger reorder

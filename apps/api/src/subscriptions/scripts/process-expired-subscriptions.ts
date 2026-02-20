@@ -319,6 +319,8 @@ async function sendExpirationEmail(
       to: admin.email,
       subject: template.subject.replace('{{shopName}}', shop.name),
       html: template.getHtml(vars),
+      templateName: 'subscription_expired',
+      category: 'subscription',
     });
     return result.success;
   } catch {
@@ -355,6 +357,8 @@ async function sendPastDueEmail(
       to: admin.email,
       subject: template.subject.replace('{{shopName}}', shop.name),
       html: template.getHtml(vars),
+      templateName: 'subscription_past_due_day1',
+      category: 'subscription',
     });
     return result.success;
   } catch {
@@ -386,6 +390,8 @@ async function sendSuspensionEmail(
       to: admin.email,
       subject: template.subject.replace('{{shopName}}', shop.name),
       html: template.getHtml(vars),
+      templateName: 'subscription_suspended_notice',
+      category: 'subscription',
     });
     return result.success;
   } catch {

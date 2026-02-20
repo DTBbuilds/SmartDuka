@@ -58,11 +58,28 @@ export class SubscriptionEnforcementService {
     private readonly planModel: Model<SubscriptionPlanDocument>,
   ) {}
 
+  // FREE_MODE: SmartDuka is currently free and open source for all users.
+  // Set to false to re-enable subscription enforcement when monetization is ready.
+  private readonly FREE_MODE = true;
+
   /**
    * Check subscription access level for a shop
    * This is the main method used by guards and frontend
+   * 
+   * FREE_MODE: Always returns FULL access — SmartDuka is free for everyone.
    */
   async checkAccess(shopId: string): Promise<SubscriptionAccessResult> {
+    // FREE_MODE: Grant full access to all users regardless of subscription status
+    if (this.FREE_MODE) {
+      return {
+        accessLevel: SubscriptionAccessLevel.FULL,
+        status: SubscriptionStatus.ACTIVE,
+        message: 'SmartDuka is free for all users',
+        daysRemaining: 9999,
+        canMakePayment: false,
+      };
+    }
+
     try {
       const subscription = await this.subscriptionModel.findOne({
         shopId: new Types.ObjectId(shopId),
@@ -97,10 +114,7 @@ export class SubscriptionEnforcementService {
 
       switch (subscription.status) {
         case SubscriptionStatus.ACTIVE:
-          // Check if subscription period has actually ended (especially important for daily plans)
           if (now > subscription.currentPeriodEnd) {
-            // Period has ended - subscription should be expired/past due
-            // For daily plans without auto-renew, block immediately
             if (subscription.billingCycle === 'daily' || !subscription.autoRenew) {
               return {
                 accessLevel: SubscriptionAccessLevel.BLOCKED,
@@ -111,7 +125,6 @@ export class SubscriptionEnforcementService {
                 subscription: subscriptionInfo,
               };
             }
-            // For auto-renew subscriptions, give grace period (read-only access)
             return {
               accessLevel: SubscriptionAccessLevel.READ_ONLY,
               status: SubscriptionStatus.PAST_DUE,
@@ -131,10 +144,8 @@ export class SubscriptionEnforcementService {
           };
 
         case SubscriptionStatus.TRIAL:
-          // Check if trial has expired (14 days)
           const trialEnd = subscription.trialEndDate || subscription.currentPeriodEnd;
           if (now > trialEnd) {
-            // Trial has expired - BLOCK access until they upgrade
             return {
               accessLevel: SubscriptionAccessLevel.BLOCKED,
               status: subscription.status,
@@ -144,7 +155,6 @@ export class SubscriptionEnforcementService {
               subscription: subscriptionInfo,
             };
           }
-          // Trial still active
           const trialDaysRemaining = Math.max(
             0,
             Math.ceil((trialEnd.getTime() - now.getTime()) / (24 * 60 * 60 * 1000))
@@ -159,8 +169,6 @@ export class SubscriptionEnforcementService {
           };
 
         case SubscriptionStatus.PAST_DUE:
-          // IMMEDIATE blocking for past_due - no grace period for operations
-          // Users must pay to restore access, no read-only mode
           return {
             accessLevel: SubscriptionAccessLevel.BLOCKED,
             status: subscription.status,
@@ -224,7 +232,6 @@ export class SubscriptionEnforcementService {
       }
     } catch (error) {
       this.logger.error(`Error checking subscription access for shop ${shopId}:`, error);
-      // On error, allow access but log - don't block users due to system errors
       return {
         accessLevel: SubscriptionAccessLevel.FULL,
         status: null,
@@ -240,6 +247,9 @@ export class SubscriptionEnforcementService {
    * Used for displaying alerts in the UI
    */
   async getWarnings(shopId: string): Promise<SubscriptionWarning[]> {
+    // FREE_MODE: No subscription warnings needed
+    if (this.FREE_MODE) return [];
+
     const warnings: SubscriptionWarning[] = [];
 
     try {
@@ -496,6 +506,9 @@ export class SubscriptionEnforcementService {
     shopId: string,
     operation: 'read' | 'write' | 'delete' | 'pos' | 'reports',
   ): Promise<{ allowed: boolean; reason?: string }> {
+    // FREE_MODE: All operations allowed
+    if (this.FREE_MODE) return { allowed: true };
+
     const access = await this.checkAccess(shopId);
 
     switch (access.accessLevel) {

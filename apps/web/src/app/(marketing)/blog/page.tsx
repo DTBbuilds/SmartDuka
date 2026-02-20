@@ -141,7 +141,7 @@ export default function BlogPage() {
                 href="/register-shop" 
                 className="px-5 py-2.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
               >
-                Start Free Trial
+                Get Started Free
               </Link>
             </div>
           </div>

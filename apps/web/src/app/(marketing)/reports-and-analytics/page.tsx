@@ -52,7 +52,7 @@ export default function ReportsAndAnalyticsPage() {
             </Link>
             <div className="flex items-center gap-4">
               <Link href="/pricing" className="text-gray-600 hover:text-gray-900 font-medium">Pricing</Link>
-              <Link href="/register-shop" className="px-5 py-2.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors">Start Free Trial</Link>
+              <Link href="/register-shop" className="px-5 py-2.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors">Get Started Free</Link>
             </div>
           </div>
         </div>
@@ -66,7 +66,7 @@ export default function ReportsAndAnalyticsPage() {
             <a href="https://www.dtbtech.org" className="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer">DTB Technologies</a>.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link href="/register-shop" className="inline-flex items-center gap-2 px-8 py-4 bg-blue-600 text-white rounded-xl font-bold text-lg hover:bg-blue-700 shadow-lg">Start Free Trial <ArrowRight className="h-5 w-5" /></Link>
+            <Link href="/register-shop" className="inline-flex items-center gap-2 px-8 py-4 bg-blue-600 text-white rounded-xl font-bold text-lg hover:bg-blue-700 shadow-lg">Get Started Free <ArrowRight className="h-5 w-5" /></Link>
             <Link href="/pricing" className="inline-flex items-center gap-2 px-8 py-4 border-2 border-gray-300 text-gray-700 rounded-xl font-bold text-lg hover:border-gray-400">View Pricing</Link>
           </div>
         </div>
@@ -174,7 +174,7 @@ export default function ReportsAndAnalyticsPage() {
           <h2 className="text-3xl font-bold text-white mb-6">Try SmartDuka Reports &amp; Analytics</h2>
           <p className="text-xl text-blue-100 mb-8">Start your free trial today. No credit card required.</p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link href="/register-shop" className="px-8 py-4 bg-white text-blue-600 rounded-xl font-bold text-lg hover:bg-blue-50 shadow-lg">Start Free Trial</Link>
+            <Link href="/register-shop" className="px-8 py-4 bg-white text-blue-600 rounded-xl font-bold text-lg hover:bg-blue-50 shadow-lg">Get Started Free</Link>
             <Link href="/" className="px-8 py-4 border-2 border-white text-white rounded-xl font-bold text-lg hover:bg-white/10">Back to Home</Link>
           </div>
         </div>

@@ -684,6 +684,8 @@ export class InvoiceService {
         subject: `Invoice ${invoice.invoiceNumber} from ${fromName}`,
         html,
         from: fromEmail,
+        templateName: 'invoice_email',
+        category: 'billing',
       });
     } catch (error: any) {
       this.logger.error(`Failed to send invoice email for ${invoice._id}: ${error.message}`);

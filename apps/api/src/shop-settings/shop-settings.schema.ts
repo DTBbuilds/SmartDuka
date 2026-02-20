@@ -36,6 +36,49 @@ export class ShopSettings extends Document {
   @Prop({ type: Map, of: Object, default: {} })
   categoryTaxRates: Record<string, { rate: number; exempt: boolean }>;
 
+  // Business Type Configuration
+  @Prop({ type: Object, default: {} })
+  businessTypeConfig?: {
+    // The canonical business type ID
+    businessTypeId?: string;
+    // Inventory tracking mode
+    inventoryMode?: string;
+    // POS interaction mode
+    posMode?: string;
+    // Default unit of measure
+    defaultUnit?: string;
+    // Available units of measure
+    availableUnits?: string[];
+    // Feature flags (overridable per shop)
+    features?: Record<string, boolean>;
+    // Product field visibility
+    productFields?: Record<string, string>;
+    // POS configuration
+    posConfig?: {
+      showBarcodeScanner?: boolean;
+      showWeightInput?: boolean;
+      showModifiers?: boolean;
+      showTableSelector?: boolean;
+      showOrderType?: boolean;
+      showQuickSellGrid?: boolean;
+      showSerialPrompt?: boolean;
+      showPrescriptionFields?: boolean;
+      receiptTitle?: string;
+      defaultOrderType?: string;
+    };
+    // Receipt configuration
+    receiptConfig?: {
+      showExpiryDate?: boolean;
+      showBatchNumber?: boolean;
+      showSerialNumber?: boolean;
+      showWeight?: boolean;
+      showPrescriptionInfo?: boolean;
+      showTableNumber?: boolean;
+      showOrderType?: boolean;
+      footerMessage?: string;
+    };
+  };
+
   // Receipt settings
   @Prop({
     type: {
@@ -110,3 +153,4 @@ export class ShopSettings extends Document {
 
 export const ShopSettingsSchema = SchemaFactory.createForClass(ShopSettings);
 // Note: shopId already has index from @Prop({ index: true })
+ShopSettingsSchema.index({ 'businessTypeConfig.businessTypeId': 1 });

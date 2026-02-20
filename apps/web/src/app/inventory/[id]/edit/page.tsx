@@ -11,6 +11,7 @@ import Link from "next/link";
 import { TableSkeleton } from "@/components/shared/loading-skeleton";
 import { CategorySelectWithCreate } from "@/components/category-select-with-create";
 import { ProductImageUpload } from "@/components/product-image-upload";
+import BusinessTypeProductFields from "@/components/inventory/business-type-product-fields";
 
 interface Product {
   _id: string;
@@ -26,6 +27,7 @@ interface Product {
   lowStockThreshold: number;
   tax: number;
   status: string;
+  [key: string]: any;
 }
 
 interface Category {
@@ -43,7 +45,7 @@ interface Supplier {
 }
 
 export default function EditProductPage() {
-  const { token } = useAuth();
+  const { token, shop } = useAuth();
   const router = useRouter();
   const params = useParams();
   const productId = params.id as string;
@@ -53,6 +55,8 @@ export default function EditProductPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [businessTypeConfig, setBusinessTypeConfig] = useState<any>(null);
+  const [businessTypeFields, setBusinessTypeFields] = useState<Record<string, any>>({});
 
   const [formData, setFormData] = useState({
     name: "",
@@ -77,6 +81,7 @@ export default function EditProductPage() {
     fetchProduct();
     fetchCategories();
     fetchSuppliers();
+    fetchBusinessTypeConfig();
   }, [productId]);
 
   const fetchProduct = async () => {
@@ -109,6 +114,25 @@ export default function EditProductPage() {
           tax: data.tax || 16,
           status: data.status || "active",
         });
+        // Populate business-type-specific fields from product data
+        const btFields: Record<string, any> = {};
+        const btFieldKeys = [
+          'unitOfMeasure', 'weight', 'weightUnit', 'pricePerUnit',
+          'serialNumber', 'imeiNumber', 'warrantyMonths', 'warrantyExpiry',
+          'drugSchedule', 'dosageForm', 'strength', 'activeIngredient',
+          'requiresPrescription', 'storageConditions', 'manufacturer',
+          'ingredients', 'allergens', 'preparationTime', 'calorieCount', 'modifiers',
+          'size', 'color', 'material', 'season', 'variants',
+          'vehicleMake', 'vehicleModel', 'vehicleYear', 'partNumber', 'oemNumber', 'coreCharge',
+          'dimensions', 'targetSpecies', 'withdrawalPeriod',
+          'tieredPricing', 'duration', 'isService',
+        ];
+        for (const key of btFieldKeys) {
+          if (data[key] !== undefined && data[key] !== null) {
+            btFields[key] = data[key];
+          }
+        }
+        setBusinessTypeFields(btFields);
       }
     } catch (error) {
       console.error("Failed to fetch product:", error);
@@ -157,6 +181,26 @@ export default function EditProductPage() {
     }
   };
 
+  const fetchBusinessTypeConfig = async () => {
+    try {
+      const apiUrl = config.apiUrl;
+      const res = await fetch(`${apiUrl}/shop-settings/${shop?.id}/business-type-config`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const text = await res.text();
+        const data = text ? JSON.parse(text) : null;
+        setBusinessTypeConfig(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch business type config:', error);
+    }
+  };
+
+  const handleBusinessTypeFieldChange = (field: string, value: any) => {
+    setBusinessTypeFields((prev) => ({ ...prev, [field]: value }));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
@@ -164,9 +208,10 @@ export default function EditProductPage() {
     try {
       const apiUrl = config.apiUrl;
       
-      // Clean up form data - remove empty IDs
+      // Clean up form data - remove empty IDs, merge business-type fields
       const payload = {
         ...formData,
+        ...businessTypeFields,
         categoryId: formData.categoryId || undefined,
         preferredSupplierId: formData.preferredSupplierId || undefined,
       };
@@ -410,6 +455,23 @@ export default function EditProductPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* Business-Type-Specific Fields */}
+        {businessTypeConfig && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Business-Specific Details</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <BusinessTypeProductFields
+                config={businessTypeConfig}
+                productData={businessTypeFields}
+                onChange={handleBusinessTypeFieldChange}
+                mode="edit"
+              />
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader>

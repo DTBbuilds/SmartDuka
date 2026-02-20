@@ -22,6 +22,44 @@ export class OrderItem {
 
   @Prop({ default: 0, min: 0 })
   cost?: number;
+
+  // --- Business-type-specific item fields ---
+  @Prop()
+  unitOfMeasure?: string;
+
+  @Prop({ min: 0 })
+  weight?: number;
+
+  @Prop()
+  serialNumber?: string;
+
+  @Prop()
+  imeiNumber?: string;
+
+  @Prop()
+  batchNumber?: string;
+
+  @Prop()
+  expiryDate?: Date;
+
+  // Restaurant modifiers applied to this item
+  @Prop({ type: [Object], default: [] })
+  modifiers?: Array<{
+    name: string;
+    option: string;
+    price: number;
+  }>;
+
+  @Prop()
+  specialInstructions?: string;
+
+  // Kitchen status tracking
+  @Prop({ enum: ['pending', 'preparing', 'ready', 'served'], default: 'pending' })
+  kitchenStatus?: string;
+
+  // Prescription reference (pharmacy)
+  @Prop()
+  prescriptionRef?: string;
 }
 
 export const OrderItemSchema = SchemaFactory.createForClass(OrderItem);
@@ -159,6 +197,46 @@ export class Order {
   // Shift reference
   @Prop({ type: Types.ObjectId, ref: 'Shift' })
   shiftId?: Types.ObjectId;
+
+  // --- Business-type-specific order fields ---
+
+  // Restaurant: order type
+  @Prop({ enum: ['standard', 'dine_in', 'takeaway', 'delivery'], default: 'standard' })
+  orderType?: string;
+
+  // Restaurant: table number
+  @Prop()
+  tableNumber?: string;
+
+  // Restaurant: number of guests
+  @Prop({ min: 0 })
+  guestCount?: number;
+
+  // Restaurant: tips
+  @Prop({ default: 0, min: 0 })
+  tipAmount?: number;
+
+  // Restaurant: kitchen status
+  @Prop({ enum: ['new', 'sent_to_kitchen', 'preparing', 'ready', 'served', 'completed'], default: 'new' })
+  kitchenStatus?: string;
+
+  // Delivery info
+  @Prop()
+  deliveryAddress?: string;
+
+  @Prop()
+  deliveryPhone?: string;
+
+  // Service-based: appointment reference
+  @Prop()
+  appointmentId?: string;
+
+  // Service-based: service provider/staff
+  @Prop()
+  serviceProviderId?: string;
+
+  @Prop()
+  serviceProviderName?: string;
 
   // Soft delete support
   @Prop({ required: false })

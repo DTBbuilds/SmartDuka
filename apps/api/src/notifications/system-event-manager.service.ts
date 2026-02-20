@@ -303,6 +303,8 @@ export class SystemEventManagerService implements OnModuleInit {
       subject: `Receipt from ${shop.shopName} - Order #${data.orderNumber}`,
       html: receiptHtml,
       from: `${shop.shopName} <noreply@smartduka.co.ke>`,
+      templateName: 'receipt_email',
+      category: 'receipt',
     });
 
     this.logger.log(`Receipt sent to ${data.customerEmail} for order ${data.orderNumber}`);

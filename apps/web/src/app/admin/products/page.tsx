@@ -112,7 +112,7 @@ type Category = {
 
 function ProductsContent() {
   const router = useRouter();
-  const { user, token } = useAuth();
+  const { user, token, shop } = useAuth();
   const { currentBranch } = useBranch();
   const { toasts, toast, dismiss } = useToast();
 
@@ -136,6 +136,7 @@ function ProductsContent() {
   const [stockHistoryProduct, setStockHistoryProduct] = useState<Product | null>(null);
   const [totalProducts, setTotalProducts] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [businessTypeConfig, setBusinessTypeConfig] = useState<any>(null);
   const itemsPerPage = 20;
   const fetchedRef = useRef(false);
   
@@ -171,9 +172,10 @@ function ProductsContent() {
       const branchParam = branchId ? `branchId=${branchId}` : '';
       const branchQuery = branchParam ? `&${branchParam}` : '';
 
-      const [productsRes, categoriesRes] = await Promise.all([
+      const [productsRes, categoriesRes, btConfigRes] = await Promise.all([
         fetch(`${base}/inventory/products?limit=200${branchQuery}`, { headers }),
         fetch(`${base}/inventory/categories`, { headers }),
+        !businessTypeConfig && shop?.id ? fetch(`${base}/shop-settings/${shop.id}/business-type-config`, { headers }) : Promise.resolve(null),
       ]);
 
       if (productsRes.ok) {
@@ -194,6 +196,13 @@ function ProductsContent() {
         setCache(CATEGORIES_CACHE_KEY, categoriesArray);
       } else {
         setCategories([]);
+      }
+
+      if (btConfigRes && btConfigRes.ok) {
+        try {
+          const btData = await btConfigRes.json();
+          setBusinessTypeConfig(btData);
+        } catch { /* ignore */ }
       }
     } catch (err: any) {
       console.error('Error loading data:', err);
@@ -409,6 +418,7 @@ function ProductsContent() {
               <QuickAddProductForm
                 categories={categories}
                 token={token || ''}
+                businessTypeConfig={businessTypeConfig}
                 onSubmit={async (product: any) => {
                   if (!token) return;
                   try {

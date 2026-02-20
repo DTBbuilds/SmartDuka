@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "turbo run dev --parallel --filter=@smartduka/web --filter=@smartduka/api",
+    "build:types": "pnpm --filter @smartduka/business-types run build",
+    "dev": "pnpm run build:types && turbo run dev --parallel --filter=@smartduka/web --filter=@smartduka/api",
     "dev:web": "pnpm --filter @smartduka/web dev",
     "dev:api": "pnpm --filter @smartduka/api start:dev",
     "dev:ngrok": "node scripts/dev-with-ngrok.js",

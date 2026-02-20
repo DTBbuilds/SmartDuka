@@ -15,21 +15,22 @@ import {
 import { FAQJsonLd, ProductJsonLd } from '@/components/seo';
 
 export const metadata: Metadata = {
-  title: 'SmartDuka Pricing - Affordable POS Plans for Kenya | From KES 2,500/month',
-  description: 'Transparent pricing for SmartDuka POS system. Plans from KES 2,500/month with M-Pesa integration, inventory management, and 24/7 support. No hidden fees. Start free trial!',
+  title: 'SmartDuka Pricing - 100% Free POS System | No Subscriptions',
+  description: 'SmartDuka is completely free for all users. No subscriptions, no hidden fees, no limits. Full POS system with M-Pesa integration, inventory management, and analytics — free forever. Open source and privacy-first.',
   keywords: [
-    'POS pricing Kenya',
-    'affordable POS system',
-    'SmartDuka price',
-    'point of sale cost Kenya',
-    'retail software pricing',
-    'M-Pesa POS cost',
-    'inventory software price',
-    'cheap POS Kenya',
+    'free POS system',
+    'free point of sale',
+    'SmartDuka free',
+    'free POS Kenya',
+    'no subscription POS',
+    'open source POS',
+    'free inventory management',
+    'free retail software',
+    'free M-Pesa POS',
   ],
   openGraph: {
-    title: 'SmartDuka Pricing - Affordable POS Plans | From KES 2,500/month',
-    description: 'Transparent, affordable pricing for Kenya\'s best POS system. All plans include M-Pesa integration.',
+    title: 'SmartDuka – 100% Free POS System | No Subscriptions Ever',
+    description: 'SmartDuka is completely free. No subscriptions, no hidden fees. Full POS, inventory, analytics — all free forever.',
     type: 'website',
     locale: 'en_KE',
   },
@@ -38,165 +39,63 @@ export const metadata: Metadata = {
   },
 };
 
-const plans = [
-  {
-    code: 'starter',
-    name: 'Starter',
-    description: 'Perfect for small shops',
-    monthlyPrice: 2500,
-    annualPrice: 25000,
-    setupPrice: 5000,
-    maxShops: 1,
-    maxEmployees: 2,
-    maxProducts: 500,
-    features: [
-      'Full POS System',
-      'M-Pesa Integration',
-      'Inventory Tracking',
-      'Sales Reports',
-      'Email Support',
-    ],
-    colorTheme: 'blue',
-    annualSavings: 5000,
-  },
-  {
-    code: 'business',
-    name: 'Business',
-    description: 'Growing businesses',
-    monthlyPrice: 5000,
-    annualPrice: 50000,
-    setupPrice: 10000,
-    maxShops: 2,
-    maxEmployees: 5,
-    maxProducts: 2000,
-    features: [
-      'Everything in Starter',
-      'Multi-Branch Support',
-      'Employee Management',
-      'Advanced Analytics',
-      'Priority Support',
-    ],
-    badge: 'Popular',
-    colorTheme: 'green',
-    annualSavings: 10000,
-  },
-  {
-    code: 'professional',
-    name: 'Professional',
-    description: 'Multiple locations',
-    monthlyPrice: 10000,
-    annualPrice: 100000,
-    setupPrice: 15000,
-    maxShops: 5,
-    maxEmployees: 15,
-    maxProducts: 10000,
-    features: [
-      'Everything in Business',
-      'Stock Transfers',
-      'Customer Loyalty',
-      'API Access',
-      'Dedicated Support',
-    ],
-    colorTheme: 'purple',
-    annualSavings: 20000,
-  },
-  {
-    code: 'enterprise',
-    name: 'Enterprise',
-    description: 'Large operations',
-    monthlyPrice: 15000,
-    annualPrice: 150000,
-    setupPrice: 25000,
-    maxShops: 20,
-    maxEmployees: 50,
-    maxProducts: 50000,
-    features: [
-      'Everything in Professional',
-      'Unlimited Branches',
-      'Custom Integrations',
-      'On-site Training',
-      'SLA Guarantee',
-    ],
-    badge: 'Best Value',
-    colorTheme: 'gold',
-    annualSavings: 30000,
-  },
+const allFeatures = [
+  'Full POS System',
+  'M-Pesa Integration',
+  'Inventory Tracking',
+  'Sales Reports & Analytics',
+  'Barcode Scanning',
+  'Multi-Branch Support',
+  'Employee Management',
+  'Stock Transfers',
+  'Smart Invoicing',
+  'AI-Powered Insights',
+  'Unlimited Shops',
+  'Unlimited Staff',
+  'Unlimited Products',
+  '24/7 Support',
 ];
 
 const faqs = [
   {
-    question: 'What\'s included in the setup price?',
-    answer: 'The setup price includes a site survey, initial stocktake of your products, system setup and configuration, staff training, ongoing support, and 3 months of free subscription.',
+    question: 'Is SmartDuka really free?',
+    answer: 'Yes! SmartDuka is 100% free for all users. There are no subscriptions, no hidden fees, no premium tiers, and no limits. Every feature is available to every user, forever.',
   },
   {
-    question: 'Can I upgrade or downgrade my plan?',
-    answer: 'Yes! You can upgrade or downgrade your plan at any time. When upgrading, you\'ll only pay the prorated difference. Downgrades take effect at the end of your billing period.',
+    question: 'Why is SmartDuka free?',
+    answer: 'SmartDuka is an open source project built to empower small businesses. We believe every retailer deserves access to professional POS tools without financial barriers.',
   },
   {
-    question: 'How do I pay for my subscription?',
-    answer: 'We accept M-Pesa payments for all subscriptions. You\'ll receive an STK push to your phone when payment is due. You can also pay via bank transfer.',
+    question: 'Will SmartDuka ever start charging?',
+    answer: 'SmartDuka is committed to remaining free. If premium features are added in the future, all current features will remain free forever.',
   },
   {
-    question: 'What happens if I exceed my limits?',
-    answer: 'If you reach your plan limits (shops, employees, or products), you\'ll be prompted to upgrade to a higher plan. Your existing data is never deleted.',
+    question: 'Do you collect any user data?',
+    answer: 'No. SmartDuka does not collect, sell, or share any user data at any level. Your business data stays completely private and under your control.',
   },
   {
-    question: 'Is there a free trial?',
-    answer: 'Yes! All plans come with a 14-day free trial. No credit card required. You can test all features before committing.',
+    question: 'How can I support SmartDuka?',
+    answer: 'You can support SmartDuka with a voluntary M-Pesa donation to 0729 983 567. Donations help us maintain and improve the system. They are entirely optional and do not unlock any additional features.',
   },
   {
-    question: 'Do you offer discounts for annual payment?',
-    answer: 'Yes! Pay annually and save up to 17% compared to monthly payments. All annual plans include additional benefits.',
+    question: 'Is SmartDuka open source?',
+    answer: 'Yes! SmartDuka is fully open source. You can inspect the code, suggest improvements, and contribute to the project.',
   },
 ];
 
-const planColors: Record<string, { 
-  gradient: string; 
-  border: string; 
-  button: string;
-  badge: string;
-}> = {
-  blue: { 
-    gradient: 'from-blue-600 to-blue-700', 
-    border: 'border-blue-300',
-    button: 'bg-blue-600 hover:bg-blue-700',
-    badge: 'bg-blue-600',
-  },
-  green: { 
-    gradient: 'from-emerald-600 to-emerald-700', 
-    border: 'border-emerald-300',
-    button: 'bg-emerald-600 hover:bg-emerald-700',
-    badge: 'bg-emerald-600',
-  },
-  purple: { 
-    gradient: 'from-violet-600 to-violet-700', 
-    border: 'border-violet-300',
-    button: 'bg-violet-600 hover:bg-violet-700',
-    badge: 'bg-violet-600',
-  },
-  gold: { 
-    gradient: 'from-amber-500 to-orange-600', 
-    border: 'border-amber-400',
-    button: 'bg-amber-600 hover:bg-amber-700',
-    badge: 'bg-amber-600',
-  },
-};
 
 export default function PricingPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       <FAQJsonLd faqs={faqs} />
-      {plans.map((plan) => (
-        <ProductJsonLd 
-          key={plan.code}
-          plan={{
-            name: plan.name,
-            description: plan.description,
-            price: plan.monthlyPrice,
-            priceCurrency: 'KES',
-          }} 
-        />
-      ))}
+      <ProductJsonLd 
+        plan={{
+          name: 'Free Plan',
+          description: 'SmartDuka is 100% free for all users. No subscriptions, no hidden fees.',
+          price: 0,
+          priceCurrency: 'KES',
+        }} 
+      />
 
       {/* Header */}
       <header className="bg-white border-b">
@@ -232,119 +131,59 @@ export default function PricingPage() {
       {/* Hero Section */}
       <section className="py-16 px-4 sm:px-6 lg:px-8">
         <div className="max-w-4xl mx-auto text-center">
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-green-100 rounded-full text-green-700 text-sm font-medium mb-6">
+            <Shield className="h-4 w-4" />
+            Open Source &amp; Privacy-First
+          </div>
           <h1 className="text-4xl sm:text-5xl font-bold text-gray-900 mb-6">
-            Simple, Transparent Pricing
+            100% Free. No Catch.
           </h1>
           <p className="text-xl text-gray-600 mb-8">
-            Choose the perfect plan for your business. All plans include M-Pesa integration, 
-            inventory management, and 24/7 support. No hidden fees.
+            SmartDuka is completely free for everyone. No subscriptions, no hidden fees, 
+            no premium tiers. Every feature is available to every user, forever.
           </p>
         </div>
       </section>
 
-      {/* Pricing Cards */}
+      {/* Free Plan Card */}
       <section className="pb-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {plans.map((plan) => {
-              const colors = planColors[plan.colorTheme];
-              const isPopular = plan.badge === 'Popular';
+        <div className="max-w-2xl mx-auto">
+          <div className="relative bg-white rounded-2xl border-2 border-green-400 shadow-xl overflow-hidden ring-4 ring-green-500 ring-offset-2">
+            <div className="absolute top-0 right-0 bg-green-600 text-white text-xs font-bold px-4 py-1.5 rounded-bl-xl">
+              Free Forever
+            </div>
 
-              return (
-                <div
-                  key={plan.code}
-                  className={`relative bg-white rounded-2xl border-2 ${colors.border} shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden ${
-                    isPopular ? 'ring-4 ring-emerald-500 ring-offset-2 scale-105 z-10' : ''
-                  }`}
-                >
-                  {plan.badge && (
-                    <div className={`absolute top-0 right-0 ${colors.badge} text-white text-xs font-bold px-4 py-1.5 rounded-bl-xl`}>
-                      {plan.badge}
+            <div className="bg-gradient-to-br from-green-600 to-emerald-700 p-8 text-center">
+              <h2 className="text-3xl font-bold text-white">SmartDuka</h2>
+              <p className="text-white/90 mt-1">Everything you need — completely free</p>
+              <div className="mt-4">
+                <span className="text-6xl font-extrabold text-white">Free</span>
+                <p className="text-white/80 mt-1">No subscriptions. No limits. Forever.</p>
+              </div>
+            </div>
+
+            <div className="p-8">
+              <div className="grid grid-cols-2 gap-3">
+                {allFeatures.map((feature, idx) => (
+                  <div key={idx} className="flex items-center gap-3">
+                    <div className="w-5 h-5 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                      <Check className="h-3 w-3 text-emerald-600" />
                     </div>
-                  )}
-
-                  <div className={`bg-gradient-to-br ${colors.gradient} p-6`}>
-                    <h2 className="text-2xl font-bold text-white">{plan.name}</h2>
-                    <p className="text-white/90 text-sm mt-1">{plan.description}</p>
+                    <span className="text-gray-700 text-sm">{feature}</span>
                   </div>
+                ))}
+              </div>
+            </div>
 
-                  <div className="p-6 border-b border-gray-200">
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-base font-semibold text-gray-600">KES</span>
-                      <span className="text-4xl font-extrabold text-gray-900">
-                        {plan.monthlyPrice.toLocaleString()}
-                      </span>
-                      <span className="text-gray-600">/month</span>
-                    </div>
-                    <p className="text-sm text-emerald-600 font-medium mt-2">
-                      Save KES {plan.annualSavings.toLocaleString()} annually
-                    </p>
-                  </div>
-
-                  <div className="p-6 space-y-4 border-b border-gray-200">
-                    <div className="flex items-center gap-4">
-                      <div className="p-2 bg-gray-100 rounded-lg">
-                        <Store className="h-5 w-5 text-gray-600" />
-                      </div>
-                      <div>
-                        <p className="font-bold text-gray-900">{plan.maxShops} Shop{plan.maxShops > 1 ? 's' : ''}</p>
-                        <p className="text-sm text-gray-500">Manage locations</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <div className="p-2 bg-gray-100 rounded-lg">
-                        <Users className="h-5 w-5 text-gray-600" />
-                      </div>
-                      <div>
-                        <p className="font-bold text-gray-900">Up to {plan.maxEmployees} Employees</p>
-                        <p className="text-sm text-gray-500">Cashiers & Staff</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <div className="p-2 bg-gray-100 rounded-lg">
-                        <Package className="h-5 w-5 text-gray-600" />
-                      </div>
-                      <div>
-                        <p className="font-bold text-gray-900">{plan.maxProducts.toLocaleString()} Products</p>
-                        <p className="text-sm text-gray-500">SKUs in inventory</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="p-6 space-y-3">
-                    {plan.features.map((feature, idx) => (
-                      <div key={idx} className="flex items-center gap-3">
-                        <div className="w-5 h-5 rounded-full bg-emerald-100 flex items-center justify-center">
-                          <Check className="h-3 w-3 text-emerald-600" />
-                        </div>
-                        <span className="text-gray-700 text-sm">{feature}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="px-6 pb-4">
-                    <div className="bg-gray-100 rounded-xl p-4">
-                      <p className="font-bold text-gray-900">
-                        Setup: KES {plan.setupPrice.toLocaleString()}
-                      </p>
-                      <p className="text-sm text-gray-600 mt-1">
-                        Includes training & 3 months free
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="p-6 pt-2">
-                    <Link
-                      href={`/register-shop?plan=${plan.code}`}
-                      className={`flex items-center justify-center gap-2 w-full py-3.5 ${colors.button} text-white rounded-xl font-bold transition-all`}
-                    >
-                      Start Free Trial
-                      <ArrowRight className="h-5 w-5" />
-                    </Link>
-                  </div>
-                </div>
-              );
-            })}
+            <div className="px-8 pb-8">
+              <Link
+                href="/register-shop"
+                className="flex items-center justify-center gap-2 w-full py-4 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold text-lg transition-all shadow-lg"
+              >
+                Get Started — It&apos;s Free
+                <ArrowRight className="h-5 w-5" />
+              </Link>
+            </div>
           </div>
         </div>
       </section>
@@ -354,7 +193,7 @@ export default function PricingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
             <h2 className="text-3xl font-bold text-gray-900">Everything You Need to Run Your Business</h2>
-            <p className="text-gray-600 mt-2">All plans include these powerful features</p>
+            <p className="text-gray-600 mt-2">All included free with SmartDuka</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
@@ -433,7 +272,7 @@ export default function PricingPage() {
               href="/register-shop"
               className="px-8 py-3 bg-white text-blue-600 rounded-xl font-semibold hover:bg-blue-50 transition-colors"
             >
-              Start Free Trial
+              Get Started Free
             </Link>
             <a
               href="tel:+254729983567"

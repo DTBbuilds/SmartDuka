@@ -74,6 +74,9 @@ const planColors: Record<string, {
   },
 };
 
+// FREE_MODE: SmartDuka is free — skip plan selection entirely
+const FREE_MODE = true;
+
 export default function SelectPlanPage() {
   const router = useRouter();
   const { user, shop, token } = useAuth();
@@ -84,6 +87,13 @@ export default function SelectPlanPage() {
   const [selectedPlanCode, setSelectedPlanCode] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
+
+  // FREE_MODE: Redirect straight to dashboard — no plan selection needed
+  useEffect(() => {
+    if (FREE_MODE) {
+      router.replace('/admin/dashboard');
+    }
+  }, [router]);
 
   // Redirect if not authenticated
   useEffect(() => {

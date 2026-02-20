@@ -141,7 +141,7 @@ export default function MpesaFeaturePage() {
                 href="/register-shop" 
                 className="px-5 py-2.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
               >
-                Start Free Trial
+                Get Started Free
               </Link>
             </div>
           </div>
@@ -172,7 +172,7 @@ export default function MpesaFeaturePage() {
                   href="/register-shop" 
                   className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-white text-green-600 rounded-xl font-bold text-lg hover:bg-green-50 transition-colors"
                 >
-                  Start Free Trial
+                  Get Started Free
                   <ArrowRight className="h-5 w-5" />
                 </Link>
                 <Link 
@@ -348,7 +348,7 @@ export default function MpesaFeaturePage() {
               href="/register-shop" 
               className="px-8 py-4 bg-white text-green-600 rounded-xl font-bold text-lg hover:bg-green-50 transition-colors"
             >
-              Start Free Trial
+              Get Started Free
             </Link>
             <Link 
               href="/features/analytics" 

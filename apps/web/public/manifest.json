@@ -1,7 +1,7 @@
 {
-  "name": "SmartDuka POS",
+  "name": "SmartDuka – Free POS",
   "short_name": "SmartDuka",
-  "description": "Modern Point of Sale System for Kenyan Retailers",
+  "description": "Free, open source Point of Sale & Inventory Management. No subscriptions, no data collected.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

@@ -1,9 +1,17 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { ShopSettings } from './shop-settings.schema';
 import { Shop, ShopDocument } from '../shops/schemas/shop.schema';
 import { CreateShopSettingsDto, UpdateShopSettingsDto } from './dto';
+import {
+  getBusinessTypeProfile,
+  normalizeBusinessTypeId,
+  getBusinessTypeOptions,
+  getAllBusinessTypes,
+  getBusinessTypesByCategory,
+  BusinessTypeId,
+} from '@smartduka/business-types';
 
 @Injectable()
 export class ShopSettingsService {
@@ -209,6 +217,178 @@ export class ShopSettingsService {
       showCustomerName: true,
       showItemSku: false,
       footerMessage: 'Thank you for your purchase!',
+    };
+  }
+
+  // =========================================================================
+  // Business Type Configuration
+  // =========================================================================
+
+  /**
+   * Apply a business type profile to a shop's settings.
+   * Called when a shop is created or when the business type is changed.
+   * Merges the profile defaults with any existing overrides.
+   */
+  async applyBusinessTypeConfig(
+    shopId: string,
+    businessType: string,
+    overrides?: Record<string, any>,
+  ): Promise<ShopSettings | null> {
+    const typeId = normalizeBusinessTypeId(businessType);
+    const profile = getBusinessTypeProfile(typeId);
+
+    const businessTypeConfig: any = {
+      businessTypeId: profile.id,
+      inventoryMode: profile.defaultInventoryMode,
+      posMode: profile.posMode,
+      defaultUnit: profile.defaultUnit,
+      availableUnits: profile.defaultUnits,
+      features: { ...profile.features },
+      productFields: { ...profile.productFields },
+      posConfig: { ...profile.posConfig },
+      receiptConfig: { ...profile.receiptConfig },
+    };
+
+    // Apply any shop-specific overrides
+    if (overrides?.features) {
+      Object.assign(businessTypeConfig.features, overrides.features);
+    }
+    if (overrides?.posConfig) {
+      Object.assign(businessTypeConfig.posConfig, overrides.posConfig);
+    }
+    if (overrides?.productFields) {
+      Object.assign(businessTypeConfig.productFields, overrides.productFields);
+    }
+
+    // Also apply business-type-specific tax defaults if not already customized
+    const existingSettings = await this.model.findOne({ shopId });
+    const updateData: any = {
+      businessTypeConfig,
+      updatedAt: new Date(),
+    };
+
+    // Apply default tax config from business type if shop has default tax
+    if (!existingSettings || existingSettings.tax?.rate === 0.16) {
+      updateData.tax = {
+        enabled: profile.defaultTaxConfig.enabled,
+        rate: profile.defaultTaxConfig.rate,
+        name: profile.defaultTaxConfig.name,
+        description: profile.defaultTaxConfig.description,
+        appliedByDefault: true,
+      };
+    }
+
+    // Update receipt footer from business type profile
+    if (!existingSettings?.receipt?.footerMessage || existingSettings.receipt.footerMessage === 'Thank you for your purchase!') {
+      updateData['receipt.footerMessage'] = profile.receiptConfig.footerMessage;
+    }
+
+    return this.model.findOneAndUpdate(
+      { shopId },
+      { $set: updateData },
+      { new: true, upsert: true },
+    );
+  }
+
+  /**
+   * Get business type configuration for a shop.
+   */
+  async getBusinessTypeConfig(shopId: string): Promise<any> {
+    const settings = await this.getByShopId(shopId);
+    if (settings?.businessTypeConfig?.businessTypeId) {
+      return settings.businessTypeConfig;
+    }
+
+    // If no business type config yet, try to derive from shop's businessType field
+    const shop = await this.shopModel.findOne({ shopId }).exec();
+    if (shop?.businessType) {
+      const typeId = normalizeBusinessTypeId(shop.businessType);
+      const profile = getBusinessTypeProfile(typeId);
+      return {
+        businessTypeId: profile.id,
+        inventoryMode: profile.defaultInventoryMode,
+        posMode: profile.posMode,
+        defaultUnit: profile.defaultUnit,
+        availableUnits: profile.defaultUnits,
+        features: profile.features,
+        productFields: profile.productFields,
+        posConfig: profile.posConfig,
+        receiptConfig: profile.receiptConfig,
+      };
+    }
+
+    // Fallback to general store
+    const fallback = getBusinessTypeProfile(BusinessTypeId.OTHER);
+    return {
+      businessTypeId: fallback.id,
+      inventoryMode: fallback.defaultInventoryMode,
+      posMode: fallback.posMode,
+      defaultUnit: fallback.defaultUnit,
+      availableUnits: fallback.defaultUnits,
+      features: fallback.features,
+      productFields: fallback.productFields,
+      posConfig: fallback.posConfig,
+      receiptConfig: fallback.receiptConfig,
+    };
+  }
+
+  /**
+   * Toggle a specific feature for a shop (override business type default).
+   */
+  async updateBusinessTypeFeature(
+    shopId: string,
+    featureName: string,
+    enabled: boolean,
+  ): Promise<ShopSettings | null> {
+    return this.model.findOneAndUpdate(
+      { shopId },
+      {
+        $set: {
+          [`businessTypeConfig.features.${featureName}`]: enabled,
+          updatedAt: new Date(),
+        },
+      },
+      { new: true },
+    );
+  }
+
+  /**
+   * Get all available business type options for dropdowns.
+   */
+  getAvailableBusinessTypes() {
+    return getBusinessTypeOptions();
+  }
+
+  /**
+   * Get all business types grouped by category.
+   */
+  getBusinessTypesGrouped() {
+    const grouped = getBusinessTypesByCategory();
+    const result: any = {};
+    for (const [category, profiles] of Object.entries(grouped)) {
+      result[category] = (profiles as any[]).map((p: any) => ({
+        id: p.id,
+        displayName: p.displayName,
+        description: p.description,
+        icon: p.icon,
+        category: p.category,
+        posMode: p.posMode,
+        defaultInventoryMode: p.defaultInventoryMode,
+      }));
+    }
+    return result;
+  }
+
+  /**
+   * Get full profile details for a specific business type.
+   */
+  getBusinessTypeProfile(businessType: string) {
+    const typeId = normalizeBusinessTypeId(businessType);
+    const profile = getBusinessTypeProfile(typeId);
+    return {
+      ...profile,
+      // Include category labels
+      defaultCategories: profile.defaultCategories,
     };
   }
 }

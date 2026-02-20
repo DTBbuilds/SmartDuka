@@ -53,7 +53,17 @@ export class AuthService {
       await this.shopSettingsService.syncReceiptSettingsFromShop((shop as any).shopId);
     } catch (err) {
       console.error('Failed to initialize shop settings:', err);
-      // Don't fail registration if settings sync fails
+    }
+
+    // Apply business type configuration profile
+    try {
+      await this.shopSettingsService.applyBusinessTypeConfig(
+        (shop as any).shopId,
+        dto.shop.businessType,
+      );
+      this.logger.log(`Business type config applied for shop ${shop.name}: ${dto.shop.businessType}`);
+    } catch (err) {
+      this.logger.error('Failed to apply business type config:', err);
     }
 
     // Create subscription for the shop
@@ -719,7 +729,17 @@ export class AuthService {
       await this.shopSettingsService.syncReceiptSettingsFromShop((shop as any).shopId);
     } catch (err) {
       console.error('Failed to initialize shop settings:', err);
-      // Don't fail registration if settings sync fails
+    }
+
+    // Apply business type configuration profile
+    try {
+      await this.shopSettingsService.applyBusinessTypeConfig(
+        (shop as any).shopId,
+        shopData.businessType,
+      );
+      this.logger.log(`Business type config applied for shop ${shop.name}: ${shopData.businessType}`);
+    } catch (err) {
+      this.logger.error('Failed to apply business type config:', err);
     }
 
     // Create admin user with Google auth

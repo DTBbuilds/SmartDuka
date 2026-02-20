@@ -383,6 +383,8 @@ export class SuperAdminPaymentsController {
               dateStyle: 'long' 
             }),
           }),
+          templateName: 'payment_confirmed',
+          category: 'billing',
         });
 
         this.logger.log(`📧 Payment confirmation email sent to ${shopAdmin.email}`);

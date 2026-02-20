@@ -891,6 +891,8 @@ export class SubscriptionsService {
               changeDate: new Date().toLocaleDateString('en-KE', { dateStyle: 'long' }),
               dashboardUrl: `${frontendUrl}/admin/dashboard`,
             }),
+            templateName: 'plan_changed',
+            category: 'subscription',
           });
           this.logger.log(`📧 Plan change email sent to ${admin.email} (${previousPlan} → ${newPlan.name})`);
         }
@@ -2679,6 +2681,8 @@ export class SubscriptionsService {
                 <p>Best regards,<br>SmartDuka Team</p>
               </div>
             `,
+            templateName: 'grace_period_extended',
+            category: 'subscription',
           });
           this.logger.log(`Grace period email sent to ${shopAdmin.email}`);
         }
@@ -2810,6 +2814,8 @@ export class SubscriptionsService {
             <p>Best regards,<br>SmartDuka Team</p>
           </div>
         `,
+        templateName: `payment_reminder_${type}`,
+        category: 'subscription',
       });
       
       this.logger.log(`Payment reminder email (${type}) sent to ${shopAdmin.email}`);

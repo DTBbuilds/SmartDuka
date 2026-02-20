@@ -1,6 +1,7 @@
-import { Body, Controller, Get, Post, Put, UseGuards, Param, ForbiddenException } from '@nestjs/common';
+import { Body, Controller, Get, Post, Put, UseGuards, Param, ForbiddenException, Optional, Logger } from '@nestjs/common';
 import type { CreateShopDto, UpdateShopDto } from './shops.service';
 import { ShopsService } from './shops.service';
+import { ShopSettingsService } from '../shop-settings/shop-settings.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -8,7 +9,12 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
 @Controller('shops')
 export class ShopsController {
-  constructor(private readonly shopsService: ShopsService) {}
+  private readonly logger = new Logger(ShopsController.name);
+
+  constructor(
+    private readonly shopsService: ShopsService,
+    @Optional() private readonly shopSettingsService?: ShopSettingsService,
+  ) {}
 
   // Public endpoint - get all shops for login page
   @Get()
@@ -41,7 +47,20 @@ export class ShopsController {
     if (!user.shopId) {
       throw new ForbiddenException('No shop associated with this user');
     }
-    return this.shopsService.update(user.shopId, dto);
+    const result = await this.shopsService.update(user.shopId, dto);
+    // Re-apply business type config if businessType changed
+    if (dto.businessType && this.shopSettingsService && result) {
+      try {
+        await this.shopSettingsService.applyBusinessTypeConfig(
+          (result as any).shopId,
+          dto.businessType,
+        );
+        this.logger.log(`Business type config re-applied for shop ${result.name}: ${dto.businessType}`);
+      } catch (err) {
+        this.logger.error('Failed to re-apply business type config:', err);
+      }
+    }
+    return result;
   }
 
   @UseGuards(JwtAuthGuard)
@@ -53,7 +72,20 @@ export class ShopsController {
   @UseGuards(JwtAuthGuard)
   @Put(':id')
   async updateShop(@Body() dto: any, @CurrentUser() user: Record<string, any>) {
-    return this.shopsService.update(user.shopId, dto);
+    const result = await this.shopsService.update(user.shopId, dto);
+    // Re-apply business type config if businessType changed
+    if (dto.businessType && this.shopSettingsService && result) {
+      try {
+        await this.shopSettingsService.applyBusinessTypeConfig(
+          (result as any).shopId,
+          dto.businessType,
+        );
+        this.logger.log(`Business type config re-applied for shop ${result.name}: ${dto.businessType}`);
+      } catch (err) {
+        this.logger.error('Failed to re-apply business type config:', err);
+      }
+    }
+    return result;
   }
 
   @UseGuards(JwtAuthGuard)

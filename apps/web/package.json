@@ -28,6 +28,7 @@
     "@radix-ui/react-switch": "^1.1.2",
     "@radix-ui/react-tabs": "^1.1.13",
     "@smartduka/ui": "workspace:*",
+    "@smartduka/business-types": "workspace:*",
     "@stripe/react-stripe-js": "^5.4.1",
     "@stripe/stripe-js": "^8.5.3",
     "@vercel/analytics": "^1.6.1",

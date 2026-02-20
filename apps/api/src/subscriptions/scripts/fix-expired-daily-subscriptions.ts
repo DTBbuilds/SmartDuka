@@ -121,6 +121,8 @@ async function fixExpiredDailySubscriptions() {
                   </p>
                 </div>
               `,
+              templateName: 'daily_subscription_expired',
+              category: 'subscription',
             });
             result.emailSent = true;
             console.log(`   📧 Email sent to ${admin.email}`);

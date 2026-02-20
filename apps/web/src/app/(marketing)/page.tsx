@@ -21,25 +21,28 @@ import {
 import { FAQJsonLd, WebPageJsonLd } from '@/components/seo';
 
 export const metadata: Metadata = {
-  title: 'SmartDuka \u2013 Point of Sale & Inventory Management Software',
-  description: 'SmartDuka is a web-based point of sale and inventory management software built by DTB Technologies. Manage sales, stock, reports, analytics, and barcode scanning in one system.',
+  title: 'SmartDuka \u2013 Free Open Source Point of Sale & Inventory Management',
+  description: 'SmartDuka is a 100% free, open source point of sale and inventory management system. No subscriptions, no hidden fees, no user data collected. M-Pesa integration, barcode scanning, analytics \u2014 all free forever.',
   keywords: [
     'SmartDuka',
-    'point of sale software',
-    'POS system',
-    'inventory management software',
-    'stock management system',
-    'retail POS software',
-    'barcode POS system',
-    'sales reports and analytics software',
-    'web-based POS system',
+    'free point of sale software',
+    'free POS system',
+    'open source POS',
+    'free inventory management',
+    'free stock management',
+    'free retail POS',
+    'free barcode POS',
+    'free sales software',
+    'free web-based POS',
     'DTB Technologies',
-    'cloud POS',
-    'multi-store POS',
+    'free cloud POS',
+    'free multi-store POS',
+    'no subscription POS',
+    'M-Pesa POS system',
   ],
   openGraph: {
-    title: 'SmartDuka \u2013 Point of Sale & Inventory Management Software',
-    description: 'SmartDuka is a web-based point of sale and inventory management software built by DTB Technologies. Manage sales, stock, reports, analytics, and barcode scanning in one system.',
+    title: 'SmartDuka \u2013 Free Open Source Point of Sale & Inventory Management',
+    description: '100% free, open source POS and inventory management. No subscriptions, no hidden fees, no user data collected. Built for African retailers.',
     type: 'website',
     locale: 'en_KE',
     siteName: 'SmartDuka',
@@ -47,8 +50,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'SmartDuka \u2013 Point of Sale & Inventory Management Software',
-    description: 'Web-based POS and inventory management software by DTB Technologies. Sales, stock, analytics, barcode scanning.',
+    title: 'SmartDuka \u2013 Free Open Source POS System',
+    description: '100% free, open source POS and inventory management. No subscriptions, no data collection. Built for African retailers.',
     creator: '@smartduka',
     site: '@smartduka',
   },
@@ -171,8 +174,8 @@ export default function HomePage() {
     <div className="min-h-screen bg-white">
       <FAQJsonLd faqs={homepageFaqs} />
       <WebPageJsonLd 
-        name="SmartDuka – Point of Sale & Inventory Management Software"
-        description="SmartDuka is a web-based point of sale and inventory management software built by DTB Technologies."
+        name="SmartDuka \u2013 Free Open Source Point of Sale & Inventory Management"
+        description="SmartDuka is a 100% free, open source point of sale and inventory management system by DTB Technologies. No subscriptions, no user data collected."
         url="https://www.smartduka.org"
       />
       
@@ -202,7 +205,7 @@ export default function HomePage() {
                 href="/register-shop" 
                 className="px-5 py-2.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
               >
-                Start Free Trial
+                Start Free
               </Link>
             </div>
           </div>
@@ -216,7 +219,7 @@ export default function HomePage() {
             <div>
               <div className="inline-flex items-center gap-2 px-4 py-2 bg-green-100 rounded-full text-green-700 text-sm font-medium mb-6">
                 <Zap className="h-4 w-4" />
-                Now with M-Pesa STK Push Integration
+                100% Free &amp; Open Source
               </div>
               
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900 leading-tight mb-6">
@@ -235,14 +238,14 @@ export default function HomePage() {
                   href="/register-shop" 
                   className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-blue-600 text-white rounded-xl font-bold text-lg hover:bg-blue-700 transition-all shadow-lg hover:shadow-xl"
                 >
-                  Start Free Trial
+                  Get Started Free
                   <ArrowRight className="h-5 w-5" />
                 </Link>
                 <Link 
-                  href="/pricing" 
+                  href="/features/pos" 
                   className="inline-flex items-center justify-center gap-2 px-8 py-4 border-2 border-gray-300 text-gray-700 rounded-xl font-bold text-lg hover:border-gray-400 transition-colors"
                 >
-                  View Pricing
+                  See All Features
                 </Link>
               </div>
               
@@ -265,11 +268,15 @@ export default function HomePage() {
               <div className="flex items-center gap-6 text-sm text-gray-500">
                 <div className="flex items-center gap-2">
                   <CheckCircle className="h-5 w-5 text-green-500" />
-                  No credit card required
+                  Free forever
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle className="h-5 w-5 text-green-500" />
-                  Free setup & training
+                  No data collected
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="h-5 w-5 text-green-500" />
+                  Open source
                 </div>
               </div>
             </div>
@@ -490,13 +497,13 @@ export default function HomePage() {
               href="/register-shop" 
               className="px-8 py-4 bg-white text-blue-600 rounded-xl font-bold text-lg hover:bg-blue-50 transition-colors shadow-lg"
             >
-              Start Your Free Trial
+              Get Started Free
             </Link>
             <Link 
               href="/pricing" 
               className="px-8 py-4 border-2 border-white text-white rounded-xl font-bold text-lg hover:bg-white/10 transition-colors"
             >
-              View Pricing Plans
+              See All Features
             </Link>
           </div>
         </div>
@@ -585,7 +592,7 @@ export default function HomePage() {
               {' · '}
               <Link href="/pricing" className="hover:text-white">Pricing</Link>
               {' · '}
-              <Link href="/register-shop" className="hover:text-white">Start Free Trial</Link>
+              <Link href="/register-shop" className="hover:text-white">Get Started Free</Link>
             </p>
           </div>
         </div>

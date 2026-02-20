@@ -161,10 +161,35 @@ export class EmailService {
     };
   }
 
+  /**
+   * Get the correct 'from' address based on the active provider.
+   * Resend requires a verified domain - never use gmail.com/yahoo.com etc.
+   */
+  private getFromAddress(requestedFrom?: string): string {
+    const defaultFrom = 'SmartDuka <noreply@smartduka.co.ke>';
+    const envFrom = requestedFrom || process.env.EMAIL_FROM || process.env.SMTP_FROM || defaultFrom;
+
+    // When using Resend, we MUST send from a verified domain
+    if (this.resend) {
+      const resendFrom = process.env.RESEND_FROM_EMAIL || defaultFrom;
+      // If the env-configured from address uses an unverified free email domain, override it
+      const freeEmailDomains = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'live.com'];
+      const fromEmail = envFrom.match(/<([^>]+)>/)?.[1] || envFrom;
+      const domain = fromEmail.split('@')[1]?.toLowerCase();
+      if (domain && freeEmailDomains.includes(domain)) {
+        this.logger.warn(`Resend cannot send from '${domain}' - using verified domain: ${resendFrom}`);
+        return resendFrom;
+      }
+      return envFrom;
+    }
+
+    return envFrom;
+  }
+
   async sendEmail(options: EmailOptions): Promise<{ success: boolean; messageId?: string; error?: string; emailLogId?: string }> {
     const toArray = Array.isArray(options.to) ? options.to : [options.to];
     const toAddress = toArray.join(', ');
-    const from = options.from || process.env.EMAIL_FROM || process.env.SMTP_FROM || 'SmartDuka <noreply@smartduka.co.ke>';
+    const from = this.getFromAddress(options.from);
     
     // Create email log entry first
     let emailLog: EmailLogDocument | null = null;
@@ -342,6 +367,7 @@ export class EmailService {
       html,
       text: text || undefined,
       attachments: options.attachments,
+      templateName: options.templateName,
     });
   }
 

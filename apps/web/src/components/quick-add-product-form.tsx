@@ -6,6 +6,7 @@ import { Plus, FolderPlus, Scan, AlertCircle, CheckCircle2, Info, Camera } from 
 import { CategorySelectWithCreate } from './category-select-with-create';
 import { BarcodeScannerUnified } from './barcode-scanner-unified';
 import { ProductImageUpload } from './product-image-upload';
+import BusinessTypeProductFields from './inventory/business-type-product-fields';
 
 interface Category {
   _id: string;
@@ -24,13 +25,15 @@ interface QuickAddProductFormProps {
     stock: number;
     categoryId: string;
     image?: string;
+    [key: string]: any;
   }) => Promise<void>;
   onCategoryCreated?: (category: Category) => void;
   token: string;
   isLoading?: boolean;
+  businessTypeConfig?: any;
 }
 
-export function QuickAddProductForm({ categories, onSubmit, onCategoryCreated, token, isLoading = false }: QuickAddProductFormProps) {
+export function QuickAddProductForm({ categories, onSubmit, onCategoryCreated, token, isLoading = false, businessTypeConfig }: QuickAddProductFormProps) {
   const [formData, setFormData] = useState({
     name: '',
     sku: '',
@@ -46,6 +49,7 @@ export function QuickAddProductForm({ categories, onSubmit, onCategoryCreated, t
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [businessTypeFields, setBusinessTypeFields] = useState<Record<string, any>>({});
 
   const margin = formData.price > 0 && formData.cost > 0
     ? ((formData.price - formData.cost) / formData.price * 100).toFixed(1)
@@ -101,7 +105,7 @@ export function QuickAddProductForm({ categories, onSubmit, onCategoryCreated, t
 
     try {
       setIsSubmitting(true);
-      await onSubmit(formData);
+      await onSubmit({ ...formData, ...businessTypeFields });
       
       // Reset form
       setFormData({
@@ -115,6 +119,7 @@ export function QuickAddProductForm({ categories, onSubmit, onCategoryCreated, t
         image: '',
       });
       setFieldErrors({});
+      setBusinessTypeFields({});
     } catch (err: any) {
       // Parse backend errors into user-friendly messages
       const message = err?.message || 'Failed to add product';
@@ -352,6 +357,16 @@ export function QuickAddProductForm({ categories, onSubmit, onCategoryCreated, t
               ) : null}
             </div>
           </div>
+
+          {/* Business-Type-Specific Fields */}
+          {businessTypeConfig && (
+            <BusinessTypeProductFields
+              config={businessTypeConfig}
+              productData={businessTypeFields}
+              onChange={(field, value) => setBusinessTypeFields(prev => ({ ...prev, [field]: value }))}
+              mode="create"
+            />
+          )}
 
           {/* Margin display */}
           {formData.price > 0 && formData.cost > 0 && (

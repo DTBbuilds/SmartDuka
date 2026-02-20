@@ -276,6 +276,8 @@ export class SubscriptionDunningService {
         to: admin.email,
         subject: template.subject.replace('{{shopName}}', shop.name),
         html: template.getHtml(vars),
+        templateName: templateName,
+        category: 'subscription',
       });
 
       // Create in-app notification
@@ -371,6 +373,8 @@ export class SubscriptionDunningService {
           .replace('{{shopName}}', shop.name)
           .replace('{{daysUntilSuspension}}', daysUntilSuspension.toString()),
         html: template.getHtml(vars),
+        templateName: templateName,
+        category: 'subscription',
       });
 
       // Create in-app notification
@@ -447,6 +451,8 @@ export class SubscriptionDunningService {
         to: admin.email,
         subject: template.subject.replace('{{shopName}}', shop.name),
         html: template.getHtml(vars),
+        templateName: 'subscription_suspended_notice',
+        category: 'subscription',
       });
 
       // Create in-app notification
@@ -528,6 +534,8 @@ export class SubscriptionDunningService {
         to: admin.email,
         subject: template.subject.replace('{{shopName}}', shop.name),
         html: template.getHtml(vars),
+        templateName: 'subscription_reactivated',
+        category: 'subscription',
       });
 
       // Create in-app notification

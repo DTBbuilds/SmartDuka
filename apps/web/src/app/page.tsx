@@ -8,7 +8,8 @@ import { AppStartupScreen } from '@/components/app-startup-screen';
 import { 
   ShoppingCart, Smartphone, Package, BarChart3, Users, CheckCircle, ArrowRight, 
   Shield, Zap, Camera, Receipt, Brain, Wallet, Phone, Mail, Clock, 
-  Sparkles, TrendingUp, ChevronRight, Star, CreditCard, Building2
+  Sparkles, TrendingUp, ChevronRight, Star, CreditCard, Building2,
+  Heart, Globe, Lock, Code
 } from 'lucide-react';
 import { ThemeToggleOutline } from '@/components/theme-toggle';
 
@@ -16,7 +17,6 @@ export default function Home() {
   const router = useRouter();
   const { user, loading, isAuthenticated } = useAuth();
   const [appReady, setAppReady] = useState(false);
-  const [expandedPlan, setExpandedPlan] = useState<string | null>(null);
 
   // Redirect authenticated users to their dashboard
   useEffect(() => {
@@ -58,79 +58,40 @@ export default function Home() {
       icon: Brain, 
       title: 'AI-Powered Insights', 
       description: 'Smart predictions & analytics powered by our AI Hyper Engine',
-      color: 'from-violet-500 to-purple-600'
+      color: 'from-primary to-orange-600'
     },
     { 
       icon: Camera, 
       title: 'Smart Scanning', 
       description: 'Camera barcode scanning & hardware scanner support',
-      color: 'from-blue-500 to-cyan-500'
+      color: 'from-primary to-orange-600'
     },
     { 
       icon: Wallet, 
       title: 'M-Pesa & Pochi', 
       description: 'Accept Send Money & Pochi la Biashara payments',
-      color: 'from-emerald-500 to-green-600'
+      color: 'from-primary to-orange-600'
     },
     { 
       icon: Receipt, 
       title: 'Smart Invoicing', 
       description: 'Professional invoices with payment tracking',
-      color: 'from-amber-500 to-orange-500'
+      color: 'from-primary to-orange-600'
     },
     { 
       icon: Package, 
       title: 'Inventory Control', 
       description: 'Real-time stock tracking with low-stock alerts',
-      color: 'from-rose-500 to-pink-600'
+      color: 'from-primary to-orange-600'
     },
     { 
       icon: BarChart3, 
       title: 'Sales Analytics', 
       description: 'Comprehensive reports & performance metrics',
-      color: 'from-indigo-500 to-blue-600'
+      color: 'from-primary to-orange-600'
     },
   ];
 
-  const plans = [
-    {
-      id: 'starter',
-      name: 'Starter',
-      price: 'KES 1,000',
-      period: '/month',
-      description: 'Perfect for small shops',
-      features: ['1 Shop', '2 Staff', '250 Items', 'Full POS System', 'M-Pesa Integration', 'Basic Reports'],
-      color: 'slate'
-    },
-    {
-      id: 'basic',
-      name: 'Basic',
-      price: 'KES 1,500',
-      period: '/month',
-      description: 'For growing businesses',
-      features: ['2 Shops', '5 Staff', '750 Items', 'Multi-Branch Support', 'Advanced Analytics', 'Priority Support'],
-      color: 'blue',
-      popular: true
-    },
-    {
-      id: 'silver',
-      name: 'Silver',
-      price: 'KES 2,500',
-      period: '/month',
-      description: 'Multiple locations',
-      features: ['5 Shops', '15 Staff', '2,000 Items', 'Stock Transfers', 'Full Analytics', 'Priority Support'],
-      color: 'purple'
-    },
-    {
-      id: 'gold',
-      name: 'Gold',
-      price: 'KES 4,500',
-      period: '/month',
-      description: 'Large operations',
-      features: ['10 Shops', '25 Staff', '4,000 Items', 'All Features', 'Dedicated Support', 'Custom Integrations'],
-      color: 'amber'
-    },
-  ];
 
   // Hero/Landing page for non-authenticated users
   return (
@@ -153,7 +114,7 @@ export default function Home() {
                 Features
               </a>
               <a href="#pricing" className="text-muted-foreground hover:text-foreground text-sm font-medium transition-colors">
-                Pricing
+                Why Free
               </a>
               <a href="#contact" className="text-muted-foreground hover:text-foreground text-sm font-medium transition-colors">
                 Contact
@@ -171,7 +132,7 @@ export default function Home() {
                 href="/register-shop" 
                 className="hidden sm:flex px-4 py-2 bg-primary text-primary-foreground rounded-lg font-medium text-sm hover:bg-primary/90 transition-all shadow-md shadow-primary/20"
               >
-                Start Free Trial
+                Start Free
               </Link>
               <ThemeToggleOutline />
             </div>
@@ -192,22 +153,22 @@ export default function Home() {
             {/* Badge */}
             <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-primary/10 border border-primary/20 rounded-full text-primary text-sm font-medium mb-8">
               <Sparkles className="h-4 w-4" />
-              Kenya&apos;s Smartest POS System
+              100% Free &amp; Open Source
             </div>
             
             {/* Main Heading */}
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight mb-6">
-              <span className="text-foreground">Manage Your Business</span>
+              <span className="text-foreground">Free Point of Sale</span>
               <br />
               <span className="bg-gradient-to-r from-primary to-orange-600 bg-clip-text text-transparent">
-                Smarter & Faster
+                For Every Business
               </span>
             </h1>
             
             {/* Subheading */}
             <p className="text-lg md:text-xl text-muted-foreground mb-10 leading-relaxed max-w-2xl mx-auto">
               Complete Point of Sale system with M-Pesa integration, AI-powered analytics, 
-              and real-time inventory tracking. Built for Kenyan retailers.
+              and real-time inventory tracking. 100% free, open source, and no user data collected.
             </p>
             
             {/* CTA Buttons */}
@@ -216,7 +177,7 @@ export default function Home() {
                 href="/register-shop" 
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-4 bg-primary text-primary-foreground rounded-xl font-semibold text-lg hover:bg-primary/90 transition-all shadow-xl shadow-primary/25 hover:shadow-primary/40"
               >
-                Start Free Trial
+                Get Started Free
                 <ArrowRight className="h-5 w-5" />
               </Link>
               <Link 
@@ -230,16 +191,16 @@ export default function Home() {
             {/* Trust badges */}
             <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-muted-foreground">
               <div className="flex items-center gap-2">
-                <CheckCircle className="h-5 w-5 text-green-500" />
-                No credit card required
+                <CheckCircle className="h-5 w-5 text-primary" />
+                Free forever
               </div>
               <div className="flex items-center gap-2">
-                <CheckCircle className="h-5 w-5 text-green-500" />
-                Free setup & training
+                <CheckCircle className="h-5 w-5 text-primary" />
+                No data collected
               </div>
               <div className="flex items-center gap-2">
-                <CheckCircle className="h-5 w-5 text-green-500" />
-                Cancel anytime
+                <CheckCircle className="h-5 w-5 text-primary" />
+                Open source
               </div>
             </div>
           </div>
@@ -296,76 +257,104 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Pricing Section */}
+      {/* Why Free Section */}
       <section id="pricing" className="py-20 md:py-28">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-primary/10 border border-primary/20 rounded-full text-primary text-sm font-medium mb-6">
+              <Heart className="h-4 w-4" />
+              Completely Free
+            </div>
             <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
-              Flexible Plans for Every Business
+              100% Free. No Catch.
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Start small and scale as you grow. No hidden fees, cancel anytime.
+              SmartDuka is open source and free for everyone. No subscriptions, no hidden fees, 
+              no premium tiers. Every feature is available to every user.
             </p>
           </div>
           
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5 max-w-6xl mx-auto">
-            {plans.map((plan) => (
-              <div 
-                key={plan.id}
-                className={`relative p-6 bg-card rounded-2xl border-2 transition-all ${
-                  plan.popular 
-                    ? 'border-primary shadow-xl shadow-primary/10' 
-                    : 'border-border hover:border-primary/30'
-                }`}
-              >
-                {plan.popular && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-primary text-primary-foreground text-xs font-semibold rounded-full">
-                    Most Popular
-                  </div>
-                )}
-                
-                <div className="mb-6">
-                  <h3 className="text-lg font-semibold text-foreground mb-1">{plan.name}</h3>
-                  <p className="text-sm text-muted-foreground">{plan.description}</p>
-                </div>
-                
-                <div className="mb-6">
-                  <span className="text-3xl font-bold text-foreground">{plan.price}</span>
-                  <span className="text-muted-foreground">{plan.period}</span>
-                </div>
-                
-                <ul className="space-y-3 mb-6">
-                  {plan.features.slice(0, expandedPlan === plan.id ? undefined : 4).map((feature, index) => (
-                    <li key={index} className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <CheckCircle className="h-4 w-4 text-primary flex-shrink-0" />
-                      {feature}
-                    </li>
-                  ))}
-                </ul>
-                
-                {plan.features.length > 4 && (
-                  <button 
-                    onClick={() => setExpandedPlan(expandedPlan === plan.id ? null : plan.id)}
-                    className="text-sm text-primary hover:underline mb-4 flex items-center gap-1"
-                  >
-                    {expandedPlan === plan.id ? 'Show less' : `+${plan.features.length - 4} more features`}
-                    <ChevronRight className={`h-4 w-4 transition-transform ${expandedPlan === plan.id ? 'rotate-90' : ''}`} />
-                  </button>
-                )}
-                
-                <Link 
-                  href="/register-shop"
-                  className={`w-full py-3 px-4 rounded-xl font-semibold text-center block transition-all ${
-                    plan.popular
-                      ? 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20'
-                      : 'bg-muted text-foreground hover:bg-muted/80'
-                  }`}
-                >
-                  Get Started
-                </Link>
+          <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto mb-16">
+            <div className="text-center p-6 bg-card rounded-2xl border border-border">
+              <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center mx-auto mb-4">
+                <Code className="h-6 w-6 text-primary" />
               </div>
-            ))}
+              <h3 className="text-lg font-semibold text-foreground mb-2">Open Source</h3>
+              <p className="text-sm text-muted-foreground">Fully transparent codebase. Inspect, modify, and contribute to the project.</p>
+            </div>
+            <div className="text-center p-6 bg-card rounded-2xl border border-border">
+              <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center mx-auto mb-4">
+                <Lock className="h-6 w-6 text-primary" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground mb-2">No Data Collected</h3>
+              <p className="text-sm text-muted-foreground">Your business data stays yours. We collect zero user data at any level. Complete privacy.</p>
+            </div>
+            <div className="text-center p-6 bg-card rounded-2xl border border-border">
+              <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center mx-auto mb-4">
+                <Globe className="h-6 w-6 text-primary" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground mb-2">Free Forever</h3>
+              <p className="text-sm text-muted-foreground">No trials, no limits, no upgrades. Full access to all features, always.</p>
+            </div>
           </div>
+
+          {/* What You Get - All Features Free */}
+          <div className="bg-gradient-to-br from-primary/5 to-orange-500/5 border border-primary/10 rounded-2xl p-8 md:p-10 max-w-3xl mx-auto">
+            <h3 className="text-xl font-bold text-foreground mb-6 text-center">Everything Included — Free</h3>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              {[
+                'Unlimited Shops', 'Unlimited Staff', 'Unlimited Products',
+                'Full POS System', 'M-Pesa Integration', 'Barcode Scanning',
+                'Sales Analytics', 'Inventory Tracking', 'Smart Invoicing',
+                'AI-Powered Insights', 'Multi-Branch Support', 'Real-time Reports'
+              ].map((feature, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-primary flex-shrink-0" />
+                  <span className="text-sm text-foreground">{feature}</span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-8 text-center">
+              <Link 
+                href="/register-shop"
+                className="inline-flex items-center gap-2 px-8 py-4 bg-primary text-primary-foreground rounded-xl font-semibold text-lg hover:bg-primary/90 transition-all shadow-xl shadow-primary/25"
+              >
+                Get Started — It&apos;s Free
+                <ArrowRight className="h-5 w-5" />
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Donate Section */}
+      <section className="py-16 md:py-20 bg-muted/30">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <Heart className="h-10 w-10 text-primary mx-auto mb-4" />
+          <h2 className="text-2xl md:text-3xl font-bold text-foreground mb-4">
+            Love SmartDuka? Support Us
+          </h2>
+          <p className="text-muted-foreground mb-8 max-w-xl mx-auto">
+            SmartDuka is built and maintained by a small team. If you find it valuable, 
+            consider making a voluntary donation to help us keep it free and keep improving.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <a 
+              href="https://wa.me/254729983567?text=Hello%20SmartDuka%2C%20I%20would%20like%20to%20make%20a%20donation%20to%20support%20the%20project" 
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition-colors shadow-lg"
+            >
+              <Heart className="h-5 w-5" />
+              Donate via M-Pesa
+            </a>
+            <p className="text-sm text-muted-foreground">
+              Send to <strong>0729 983 567</strong> (SmartDuka)
+            </p>
+          </div>
+          <p className="text-xs text-muted-foreground mt-4">
+            Donations are completely voluntary and do not unlock any additional features.
+          </p>
         </div>
       </section>
 
@@ -378,14 +367,14 @@ export default function Home() {
             Ready to Transform Your Business?
           </h2>
           <p className="text-lg text-primary-foreground/80 mb-10 max-w-2xl mx-auto">
-            Join hundreds of Kenyan businesses already using SmartDuka to streamline operations and boost sales.
+            Join hundreds of Kenyan businesses already using SmartDuka for free to streamline operations and boost sales.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link 
               href="/register-shop" 
               className="w-full sm:w-auto px-8 py-4 bg-white text-primary rounded-xl font-bold text-lg hover:bg-gray-100 transition-colors shadow-xl"
             >
-              Start Your Free Trial
+              Get Started Free
             </Link>
             <Link 
               href="/login" 
@@ -494,7 +483,7 @@ export default function Home() {
                 <span className="text-xl font-bold text-foreground">SmartDuka</span>
               </Link>
               <p className="text-muted-foreground text-sm max-w-xs mb-4">
-                Kenya&apos;s smartest Point of Sale system. Built for modern retailers who want to grow their business.
+                Kenya&apos;s smartest Point of Sale system. 100% free, open source, and privacy-first. Built for modern retailers.
               </p>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Clock className="h-4 w-4" />
@@ -507,7 +496,7 @@ export default function Home() {
               <h4 className="font-semibold text-foreground mb-4">Quick Links</h4>
               <ul className="space-y-2 text-sm">
                 <li><a href="#features" className="text-muted-foreground hover:text-primary transition-colors">Features</a></li>
-                <li><a href="#pricing" className="text-muted-foreground hover:text-primary transition-colors">Pricing</a></li>
+                <li><a href="#pricing" className="text-muted-foreground hover:text-primary transition-colors">Why Free</a></li>
                 <li><a href="#contact" className="text-muted-foreground hover:text-primary transition-colors">Contact</a></li>
                 <li><Link href="/login" className="text-muted-foreground hover:text-primary transition-colors">Sign In</Link></li>
               </ul>

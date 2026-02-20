@@ -4,13 +4,13 @@ import { config } from './config';
 
 /**
  * API Resilience Layer
- * Handles backend cold starts, retries, and provides user-friendly feedback
- * for when the backend is waking up after inactivity
+ * Handles retries, timeouts, and provides user-friendly feedback
+ * for connection issues
  */
 
 export type BackendStatus = 
   | 'ready'           // Backend is responding normally
-  | 'waking'          // Backend is starting up (cold start)
+  | 'waking'          // Backend is reconnecting
   | 'slow'            // Backend is responding but slowly
   | 'unreachable'     // Cannot reach backend
   | 'offline'         // Device is offline
@@ -39,11 +39,9 @@ const DEFAULT_RETRY_CONFIG: RetryConfig = {
   initialDelayMs: 1000,
   maxDelayMs: 10000,
   backoffMultiplier: 1.5,
-  timeoutMs: 30000, // 30 seconds for cold starts
+  timeoutMs: 15000,
 };
 
-// Cold start detection - if first request takes > 5s, likely a cold start
-const COLD_START_THRESHOLD_MS = 5000;
 const SLOW_RESPONSE_THRESHOLD_MS = 3000;
 
 type StateListener = (state: BackendState) => void;
@@ -84,22 +82,10 @@ class ApiResilience {
   private getStatusMessage(status: BackendStatus, retryCount: number): { message: string; detail?: string } {
     switch (status) {
       case 'waking':
-        if (retryCount === 0) {
-          return {
-            message: 'Connecting to server...',
-            detail: 'The server is starting up. This usually takes 10-30 seconds.',
-          };
-        } else if (retryCount === 1) {
-          return {
-            message: 'Server is waking up...',
-            detail: 'Please wait while we establish a connection.',
-          };
-        } else {
-          return {
-            message: 'Almost there...',
-            detail: 'The server is taking longer than usual to start.',
-          };
-        }
+        return {
+          message: 'Reconnecting...',
+          detail: retryCount > 1 ? 'Taking longer than usual. Please wait.' : undefined,
+        };
       case 'slow':
         return {
           message: 'Connection is slow',
@@ -126,23 +112,12 @@ class ApiResilience {
   }
 
   /**
-   * Calculate estimated wait time based on retry count
-   */
-  private getEstimatedWaitTime(retryCount: number): number {
-    // Typical cold start times: 10-30 seconds
-    const baseTime = 15;
-    const remaining = Math.max(0, baseTime - (retryCount * 3));
-    return remaining;
-  }
-
-  /**
-   * Calculate progress for waking state (0-100)
+   * Calculate progress for reconnecting state (0-100)
    */
   private getWakingProgress(): number {
     if (!this.wakeStartTime) return 0;
     const elapsed = Date.now() - this.wakeStartTime;
-    // Assume 30 seconds max for cold start
-    const progress = Math.min(95, (elapsed / 30000) * 100);
+    const progress = Math.min(95, (elapsed / 15000) * 100);
     return Math.round(progress);
   }
 
@@ -193,7 +168,6 @@ class ApiResilience {
       detail: initialMsg.detail,
       progress: 0,
       retryCount: 0,
-      estimatedWaitTime: this.getEstimatedWaitTime(0),
     });
 
     let retryCount = 0;
@@ -251,7 +225,6 @@ class ApiResilience {
         detail: retryMsg.detail,
         progress: this.getWakingProgress(),
         retryCount,
-        estimatedWaitTime: this.getEstimatedWaitTime(retryCount),
       });
 
       // Wait before next retry
@@ -305,11 +278,6 @@ class ApiResilience {
 
         const elapsed = Date.now() - startTime;
 
-        // Detect cold start (first request took a long time)
-        if (elapsed > COLD_START_THRESHOLD_MS && attempt === 0) {
-          console.log(`[API] Cold start detected: ${elapsed}ms`);
-        }
-
         // Update state on success
         if (response.ok || response.status < 500) {
           this.updateState({
@@ -326,16 +294,13 @@ class ApiResilience {
 
         // Don't retry on abort (user cancelled) or if offline
         if (error.name === 'AbortError') {
-          // Timeout - likely cold start
           if (attempt === 0) {
-            // First timeout, try to wake the backend
             const { message, detail } = this.getStatusMessage('waking', attempt);
             this.updateState({
               status: 'waking',
               message,
               detail,
               retryCount: attempt,
-              estimatedWaitTime: this.getEstimatedWaitTime(attempt),
             });
           }
         }
@@ -347,7 +312,6 @@ class ApiResilience {
             message,
             detail,
             retryCount: attempt + 1,
-            estimatedWaitTime: this.getEstimatedWaitTime(attempt + 1),
           });
 
           await new Promise(resolve => setTimeout(resolve, delay));

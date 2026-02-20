@@ -19,27 +19,10 @@ const KENYA_COUNTIES = [
   "Uasin Gishu", "Vihiga", "Wajir", "West Pokot"
 ];
 
-// Business types for dropdown
-const BUSINESS_TYPES = [
-  "General Store / Duka",
-  "Supermarket",
-  "Mini Supermarket",
-  "Wholesale Shop",
-  "Pharmacy / Chemist",
-  "Hardware Store",
-  "Electronics Shop",
-  "Clothing & Apparel",
-  "Grocery Store",
-  "Butchery",
-  "Bakery",
-  "Restaurant / Cafe",
-  "Stationery Shop",
-  "Mobile Phone Shop",
-  "Beauty & Cosmetics",
-  "Auto Parts Shop",
-  "Agro-Vet Shop",
-  "Other"
-];
+// Business types from shared package
+import { getBusinessTypeOptions, getCategoryLabel, getBusinessTypeProfile, normalizeBusinessTypeId } from '@smartduka/business-types';
+
+const BUSINESS_TYPE_OPTIONS = getBusinessTypeOptions();
 
 export default function OnboardingPage() {
   const router = useRouter();

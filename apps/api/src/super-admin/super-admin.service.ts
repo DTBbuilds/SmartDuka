@@ -1,6 +1,6 @@
 import { Injectable, Logger, BadRequestException, NotFoundException, Optional } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { InjectModel, InjectConnection } from '@nestjs/mongoose';
+import { Model, Types, Connection } from 'mongoose';
 import { Shop, ShopDocument } from '../shops/schemas/shop.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { Subscription, SubscriptionDocument, SubscriptionStatus } from '../subscriptions/schemas/subscription.schema';
@@ -22,6 +22,7 @@ export class SuperAdminService {
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     @InjectModel(Subscription.name) private readonly subscriptionModel: Model<SubscriptionDocument>,
     @InjectModel(SubscriptionPlan.name) private readonly planModel: Model<SubscriptionPlanDocument>,
+    @InjectConnection() private readonly connection: Connection,
     private readonly auditLogService: ShopAuditLogService,
     @Optional() private readonly emailService?: EmailService,
     @Optional() private readonly cacheService?: CacheService,
@@ -819,6 +820,140 @@ export class SuperAdminService {
   }
 
   /**
+   * Permanently delete a shop and ALL its related data from the database.
+   * This is irreversible. Only works on shops that are already soft-deleted.
+   */
+  async permanentDeleteShop(
+    shopId: string,
+    superAdminId: string,
+    confirmName: string,
+  ): Promise<{ deletedCollections: Record<string, number>; totalDeleted: number }> {
+    const shopObjectId = new Types.ObjectId(shopId);
+
+    // Verify shop exists and is already soft-deleted
+    const shop = await this.shopModel.findById(shopObjectId).exec();
+    if (!shop) {
+      throw new NotFoundException('Shop not found');
+    }
+    if (!shop.deletedAt) {
+      throw new BadRequestException(
+        'Shop must be soft-deleted before it can be permanently deleted. Soft-delete it first.',
+      );
+    }
+
+    // Safety check: confirm shop name matches
+    if (shop.name !== confirmName) {
+      throw new BadRequestException(
+        'Shop name confirmation does not match. Please type the exact shop name to confirm.',
+      );
+    }
+
+    this.logger.warn(
+      `PERMANENT DELETE initiated for shop "${shop.name}" (${shopId}) by super admin ${superAdminId}`,
+    );
+
+    // All collections that store shop-scoped data via shopId
+    const collectionsToClean: string[] = [
+      'users',
+      'products',
+      'categories',
+      'orders',
+      'invoices',
+      'receipts',
+      'receipttemplates',
+      'shifts',
+      'returns',
+      'stockadjustments',
+      'stockreconciliations',
+      'customers',
+      'discounts',
+      'discountaudits',
+      'loyaltyprograms',
+      'loyaltyaccounts',
+      'locations',
+      'reconciliations',
+      'paymenttransactions',
+      'mpesatransactions',
+      'paymentconfigs',
+      'configauditlogs',
+      'verificationlogs',
+      'subscriptions',
+      'subscriptioninvoices',
+      'payment_attempts',
+      'activitylogs',
+      'stripecustomers',
+      'stripepayments',
+      'stripesubscriptions',
+      'whatsappconfigs',
+      'shopauditlogs',
+      'branches',
+      'stocktransfers',
+      'shopsettings',
+      'activities',
+      'aiauditlogs',
+      'aifeedbacks',
+      'aiinsights',
+      'auditlogs',
+      'sessions',
+      'refreshtokens',
+      'notifications',
+      'purchases',
+      'conversations',
+      'messages',
+      'systemauditlogs',
+      'emaillogs',
+    ];
+
+    const deletedCollections: Record<string, number> = {};
+    let totalDeleted = 0;
+
+    const db = this.connection.db;
+    if (!db) {
+      throw new BadRequestException('Database connection not available');
+    }
+
+    // Get list of existing collections to avoid errors on non-existent ones
+    const existingCollections = await db.listCollections().toArray();
+    const existingNames = new Set(existingCollections.map((c) => c.name));
+
+    for (const collectionName of collectionsToClean) {
+      if (!existingNames.has(collectionName)) {
+        continue;
+      }
+      try {
+        const result = await db
+          .collection(collectionName)
+          .deleteMany({ shopId: shopObjectId });
+        if (result.deletedCount > 0) {
+          deletedCollections[collectionName] = result.deletedCount;
+          totalDeleted += result.deletedCount;
+          this.logger.log(
+            `Deleted ${result.deletedCount} documents from ${collectionName} for shop ${shopId}`,
+          );
+        }
+      } catch (error) {
+        this.logger.error(
+          `Error deleting from ${collectionName} for shop ${shopId}: ${error.message}`,
+        );
+      }
+    }
+
+    // Finally, delete the shop document itself
+    await this.shopModel.deleteOne({ _id: shopObjectId }).exec();
+    deletedCollections['shops'] = 1;
+    totalDeleted += 1;
+
+    // Invalidate caches
+    this.invalidateShopCache();
+
+    this.logger.warn(
+      `PERMANENT DELETE completed for shop "${shop.name}" (${shopId}). Total documents removed: ${totalDeleted}`,
+    );
+
+    return { deletedCollections, totalDeleted };
+  }
+
+  /**
    * Get subscription statistics
    */
   async getSubscriptionStats() {
@@ -991,11 +1126,24 @@ export class SuperAdminService {
 
     if (!template) return false;
 
+    // Map status to template name for logging
+    const templateNames: Record<string, string> = {
+      expired: 'subscription_expired',
+      past_due: 'subscription_past_due_day1',
+      suspended: 'subscription_suspended_notice',
+    };
+    const normalizedStatus = status === SubscriptionStatus.EXPIRED ? 'expired'
+      : status === SubscriptionStatus.PAST_DUE ? 'past_due'
+      : status === SubscriptionStatus.SUSPENDED ? 'suspended'
+      : status;
+
     try {
       const result = await this.emailService.sendEmail({
         to: admin.email,
         subject: template.subject.replace('{{shopName}}', shop.name),
         html: template.getHtml(vars),
+        templateName: templateNames[normalizedStatus] || `subscription_${normalizedStatus}`,
+        category: 'subscription',
       });
       return result.success;
     } catch (error) {

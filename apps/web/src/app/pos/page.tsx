@@ -174,6 +174,9 @@ function POSContent() {
   const [isCheckoutMode, setIsCheckoutMode] = useState(false);
   const [showReceiptPreview, setShowReceiptPreview] = useState(false);
   const [shopSettings, setShopSettings] = useState<any>(null);
+  const [businessTypeConfig, setBusinessTypeConfig] = useState<any>(null);
+  const [orderType, setOrderType] = useState<string>('standard');
+  const [tableNumber, setTableNumber] = useState<string>('');
   const [receiptsHistory, setReceiptsHistory] = useState<StoredReceipt[]>([]);
   const [isReceiptsHistoryOpen, setIsReceiptsHistoryOpen] = useState(false);
   const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false);
@@ -707,25 +710,38 @@ function POSContent() {
     return () => controller.abort();
   }, [q, tab, currentBranch?._id]);
 
-  // Fetch shop settings on mount
+  // Fetch shop settings and business type config on mount
   useEffect(() => {
     const fetchShopSettings = async () => {
       try {
         if (!shop?.id || !token) return;
         const base = config.apiUrl;
-        const res = await fetch(`${base}/shop-settings/${shop.id}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-        if (res.ok) {
-          const settingsText = await res.text();
+        const [settingsRes, btConfigRes] = await Promise.all([
+          fetch(`${base}/shop-settings/${shop.id}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          fetch(`${base}/shop-settings/${shop.id}/business-type-config`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+        ]);
+        if (settingsRes.ok) {
+          const settingsText = await settingsRes.text();
           const data = settingsText ? JSON.parse(settingsText) : {};
           setShopSettings(data);
         }
+        if (btConfigRes.ok) {
+          const btText = await btConfigRes.text();
+          const btData = btText ? JSON.parse(btText) : null;
+          if (btData) {
+            setBusinessTypeConfig(btData);
+            // Set default order type from POS config
+            if (btData.posConfig?.defaultOrderType) {
+              setOrderType(btData.posConfig.defaultOrderType);
+            }
+          }
+        }
       } catch (err) {
         console.error('Failed to fetch shop settings:', err);
-        // Use default settings if fetch fails
         setShopSettings({
           tax: { enabled: true, rate: 0.16, name: 'VAT' },
         });
@@ -981,7 +997,7 @@ function POSContent() {
         setFeedbackType('loading');
         setFeedbackMessage('Creating order...');
         
-        const payload = {
+        const payload: any = {
           items: cartItems.map((item) => ({
             productId: item.productId,
             name: item.name,
@@ -1007,6 +1023,9 @@ function POSContent() {
           cashierId,
           cashierName,
           shiftId: currentShift?._id,
+          // Business-type-specific order fields
+          ...(orderType !== 'standard' && { orderType }),
+          ...(tableNumber && { tableNumber }),
         };
         
         const res = await fetch(`${config.apiUrl}/sales/checkout`, {
@@ -1178,7 +1197,7 @@ function POSContent() {
       const finalTotal = total - loyaltyPointsToRedeem;
       paymentDetails.amount = finalTotal;
       
-      const payload = {
+      const payload: any = {
         items: cartItems.map((item) => ({
           productId: item.productId,
           name: item.name,
@@ -1197,6 +1216,9 @@ function POSContent() {
         cashierId,
         cashierName,
         shiftId: currentShift?._id,
+        // Business-type-specific order fields
+        ...(orderType !== 'standard' && { orderType }),
+        ...(tableNumber && { tableNumber }),
       };
       const res = await fetch(`${config.apiUrl}/sales/checkout`, {
         method: "POST",

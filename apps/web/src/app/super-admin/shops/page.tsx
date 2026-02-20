@@ -4,7 +4,7 @@ import { config } from '@/lib/config';
 import { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Badge, Tabs, TabsContent, TabsList, TabsTrigger, Button, Input } from '@smartduka/ui';
-import { Search, Eye, CheckCircle, XCircle, AlertCircle, Clock, RefreshCw, ArrowLeft, Store, Trash2, RotateCcw } from 'lucide-react';
+import { Search, Eye, CheckCircle, XCircle, AlertCircle, Clock, RefreshCw, ArrowLeft, Store, Trash2, RotateCcw, AlertTriangle } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/lib/use-toast';
@@ -44,6 +44,10 @@ function ShopsManagementContent() {
   const [shopToDelete, setShopToDelete] = useState<Shop | null>(null);
   const [deleteReason, setDeleteReason] = useState('');
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [permanentDeleteDialogOpen, setPermanentDeleteDialogOpen] = useState(false);
+  const [shopToPermanentDelete, setShopToPermanentDelete] = useState<Shop | null>(null);
+  const [permanentDeleteConfirmName, setPermanentDeleteConfirmName] = useState('');
+  const [permanentDeleteLoading, setPermanentDeleteLoading] = useState(false);
 
   // Update tab when URL changes
   useEffect(() => {
@@ -223,6 +227,43 @@ function ShopsManagementContent() {
       toast({ type: 'error', title: 'Error', message: err?.message });
     } finally {
       setDeleteLoading(false);
+    }
+  };
+
+  const openPermanentDeleteDialog = (shop: Shop) => {
+    setShopToPermanentDelete(shop);
+    setPermanentDeleteConfirmName('');
+    setPermanentDeleteDialogOpen(true);
+  };
+
+  const handlePermanentDelete = async () => {
+    if (!token || !shopToPermanentDelete || permanentDeleteConfirmName !== shopToPermanentDelete.name) return;
+    try {
+      setPermanentDeleteLoading(true);
+      const res = await fetch(`${config.apiUrl}/super-admin/shops/${shopToPermanentDelete._id}/permanent`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ confirmName: permanentDeleteConfirmName }),
+      });
+
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast({ type: 'success', title: 'Permanently Deleted', message: `Shop and ${data.totalDeleted || 0} related records have been permanently removed.` });
+        setPermanentDeleteDialogOpen(false);
+        setShopToPermanentDelete(null);
+        setPermanentDeleteConfirmName('');
+        loadShops();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        toast({ type: 'error', title: 'Failed', message: data.message || 'Could not permanently delete shop' });
+      }
+    } catch (err: any) {
+      toast({ type: 'error', title: 'Error', message: err?.message });
+    } finally {
+      setPermanentDeleteLoading(false);
     }
   };
 
@@ -467,6 +508,7 @@ function ShopsManagementContent() {
                   key={shop._id}
                   shop={shop}
                   onRestore={() => handleRestore(shop._id)}
+                  onPermanentDelete={() => openPermanentDeleteDialog(shop)}
                   getStatusIcon={getStatusIcon}
                   isDeleted
                 />
@@ -533,6 +575,71 @@ function ShopsManagementContent() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        {/* Permanent Delete Confirmation Dialog */}
+        <Dialog open={permanentDeleteDialogOpen} onOpenChange={setPermanentDeleteDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-red-700">
+                <AlertTriangle className="h-5 w-5" />
+                Permanently Delete Shop
+              </DialogTitle>
+              <DialogDescription>
+                This action is <strong>irreversible</strong>. The shop and <strong>ALL</strong> its data (products, orders, users, payments, etc.) will be permanently removed from the database.
+              </DialogDescription>
+            </DialogHeader>
+            {shopToPermanentDelete && (
+              <div className="space-y-4">
+                <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="font-semibold text-red-800">{shopToPermanentDelete.name}</p>
+                  <p className="text-sm text-red-600">{shopToPermanentDelete.email}</p>
+                  {shopToPermanentDelete.deletionReason && (
+                    <p className="text-xs text-red-500 mt-1">Deletion reason: {shopToPermanentDelete.deletionReason}</p>
+                  )}
+                </div>
+                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
+                  <strong>Warning:</strong> This will delete all users, products, orders, invoices, receipts, payments, subscriptions, and every other record associated with this shop.
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Type <span className="font-bold text-red-600">{shopToPermanentDelete.name}</span> to confirm
+                  </label>
+                  <input
+                    type="text"
+                    value={permanentDeleteConfirmName}
+                    onChange={(e) => setPermanentDeleteConfirmName(e.target.value)}
+                    placeholder="Type the shop name exactly..."
+                    className="w-full p-3 border border-red-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                  />
+                </div>
+              </div>
+            )}
+            <DialogFooter className="gap-2">
+              <button
+                onClick={() => setPermanentDeleteDialogOpen(false)}
+                className="px-4 py-2 text-sm border rounded-lg hover:bg-muted"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handlePermanentDelete}
+                disabled={permanentDeleteConfirmName !== shopToPermanentDelete?.name || permanentDeleteLoading}
+                className="px-4 py-2 text-sm bg-red-700 text-white rounded-lg hover:bg-red-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {permanentDeleteLoading ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    Deleting Forever...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-4 w-4" />
+                    Permanently Delete
+                  </>
+                )}
+              </button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </main>
   );
@@ -546,6 +653,7 @@ interface ShopCardProps {
   onReactivate?: () => void;
   onDelete?: () => void;
   onRestore?: () => void;
+  onPermanentDelete?: () => void;
   isDeleted?: boolean;
   getStatusIcon: (status: string) => React.ReactNode;
 }
@@ -558,6 +666,7 @@ function ShopCard({
   onReactivate,
   onDelete,
   onRestore,
+  onPermanentDelete,
   isDeleted,
   getStatusIcon,
 }: ShopCardProps) {
@@ -654,6 +763,15 @@ function ShopCard({
             >
               <RotateCcw className="h-3 w-3" />
               Restore
+            </button>
+          )}
+          {onPermanentDelete && (
+            <button
+              onClick={onPermanentDelete}
+              className="px-2 md:px-3 py-1 bg-red-800 text-white text-xs md:text-sm rounded hover:bg-red-900 flex items-center gap-1"
+            >
+              <Trash2 className="h-3 w-3" />
+              Permanently Delete
             </button>
           )}
           {onDelete && (

@@ -42,6 +42,9 @@ const planOrder = ['starter', 'basic', 'silver', 'gold'];
  * - Check resource limits before allowing actions
  * - Block access for suspended/expired subscriptions
  */
+// FREE_MODE: SmartDuka is free for all users. Set to false to re-enable subscription enforcement.
+const FREE_MODE = true;
+
 export function SubscriptionGuard({
   children,
   requiredPlan,
@@ -52,6 +55,9 @@ export function SubscriptionGuard({
 }: SubscriptionGuardProps) {
   const router = useRouter();
   const { subscription, loading, error } = useSubscription();
+
+  // FREE_MODE: Skip all subscription checks — full access for everyone
+  if (FREE_MODE) return <>{children}</>;
 
   // Check if current plan meets minimum requirement
   const meetsMinimumPlan = () => {

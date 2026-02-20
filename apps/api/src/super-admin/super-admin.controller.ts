@@ -247,6 +247,22 @@ export class SuperAdminController {
   }
 
   /**
+   * Permanently delete a shop and ALL its data from the database.
+   * This is irreversible. Shop must already be soft-deleted.
+   */
+  @Delete('shops/:id/permanent')
+  async permanentDeleteShop(
+    @Param('id') shopId: string,
+    @Body() body: { confirmName: string },
+    @CurrentUser() user: any,
+  ) {
+    if (!body.confirmName || body.confirmName.trim().length === 0) {
+      throw new BadRequestException('Shop name confirmation is required');
+    }
+    return this.superAdminService.permanentDeleteShop(shopId, user.sub, body.confirmName);
+  }
+
+  /**
    * Restore a soft-deleted shop
    */
   @Post('shops/:id/restore')
