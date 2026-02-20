@@ -5,7 +5,7 @@ services:
     region: singapore
     plan: free
     rootDir: apps/api
-    buildCommand: corepack enable && pnpm install && pnpm run build
+    buildCommand: corepack enable && pnpm install && cd ../../packages/business-types && pnpm run build && cd ../../apps/api && pnpm run build
     startCommand: pnpm run start:prod
     envVars:
       # ==================== CORE ====================
