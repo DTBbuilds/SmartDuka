@@ -34,6 +34,9 @@ const nextConfig: NextConfig = {
   /* config options here */
   // Removed reactCompiler and turbopack config for Vercel compatibility
   
+  // Transpile workspace packages so Next.js/Turbopack can resolve them
+  transpilePackages: ['@smartduka/business-types'],
+  
   // Allow cross-origin requests from local network IPs in development
   // This enables testing from mobile devices on the same network
   allowedDevOrigins,
