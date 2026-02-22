@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Card,
@@ -36,6 +36,7 @@ import { Button } from '@smartduka/ui';
 import { useAuth } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
 import { config } from '@/lib/config';
+import { OrderDetailsModal } from '@/components/order-details-modal';
 
 type Order = {
   _id: string;
@@ -72,6 +73,28 @@ export default function OrdersAnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<OrderStats | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [selectedOrder, setSelectedOrder] = useState<any>(null);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+  const [loadingOrderId, setLoadingOrderId] = useState<string | null>(null);
+
+  const handleOrderClick = useCallback(async (orderId: string) => {
+    if (!token) return;
+    try {
+      setLoadingOrderId(orderId);
+      const res = await fetch(`${config.apiUrl}/sales/orders/${orderId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const orderData = await res.json();
+        setSelectedOrder(orderData);
+        setIsDetailsModalOpen(true);
+      }
+    } catch (err) {
+      console.error('Failed to load order details:', err);
+    } finally {
+      setLoadingOrderId(null);
+    }
+  }, [token]);
 
   useEffect(() => {
     if (token) {
@@ -339,7 +362,7 @@ export default function OrdersAnalyticsPage() {
                     <div
                       key={order._id}
                       className="flex flex-col sm:flex-row sm:items-center justify-between p-3 sm:p-4 border rounded-lg hover:bg-accent transition-colors cursor-pointer gap-2 sm:gap-4"
-                      onClick={() => router.push(`/orders/${order._id}`)}
+                      onClick={() => handleOrderClick(order._id)}
                     >
                       <div className="flex items-center gap-3 sm:gap-4 min-w-0">
                         <div className="p-2 rounded-lg bg-primary/10 flex-shrink-0">
@@ -377,6 +400,16 @@ export default function OrdersAnalyticsPage() {
           </Card>
         </>
       )}
+
+      {/* Order Details Modal */}
+      <OrderDetailsModal
+        isOpen={isDetailsModalOpen}
+        onClose={() => {
+          setIsDetailsModalOpen(false);
+          setSelectedOrder(null);
+        }}
+        order={selectedOrder}
+      />
     </div>
   );
 }

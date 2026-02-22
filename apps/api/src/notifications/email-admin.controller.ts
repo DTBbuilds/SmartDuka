@@ -399,7 +399,7 @@ export class EmailAdminController {
         port: port ? `${port}` : '587 (default)',
         user: user ? '✓ Set' : '✗ Missing',
         pass: pass ? '✓ Set' : '✗ Missing',
-        from: from || 'SmartDuka <noreply@smartduka.co.ke>',
+        from: from || 'SmartDuka <noreply@smartduka.org>',
       },
       missingFields: [
         !host && 'SMTP_HOST',
@@ -475,7 +475,7 @@ export class EmailAdminController {
                 <h3>Configuration Details:</h3>
                 <p><strong>SMTP Host:</strong> ${host}</p>
                 <p><strong>SMTP Port:</strong> ${process.env.SMTP_PORT || 465}</p>
-                <p><strong>From Address:</strong> ${process.env.SMTP_FROM || 'SmartDuka <noreply@smartduka.co.ke>'}</p>
+                <p><strong>From Address:</strong> ${process.env.SMTP_FROM || 'SmartDuka <noreply@smartduka.org>'}</p>
                 <p><strong>Test Email Sent To:</strong> ${testEmail}</p>
               </div>
               <p style="color: #666; font-size: 14px;">
@@ -494,7 +494,7 @@ export class EmailAdminController {
         configuration: {
           host,
           port: process.env.SMTP_PORT || 465,
-          from: process.env.SMTP_FROM || 'SmartDuka <noreply@smartduka.co.ke>',
+          from: process.env.SMTP_FROM || 'SmartDuka <noreply@smartduka.org>',
         },
       };
     } catch (error: any) {

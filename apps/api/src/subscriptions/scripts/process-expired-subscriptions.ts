@@ -22,7 +22,7 @@ import { EmailService } from '../../notifications/email.service';
 import { EMAIL_TEMPLATES } from '../../notifications/email-templates';
 
 const GRACE_PERIOD_DAYS = 7;
-const FRONTEND_URL = process.env.FRONTEND_URL || 'https://smartduka.co.ke';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'https://www.smartduka.org';
 
 interface ProcessResult {
   shopId: string;

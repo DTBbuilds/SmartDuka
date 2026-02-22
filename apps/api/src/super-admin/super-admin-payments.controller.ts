@@ -357,7 +357,7 @@ export class SuperAdminPaymentsController {
 
       if (shopAdmin?.email && shop) {
         const template = EMAIL_TEMPLATES.payment_successful;
-        const frontendUrl = process.env.FRONTEND_URL || 'https://smartduka.co.ke';
+        const frontendUrl = process.env.FRONTEND_URL || 'https://www.smartduka.org';
         const apiUrl = process.env.API_URL || 'https://smarduka.onrender.com';
         
         // Format sender phone if available

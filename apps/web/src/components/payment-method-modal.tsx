@@ -496,7 +496,7 @@ export function PaymentMethodModal({
                     onClick={() => setAmountTendered(amount)}
                     className="text-xs"
                   >
-                    {amount >= 1000 ? `${amount / 1000}K` : amount}
+                    {amount.toLocaleString('en-KE')}
                   </Button>
                 ))}
               </div>

@@ -59,13 +59,35 @@ export function ProductImageUpload({
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.message || `Upload failed (${res.status})`);
+        const msg = errData.message || '';
+        // Provide user-friendly messages for common errors
+        if (msg.includes('api_key') || msg.includes('API key') || msg.includes('Must supply')) {
+          throw new Error('Image service not configured. Please contact support.');
+        }
+        if (res.status === 413) {
+          throw new Error('Image too large. Max 5MB allowed.');
+        }
+        if (res.status === 401) {
+          throw new Error('Session expired. Please log in again.');
+        }
+        if (res.status === 403) {
+          throw new Error('You don\'t have permission to upload images.');
+        }
+        throw new Error(msg || `Upload failed. Please try again.`);
       }
 
       const data = await res.json();
       onChange(data.url);
     } catch (err: any) {
-      setError(err.message || 'Upload failed');
+      const message = err.message || 'Upload failed';
+      // Clean up technical Cloudinary errors for end users
+      if (message.includes('api_key') || message.includes('API key') || message.includes('Must supply')) {
+        setError('Image service not configured. Contact support.');
+      } else if (message.includes('fetch') || message.includes('network') || message.includes('Failed to fetch')) {
+        setError('Network error. Check your connection.');
+      } else {
+        setError(message);
+      }
     } finally {
       setIsUploading(false);
     }

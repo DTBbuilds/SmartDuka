@@ -197,7 +197,7 @@ export default function PaymentsAnalyticsPage() {
                   <div className="min-w-0 flex-1">
                     <p className="text-xs md:text-sm text-muted-foreground">Today</p>
                     <p className="text-lg md:text-2xl font-bold text-green-700 dark:text-green-400 truncate">
-                      Ksh {(stats.todayTotal / 1000).toFixed(0)}K
+                      Ksh {stats.todayTotal.toLocaleString('en-KE')}
                     </p>
                     <p className="text-xs text-muted-foreground">{stats.todayTransactions} txns</p>
                   </div>
@@ -214,7 +214,7 @@ export default function PaymentsAnalyticsPage() {
                   <div className="min-w-0 flex-1">
                     <p className="text-xs md:text-sm text-muted-foreground">Month</p>
                     <p className="text-lg md:text-2xl font-bold truncate">
-                      Ksh {(stats.monthTotal / 1000000).toFixed(1)}M
+                      Ksh {stats.monthTotal.toLocaleString('en-KE')}
                     </p>
                     <p className="text-xs text-muted-foreground">{stats.monthTransactions} txns</p>
                   </div>
@@ -246,7 +246,7 @@ export default function PaymentsAnalyticsPage() {
                   <div className="min-w-0 flex-1">
                     <p className="text-xs md:text-sm text-muted-foreground">Avg Txn</p>
                     <p className="text-lg md:text-2xl font-bold truncate">
-                      Ksh {(stats.averageTransactionValue / 1000).toFixed(1)}K
+                      Ksh {stats.averageTransactionValue.toLocaleString('en-KE')}
                     </p>
                     <p className="text-xs text-muted-foreground">Per order</p>
                   </div>
@@ -368,7 +368,7 @@ export default function PaymentsAnalyticsPage() {
                       </div>
                       <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">
                         <div className="text-right">
-                          <p className="font-semibold text-sm md:text-base">Ksh {(txn.amount / 1000).toFixed(1)}K</p>
+                          <p className="font-semibold text-sm md:text-base">Ksh {txn.amount.toLocaleString('en-KE')}</p>
                           <p className="text-xs text-muted-foreground">
                             {new Date(txn.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </p>

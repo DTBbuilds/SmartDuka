@@ -11,7 +11,7 @@ import { EMAIL_TEMPLATES } from '../notifications/email-templates';
 import { CacheService, CACHE_TTL, ADMIN_CACHE_KEYS } from '../common/services/cache.service';
 
 const GRACE_PERIOD_DAYS = 7;
-const FRONTEND_URL = process.env.FRONTEND_URL || 'https://smartduka.co.ke';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'https://www.smartduka.org';
 
 @Injectable()
 export class SuperAdminService {

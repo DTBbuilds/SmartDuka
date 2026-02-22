@@ -302,7 +302,7 @@ export class SystemEventManagerService implements OnModuleInit {
       to: data.customerEmail,
       subject: `Receipt from ${shop.shopName} - Order #${data.orderNumber}`,
       html: receiptHtml,
-      from: `${shop.shopName} <noreply@smartduka.co.ke>`,
+      from: `${shop.shopName} <noreply@smartduka.org>`,
       templateName: 'receipt_email',
       category: 'receipt',
     });
@@ -521,7 +521,7 @@ export class SystemEventManagerService implements OnModuleInit {
       <p>This is an electronic receipt from ${shop.shopName}.</p>
       <p>For inquiries, contact us at ${shop.shopEmail || 'smartdukainfo@gmail.com'}</p>
       <p style="margin-top: 15px; font-size: 10px; color: #999;">
-        Powered by SmartDuka POS | www.smartduka.co.ke
+        Powered by SmartDuka POS | www.smartduka.org
       </p>
     </div>
   </div>

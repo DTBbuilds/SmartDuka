@@ -63,9 +63,6 @@ const PERIOD_LABELS: Record<string, { title: string; subtitle: string; trendLabe
 };
 
 const formatCurrency = (value: number) => {
-  if (value >= 1_000_000) return `Ksh ${(value / 1_000_000).toFixed(2)}M`;
-  if (value >= 10_000) return `Ksh ${(value / 1_000).toFixed(0)}K`;
-  if (value >= 1_000) return `Ksh ${(value / 1_000).toFixed(1)}K`;
   return `Ksh ${value.toLocaleString('en-KE')}`;
 };
 

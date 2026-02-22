@@ -11,7 +11,7 @@ SMTP_HOST=smtp.gmail.com
 SMTP_PORT=465
 SMTP_USER=your-email@gmail.com
 SMTP_PASS=your-app-password
-SMTP_FROM=SmartDuka <noreply@smartduka.co.ke>
+SMTP_FROM=SmartDuka <noreply@smartduka.org>
 ```
 
 ## Provider-Specific Setup
@@ -34,7 +34,7 @@ SMTP_FROM=SmartDuka <noreply@smartduka.co.ke>
    SMTP_PORT=465
    SMTP_USER=your-email@gmail.com
    SMTP_PASS=xxxx xxxx xxxx xxxx  # Remove spaces: xxxxxxxxxxxxxxxx
-   SMTP_FROM=SmartDuka <noreply@smartduka.co.ke>
+   SMTP_FROM=SmartDuka <noreply@smartduka.org>
    ```
 
 ### Microsoft Outlook
@@ -49,7 +49,7 @@ SMTP_FROM=SmartDuka <noreply@smartduka.co.ke>
    SMTP_PORT=465
    SMTP_USER=your-email@outlook.com
    SMTP_PASS=your-outlook-password
-   SMTP_FROM=SmartDuka <noreply@smartduka.co.ke>
+   SMTP_FROM=SmartDuka <noreply@smartduka.org>
    ```
 
 ### SendGrid
@@ -64,7 +64,7 @@ SMTP_FROM=SmartDuka <noreply@smartduka.co.ke>
    SMTP_PORT=465
    SMTP_USER=apikey
    SMTP_PASS=SG.your-api-key-here
-   SMTP_FROM=SmartDuka <noreply@smartduka.co.ke>
+   SMTP_FROM=SmartDuka <noreply@smartduka.org>
    ```
 
 ### AWS SES (Production)
@@ -80,7 +80,7 @@ SMTP_FROM=SmartDuka <noreply@smartduka.co.ke>
    SMTP_PORT=465
    SMTP_USER=your-smtp-username
    SMTP_PASS=your-smtp-password
-   SMTP_FROM=SmartDuka <noreply@smartduka.co.ke>
+   SMTP_FROM=SmartDuka <noreply@smartduka.org>
    ```
 
 ## Troubleshooting
@@ -179,7 +179,7 @@ All templates can be customized in the admin panel.
 | `SMTP_PORT` | No | 465 | SMTP port (default: 465, SSL) |
 | `SMTP_USER` | Yes | user@gmail.com | Email address or username |
 | `SMTP_PASS` | Yes | app-password | Password or app-specific password |
-| `SMTP_FROM` | No | noreply@smartduka.co.ke | From address for emails |
+| `SMTP_FROM` | No | noreply@smartduka.org | From address for emails |
 
 ## Support
 

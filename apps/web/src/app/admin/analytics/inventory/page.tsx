@@ -190,7 +190,7 @@ export default function InventoryAnalyticsPage() {
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0 flex-1">
                     <p className="text-xs sm:text-sm text-muted-foreground truncate">Stock Value</p>
-                    <p className="text-lg sm:text-2xl font-bold">Ksh {(stats.totalStockValue / 1000000).toFixed(2)}M</p>
+                    <p className="text-lg sm:text-2xl font-bold">Ksh {stats.totalStockValue.toLocaleString('en-KE')}</p>
                     <p className="text-xs text-muted-foreground truncate">{stats.totalStockUnits.toLocaleString()} units</p>
                   </div>
                   <div className="p-2 sm:p-3 rounded-full bg-green-500/10 flex-shrink-0">

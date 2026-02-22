@@ -677,7 +677,7 @@ export class InvoiceService {
       const html = this.generateInvoiceHTML(invoice);
 
       const fromName = invoice.businessName || 'SmartDuka';
-      const fromEmail = invoice.businessEmail || process.env.SMTP_FROM || 'SmartDuka <noreply@smartduka.co.ke>';
+      const fromEmail = invoice.businessEmail || process.env.SMTP_FROM || 'SmartDuka <noreply@smartduka.org>';
 
       await this.emailService.sendEmail({
         to: invoice.customerEmail,

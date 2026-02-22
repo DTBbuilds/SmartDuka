@@ -256,34 +256,35 @@ function CashierDashboardContent() {
   };
 
   return (
-    <main className="bg-background py-6 min-h-screen">
+    <main className="bg-background py-4 sm:py-6 min-h-screen">
       <ToastContainer toasts={toasts} onDismiss={dismiss} />
-      <div className="container">
+      <div className="container px-3 sm:px-6">
         {/* Header */}
-        <div className="mb-8 flex items-center justify-between">
-          <div>
+        <div className="mb-5 sm:mb-8 flex items-center justify-between gap-3">
+          <div className="min-w-0">
             {shop && (
-              <p className="text-xs font-medium text-primary mb-2">
+              <p className="text-[10px] sm:text-xs font-medium text-primary mb-1 sm:mb-2 truncate">
                 {shop.name} • Cashier View
               </p>
             )}
-            <h1 className="text-3xl font-bold">Welcome, {user?.name || 'Cashier'}</h1>
-            <p className="text-muted-foreground">Your sales dashboard for today</p>
+            <h1 className="text-xl sm:text-3xl font-bold truncate">Welcome, {user?.name || 'Cashier'}</h1>
+            <p className="text-xs sm:text-sm text-muted-foreground">Your sales dashboard for today</p>
           </div>
           <Button
             variant="outline"
             onClick={handleLogout}
-            className="gap-2"
+            size="sm"
+            className="gap-1.5 sm:gap-2 flex-shrink-0"
           >
             <LogOut className="h-4 w-4" />
-            Logout
+            <span className="hidden sm:inline">Logout</span>
           </Button>
         </div>
 
         {/* Shift Status Card */}
         {shift ? (
-          <Card className={`mb-8 border-l-4 ${isOnBreak ? 'border-l-amber-500' : 'border-l-blue-500'}`}>
-            <CardHeader className="pb-3">
+          <Card className={`mb-5 sm:mb-8 border-l-4 ${isOnBreak ? 'border-l-amber-500' : 'border-l-blue-500'}`}>
+            <CardHeader className="pb-2 sm:pb-3 px-3 sm:px-6">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-sm font-medium flex items-center gap-2">
                   {isOnBreak ? (
@@ -314,8 +315,8 @@ function CashierDashboardContent() {
                 </div>
               </div>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-4">
+            <CardContent className="px-3 sm:px-6">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 mb-3 sm:mb-4">
                 <div>
                   <p className="text-xs text-muted-foreground">Start Time</p>
                   <p className="font-semibold">{formatTime(shift.startTime)}</p>
@@ -384,12 +385,12 @@ function CashierDashboardContent() {
                 </div>
               )}
 
-              <div className="flex gap-2 flex-wrap">
+              <div className="grid grid-cols-3 gap-2">
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={() => router.push('/pos')}
-                  className="flex-1"
+                  className="h-10 sm:h-9 text-xs sm:text-sm"
                   disabled={isOnBreak}
                 >
                   <ShoppingCart className="h-4 w-4 mr-1" />
@@ -401,7 +402,7 @@ function CashierDashboardContent() {
                   <Button
                     size="sm"
                     onClick={handleEndBreak}
-                    className="flex-1 bg-green-600 hover:bg-green-700"
+                    className="h-10 sm:h-9 text-xs sm:text-sm bg-green-600 hover:bg-green-700"
                   >
                     <Play className="h-4 w-4 mr-1" />
                     End Break
@@ -411,17 +412,17 @@ function CashierDashboardContent() {
                     size="sm"
                     variant="outline"
                     onClick={handleStartBreak}
-                    className="flex-1"
+                    className="h-10 sm:h-9 text-xs sm:text-sm"
                   >
                     <Coffee className="h-4 w-4 mr-1" />
-                    Take Break
+                    Break
                   </Button>
                 )}
                 
                 <Button
                   size="sm"
                   onClick={() => router.push('/cashier/shift-end')}
-                  className="flex-1 bg-orange-600 hover:bg-orange-700"
+                  className="h-10 sm:h-9 text-xs sm:text-sm bg-orange-600 hover:bg-orange-700"
                   disabled={isOnBreak}
                 >
                   <Square className="h-4 w-4 mr-1" />
@@ -431,20 +432,20 @@ function CashierDashboardContent() {
             </CardContent>
           </Card>
         ) : (
-          <Card className="mb-8 border-l-4 border-l-yellow-500">
-            <CardHeader className="pb-3">
+          <Card className="mb-5 sm:mb-8 border-l-4 border-l-yellow-500">
+            <CardHeader className="pb-2 sm:pb-3 px-3 sm:px-6">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
                 <Clock className="h-4 w-4 text-yellow-600" />
                 No Active Shift
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground mb-4">
+            <CardContent className="px-3 sm:px-6">
+              <p className="text-sm text-muted-foreground mb-3 sm:mb-4">
                 Start a shift to begin tracking your sales.
               </p>
               <Button
                 onClick={() => router.push('/cashier/shift-start')}
-                className="w-full bg-green-600 hover:bg-green-700"
+                className="w-full h-11 bg-green-600 hover:bg-green-700"
               >
                 <Play className="h-4 w-4 mr-2" />
                 Start Shift
@@ -454,51 +455,39 @@ function CashierDashboardContent() {
         )}
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-5 sm:mb-8">
           {/* Total Sales */}
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <DollarSign className="h-4 w-4 text-green-600" />
-                Total Sales Today
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{formatCurrency(stats.totalSales)}</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {stats.transactionCount} transactions
+            <CardContent className="p-3 sm:pt-6 sm:p-6">
+              <DollarSign className="h-4 w-4 text-green-600 mb-1" />
+              <p className="text-[10px] sm:text-xs text-muted-foreground">Sales Today</p>
+              <div className="text-base sm:text-2xl font-bold mt-0.5 truncate">{formatCurrency(stats.totalSales)}</div>
+              <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">
+                {stats.transactionCount} txns
               </p>
             </CardContent>
           </Card>
 
           {/* Transaction Count */}
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <ShoppingCart className="h-4 w-4 text-blue-600" />
-                Transactions
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.transactionCount}</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                sales completed today
+            <CardContent className="p-3 sm:pt-6 sm:p-6">
+              <ShoppingCart className="h-4 w-4 text-blue-600 mb-1" />
+              <p className="text-[10px] sm:text-xs text-muted-foreground">Transactions</p>
+              <div className="text-base sm:text-2xl font-bold mt-0.5">{stats.transactionCount}</div>
+              <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">
+                completed
               </p>
             </CardContent>
           </Card>
 
           {/* Average Transaction */}
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <TrendingUp className="h-4 w-4 text-purple-600" />
-                Average Sale
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{formatCurrency(stats.averageTransaction)}</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                per transaction
+            <CardContent className="p-3 sm:pt-6 sm:p-6">
+              <TrendingUp className="h-4 w-4 text-purple-600 mb-1" />
+              <p className="text-[10px] sm:text-xs text-muted-foreground">Avg Sale</p>
+              <div className="text-base sm:text-2xl font-bold mt-0.5 truncate">{formatCurrency(stats.averageTransaction)}</div>
+              <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">
+                per txn
               </p>
             </CardContent>
           </Card>
@@ -506,14 +495,14 @@ function CashierDashboardContent() {
 
         {/* Recent Transactions */}
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Clock className="h-5 w-5" />
+          <CardHeader className="px-3 sm:px-6 pb-2 sm:pb-3">
+            <CardTitle className="text-sm sm:text-base flex items-center gap-2">
+              <Clock className="h-4 w-4 sm:h-5 sm:w-5" />
               Recent Transactions
             </CardTitle>
-            <CardDescription>Your last 10 sales today</CardDescription>
+            <CardDescription className="text-xs">Your last 10 sales today</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-3 sm:px-6">
             {loading ? (
               <div className="text-center py-8 text-muted-foreground">Loading transactions...</div>
             ) : stats.recentTransactions.length === 0 ? (
@@ -521,25 +510,25 @@ function CashierDashboardContent() {
                 No transactions yet. Start selling!
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2 sm:space-y-3">
                 {stats.recentTransactions.map((transaction) => (
                   <div
                     key={transaction._id}
-                    className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+                    className="flex items-center justify-between p-2.5 sm:p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors active:bg-muted"
                   >
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <ShoppingCart className="h-4 w-4 text-muted-foreground" />
-                        <span className="font-medium">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 sm:gap-2">
+                        <ShoppingCart className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground flex-shrink-0" />
+                        <span className="font-medium text-sm sm:text-base">
                           {transaction.details?.items || 0} items
                         </span>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1">
+                      <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 sm:mt-1 pl-5 sm:pl-6">
                         {transaction.details?.paymentMethod || 'Unknown'} • {formatTime(transaction.timestamp)}
                       </p>
                     </div>
-                    <div className="text-right">
-                      <div className="font-bold text-lg">
+                    <div className="text-right flex-shrink-0 ml-2">
+                      <div className="font-bold text-sm sm:text-lg">
                         {formatCurrency(transaction.details?.amount || 0)}
                       </div>
                     </div>
@@ -551,11 +540,11 @@ function CashierDashboardContent() {
         </Card>
 
         {/* Action Buttons */}
-        <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="mt-5 sm:mt-8 grid grid-cols-2 gap-3 sm:gap-4">
           <Button
             size="lg"
             onClick={() => router.push('/pos')}
-            className="gap-2"
+            className="gap-2 h-12 sm:h-11"
           >
             <ShoppingCart className="h-5 w-5" />
             Go to POS
@@ -564,10 +553,10 @@ function CashierDashboardContent() {
             size="lg"
             variant="outline"
             onClick={loadCashierStats}
-            className="gap-2"
+            className="gap-2 h-12 sm:h-11"
           >
             <Clock className="h-5 w-5" />
-            Refresh Stats
+            Refresh
           </Button>
         </div>
       </div>

@@ -877,7 +877,7 @@ export class SubscriptionsService {
         const previousPlan = currentPlan?.name || oldPlanCode;
         
         if (admin?.email && shop) {
-          const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'https://smartduka.co.ke';
+          const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'https://www.smartduka.org';
           const template = EMAIL_TEMPLATES.plan_changed;
           
           await this.emailService.sendEmail({
@@ -2803,7 +2803,7 @@ export class SubscriptionsService {
             <p>Dear ${shopAdmin.name || shopName},</p>
             ${messages[type]}
             <div style="margin: 24px 0;">
-              <a href="${process.env.FRONTEND_URL || 'https://smartduka.co.ke'}/settings?tab=subscription" 
+              <a href="${process.env.FRONTEND_URL || 'https://www.smartduka.org'}/settings?tab=subscription" 
                  style="background-color: #f97316; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">
                 ${type === 'trial_expired' ? 'Choose a Plan' : 'Make Payment Now'}
               </a>

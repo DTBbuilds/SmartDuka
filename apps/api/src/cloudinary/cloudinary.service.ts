@@ -15,6 +15,18 @@ export class CloudinaryService {
     file: Express.Multer.File,
     folder = 'smartduka/products',
   ): Promise<{ url: string; publicId: string }> {
+    // Validate Cloudinary is configured before attempting upload
+    const cfg = cloudinary.config();
+    if (!cfg.cloud_name || !cfg.api_key || !cfg.api_secret) {
+      const missing = [
+        !cfg.cloud_name && 'CLOUDINARY_CLOUD_NAME',
+        !cfg.api_key && 'CLOUDINARY_API_KEY',
+        !cfg.api_secret && 'CLOUDINARY_API_SECRET',
+      ].filter(Boolean).join(', ');
+      this.logger.error(`Cloudinary not configured. Missing: ${missing}`);
+      throw new Error('Image upload service is not configured. Please contact support.');
+    }
+
     return new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
         {

@@ -144,9 +144,7 @@ export default function ProfitAnalyticsPage() {
   };
 
   const formatCurrency = (amount: number) => {
-    if (amount >= 1000000) return `KES ${(amount / 1000000).toFixed(1)}M`;
-    if (amount >= 1000) return `KES ${(amount / 1000).toFixed(0)}K`;
-    return `KES ${amount.toLocaleString()}`;
+    return `KES ${amount.toLocaleString('en-KE')}`;
   };
 
   if (loading) {

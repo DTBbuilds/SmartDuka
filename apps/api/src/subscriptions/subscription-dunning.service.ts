@@ -45,7 +45,7 @@ export class SubscriptionDunningService {
     private readonly emailService: EmailService,
     private readonly configService: ConfigService,
   ) {
-    this.frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'https://smartduka.co.ke';
+    this.frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'https://www.smartduka.org';
   }
 
   /**

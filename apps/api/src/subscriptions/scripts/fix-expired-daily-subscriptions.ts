@@ -19,7 +19,7 @@ import { Shop, ShopDocument } from '../../shops/schemas/shop.schema';
 import { User, UserDocument } from '../../users/schemas/user.schema';
 import { EmailService } from '../../notifications/email.service';
 
-const FRONTEND_URL = process.env.FRONTEND_URL || 'https://smartduka.co.ke';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'https://www.smartduka.org';
 
 interface ProcessResult {
   shopId: string;

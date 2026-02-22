@@ -58,25 +58,43 @@ export class EmailService {
   }
 
   /**
-   * Initialize email providers - Resend (primary) then SMTP (fallback)
-   * Resend uses HTTP API which bypasses SMTP port blocking on Render
+   * Initialize email providers - both SMTP and Resend run in parallel
+   * SMTP (Gmail) for direct sending, Resend (HTTP API) as reliable backup
+   * Both fire simultaneously to maximize delivery success
    */
   private initializeProviders() {
-    // Try Resend first (recommended for Render - uses HTTP API)
+    // Initialize SMTP (Gmail)
+    this.initializeSmtpTransporter();
+
+    // Initialize Resend (HTTP API - works even when SMTP ports are blocked)
     const resendApiKey = process.env.RESEND_API_KEY;
     if (resendApiKey) {
       try {
         this.resend = new Resend(resendApiKey);
-        this.activeProvider = 'resend';
-        this.logger.log('✅ Email provider: Resend (HTTP API)');
-        return;
+        this.logger.log('✅ Resend initialized (HTTP API)');
+        if (this.activeProvider === 'none') {
+          this.activeProvider = 'resend';
+        }
       } catch (error: any) {
         this.logger.warn(`⚠️ Resend initialization failed: ${error.message}`);
       }
     }
 
-    // Fallback to SMTP (may not work on Render due to port blocking)
-    this.initializeSmtpTransporter();
+    // Log combined status
+    const smtpReady = !!this.transporter;
+    const resendReady = !!this.resend;
+    if (smtpReady && resendReady) {
+      this.activeProvider = 'smtp';
+      this.logger.log('✅ Email: SMTP + Resend (parallel mode)');
+    } else if (smtpReady) {
+      this.activeProvider = 'smtp';
+      this.logger.log('✅ Email: SMTP only');
+    } else if (resendReady) {
+      this.activeProvider = 'resend';
+      this.logger.log('✅ Email: Resend only');
+    } else {
+      this.logger.warn('⚠️ No email provider configured. Set SMTP credentials and/or RESEND_API_KEY.');
+    }
   }
 
   private initializeSmtpTransporter() {
@@ -86,7 +104,7 @@ export class EmailService {
     const port = parseInt(process.env.SMTP_PORT || '465', 10);
     const user = process.env.SMTP_USER;
     const pass = process.env.SMTP_PASS;
-    const from = process.env.SMTP_FROM || 'SmartDuka <noreply@smartduka.co.ke>';
+    const from = process.env.SMTP_FROM || 'SmartDuka <noreply@smartduka.org>';
 
     // Log configuration status (only once, concisely)
     this.logger.log(`SMTP Config: host=${host ? '✓' : '✗'}, user=${user ? '✓' : '✗'}, pass=${pass ? '✓' : '✗'}, port=${port}`);
@@ -162,45 +180,48 @@ export class EmailService {
   }
 
   /**
-   * Get the correct 'from' address based on the active provider.
-   * Resend requires a verified domain - never use gmail.com/yahoo.com etc.
+   * Get the correct 'from' address based on the provider being used.
+   * SMTP can send from Gmail; Resend requires a verified domain.
    */
-  private getFromAddress(requestedFrom?: string): string {
-    const defaultFrom = 'SmartDuka <noreply@smartduka.co.ke>';
-    const envFrom = requestedFrom || process.env.EMAIL_FROM || process.env.SMTP_FROM || defaultFrom;
+  private getFromAddress(requestedFrom?: string, provider?: 'smtp' | 'resend'): string {
+    const verifiedDomainFrom = 'SmartDuka <noreply@smartduka.org>';
+    const smtpFrom = process.env.SMTP_FROM || process.env.EMAIL_FROM || verifiedDomainFrom;
 
-    // When using Resend, we MUST send from a verified domain
-    if (this.resend) {
-      const resendFrom = process.env.RESEND_FROM_EMAIL || defaultFrom;
-      // If the env-configured from address uses an unverified free email domain, override it
+    // For Resend, we MUST send from a verified domain - never gmail.com etc.
+    if (provider === 'resend') {
+      const resendFrom = process.env.RESEND_FROM_EMAIL || verifiedDomainFrom;
+      const envFrom = requestedFrom || smtpFrom;
       const freeEmailDomains = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'live.com'];
       const fromEmail = envFrom.match(/<([^>]+)>/)?.[1] || envFrom;
       const domain = fromEmail.split('@')[1]?.toLowerCase();
       if (domain && freeEmailDomains.includes(domain)) {
-        this.logger.warn(`Resend cannot send from '${domain}' - using verified domain: ${resendFrom}`);
         return resendFrom;
       }
       return envFrom;
     }
 
-    return envFrom;
+    // For SMTP (Gmail), use the configured SMTP_FROM or requested from
+    return requestedFrom || smtpFrom;
   }
 
   async sendEmail(options: EmailOptions): Promise<{ success: boolean; messageId?: string; error?: string; emailLogId?: string }> {
     const toArray = Array.isArray(options.to) ? options.to : [options.to];
     const toAddress = toArray.join(', ');
-    const from = this.getFromAddress(options.from);
+    const replyTo = options.replyTo || process.env.REPLY_TO_EMAIL || 'smartdukainfo@gmail.com';
     
+    const smtpFrom = this.getFromAddress(options.from, 'smtp');
+    const resendFrom = this.getFromAddress(options.from, 'resend');
+
     // Create email log entry first
     let emailLog: EmailLogDocument | null = null;
     try {
       emailLog = new this.emailLogModel({
         to: toAddress,
         subject: options.subject,
-        htmlContent: options.html?.substring(0, 1000), // Store first 1000 chars
+        htmlContent: options.html?.substring(0, 1000),
         textContent: options.text?.substring(0, 500),
-        from,
-        replyTo: options.replyTo,
+        from: smtpFrom,
+        replyTo: replyTo,
         shopId: options.shopId ? new Types.ObjectId(options.shopId) : undefined,
         shopName: options.shopName,
         userId: options.userId ? new Types.ObjectId(options.userId) : undefined,
@@ -217,54 +238,28 @@ export class EmailService {
       this.logger.warn(`Failed to create email log: ${logError.message}`);
     }
 
-    // Try Resend first (HTTP API - works on Render)
-    if (this.resend) {
-      try {
-        const result = await this.resend.emails.send({
-          from,
-          to: toArray,
-          subject: options.subject,
-          html: options.html,
-          text: options.text,
-          replyTo: options.replyTo,
-        });
+    // ===== PARALLEL MODE: Both SMTP and Resend fire simultaneously =====
+    // At least one must succeed for the email to be considered delivered.
+    // SMTP sends from Gmail (smartdukainfo@gmail.com) - works in dev, may be blocked on Render.
+    // Resend sends from verified domain (noreply@smartduka.org) - always works via HTTP API.
 
-        if (result.error) {
-          throw new Error(result.error.message);
-        }
+    const sendPromises: Array<Promise<{ provider: 'smtp' | 'resend'; success: boolean; messageId?: string; error?: string; from?: string }>> = [];
 
-        this.logger.log(`Email sent via Resend to ${toAddress}: ${result.data?.id}`);
-        
-        if (emailLog) {
-          await this.emailLogModel.findByIdAndUpdate(emailLog._id, {
-            status: 'sent',
-            sentAt: new Date(),
-            messageId: result.data?.id,
-            provider: 'resend',
-          });
-        }
-        
-        return { success: true, messageId: result.data?.id, emailLogId: emailLog?._id?.toString() };
-      } catch (error: any) {
-        this.logger.warn(`Resend failed for ${toAddress}: ${error.message}`);
-        // Fall through to SMTP if available
-        if (!this.transporter) {
-          if (emailLog) {
-            await this.emailLogModel.findByIdAndUpdate(emailLog._id, {
-              status: 'failed',
-              failedAt: new Date(),
-              errorMessage: error.message,
-              provider: 'resend',
-            });
-          }
-          return { success: false, error: error.message, emailLogId: emailLog?._id?.toString() };
-        }
-      }
+    // SMTP attempt
+    if (this.transporter) {
+      const smtpPromise = this.sendViaSmtp(toAddress, options, smtpFrom, replyTo);
+      sendPromises.push(smtpPromise);
     }
 
-    // Fallback to SMTP
-    if (!this.transporter) {
-      this.logger.warn('Email not sent - no provider configured (set RESEND_API_KEY or SMTP credentials)');
+    // Resend attempt
+    if (this.resend) {
+      const resendPromise = this.sendViaResend(toArray, options, resendFrom, replyTo);
+      sendPromises.push(resendPromise);
+    }
+
+    // No providers configured
+    if (sendPromises.length === 0) {
+      this.logger.warn('Email not sent - no provider configured (set SMTP credentials and/or RESEND_API_KEY)');
       if (emailLog) {
         await this.emailLogModel.findByIdAndUpdate(emailLog._id, {
           status: 'failed',
@@ -275,68 +270,130 @@ export class EmailService {
       return { success: false, error: 'No email provider configured', emailLogId: emailLog?._id?.toString() };
     }
 
-    // SMTP with retry logic for transient failures
+    // Fire all providers in parallel, wait for all to settle
+    const results = await Promise.allSettled(sendPromises);
+    const outcomes = results.map(r => r.status === 'fulfilled' ? r.value : { provider: 'unknown' as const, success: false, error: (r as any).reason?.message, messageId: undefined as string | undefined, from: undefined as string | undefined });
+
+    const smtpResult = outcomes.find(r => r.provider === 'smtp');
+    const resendResult = outcomes.find(r => r.provider === 'resend');
+    const firstSuccess = outcomes.find(r => r.success);
+
+    // Log results
+    if (smtpResult) {
+      if (smtpResult.success) {
+        this.logger.log(`✅ SMTP sent to ${toAddress}: ${smtpResult.messageId}`);
+      } else {
+        this.logger.warn(`⚠️ SMTP failed for ${toAddress}: ${smtpResult.error}`);
+      }
+    }
+    if (resendResult) {
+      if (resendResult.success) {
+        this.logger.log(`✅ Resend sent to ${toAddress}: ${resendResult.messageId}`);
+      } else {
+        this.logger.warn(`⚠️ Resend failed for ${toAddress}: ${resendResult.error}`);
+      }
+    }
+
+    // Update email log based on results
+    if (emailLog) {
+      if (firstSuccess) {
+        const providers = outcomes.filter(r => r.success).map(r => r.provider).join('+');
+        await this.emailLogModel.findByIdAndUpdate(emailLog._id, {
+          status: 'sent',
+          sentAt: new Date(),
+          messageId: firstSuccess.messageId,
+          provider: providers,
+          from: firstSuccess.from,
+        });
+      } else {
+        const errors = outcomes.map(r => `${r.provider}: ${r.error}`).join('; ');
+        await this.emailLogModel.findByIdAndUpdate(emailLog._id, {
+          status: 'failed',
+          failedAt: new Date(),
+          errorMessage: errors,
+          provider: outcomes.map(r => r.provider).join('+'),
+        });
+      }
+    }
+
+    if (firstSuccess) {
+      return { success: true, messageId: firstSuccess.messageId, emailLogId: emailLog?._id?.toString() };
+    }
+
+    const allErrors = outcomes.map(r => `${r.provider}: ${r.error}`).join('; ');
+    this.logger.error(`All providers failed for ${toAddress}: ${allErrors}`);
+    return { success: false, error: allErrors, emailLogId: emailLog?._id?.toString() };
+  }
+
+  /**
+   * Send email via SMTP (Gmail) with retry logic
+   */
+  private async sendViaSmtp(
+    toAddress: string,
+    options: EmailOptions,
+    from: string,
+    replyTo: string,
+  ): Promise<{ provider: 'smtp'; success: boolean; messageId?: string; error?: string; from: string }> {
     let lastError: Error | null = null;
+
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       try {
-        const result = await this.transporter.sendMail({
+        const result = await this.transporter!.sendMail({
           from,
           to: toAddress,
           subject: options.subject,
           html: options.html,
           text: options.text,
-          replyTo: options.replyTo,
+          replyTo,
           attachments: options.attachments,
         });
-
-        this.logger.log(`Email sent via SMTP to ${toAddress}: ${result.messageId}${attempt > 0 ? ` (retry ${attempt})` : ''}`);
-        
-        if (emailLog) {
-          await this.emailLogModel.findByIdAndUpdate(emailLog._id, {
-            status: 'sent',
-            sentAt: new Date(),
-            messageId: result.messageId,
-            provider: 'smtp',
-            retryCount: attempt,
-          });
-        }
-        
-        return { success: true, messageId: result.messageId, emailLogId: emailLog?._id?.toString() };
+        return { provider: 'smtp', success: true, messageId: result.messageId, from };
       } catch (error: any) {
         lastError = error;
-        
-        // Only retry on transient errors (timeout, connection issues)
-        const isRetryable = error.code === 'ETIMEDOUT' || 
-                           error.code === 'ECONNRESET' || 
+        const isRetryable = error.code === 'ETIMEDOUT' ||
+                           error.code === 'ECONNRESET' ||
                            error.code === 'ECONNREFUSED' ||
                            error.message?.includes('timeout') ||
                            error.message?.includes('Connection');
-        
+
         if (isRetryable && attempt < this.maxRetries) {
-          this.logger.warn(`SMTP to ${toAddress} failed (attempt ${attempt + 1}/${this.maxRetries + 1}): ${error.message}. Retrying...`);
           await new Promise(resolve => setTimeout(resolve, this.retryDelayMs * (attempt + 1)));
           continue;
         }
-        
         break;
       }
     }
 
-    // All retries exhausted
-    this.logger.error(`Failed to send email to ${toAddress} after ${this.maxRetries + 1} attempts:`, lastError?.message);
-    
-    if (emailLog) {
-      await this.emailLogModel.findByIdAndUpdate(emailLog._id, {
-        status: 'failed',
-        failedAt: new Date(),
-        errorMessage: lastError?.message || 'Unknown error',
-        errorCode: (lastError as any)?.code,
-        provider: 'smtp',
-        retryCount: this.maxRetries,
+    return { provider: 'smtp', success: false, error: lastError?.message || 'SMTP failed', from };
+  }
+
+  /**
+   * Send email via Resend (HTTP API) - works even when SMTP ports are blocked
+   */
+  private async sendViaResend(
+    toArray: string[],
+    options: EmailOptions,
+    from: string,
+    replyTo: string,
+  ): Promise<{ provider: 'resend'; success: boolean; messageId?: string; error?: string; from: string }> {
+    try {
+      const result = await this.resend!.emails.send({
+        from,
+        to: toArray,
+        subject: options.subject,
+        html: options.html,
+        text: options.text,
+        replyTo,
       });
+
+      if (result.error) {
+        return { provider: 'resend', success: false, error: result.error.message, from };
+      }
+
+      return { provider: 'resend', success: true, messageId: result.data?.id, from };
+    } catch (error: any) {
+      return { provider: 'resend', success: false, error: error.message, from };
     }
-    
-    return { success: false, error: lastError?.message || 'Unknown error', emailLogId: emailLog?._id?.toString() };
   }
 
   async sendTemplateEmail(options: TemplateEmailOptions): Promise<{ success: boolean; messageId?: string; error?: string }> {
