@@ -22,6 +22,7 @@ import {
   Award,
   Loader2,
 } from 'lucide-react';
+import { CartLoader } from '@/components/ui/cart-loader';
 import {
   AreaChart,
   Area,
@@ -111,13 +112,7 @@ export default function AllTimeAnalyticsPage() {
   };
 
   if (loading) {
-    return (
-      <div className="container py-8 px-4 sm:px-6">
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
-      </div>
-    );
+    return <CartLoader fullScreen title="Loading Analytics" />;
   }
 
   if (!data) {

@@ -1,5 +1,5 @@
-import { LoadingScreen } from '@/components/loading-screen';
+import { CartLoader } from '@/components/ui/cart-loader';
 
 export default function Loading() {
-  return <LoadingScreen title="Loading..." description="Please wait" />;
+  return <CartLoader fullScreen title="Loading SmartDuka" description="Please wait..." />;
 }

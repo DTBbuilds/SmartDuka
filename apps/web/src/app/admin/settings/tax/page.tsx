@@ -1,6 +1,7 @@
 'use client';
 
 import { config } from '@/lib/config';
+import { CartLoader } from '@/components/ui/cart-loader';
 import { useState, useEffect } from 'react';
 import {
   Card,
@@ -111,11 +112,7 @@ export default function TaxSettingsPage() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    );
+    return <CartLoader fullScreen title="Loading Tax Settings" />;
   }
 
   if (!settings) {

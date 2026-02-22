@@ -12,9 +12,9 @@ import {
   Users,
   Package,
   ChevronRight,
-  Loader2,
   X,
 } from 'lucide-react';
+import { CartLoader } from '@/components/ui/cart-loader';
 import { useSubscription, type Subscription } from '@/hooks/use-subscription';
 
 // Status configurations - high contrast colors
@@ -99,9 +99,7 @@ export function SubscriptionStatusCard({
   if (loading) {
     return (
       <div className={`bg-white rounded-xl border p-4 ${className}`}>
-        <div className="flex items-center justify-center py-4">
-          <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
-        </div>
+        <CartLoader size="sm" className="py-4" />
       </div>
     );
   }

@@ -6,6 +6,7 @@ import { useBranch } from '@/lib/branch-context';
 import { config } from '@/lib/config';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { CartLoader } from '@/components/ui/cart-loader';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -505,9 +506,7 @@ export default function StockTransfersPage() {
 
       {/* Transfers List */}
       {isLoading ? (
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
+        <CartLoader size="md" className="h-64" />
       ) : filteredTransfers.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center h-64">

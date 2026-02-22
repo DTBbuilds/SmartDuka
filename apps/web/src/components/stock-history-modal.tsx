@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { Button, Badge } from '@smartduka/ui';
-import { X, TrendingUp, TrendingDown, Package, Calendar, User, FileText, Loader2, RefreshCw } from 'lucide-react';
+import { X, TrendingUp, TrendingDown, Package, Calendar, User, FileText, RefreshCw } from 'lucide-react';
+import { CartLoader } from '@/components/ui/cart-loader';
 import { config } from '@/lib/config';
 
 interface StockAdjustment {
@@ -152,10 +153,7 @@ export function StockHistoryModal({
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4">
           {loading ? (
-            <div className="flex flex-col items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-primary mb-3" />
-              <p className="text-muted-foreground">Loading stock history...</p>
-            </div>
+            <CartLoader size="md" title="Loading stock history..." />
           ) : error ? (
             <div className="flex flex-col items-center justify-center py-12">
               <p className="text-red-500 mb-3">{error}</p>

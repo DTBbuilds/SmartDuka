@@ -1,4 +1,5 @@
 // Loading components
+export { CartLoader } from './cart-loader';
 export { Spinner, DotsSpinner, PulseSpinner } from './spinner';
 export { 
   LoadingOverlay, 

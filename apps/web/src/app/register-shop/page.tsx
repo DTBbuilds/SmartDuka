@@ -7,6 +7,7 @@ import { ShoppingCart, Eye, EyeOff, Store, User, ArrowRight, ArrowLeft, Building
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label } from "@smartduka/ui";
 import { useAuth, GoogleProfile } from "@/lib/auth-context";
 import { config } from "@/lib/config";
+import { CartLoader } from "@/components/ui/cart-loader";
 import { ThemeToggleOutline } from "@/components/theme-toggle";
 import { api } from "@/lib/api-client";
 
@@ -489,9 +490,7 @@ function RegisterShopContent() {
 
               {/* Plans Grid */}
               {loadingPlans ? (
-                <div className="flex justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                </div>
+                <CartLoader size="sm" className="py-8" />
               ) : (
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                   {plans.map((plan) => {
@@ -993,10 +992,7 @@ function RegisterShopContent() {
 function RegisterShopLoading() {
   return (
     <div className="h-screen bg-background flex items-center justify-center">
-      <div className="flex flex-col items-center gap-4">
-        <Loader2 className="h-12 w-12 text-primary animate-spin" />
-        <p className="text-muted-foreground">Loading...</p>
-      </div>
+      <CartLoader size="lg" title="Loading..." />
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/auth-context';
 import { config } from '@/lib/config';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { CartLoader } from '@/components/ui/cart-loader';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
@@ -490,11 +491,7 @@ export default function BranchSettingsPage() {
   };
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <CartLoader size="lg" className="h-96" />;
   }
 
   if (!branch) {

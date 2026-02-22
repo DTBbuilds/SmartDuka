@@ -1,5 +1,5 @@
-import { PageLoading } from '@/components/ui/loading';
+import { CartLoader } from '@/components/ui/cart-loader';
 
 export default function AdminLoading() {
-  return <PageLoading title="Loading Dashboard" description="Fetching your data..." />;
+  return <CartLoader fullScreen title="Loading Dashboard" description="Fetching your data..." />;
 }

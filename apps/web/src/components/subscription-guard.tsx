@@ -3,7 +3,8 @@
 import { useEffect, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSubscription } from '@/hooks/use-subscription';
-import { Loader2, AlertTriangle, Crown, Lock } from 'lucide-react';
+import { AlertTriangle, Crown, Lock } from 'lucide-react';
+import { CartLoader } from '@/components/ui/cart-loader';
 import Link from 'next/link';
 
 interface SubscriptionGuardProps {
@@ -122,11 +123,7 @@ export function SubscriptionGuard({
   }, [loading, subscription, router, showBlockedMessage, allowReadOnly]);
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[200px]">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-      </div>
-    );
+    return <CartLoader size="md" className="min-h-[200px]" />;
   }
 
   // No subscription

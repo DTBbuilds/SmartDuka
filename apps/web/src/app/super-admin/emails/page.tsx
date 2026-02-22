@@ -4,6 +4,7 @@ import { config } from '@/lib/config';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { AuthGuard } from '@/components/auth-guard';
+import { CartLoader } from '@/components/ui/cart-loader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -484,11 +485,7 @@ function SuperAdminEmailsContent() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <RefreshCw className="h-8 w-8 animate-spin" />
-      </div>
-    );
+    return <CartLoader size="lg" className="h-64" />;
   }
 
   return (

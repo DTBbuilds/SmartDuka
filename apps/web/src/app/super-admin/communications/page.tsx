@@ -4,6 +4,7 @@ import { config } from '@/lib/config';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { AuthGuard } from '@/components/auth-guard';
+import { CartLoader } from '@/components/ui/cart-loader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -742,9 +743,7 @@ function SuperAdminCommunicationsContent() {
                     {/* Shop List */}
                     <div className="max-h-[400px] overflow-y-auto space-y-2">
                       {loadingShops ? (
-                        <div className="flex items-center justify-center py-8">
-                          <RefreshCw className="h-6 w-6 animate-spin" />
-                        </div>
+                        <CartLoader size="sm" className="py-8" />
                       ) : shops.length === 0 ? (
                         <p className="text-sm text-muted-foreground text-center py-4">
                           No shops found
@@ -1227,9 +1226,7 @@ function SuperAdminCommunicationsContent() {
             </CardHeader>
             <CardContent>
               {loadingInvoices ? (
-                <div className="flex items-center justify-center py-12">
-                  <RefreshCw className="h-8 w-8 animate-spin" />
-                </div>
+                <CartLoader size="md" className="py-12" />
               ) : invoices.length === 0 ? (
                 <div className="text-center py-12">
                   <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />

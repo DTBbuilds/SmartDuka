@@ -1,6 +1,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
+import { CartLoader } from './cart-loader';
 import { Spinner, DotsSpinner } from './spinner';
 
 interface LoadingOverlayProps {
@@ -20,22 +21,13 @@ export function LoadingOverlay({
   className 
 }: LoadingOverlayProps) {
   return (
-    <div
-      className={cn(
-        'flex flex-col items-center justify-center gap-3 z-50',
-        fullScreen ? 'fixed inset-0' : 'absolute inset-0',
-        transparent ? 'bg-background/60' : 'bg-background/90',
-        'backdrop-blur-sm',
-        className
-      )}
-    >
-      <Spinner size="lg" />
-      {message && (
-        <p className="text-sm font-medium text-muted-foreground animate-pulse">
-          {message}
-        </p>
-      )}
-    </div>
+    <CartLoader
+      title={message}
+      fullScreen={fullScreen}
+      transparent={transparent}
+      size="md"
+      className={cn(!fullScreen && 'absolute inset-0', className)}
+    />
   );
 }
 
@@ -112,8 +104,8 @@ interface InlineLoadingProps {
  */
 export function InlineLoading({ message = 'Loading...', className }: InlineLoadingProps) {
   return (
-    <div className={cn('flex items-center gap-2 py-4', className)}>
-      <Spinner size="sm" />
+    <div className={cn('flex items-center gap-3 py-4', className)}>
+      <CartLoader size="sm" />
       <span className="text-sm text-muted-foreground">{message}</span>
     </div>
   );
@@ -129,18 +121,12 @@ interface PageLoadingProps {
  */
 export function PageLoading({ title = 'Loading', description }: PageLoadingProps) {
   return (
-    <div className="flex min-h-[400px] flex-col items-center justify-center gap-4">
-      <div className="relative">
-        <div className="h-16 w-16 rounded-full border-4 border-primary/20" />
-        <div className="absolute inset-0 h-16 w-16 rounded-full border-4 border-transparent border-t-primary animate-spin" />
-      </div>
-      <div className="text-center">
-        <h3 className="text-lg font-semibold">{title}</h3>
-        {description && (
-          <p className="text-sm text-muted-foreground mt-1">{description}</p>
-        )}
-      </div>
-    </div>
+    <CartLoader
+      title={title}
+      description={description}
+      size="lg"
+      className="min-h-[400px]"
+    />
   );
 }
 

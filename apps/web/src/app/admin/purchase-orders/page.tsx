@@ -20,6 +20,7 @@ import {
   ChevronRight,
   ShoppingCart,
 } from 'lucide-react';
+import { CartLoader } from '@/components/ui/cart-loader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -333,9 +334,7 @@ export default function PurchaseOrdersPage() {
 
       {/* Content */}
       {isLoading ? (
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
+        <CartLoader size="md" className="h-64" />
       ) : orders.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center h-64">

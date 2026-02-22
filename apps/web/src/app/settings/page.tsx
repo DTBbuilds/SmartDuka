@@ -5,9 +5,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { useRefreshEvent } from '@/lib/refresh-events';
 import { config } from "@/lib/config";
+import { CartLoader } from '@/components/ui/cart-loader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Tabs, TabsContent, TabsList, TabsTrigger, Input, Label, Button, Textarea, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@smartduka/ui";
 import { Switch } from "@/components/ui/switch";
-import { Store, User, Lock, Settings as SettingsIcon, ShieldAlert, CreditCard, Crown, TrendingUp, Users, Package, Receipt, AlertCircle, Check, Clock, X, Phone, Loader2, Smartphone, ChevronRight, ChevronLeft, Menu, FileText, Calendar, CreditCard as CardIcon, CheckCircle2, XCircle, ArrowRight, Info, Shield, Zap, Eye, Download, RefreshCw, ExternalLink, Copy, Banknote } from "lucide-react";
+import { Store, User, Lock, Settings as SettingsIcon, ShieldAlert, CreditCard, Crown, TrendingUp, Users, Package, Receipt, AlertCircle, Check, Clock, X, Phone, Smartphone, ChevronRight, ChevronLeft, Menu, FileText, Calendar, CreditCard as CardIcon, CheckCircle2, XCircle, ArrowRight, Info, Shield, Zap, Eye, Download, RefreshCw, ExternalLink, Copy, Banknote, Loader2 } from "lucide-react";
 import { TableSkeleton } from "@/components/shared/loading-skeleton";
 import { useSubscription, useSubscriptionPlans, useBillingHistory, type BillingCycle, type SubscriptionPlan } from "@/hooks/use-subscription";
 import { MpesaSettings } from "@/components/settings/mpesa-settings";
@@ -1069,8 +1070,8 @@ function SubscriptionSettingsTab() {
   if (loading) {
     return (
       <Card>
-        <CardContent className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <CardContent>
+          <CartLoader size="md" className="py-12" />
         </CardContent>
       </Card>
     );

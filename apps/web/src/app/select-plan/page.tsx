@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
+import { CartLoader } from '@/components/ui/cart-loader';
 import { 
   Check, 
   Store, 
@@ -127,11 +127,7 @@ export default function SelectPlanPage() {
   };
 
   if (!user || plansLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-      </div>
-    );
+    return <CartLoader fullScreen title="Loading Plans" />;
   }
 
   return (

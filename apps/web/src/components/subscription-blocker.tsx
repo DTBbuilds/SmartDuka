@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useSubscription, useBillingHistory } from '@/hooks/use-subscription';
 import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api-client';
+import { CartLoader } from '@/components/ui/cart-loader';
 import { 
   AlertTriangle, CreditCard, Clock, Shield, RefreshCw, 
   Smartphone, Send, X, Phone, Loader2, Check, 
@@ -332,14 +333,7 @@ export function SubscriptionBlocker({ children }: { children: React.ReactNode })
   // CRITICAL FIX: Don't render children during initial load
   // This prevents the flash where users briefly see protected content
   if (!hasInitialized && loading) {
-    return (
-      <div className="fixed inset-0 z-50 bg-white flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="w-10 h-10 animate-spin text-blue-600" />
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
-    );
+    return <CartLoader fullScreen title="Loading..." />;
   }
 
   if (!isBlocked) {

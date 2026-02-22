@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api-client';
 import { AuthGuard } from '@/components/auth-guard';
+import { CartLoader } from '@/components/ui/cart-loader';
 import {
   Card,
   CardContent,
@@ -218,11 +219,7 @@ function SuperAdminSettingsContent() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
+    return <CartLoader size="lg" className="min-h-[400px]" />;
   }
 
   return (

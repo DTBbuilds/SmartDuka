@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { api } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth-context';
+import { CartLoader } from '@/components/ui/cart-loader';
 
 interface Supplier {
   _id: string;
@@ -187,11 +188,7 @@ export default function SuppliersPage() {
   });
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-      </div>
-    );
+    return <CartLoader size="lg" className="min-h-[400px]" />;
   }
 
   return (

@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api-client';
 import { useRefreshEvent } from '@/lib/refresh-events';
 import { AuthGuard } from '@/components/auth-guard';
+import { CartLoader } from '@/components/ui/cart-loader';
 import {
   Card,
   CardContent,
@@ -443,11 +444,7 @@ function SuperAdminSubscriptionsContent() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-      </div>
-    );
+    return <CartLoader fullScreen title="Loading Subscriptions" />;
   }
 
   return (

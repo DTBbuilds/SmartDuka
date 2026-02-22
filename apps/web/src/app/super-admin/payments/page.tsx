@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api-client';
 import { AuthGuard } from '@/components/auth-guard';
+import { CartLoader } from '@/components/ui/cart-loader';
 import {
   Card,
   CardContent,
@@ -485,11 +486,7 @@ function SuperAdminPaymentsContent() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
+    return <CartLoader size="lg" className="min-h-[400px]" />;
   }
 
   return (
@@ -1070,9 +1067,7 @@ function SuperAdminPaymentsContent() {
             </CardHeader>
             <CardContent className="p-0 md:p-6">
               {invoicePaymentsLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                </div>
+                <CartLoader size="md" className="py-8" />
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full">
@@ -1246,9 +1241,7 @@ function SuperAdminPaymentsContent() {
       {activeTab === 'pending' && (
         <>
           {pendingLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
+            <CartLoader size="md" className="py-12" />
           ) : (
             <div className="space-y-6">
               {/* Pending Invoice Payments */}

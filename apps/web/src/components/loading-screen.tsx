@@ -1,6 +1,6 @@
 'use client';
 
-import { Spinner } from '@/components/ui/spinner';
+import { CartLoader } from '@/components/ui/cart-loader';
 import { cn } from '@/lib/utils';
 
 interface LoadingScreenProps {
@@ -29,51 +29,18 @@ export function LoadingScreen({
   size = 'lg',
   className,
 }: LoadingScreenProps) {
-  const spinnerSizes = {
-    sm: 'xl' as const,
-    md: 'xl' as const,
-    lg: 'xl' as const,
-  };
-
   return (
-    <div 
+    <CartLoader
+      title={title}
+      description={description}
+      fullScreen={fullScreen}
+      transparent={transparent}
+      size="lg"
       className={cn(
-        'flex items-center justify-center z-50',
-        fullScreen ? 'fixed inset-0' : 'absolute inset-0 min-h-[200px]',
-        transparent ? 'bg-background/60' : 'bg-background/90',
-        'backdrop-blur-sm',
+        !fullScreen && 'absolute inset-0 min-h-[200px]',
         className
       )}
-    >
-      <div className="flex flex-col items-center gap-4">
-        {/* Animated logo spinner */}
-        <div className="relative">
-          <div className="h-16 w-16 rounded-full border-4 border-primary/20" />
-          <div className="absolute inset-0 h-16 w-16 rounded-full border-4 border-transparent border-t-primary animate-spin" />
-          <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-xl font-bold text-primary">S</span>
-          </div>
-        </div>
-        
-        <div className="text-center">
-          <p className="text-sm font-medium text-foreground">{title}</p>
-          {description && (
-            <p className="text-xs text-muted-foreground mt-1">{description}</p>
-          )}
-        </div>
-        
-        {/* Progress dots */}
-        <div className="flex gap-1">
-          {[0, 1, 2].map((i) => (
-            <div
-              key={i}
-              className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce"
-              style={{ animationDelay: `${i * 150}ms` }}
-            />
-          ))}
-        </div>
-      </div>
-    </div>
+    />
   );
 }
 
@@ -88,12 +55,11 @@ export function LoadingSpinner({
   className?: string;
 }) {
   return (
-    <div className={cn('flex items-center justify-center gap-2 py-8', className)}>
-      <Spinner size="md" />
-      {message && (
-        <span className="text-sm text-muted-foreground">{message}</span>
-      )}
-    </div>
+    <CartLoader
+      title={message}
+      size="md"
+      className={cn('py-8', className)}
+    />
   );
 }
 
