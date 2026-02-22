@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ShoppingCart, Eye, EyeOff, Store, User, ArrowRight, ArrowLeft, Building2, MapPin, FileText, Info, CheckCircle, Loader2, BarChart3, Users, Shield, Zap, Package, Crown, Sparkles, Check, Star } from "lucide-react";
+import { ShoppingCart, Eye, EyeOff, Store, User, ArrowRight, ArrowLeft, Building2, MapPin, FileText, Info, CheckCircle, Loader2, BarChart3, Users, Shield, Zap, Package, Crown, Sparkles, Check, Star, Mail, ShieldCheck, AlertCircle } from "lucide-react";
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label } from "@smartduka/ui";
 import { useAuth, GoogleProfile } from "@/lib/auth-context";
 import { config } from "@/lib/config";
@@ -112,7 +112,7 @@ function RegisterShopContent() {
   const { registerShop, registerShopWithGoogle, loginWithGoogle } = useAuth();
   // FREE_MODE: Skip plan selection — start at shop info (step 2)
   const FREE_MODE = true;
-  const [step, setStep] = useState(FREE_MODE ? 2 : 1); // 1: Plan selection (disabled), 2: Shop info, 3: Admin info
+  const [step, setStep] = useState(FREE_MODE ? 2 : 1); // 1: Plan selection (disabled), 2: Shop info, 3: Admin info, 4: OTP verification
   const [googleProfile, setGoogleProfile] = useState<GoogleProfile | null>(null);
   const [isGoogleFlow, setIsGoogleFlow] = useState(false);
   const [googleConfigured, setGoogleConfigured] = useState(true);
@@ -153,6 +153,21 @@ function RegisterShopContent() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  // OTP verification state
+  const [otpCode, setOtpCode] = useState(['', '', '', '', '', '']);
+  const [otpError, setOtpError] = useState('');
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [otpSending, setOtpSending] = useState(false);
+  const [otpResendCooldown, setOtpResendCooldown] = useState(0);
+  const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  // OTP resend cooldown timer
+  useEffect(() => {
+    if (otpResendCooldown <= 0) return;
+    const timer = setInterval(() => setOtpResendCooldown(c => c - 1), 1000);
+    return () => clearInterval(timer);
+  }, [otpResendCooldown]);
 
   // Fetch subscription plans on mount (skip in FREE_MODE)
   useEffect(() => {
@@ -282,6 +297,57 @@ function RegisterShopContent() {
     }
   };
 
+  // OTP input handlers
+  const handleOtpChange = (index: number, value: string) => {
+    if (!/^\d*$/.test(value)) return;
+    const newOtp = [...otpCode];
+    newOtp[index] = value.slice(-1);
+    setOtpCode(newOtp);
+    setOtpError('');
+    if (value && index < 5) {
+      otpInputRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
+    if (e.key === 'Backspace' && !otpCode[index] && index > 0) {
+      otpInputRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const handleOtpPaste = (e: React.ClipboardEvent) => {
+    e.preventDefault();
+    const pastedData = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    if (pastedData.length === 6) {
+      setOtpCode(pastedData.split(''));
+      otpInputRefs.current[5]?.focus();
+    }
+  };
+
+  const sendOtp = async () => {
+    setOtpSending(true);
+    setOtpError('');
+    try {
+      const res = await fetch(`${config.apiUrl}/auth/send-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: adminData.email, shopName: shopData.shopName }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setOtpError(data.message || 'Failed to send verification code');
+        return false;
+      }
+      setOtpResendCooldown(60);
+      return true;
+    } catch {
+      setOtpError('Failed to send verification code. Check your connection.');
+      return false;
+    } finally {
+      setOtpSending(false);
+    }
+  };
+
   const handleAdminSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -293,31 +359,79 @@ function RegisterShopContent() {
       return;
     }
 
-    setIsLoading(true);
+    // For Google flow, skip OTP (Google already verified email)
+    if (isGoogleFlow && googleProfile) {
+      setIsLoading(true);
+      try {
+        const shopDataWithPlan = {
+          ...shopData,
+          subscriptionPlanCode: selectedPlan.code,
+          billingCycle: billingCycle,
+        };
+        await registerShopWithGoogle(googleProfile, { ...shopDataWithPlan, phone: adminData.phone });
+        router.push("/onboarding");
+      } catch (err: any) {
+        setError(err.message || "Registration failed");
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
 
+    // For email registration, send OTP and go to verification step
+    setIsLoading(true);
+    const sent = await sendOtp();
+    setIsLoading(false);
+    if (sent) {
+      setStep(4); // Go to OTP verification step
+      setOtpCode(['', '', '', '', '', '']);
+      setTimeout(() => otpInputRefs.current[0]?.focus(), 100);
+    }
+  };
+
+  const handleVerifyAndRegister = async () => {
+    const code = otpCode.join('');
+    if (code.length !== 6) {
+      setOtpError('Please enter the full 6-digit code');
+      return;
+    }
+    setOtpLoading(true);
+    setOtpError('');
     try {
-      // Include subscription plan in shop data
+      // Verify OTP first
+      const verifyRes = await fetch(`${config.apiUrl}/auth/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: adminData.email, code, type: 'registration' }),
+      });
+      const verifyData = await verifyRes.json();
+      if (!verifyRes.ok) {
+        setOtpError(verifyData.message || 'Invalid verification code');
+        setOtpCode(['', '', '', '', '', '']);
+        otpInputRefs.current[0]?.focus();
+        setOtpLoading(false);
+        return;
+      }
+
+      // OTP verified - now register
       const shopDataWithPlan = {
         ...shopData,
-        subscriptionPlanCode: selectedPlan.code,
+        subscriptionPlanCode: selectedPlan!.code,
         billingCycle: billingCycle,
       };
-
-      if (isGoogleFlow && googleProfile) {
-        // Register with Google profile - include phone in shop data
-        await registerShopWithGoogle(googleProfile, { ...shopDataWithPlan, phone: adminData.phone });
-      } else {
-        // Regular registration
-        await registerShop(shopDataWithPlan, adminData);
-      }
-      
-      // Redirect to onboarding
+      await registerShop(shopDataWithPlan, adminData);
       router.push("/onboarding");
     } catch (err: any) {
-      setError(err.message || "Registration failed");
-    } finally {
-      setIsLoading(false);
+      setOtpError(err.message || 'Registration failed');
+      setOtpLoading(false);
     }
+  };
+
+  const handleResendOtp = async () => {
+    if (otpResendCooldown > 0) return;
+    await sendOtp();
+    setOtpCode(['', '', '', '', '', '']);
+    otpInputRefs.current[0]?.focus();
   };
 
   const getPasswordStrength = () => {
@@ -411,8 +525,8 @@ function RegisterShopContent() {
               <h2 className="text-xl font-bold text-foreground">Register Your Shop</h2>
               <p className="text-muted-foreground text-sm">
                 {FREE_MODE
-                  ? `Step ${step - 1} of 2: ${step === 2 ? 'Shop Information' : 'Admin Account'}`
-                  : `Step ${step} of 3: ${step === 1 ? 'Choose Plan' : step === 2 ? 'Shop Information' : 'Admin Account'}`
+                  ? `Step ${step <= 4 ? step - 1 : 3} of 3: ${step === 2 ? 'Shop Information' : step === 3 ? 'Admin Account' : 'Email Verification'}`
+                  : `Step ${step} of 4: ${step === 1 ? 'Choose Plan' : step === 2 ? 'Shop Information' : step === 3 ? 'Admin Account' : 'Email Verification'}`
                 }
               </p>
             </div>
@@ -436,7 +550,13 @@ function RegisterShopContent() {
                 <div className={`h-full rounded transition-all bg-primary ${step >= 3 ? "w-full" : "w-0"}`} />
               </div>
               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all ${step >= 3 ? "bg-primary text-white" : "bg-gray-200 dark:bg-gray-700"}`}>
-                {FREE_MODE ? "2" : "3"}
+                {step > 3 ? <Check className="h-4 w-4" /> : (FREE_MODE ? "2" : "3")}
+              </div>
+              <div className="w-8 h-1 bg-gray-200 dark:bg-gray-700 rounded">
+                <div className={`h-full rounded transition-all bg-primary ${step >= 4 ? "w-full" : "w-0"}`} />
+              </div>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all ${step >= 4 ? "bg-primary text-white" : "bg-gray-200 dark:bg-gray-700"}`}>
+                {FREE_MODE ? "3" : "4"}
               </div>
             </div>
           </div>
@@ -769,7 +889,7 @@ function RegisterShopContent() {
               </div>
 
             </form>
-          ) : (
+          ) : step === 3 ? (
             <form onSubmit={handleAdminSubmit} className="space-y-5">
               {/* Google signup promoted as primary option */}
               {!isGoogleFlow && googleConfigured && (
@@ -973,15 +1093,122 @@ function RegisterShopContent() {
                   {isLoading ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Creating Account...
+                      {isGoogleFlow ? 'Creating Account...' : 'Sending Verification...'}
                     </>
-                  ) : (
+                  ) : isGoogleFlow ? (
                     "Create Account"
+                  ) : (
+                    <>
+                      Next: Verify Email
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </>
                   )}
                 </Button>
               </div>
             </form>
-          )}
+          ) : step === 4 ? (
+            /* Step 4: OTP Email Verification */
+            <div className="space-y-6">
+              <div className="text-center">
+                <div className="mx-auto mb-3 p-3 bg-blue-100 dark:bg-blue-900/30 rounded-full w-fit">
+                  <ShieldCheck className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+                </div>
+                <h3 className="text-xl font-bold">Verify Your Email</h3>
+                <p className="text-sm text-muted-foreground mt-2">
+                  We sent a 6-digit verification code to
+                </p>
+                <p className="text-sm font-medium text-foreground flex items-center justify-center gap-1.5 mt-1">
+                  <Mail className="h-4 w-4" />
+                  {adminData.email}
+                </p>
+              </div>
+
+              <div className="p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg text-center">
+                <p className="text-xs text-blue-700 dark:text-blue-300">
+                  Check your inbox and spam folder. Enter the code below to verify your email and complete registration.
+                </p>
+              </div>
+
+              {/* OTP Input */}
+              <div className="flex justify-center gap-2" onPaste={handleOtpPaste}>
+                {otpCode.map((digit, index) => (
+                  <input
+                    key={index}
+                    ref={el => { otpInputRefs.current[index] = el; }}
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={1}
+                    value={digit}
+                    onChange={e => handleOtpChange(index, e.target.value)}
+                    onKeyDown={e => handleOtpKeyDown(index, e)}
+                    className={`w-12 h-14 text-center text-2xl font-bold rounded-lg border-2 bg-background transition-all focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary ${
+                      otpError ? 'border-destructive' : 'border-border'
+                    }`}
+                    disabled={otpLoading}
+                  />
+                ))}
+              </div>
+
+              {/* OTP Error */}
+              {otpError && (
+                <div className="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                  <AlertCircle className="h-4 w-4 text-destructive flex-shrink-0" />
+                  <p className="text-sm text-destructive">{otpError}</p>
+                </div>
+              )}
+
+              {/* Verify & Register Button */}
+              <Button
+                onClick={handleVerifyAndRegister}
+                disabled={otpLoading || otpCode.join('').length !== 6}
+                className="w-full h-12 text-base"
+                size="lg"
+              >
+                {otpLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    Creating Account...
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="mr-2 h-5 w-5" />
+                    Verify &amp; Create Account
+                  </>
+                )}
+              </Button>
+
+              {/* Resend */}
+              <div className="text-center">
+                {otpResendCooldown > 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Resend code in <span className="font-medium text-foreground">{otpResendCooldown}s</span>
+                  </p>
+                ) : (
+                  <button
+                    onClick={handleResendOtp}
+                    disabled={otpSending}
+                    className="text-sm text-primary hover:underline font-medium disabled:opacity-50"
+                  >
+                    {otpSending ? 'Sending...' : "Didn't receive the code? Resend"}
+                  </button>
+                )}
+              </div>
+
+              {/* Back */}
+              <div className="flex gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => { setStep(3); setOtpCode(['', '', '', '', '', '']); setOtpError(''); }}
+                  className="flex-1"
+                  size="lg"
+                >
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Back
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

@@ -341,6 +341,14 @@ export class UsersService {
     ).exec();
   }
 
+  async updateEmailVerified(userId: string, verified: boolean): Promise<User | null> {
+    return this.userModel.findByIdAndUpdate(
+      userId,
+      { emailVerified: verified },
+      { new: true },
+    ).exec();
+  }
+
   async generatePin(): Promise<string> {
     let pin = '';
     do {

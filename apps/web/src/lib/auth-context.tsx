@@ -223,6 +223,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!res.ok) {
       throw new Error(data.message || 'Login failed');
     }
+
+    // Handle email verification requirement (OTP)
+    if (data.requiresEmailVerification) {
+      const otpError = new Error('EMAIL_VERIFICATION_REQUIRED') as any;
+      otpError.requiresEmailVerification = true;
+      otpError.email = data.email;
+      otpError.userName = data.userName;
+      otpError.shopName = data.shopName;
+      throw otpError;
+    }
+
     const { tokens, user: userData, shop: shopData } = data;
     
     // Get access token from response (also set as httpOnly cookie by server)

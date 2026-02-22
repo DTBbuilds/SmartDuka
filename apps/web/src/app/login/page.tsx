@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ShoppingCart, AlertCircle, Lock, Clock, ArrowLeft } from 'lucide-react';
+import { ShoppingCart, AlertCircle, Lock, Clock, ArrowLeft, Mail, Loader2, ShieldCheck } from 'lucide-react';
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@smartduka/ui';
 import { useAuth } from '@/lib/auth-context';
 import { config } from '@/lib/config';
@@ -31,6 +31,18 @@ export default function LoginPage() {
   const [sessionExpired, setSessionExpired] = useState(false);
   const [loginSuccess, setLoginSuccess] = useState(false);
   const [googleConfigured, setGoogleConfigured] = useState(true);
+
+  // OTP verification state
+  const [showOtpVerification, setShowOtpVerification] = useState(false);
+  const [otpEmail, setOtpEmail] = useState('');
+  const [otpUserName, setOtpUserName] = useState('');
+  const [otpShopName, setOtpShopName] = useState('');
+  const [otpCode, setOtpCode] = useState(['', '', '', '', '', '']);
+  const [otpError, setOtpError] = useState('');
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [otpResending, setOtpResending] = useState(false);
+  const [otpResendCooldown, setOtpResendCooldown] = useState(0);
+  const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   const { login, loginWithPin, loginWithGoogle, enterDemoMode, isAuthenticated, user, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -163,6 +175,114 @@ export default function LoginPage() {
     };
   };
 
+  // OTP input handlers
+  const handleOtpChange = (index: number, value: string) => {
+    if (!/^\d*$/.test(value)) return;
+    const newOtp = [...otpCode];
+    newOtp[index] = value.slice(-1);
+    setOtpCode(newOtp);
+    setOtpError('');
+    if (value && index < 5) {
+      otpInputRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
+    if (e.key === 'Backspace' && !otpCode[index] && index > 0) {
+      otpInputRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const handleOtpPaste = (e: React.ClipboardEvent) => {
+    e.preventDefault();
+    const pastedData = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    if (pastedData.length === 6) {
+      const newOtp = pastedData.split('');
+      setOtpCode(newOtp);
+      otpInputRefs.current[5]?.focus();
+    }
+  };
+
+  const handleVerifyLoginOtp = async () => {
+    const code = otpCode.join('');
+    if (code.length !== 6) {
+      setOtpError('Please enter the full 6-digit code');
+      return;
+    }
+    setOtpLoading(true);
+    setOtpError('');
+    try {
+      const res = await fetch(`${config.apiUrl}/auth/verify-login-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email: otpEmail, code }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setOtpError(data.message || 'Invalid verification code');
+        setOtpCode(['', '', '', '', '', '']);
+        otpInputRefs.current[0]?.focus();
+        setOtpLoading(false);
+        return;
+      }
+      // Success - store tokens and redirect
+      const { tokens, user: userData, shop: shopData } = data;
+      const authToken = tokens?.accessToken;
+      if (!authToken) {
+        setOtpError('Authentication failed. Please try again.');
+        setOtpLoading(false);
+        return;
+      }
+      // Import and use secure session utilities
+      const { storeToken, storeShop, storeUser, storeCsrfToken, resetRefreshAttempts } = await import('@/lib/secure-session');
+      const decoded = JSON.parse(atob(authToken.split('.')[1]));
+      storeToken(authToken, tokens?.sessionId, tokens?.expiresIn, tokens?.refreshToken);
+      storeShop(shopData);
+      storeUser(userData);
+      resetRefreshAttempts();
+      if (tokens?.csrfToken) storeCsrfToken(tokens.csrfToken);
+      setLoginSuccess(true);
+      const redirectTo = searchParams.get('redirect') || (decoded.role === 'cashier' ? '/pos' : '/admin');
+      window.location.href = redirectTo;
+    } catch (err: any) {
+      setOtpError(err.message || 'Verification failed');
+      setOtpLoading(false);
+    }
+  };
+
+  const handleResendLoginOtp = async () => {
+    if (otpResendCooldown > 0) return;
+    setOtpResending(true);
+    try {
+      const res = await fetch(`${config.apiUrl}/auth/resend-login-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: otpEmail, userName: otpUserName }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setOtpResendCooldown(60);
+        setOtpError('');
+        setOtpCode(['', '', '', '', '', '']);
+        otpInputRefs.current[0]?.focus();
+      } else {
+        setOtpError(data.message || 'Failed to resend code');
+      }
+    } catch {
+      setOtpError('Failed to resend code. Check your connection.');
+    } finally {
+      setOtpResending(false);
+    }
+  };
+
+  // OTP resend cooldown timer
+  useEffect(() => {
+    if (otpResendCooldown <= 0) return;
+    const timer = setInterval(() => setOtpResendCooldown(c => c - 1), 1000);
+    return () => clearInterval(timer);
+  }, [otpResendCooldown]);
+
   const handleAdminLogin = async (email: string, password: string, shopId: string) => {
     setError('');
     setIsLoading(true);
@@ -170,15 +290,25 @@ export default function LoginPage() {
       await login(email, password, 'admin', shopId);
       const selectedShop = shops.find(s => s.id === shopId);
       if (selectedShop?.status === 'pending' || selectedShop?.demoMode) {
-        // Pass the shop directly since state might not be updated yet
         enterDemoMode(selectedShop as any);
       }
-      // Mark login as successful and redirect immediately
       setLoginSuccess(true);
       const redirectTo = searchParams.get('redirect') || '/admin';
-      // Use window.location for more reliable redirect after state changes
       window.location.href = redirectTo;
     } catch (err: any) {
+      // Handle email verification requirement
+      if (err.requiresEmailVerification) {
+        setOtpEmail(err.email);
+        setOtpUserName(err.userName || '');
+        setOtpShopName(err.shopName || '');
+        setOtpCode(['', '', '', '', '', '']);
+        setOtpError('');
+        setShowOtpVerification(true);
+        setOtpResendCooldown(60);
+        setIsLoading(false);
+        setTimeout(() => otpInputRefs.current[0]?.focus(), 100);
+        return;
+      }
       const errorInfo = getLoginErrorMessage(err.message || 'Login failed', 'admin');
       setError(`${errorInfo.title}: ${errorInfo.message}`);
       setIsLoading(false);
@@ -295,7 +425,110 @@ export default function LoginPage() {
             Back to home
           </Link>
 
-          {/* Login Card */}
+          {/* OTP Verification Card */}
+          {showOtpVerification ? (
+            <Card className="border-0 shadow-lg">
+              <CardHeader className="space-y-1 pb-4 text-center">
+                <div className="mx-auto mb-2 p-3 bg-blue-100 dark:bg-blue-900/30 rounded-full w-fit">
+                  <ShieldCheck className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+                </div>
+                <CardTitle className="text-2xl font-bold">Verify Your Email</CardTitle>
+                <CardDescription>
+                  We sent a 6-digit verification code to<br />
+                  <span className="font-medium text-foreground">{otpEmail}</span>
+                </CardDescription>
+                {otpShopName && (
+                  <p className="text-xs text-muted-foreground mt-1">Shop: {otpShopName}</p>
+                )}
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <p className="text-sm text-center text-muted-foreground">
+                  Check your email inbox and spam folder for the code. This is a one-time verification to confirm your email address.
+                </p>
+
+                {/* OTP Input */}
+                <div className="flex justify-center gap-2" onPaste={handleOtpPaste}>
+                  {otpCode.map((digit, index) => (
+                    <input
+                      key={index}
+                      ref={el => { otpInputRefs.current[index] = el; }}
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={1}
+                      value={digit}
+                      onChange={e => handleOtpChange(index, e.target.value)}
+                      onKeyDown={e => handleOtpKeyDown(index, e)}
+                      className={`w-12 h-14 text-center text-2xl font-bold rounded-lg border-2 bg-background transition-all focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary ${
+                        otpError ? 'border-destructive' : 'border-border'
+                      }`}
+                      disabled={otpLoading}
+                      autoFocus={index === 0}
+                    />
+                  ))}
+                </div>
+
+                {/* OTP Error */}
+                {otpError && (
+                  <div className="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                    <AlertCircle className="h-4 w-4 text-destructive flex-shrink-0" />
+                    <p className="text-sm text-destructive">{otpError}</p>
+                  </div>
+                )}
+
+                {/* Verify Button */}
+                <Button
+                  onClick={handleVerifyLoginOtp}
+                  disabled={otpLoading || otpCode.join('').length !== 6}
+                  className="w-full h-12 text-base"
+                >
+                  {otpLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                      Verifying...
+                    </>
+                  ) : (
+                    <>
+                      <ShieldCheck className="mr-2 h-5 w-5" />
+                      Verify &amp; Sign In
+                    </>
+                  )}
+                </Button>
+
+                {/* Resend */}
+                <div className="text-center">
+                  {otpResendCooldown > 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      Resend code in <span className="font-medium text-foreground">{otpResendCooldown}s</span>
+                    </p>
+                  ) : (
+                    <button
+                      onClick={handleResendLoginOtp}
+                      disabled={otpResending}
+                      className="text-sm text-primary hover:underline font-medium disabled:opacity-50"
+                    >
+                      {otpResending ? 'Sending...' : "Didn't receive the code? Resend"}
+                    </button>
+                  )}
+                </div>
+
+                {/* Back to login */}
+                <div className="text-center pt-2 border-t border-border">
+                  <button
+                    onClick={() => {
+                      setShowOtpVerification(false);
+                      setOtpCode(['', '', '', '', '', '']);
+                      setOtpError('');
+                    }}
+                    className="text-sm text-muted-foreground hover:text-foreground"
+                  >
+                    <ArrowLeft className="inline h-3 w-3 mr-1" />
+                    Back to login
+                  </button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+          /* Login Card */
           <Card className="border-0 shadow-lg">
             <CardHeader className="space-y-1 pb-4">
               <CardTitle className="text-2xl font-bold">Welcome back</CardTitle>
@@ -415,6 +648,7 @@ export default function LoginPage() {
               </p>
             </CardContent>
           </Card>
+          )}
 
           {/* Footer */}
           <p className="text-center text-xs text-muted-foreground mt-6">

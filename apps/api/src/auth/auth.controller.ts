@@ -65,8 +65,21 @@ export class AuthController {
   async login(@Body() dto: LoginDto, @Req() req: any, @Res({ passthrough: true }) res: Response) {
     const ipAddress = req.ip || req.connection.remoteAddress;
     const userAgent = req.get('user-agent');
-    const result = await this.authService.loginWithTokens(dto, ipAddress, userAgent);
+    const result: any = await this.authService.loginWithTokens(dto, ipAddress, userAgent);
     
+    // If email verification is required, return OTP requirement (no tokens)
+    if (result.requiresEmailVerification) {
+      return {
+        requiresEmailVerification: true,
+        email: result.email,
+        userName: result.userName,
+        shopName: result.shopName,
+        user: null,
+        shop: null,
+        tokens: null,
+      };
+    }
+
     // Set secure httpOnly cookies
     if (result.tokens) {
       this.cookieService.setAuthCookies(
@@ -551,12 +564,77 @@ export class AuthController {
   @Post('verify-otp')
   @SkipCsrf()
   async verifyOtp(
-    @Body() body: { email: string; code: string; type?: 'registration' | 'password_reset' | 'email_verification' },
+    @Body() body: { email: string; code: string; type?: 'registration' | 'password_reset' | 'email_verification' | 'login' },
   ) {
     return this.otpService.verifyOtp(
       body.email,
       body.code,
       body.type || 'registration',
+    );
+  }
+
+  /**
+   * Verify login OTP and get tokens
+   * Called when existing user needs to verify email on login
+   * Rate limited: 5 attempts per minute per IP
+   */
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Post('verify-login-otp')
+  @SkipCsrf()
+  async verifyLoginOtp(
+    @Body() body: { email: string; code: string },
+    @Req() req: any,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.get('user-agent');
+    const result = await this.authService.verifyLoginOtpAndGetTokens(
+      body.email,
+      body.code,
+      ipAddress,
+      userAgent,
+    );
+
+    // Set secure httpOnly cookies
+    if (result.tokens) {
+      this.cookieService.setAuthCookies(
+        res,
+        result.tokens.accessToken,
+        result.tokens.refreshToken,
+        result.tokens.csrfToken,
+      );
+    }
+
+    return {
+      user: result.user,
+      shop: result.shop,
+      tokens: {
+        accessToken: result.tokens?.accessToken,
+        refreshToken: result.tokens?.refreshToken,
+        expiresIn: result.tokens?.expiresIn,
+        csrfToken: result.tokens?.csrfToken,
+      },
+    };
+  }
+
+  /**
+   * Resend login OTP (for existing users verifying email on login)
+   * Rate limited: 2 requests per minute per IP
+   */
+  @Throttle({ default: { limit: 2, ttl: 60000 } })
+  @Post('resend-login-otp')
+  @SkipCsrf()
+  async resendLoginOtp(
+    @Body() body: { email: string; userName?: string },
+    @Req() req: any,
+  ) {
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.get('user-agent');
+    return this.otpService.sendLoginOtp(
+      body.email,
+      body.userName || body.email,
+      ipAddress,
+      userAgent,
     );
   }
 
@@ -568,7 +646,7 @@ export class AuthController {
   @Post('resend-otp')
   @SkipCsrf()
   async resendOtp(
-    @Body() body: { email: string; shopName: string; type?: 'registration' | 'password_reset' | 'email_verification' },
+    @Body() body: { email: string; shopName: string; type?: 'registration' | 'password_reset' | 'email_verification' | 'login' },
     @Req() req: any,
   ) {
     const ipAddress = req.ip || req.connection.remoteAddress;

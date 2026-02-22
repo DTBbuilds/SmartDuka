@@ -11,6 +11,8 @@ import { SubscriptionDunningService } from './subscription-dunning.service';
  * - Sending renewal reminders (dunning)
  * - Suspending overdue subscriptions
  * - Generating recurring invoices
+ * 
+ * FREE_MODE: All payment/dunning/invoice tasks are disabled since the system is free.
  */
 @Injectable()
 export class SubscriptionSchedulerService {
@@ -28,81 +30,50 @@ export class SubscriptionSchedulerService {
    * - Subscriptions expiring in 7 days (send reminder)
    * - Expired subscriptions (create renewal invoice, set to PAST_DUE)
    * - Past grace period subscriptions (set to SUSPENDED)
+   * 
+   * FREE_MODE: Disabled - system is free, no subscriptions expire
    */
   @Cron('0 9 * * *')
   async processExpiringSubscriptions(): Promise<void> {
-    this.logger.log('Starting daily subscription expiration check...');
-    
-    try {
-      await this.subscriptionsService.processExpiringSubscriptions();
-      this.logger.log('Completed subscription expiration check');
-    } catch (error) {
-      this.logger.error('Failed to process expiring subscriptions:', error);
-    }
+    // FREE_MODE: System is free - skip all subscription expiration processing
+    this.logger.log('FREE_MODE: Skipping subscription expiration check (system is free)');
+    return;
   }
 
   /**
    * Process DAILY billing cycle subscriptions more frequently (every 4 hours)
    * 
-   * Daily subscriptions can expire within 24 hours, so we need to check more often
-   * than the daily 9 AM job. This ensures:
-   * - Daily subscriptions are expired promptly when their period ends
-   * - Users are blocked from access as soon as their daily period expires
-   * - Renewal invoices are created promptly
+   * FREE_MODE: Disabled - system is free, no billing cycles to process
    */
   @Cron('0 */4 * * *') // Every 4 hours
   async processDailySubscriptions(): Promise<void> {
-    this.logger.log('Starting daily billing cycle subscription check...');
-    
-    try {
-      await this.subscriptionsService.processDailyBillingSubscriptions();
-      this.logger.log('Completed daily billing subscription check');
-    } catch (error) {
-      this.logger.error('Failed to process daily billing subscriptions:', error);
-    }
+    // FREE_MODE: System is free - skip daily billing processing
+    this.logger.log('FREE_MODE: Skipping daily billing check (system is free)');
+    return;
   }
 
   /**
    * Send dunning notifications (runs daily at 10 AM)
-   * This handles:
-   * - Expiry warnings (7, 3, 1 days before)
-   * - Grace period reminders (day 1, 3, 5)
-   * - Suspension notices
+   * 
+   * FREE_MODE: Disabled - system is free, no payment reminders needed
    */
   @Cron('0 10 * * *')
   async sendDunningNotifications(): Promise<void> {
-    this.logger.log('Processing dunning notifications...');
-    
-    try {
-      const results = await this.dunningService.processDunningNotifications();
-      
-      const successful = results.filter(r => r.success).length;
-      const failed = results.filter(r => !r.success).length;
-      
-      this.logger.log(`Dunning notifications completed: ${successful} successful, ${failed} failed`);
-      
-      // Log any failures
-      results.filter(r => !r.success).forEach(r => {
-        this.logger.warn(`Failed dunning for ${r.shopName}: ${r.action} - ${r.error}`);
-      });
-    } catch (error) {
-      this.logger.error('Failed to process dunning notifications:', error);
-    }
+    // FREE_MODE: System is free - skip all dunning/payment reminder notifications
+    this.logger.log('FREE_MODE: Skipping dunning notifications (system is free)');
+    return;
   }
 
   /**
    * Generate monthly invoices for active subscriptions (runs on 1st of each month at 1 AM)
+   * 
+   * FREE_MODE: Disabled - system is free, no invoices to generate
    */
   @Cron('0 1 1 * *')
   async generateMonthlyInvoices(): Promise<void> {
-    this.logger.log('Generating monthly subscription invoices...');
-    
-    try {
-      await this.subscriptionsService.generateRecurringInvoices();
-      this.logger.log('Completed monthly invoice generation');
-    } catch (error) {
-      this.logger.error('Failed to generate monthly invoices:', error);
-    }
+    // FREE_MODE: System is free - skip invoice generation
+    this.logger.log('FREE_MODE: Skipping monthly invoice generation (system is free)');
+    return;
   }
 
   /**

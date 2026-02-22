@@ -2750,6 +2750,7 @@ export class SubscriptionsService {
 
   /**
    * Send payment reminder email to shop owner
+   * FREE_MODE: This method is disabled since the system is free.
    */
   private async sendPaymentReminderEmail(
     shopId: string | undefined,
@@ -2912,10 +2913,10 @@ export class SubscriptionsService {
             });
           }
           
-          // Send payment reminder email for expired trial
-          await this.sendPaymentReminderEmail(sub.shopId?.toString(), shopName, 'trial_expired');
+          // FREE_MODE: Payment reminder emails disabled (system is free)
+          // await this.sendPaymentReminderEmail(sub.shopId?.toString(), shopName, 'trial_expired');
           
-          issues.push(`${shopName}: Trial expired - marked as EXPIRED, payment reminder sent`);
+          issues.push(`${shopName}: Trial expired - marked as EXPIRED`);
           fixed++;
         }
         
@@ -2934,15 +2935,15 @@ export class SubscriptionsService {
               });
             }
             
-            // Send suspension notification with payment reminder
-            await this.sendPaymentReminderEmail(sub.shopId?.toString(), shopName, 'suspended');
+            // FREE_MODE: Payment reminder emails disabled (system is free)
+            // await this.sendPaymentReminderEmail(sub.shopId?.toString(), shopName, 'suspended');
             
-            issues.push(`${shopName}: Past due ${daysOverdue} days - suspended, payment reminder sent`);
+            issues.push(`${shopName}: Past due ${daysOverdue} days - suspended`);
             fixed++;
           } else {
-            // Send grace period reminder
-            await this.sendPaymentReminderEmail(sub.shopId?.toString(), shopName, 'past_due', GRACE_PERIOD_DAYS - daysOverdue);
-            issues.push(`${shopName}: Past due ${daysOverdue} days - grace period reminder sent`);
+            // FREE_MODE: Payment reminder emails disabled (system is free)
+            // await this.sendPaymentReminderEmail(sub.shopId?.toString(), shopName, 'past_due', GRACE_PERIOD_DAYS - daysOverdue);
+            issues.push(`${shopName}: Past due ${daysOverdue} days - grace period (no email sent, system is free)`);
           }
         }
         

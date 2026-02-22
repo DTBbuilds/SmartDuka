@@ -204,7 +204,7 @@ class WebSocketClient {
     if ('Notification' in window && Notification.permission === 'granted') {
       new Notification(title, {
         body: message,
-        icon: '/favicon.ico',
+        icon: '/icons/icon.svg',
         tag: 'smartduka-payment',
       });
     }

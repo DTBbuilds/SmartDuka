@@ -106,6 +106,11 @@ export class User {
   @Prop({ required: false, type: Types.ObjectId, ref: 'Branch' })
   lastBranchId?: Types.ObjectId;
 
+  // Email verification - all users must verify email via OTP
+  // Default false so existing users verify on next login
+  @Prop({ default: false })
+  emailVerified: boolean;
+
   // Google OAuth fields
   @Prop({ required: false, unique: true, sparse: true })
   googleId?: string;

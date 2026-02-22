@@ -47,6 +47,14 @@ export const metadata: Metadata = {
     "no data collection POS",
     "privacy-first POS",
   ],
+  icons: {
+    icon: [
+      { url: "/icons/icon.svg", type: "image/svg+xml" },
+    ],
+    apple: [
+      { url: "/icons/icon.svg", type: "image/svg+xml" },
+    ],
+  },
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
@@ -97,8 +105,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#2563eb" },
-    { media: "(prefers-color-scheme: dark)", color: "#1e40af" },
+    { media: "(prefers-color-scheme: light)", color: "#f97316" },
+    { media: "(prefers-color-scheme: dark)", color: "#ea580c" },
   ],
   width: "device-width",
   initialScale: 1,
@@ -116,7 +124,6 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <link rel="apple-touch-icon" href="/icons/icon.svg" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="mobile-web-app-capable" content="yes" />
       </head>

@@ -205,6 +205,12 @@ export class EmailService {
   }
 
   async sendEmail(options: EmailOptions): Promise<{ success: boolean; messageId?: string; error?: string; emailLogId?: string }> {
+    // Guard: prevent sending emails with empty/null html body
+    if (!options.html || typeof options.html !== 'string' || !options.html.trim()) {
+      this.logger.error(`sendEmail called with empty html body for "${options.subject}" to ${options.to}`);
+      return { success: false, error: 'Email html body is empty or missing' };
+    }
+
     const toArray = Array.isArray(options.to) ? options.to : [options.to];
     const toAddress = toArray.join(', ');
     const replyTo = options.replyTo || process.env.REPLY_TO_EMAIL || 'smartdukainfo@gmail.com';
@@ -429,58 +435,63 @@ export class EmailService {
   }
 
   /**
-   * Generate base email layout with SmartDuka branding
+   * Generate base email layout with SmartDuka branding — clean, professional, all inline styles
    */
   private getBaseLayout(content: string, footerText?: string): string {
-    return `
-<!DOCTYPE html>
-<html>
+    const year = new Date().getFullYear();
+    const url = process.env.FRONTEND_URL || 'https://www.smartduka.org';
+    return `<!DOCTYPE html>
+<html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    body { font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background: #f4f4f5; }
-    .wrapper { max-width: 600px; margin: 0 auto; padding: 20px; }
-    .container { background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-    .header { background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: white; padding: 30px; text-align: center; }
-    .header h1 { margin: 0; font-size: 24px; font-weight: 600; }
-    .content { padding: 30px; }
-    .button { display: inline-block; background: #2563eb; color: white !important; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; margin: 20px 0; }
-    .button:hover { background: #1d4ed8; }
-    .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; background: #f8fafc; }
-    .divider { height: 1px; background: #e5e7eb; margin: 20px 0; }
-    .highlight-box { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 15px; margin: 15px 0; }
-    .warning-box { background: #fef3c7; border: 1px solid #fcd34d; border-radius: 8px; padding: 15px; margin: 15px 0; }
-    .error-box { background: #fef2f2; border: 1px solid #fca5a5; border-radius: 8px; padding: 15px; margin: 15px 0; }
-    .success-box { background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; padding: 15px; margin: 15px 0; }
-    @media only screen and (max-width: 600px) {
-      .wrapper { padding: 10px; }
-      .content { padding: 20px; }
-    }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="color-scheme" content="light">
+<title>SmartDuka</title>
 </head>
-<body>
-  <div class="wrapper">
-    <div class="container">
-      ${content}
-    </div>
-    <div class="footer">
-      <p>${footerText || 'This is an automated message from SmartDuka.'}</p>
-      <p>© ${new Date().getFullYear()} SmartDuka. All rights reserved.</p>
-      <p style="margin-top: 10px;">
-        <a href="${process.env.FRONTEND_URL || 'https://www.smartduka.org'}" style="color: #2563eb; text-decoration: none;">Visit SmartDuka</a> |
-        <a href="${process.env.FRONTEND_URL || 'https://www.smartduka.org'}/help" style="color: #2563eb; text-decoration: none;">Help Center</a>
-      </p>
-    </div>
-  </div>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;color:#111827;line-height:1.6;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;padding:32px 16px;">
+<tr><td align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background-color:#ffffff;border-radius:8px;border-top:3px solid #f97316;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+<tr><td style="padding:28px 36px 0;text-align:center;">
+  <p style="margin:0;font-size:22px;font-weight:700;color:#111827;letter-spacing:-0.3px;">SmartDuka</p>
+</td></tr>
+<tr><td style="padding:24px 36px 32px;">
+  ${content}
+</td></tr>
+<tr><td style="padding:24px 36px;border-top:1px solid #f3f4f6;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+  <tr><td style="text-align:center;">
+    <p style="margin:0 0 6px;font-size:11px;color:#9ca3af;">${footerText || 'This is an automated message from SmartDuka.'}</p>
+    <p style="margin:0 0 8px;font-size:12px;color:#9ca3af;">
+      <a href="tel:+254729983567" style="color:#9ca3af;text-decoration:none;">0729 983 567</a> &nbsp;&middot;&nbsp;
+      <a href="mailto:smartdukainfo@gmail.com" style="color:#9ca3af;text-decoration:none;">smartdukainfo@gmail.com</a> &nbsp;&middot;&nbsp;
+      <a href="${url}" style="color:#9ca3af;text-decoration:none;">smartduka.org</a>
+    </p>
+    <p style="margin:0;font-size:11px;color:#d1d5db;">&copy; ${year} SmartDuka. All rights reserved.</p>
+  </td></tr>
+  </table>
+</td></tr>
+</table>
+</td></tr>
+</table>
 </body>
 </html>`;
   }
 
   /**
    * Wrap content in SmartDuka branded email layout (public for manual emails)
+   * Fixed: guards against null/undefined/empty content to prevent empty body emails
    */
   wrapInLayout(content: string, footerText?: string): string {
+    // Guard against null/undefined/empty content — prevents empty body emails
+    if (!content || typeof content !== 'string' || !content.trim()) {
+      this.logger.warn('wrapInLayout called with empty/null content');
+      return this.getBaseLayout(
+        '<p style="margin:0;font-size:14px;color:#6b7280;text-align:center;">No content provided.</p>',
+        footerText,
+      );
+    }
+
     // Check if content already has full HTML structure
     if (content.includes('<!DOCTYPE') || content.includes('<html')) {
       return content;
@@ -488,24 +499,17 @@ export class EmailService {
 
     // Convert plain text line breaks to HTML if content appears to be plain text
     let htmlContent = content;
-    if (!content.includes('<p>') && !content.includes('<div>') && !content.includes('<br')) {
+    if (!content.includes('<p>') && !content.includes('<div>') && !content.includes('<br') && !content.includes('<table')) {
       // Convert markdown-style links to HTML
-      htmlContent = content.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" style="color: #2563eb;">$1</a>');
+      htmlContent = content.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" style="color:#f97316;text-decoration:none;">$1</a>');
       // Convert line breaks to paragraphs
       htmlContent = content
         .split(/\n\n+/)
-        .map(para => `<p style="margin: 0 0 15px 0;">${para.replace(/\n/g, '<br>')}</p>`)
+        .map(para => `<p style="margin:0 0 14px;font-size:14px;color:#374151;line-height:1.6;">${para.replace(/\n/g, '<br>')}</p>`)
         .join('');
     }
 
-    return this.getBaseLayout(`
-      <div class="header">
-        <h1>SmartDuka</h1>
-      </div>
-      <div class="content">
-        ${htmlContent}
-      </div>
-    `, footerText || 'This message was sent by the SmartDuka team.');
+    return this.getBaseLayout(htmlContent, footerText || 'This message was sent by the SmartDuka team.');
   }
 
   // Seed default email templates with professional SmartDuka branding

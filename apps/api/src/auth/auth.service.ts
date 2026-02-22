@@ -12,6 +12,8 @@ import { BillingCycle } from '../subscriptions/schemas/subscription.schema';
 import { RegisterShopDto } from './dto/register-shop.dto';
 import { LoginDto } from './dto/login.dto';
 import { TokenService } from './token.service';
+import { OtpService } from './services/otp.service';
+import { EmailService } from '../notifications/email.service';
 import * as bcryptjs from 'bcryptjs';
 
 @Injectable()
@@ -28,9 +30,19 @@ export class AuthService {
     @InjectModel('SuperAdmin') private readonly superAdminModel?: Model<any>,
     @Optional() private readonly systemEventManager?: SystemEventManagerService,
     @Optional() private readonly subscriptionsService?: SubscriptionsService,
+    @Optional() private readonly otpService?: OtpService,
+    @Optional() private readonly emailService?: EmailService,
   ) {}
 
   async registerShop(dto: RegisterShopDto) {
+    // Enforce email OTP verification before registration
+    if (this.otpService) {
+      const isVerified = await this.otpService.isEmailRecentlyVerified(dto.admin.email, 'registration');
+      if (!isVerified) {
+        throw new BadRequestException('Email not verified. Please verify your email with OTP before registering.');
+      }
+    }
+
     // Create shop with proper shop name and admin contact info
     const shopData: any = {
       name: dto.shop.shopName,  // Use the actual shop name provided
@@ -106,7 +118,7 @@ export class AuthService {
       }
     }
 
-    // Create admin user for shop
+    // Create admin user for shop (email already verified via OTP)
     const user = await this.usersService.create({
       shopId: (shop as any)._id.toString(),
       email: dto.admin.email,
@@ -115,6 +127,16 @@ export class AuthService {
       password: dto.admin.password,
       role: 'admin',
     });
+
+    // Mark email as verified since OTP was validated before registration
+    try {
+      await this.usersService.updateEmailVerified((user as any)._id.toString(), true);
+    } catch (err) {
+      this.logger.warn(`Failed to set emailVerified for ${dto.admin.email}: ${err}`);
+    }
+
+    // Send notification to super admin about new shop registration
+    this.notifySuperAdminNewShop(shop.name, dto.admin.name, dto.admin.email, dto.admin.phone);
 
     // Generate JWT token
     const token = this.jwtService.sign({
@@ -126,9 +148,9 @@ export class AuthService {
     });
 
     // Send welcome email - fire and forget (don't block registration)
-    if (this.systemEventManager) {
+    if (this.systemEventManager && false) { // FREE_MODE: Welcome emails disabled - system is free
       // Use setImmediate to defer email sending to next tick - doesn't block response
-      const eventManager = this.systemEventManager;
+      const eventManager = this.systemEventManager!;
       setImmediate(() => {
         eventManager.queueEvent({
           type: 'welcome',
@@ -218,6 +240,30 @@ export class AuthService {
     // Check shop status
     if (shop.status === 'suspended') {
       throw new UnauthorizedException('Shop is suspended');
+    }
+
+    // Check if email is verified - if not, send OTP and require verification
+    if (!(user as any).emailVerified && this.otpService) {
+      try {
+        await this.otpService.sendLoginOtp(
+          user.email,
+          (user as any).name || user.email,
+          ipAddress,
+          userAgent,
+        );
+      } catch (err: any) {
+        this.logger.warn(`Login OTP send issue for ${user.email}: ${err.message}`);
+      }
+
+      return {
+        requiresEmailVerification: true,
+        email: user.email,
+        userName: (user as any).name || user.email,
+        shopName: shop.name,
+        user: null,
+        shop: null,
+        token: null,
+      };
     }
 
     // Generate JWT token - include user's registered name for receipts
@@ -522,6 +568,11 @@ export class AuthService {
       );
     }
 
+    // Google users are email-verified by default
+    if (!(user as any).emailVerified) {
+      await this.usersService.updateEmailVerified((user as any)._id.toString(), true).catch(() => {});
+    }
+
     // Get shop info
     const shop = await this.shopsService.findById((user as any).shopId.toString());
     if (!shop) {
@@ -626,6 +677,11 @@ export class AuthService {
         googleUser.googleId,
         googleUser.avatarUrl,
       );
+    }
+
+    // Google users are email-verified by default
+    if (!(user as any).emailVerified) {
+      await this.usersService.updateEmailVerified((user as any)._id.toString(), true).catch(() => {});
     }
 
     // Get shop info
@@ -1030,6 +1086,7 @@ export class AuthService {
 
   /**
    * Login with secure token pair
+   * If email is not verified, returns requiresEmailVerification instead of tokens
    */
   async loginWithTokens(dto: LoginDto, ipAddress?: string, userAgent?: string) {
     // Check if this is a super admin login
@@ -1075,6 +1132,31 @@ export class AuthService {
       throw new UnauthorizedException('Shop is suspended');
     }
 
+    // Check if email is verified - if not, send OTP and require verification
+    if (!(user as any).emailVerified && this.otpService) {
+      try {
+        await this.otpService.sendLoginOtp(
+          user.email,
+          (user as any).name || user.email,
+          ipAddress,
+          userAgent,
+        );
+      } catch (err: any) {
+        // If cooldown error, still return requiresEmailVerification
+        this.logger.warn(`Login OTP send issue for ${user.email}: ${err.message}`);
+      }
+
+      return {
+        requiresEmailVerification: true,
+        email: user.email,
+        userName: (user as any).name || user.email,
+        shopName: shop.name,
+        user: null,
+        shop: null,
+        tokens: null,
+      };
+    }
+
     // Generate secure token pair
     let tokens: any = null;
     if (this.tokenService) {
@@ -1112,6 +1194,7 @@ export class AuthService {
     }
 
     return {
+      requiresEmailVerification: false,
       user: {
         id: (user as any)._id,
         email: user.email,
@@ -1128,6 +1211,169 @@ export class AuthService {
       },
       tokens,
     };
+  }
+
+  /**
+   * Verify login OTP and issue tokens
+   * Called after user enters OTP code during login email verification
+   */
+  async verifyLoginOtpAndGetTokens(
+    email: string,
+    code: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
+    // Verify OTP
+    if (!this.otpService) {
+      throw new BadRequestException('OTP service not available');
+    }
+
+    const otpResult = await this.otpService.verifyOtp(email, code, 'login');
+    if (!otpResult.valid) {
+      throw new UnauthorizedException('Invalid verification code');
+    }
+
+    // Find user
+    const user = await this.usersService.findByEmail(email);
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    if (user.status !== 'active') {
+      throw new UnauthorizedException('Account is disabled');
+    }
+
+    // Mark email as verified
+    try {
+      await this.usersService.updateEmailVerified((user as any)._id.toString(), true);
+      this.logger.log(`Email verified for user ${email}`);
+    } catch (err) {
+      this.logger.warn(`Failed to set emailVerified for ${email}: ${err}`);
+    }
+
+    // Get shop info
+    const shop = await this.shopsService.findById((user as any).shopId.toString());
+    if (!shop) {
+      throw new UnauthorizedException('Shop not found');
+    }
+
+    // Generate secure token pair
+    let tokens: any = null;
+    if (this.tokenService) {
+      tokens = await this.tokenService.generateTokenPair(
+        {
+          sub: (user as any)._id.toString(),
+          email: user.email,
+          name: (user as any).name || user.email,
+          role: user.role,
+          shopId: (user as any).shopId.toString(),
+          branchId: (user as any).branchId?.toString(),
+          cashierId: (user as any).cashierId,
+        },
+        {
+          userAgent,
+          ipAddress,
+          clientType: 'web',
+        },
+      );
+    }
+
+    // Log login activity
+    if (this.activityService) {
+      await this.activityService.logActivity(
+        (user as any).shopId.toString(),
+        (user as any)._id.toString(),
+        (user as any).name || user.email,
+        user.role,
+        'login',
+        { email: user.email, method: 'OTP verified' },
+        ipAddress,
+        userAgent,
+        (user as any).branchId?.toString(),
+      );
+    }
+
+    return {
+      user: {
+        id: (user as any)._id,
+        email: user.email,
+        name: (user as any).name,
+        cashierId: (user as any).cashierId,
+        role: user.role,
+        shopId: (user as any).shopId,
+        branchId: (user as any).branchId,
+      },
+      shop: {
+        id: shop._id,
+        name: shop.name,
+        status: shop.status,
+      },
+      tokens,
+    };
+  }
+
+  /**
+   * Send notification email to super admin when a new shop registers
+   */
+  private notifySuperAdminNewShop(
+    shopName: string,
+    adminName: string,
+    adminEmail: string,
+    adminPhone: string,
+  ): void {
+    const SUPER_ADMIN_EMAIL = 'dontech1914@gmail.com';
+
+    if (!this.emailService) {
+      this.logger.warn('EmailService not available, cannot notify super admin');
+      return;
+    }
+
+    // Fire and forget - don't block registration
+    setImmediate(() => {
+      this.emailService!.sendEmail({
+        to: SUPER_ADMIN_EMAIL,
+        subject: `New Shop Registered: ${shopName}`,
+        html: `<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;padding:32px 16px;">
+<tr><td align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background-color:#ffffff;border-radius:8px;border-top:3px solid #f97316;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+<tr><td style="padding:28px 32px 0;text-align:center;">
+  <p style="margin:0;font-size:20px;font-weight:700;color:#111827;">SmartDuka</p>
+</td></tr>
+<tr><td style="padding:24px 32px;">
+  <h1 style="margin:0 0 8px;font-size:20px;font-weight:700;color:#111827;text-align:center;">New shop registered</h1>
+  <p style="margin:0 0 20px;font-size:14px;color:#6b7280;text-align:center;">A new shop has been registered and needs your review.</p>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:6px;overflow:hidden;">
+    <tr><td style="padding:10px 14px;font-size:13px;color:#6b7280;background-color:#f9fafb;border-bottom:1px solid #e5e7eb;width:120px;">Shop Name</td><td style="padding:10px 14px;font-size:13px;font-weight:600;color:#111827;border-bottom:1px solid #e5e7eb;">${shopName}</td></tr>
+    <tr><td style="padding:10px 14px;font-size:13px;color:#6b7280;background-color:#f9fafb;border-bottom:1px solid #e5e7eb;">Admin</td><td style="padding:10px 14px;font-size:13px;color:#111827;border-bottom:1px solid #e5e7eb;">${adminName}</td></tr>
+    <tr><td style="padding:10px 14px;font-size:13px;color:#6b7280;background-color:#f9fafb;border-bottom:1px solid #e5e7eb;">Email</td><td style="padding:10px 14px;font-size:13px;color:#111827;border-bottom:1px solid #e5e7eb;"><a href="mailto:${adminEmail}" style="color:#f97316;text-decoration:none;">${adminEmail}</a></td></tr>
+    <tr><td style="padding:10px 14px;font-size:13px;color:#6b7280;background-color:#f9fafb;border-bottom:1px solid #e5e7eb;">Phone</td><td style="padding:10px 14px;font-size:13px;color:#111827;border-bottom:1px solid #e5e7eb;">${adminPhone}</td></tr>
+    <tr><td style="padding:10px 14px;font-size:13px;color:#6b7280;background-color:#f9fafb;">Date</td><td style="padding:10px 14px;font-size:13px;color:#111827;">${new Date().toLocaleString('en-KE', { timeZone: 'Africa/Nairobi' })}</td></tr>
+  </table>
+  <p style="margin:20px 0 16px;font-size:13px;color:#6b7280;text-align:center;">Please review and verify this registration in the admin panel.</p>
+  <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
+  <tr><td style="background-color:#111827;border-radius:6px;text-align:center;">
+    <a href="${process.env.FRONTEND_URL || 'https://www.smartduka.org'}/super-admin" style="display:inline-block;padding:10px 24px;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;">Open Admin Panel</a>
+  </td></tr>
+  </table>
+</td></tr>
+<tr><td style="padding:20px 32px;border-top:1px solid #f3f4f6;text-align:center;">
+  <p style="margin:0;font-size:11px;color:#9ca3af;">&copy; ${new Date().getFullYear()} SmartDuka</p>
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body></html>`,
+        category: 'admin_notification',
+        templateName: 'new_shop_registration_alert',
+      }).then(() => {
+        this.logger.log(`Super admin notified about new shop: ${shopName}`);
+      }).catch((err) => {
+        this.logger.error(`Failed to notify super admin about new shop ${shopName}: ${err.message}`);
+      });
+    });
   }
 
   /**
