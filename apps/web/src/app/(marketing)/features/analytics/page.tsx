@@ -113,14 +113,14 @@ export default function AnalyticsFeaturePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <Link href="/" className="flex items-center gap-2">
-              <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+              <div className="w-10 h-10 bg-orange-600 rounded-lg flex items-center justify-center">
                 <Store className="h-6 w-6 text-white" />
               </div>
               <span className="text-xl font-bold text-gray-900">SmartDuka</span>
             </Link>
             
             <nav className="hidden md:flex items-center gap-8">
-              <Link href="/features/pos" className="text-blue-600 font-medium">Features</Link>
+              <Link href="/features/pos" className="text-orange-600 font-medium">Features</Link>
               <Link href="/pricing" className="text-gray-600 hover:text-gray-900">Pricing</Link>
               <Link href="/blog" className="text-gray-600 hover:text-gray-900">Blog</Link>
               <Link href="/support" className="text-gray-600 hover:text-gray-900">Support</Link>
@@ -130,7 +130,7 @@ export default function AnalyticsFeaturePage() {
               <Link href="/login" className="text-gray-600 hover:text-gray-900 font-medium">Login</Link>
               <Link 
                 href="/register-shop" 
-                className="px-5 py-2.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+                className="px-5 py-2.5 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700 transition-colors"
               >
                 Get Started Free
               </Link>
@@ -140,7 +140,7 @@ export default function AnalyticsFeaturePage() {
       </header>
 
       {/* Hero Section */}
-      <section className="py-20 bg-gradient-to-br from-purple-50 via-white to-blue-50">
+      <section className="py-20 bg-gradient-to-br from-purple-50 via-white to-orange-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="max-w-3xl mx-auto text-center">
             <div className="inline-flex items-center gap-2 px-4 py-2 bg-purple-100 rounded-full text-purple-700 text-sm font-medium mb-6">
@@ -280,7 +280,7 @@ export default function AnalyticsFeaturePage() {
                   <span className="text-green-400 font-medium">Live Dashboard</span>
                 </div>
                 <div className="space-y-4">
-                  <div className="h-32 bg-gradient-to-r from-purple-600/20 to-blue-600/20 rounded-lg flex items-end p-4">
+                  <div className="h-32 bg-gradient-to-r from-purple-600/20 to-orange-600/20 rounded-lg flex items-end p-4">
                     <div className="flex-1 flex items-end gap-1">
                       {[40, 65, 45, 80, 55, 70, 90, 60, 75, 85, 70, 95].map((h, i) => (
                         <div key={i} className="flex-1 bg-purple-500 rounded-t" style={{ height: `${h}%` }}></div>
@@ -297,7 +297,7 @@ export default function AnalyticsFeaturePage() {
                       <p className="text-gray-500 text-xs">Sales</p>
                     </div>
                     <div className="bg-gray-800 p-3 rounded-lg text-center">
-                      <p className="text-blue-400 font-bold">KES 357</p>
+                      <p className="text-orange-400 font-bold">KES 357</p>
                       <p className="text-gray-500 text-xs">Avg Sale</p>
                     </div>
                   </div>
@@ -362,7 +362,7 @@ export default function AnalyticsFeaturePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <Link href="/" className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+              <div className="w-8 h-8 bg-orange-600 rounded-lg flex items-center justify-center">
                 <Store className="h-5 w-5 text-white" />
               </div>
               <span className="text-white font-semibold">SmartDuka</span>

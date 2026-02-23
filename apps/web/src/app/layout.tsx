@@ -47,14 +47,6 @@ export const metadata: Metadata = {
     "no data collection POS",
     "privacy-first POS",
   ],
-  icons: {
-    icon: [
-      { url: "/icons/icon.svg", type: "image/svg+xml" },
-    ],
-    apple: [
-      { url: "/icons/icon.svg", type: "image/svg+xml" },
-    ],
-  },
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,

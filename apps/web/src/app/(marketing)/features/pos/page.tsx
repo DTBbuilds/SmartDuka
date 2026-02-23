@@ -115,14 +115,14 @@ export default function POSFeaturePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <Link href="/" className="flex items-center gap-2">
-              <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+              <div className="w-10 h-10 bg-orange-600 rounded-lg flex items-center justify-center">
                 <Store className="h-6 w-6 text-white" />
               </div>
               <span className="text-xl font-bold text-gray-900">SmartDuka</span>
             </Link>
             
             <nav className="hidden md:flex items-center gap-8">
-              <Link href="/features/pos" className="text-blue-600 font-medium">Features</Link>
+              <Link href="/features/pos" className="text-orange-600 font-medium">Features</Link>
               <Link href="/pricing" className="text-gray-600 hover:text-gray-900">Pricing</Link>
               <Link href="/blog" className="text-gray-600 hover:text-gray-900">Blog</Link>
               <Link href="/support" className="text-gray-600 hover:text-gray-900">Support</Link>
@@ -134,7 +134,7 @@ export default function POSFeaturePage() {
               </Link>
               <Link 
                 href="/register-shop" 
-                className="px-5 py-2.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+                className="px-5 py-2.5 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700 transition-colors"
               >
                 Get Started Free
               </Link>
@@ -144,16 +144,16 @@ export default function POSFeaturePage() {
       </header>
 
       {/* Hero Section */}
-      <section className="py-20 bg-gradient-to-br from-blue-50 via-white to-green-50">
+      <section className="py-20 bg-gradient-to-br from-orange-50 via-white to-green-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="max-w-3xl mx-auto text-center">
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-100 rounded-full text-blue-700 text-sm font-medium mb-6">
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-orange-100 rounded-full text-orange-700 text-sm font-medium mb-6">
               <ShoppingCart className="h-4 w-4" />
               Point of Sale System
             </div>
             
             <h1 className="text-4xl sm:text-5xl font-bold text-gray-900 mb-6">
-              Fast, Reliable <span className="text-blue-600">POS System</span> for Kenyan Retailers
+              Fast, Reliable <span className="text-orange-600">POS System</span> for Kenyan Retailers
             </h1>
             
             <p className="text-xl text-gray-600 mb-8">
@@ -164,7 +164,7 @@ export default function POSFeaturePage() {
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link 
                 href="/register-shop" 
-                className="inline-flex items-center gap-2 px-8 py-4 bg-blue-600 text-white rounded-xl font-bold text-lg hover:bg-blue-700 transition-colors"
+                className="inline-flex items-center gap-2 px-8 py-4 bg-orange-600 text-white rounded-xl font-bold text-lg hover:bg-orange-700 transition-colors"
               >
                 Get Started Free
                 <ArrowRight className="h-5 w-5" />
@@ -189,7 +189,7 @@ export default function POSFeaturePage() {
           <div className="flex flex-wrap justify-center gap-8">
             {deviceSupport.map((device, index) => (
               <div key={index} className="flex items-center gap-3 text-white">
-                <device.icon className="h-8 w-8 text-blue-400" />
+                <device.icon className="h-8 w-8 text-orange-400" />
                 <div>
                   <p className="font-semibold">{device.name}</p>
                   <p className="text-gray-400 text-sm">{device.description}</p>
@@ -214,9 +214,9 @@ export default function POSFeaturePage() {
           
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
             {posFeatures.map((feature, index) => (
-              <div key={index} className="p-6 bg-gray-50 rounded-xl hover:bg-blue-50 transition-colors">
-                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
-                  <feature.icon className="h-6 w-6 text-blue-600" />
+              <div key={index} className="p-6 bg-gray-50 rounded-xl hover:bg-orange-50 transition-colors">
+                <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center mb-4">
+                  <feature.icon className="h-6 w-6 text-orange-600" />
                 </div>
                 <h3 className="text-lg font-bold text-gray-900 mb-2">{feature.title}</h3>
                 <p className="text-gray-600">{feature.description}</p>
@@ -231,7 +231,7 @@ export default function POSFeaturePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-100 rounded-full text-blue-700 text-sm font-medium mb-4">
+              <div className="inline-flex items-center gap-2 px-3 py-1 bg-orange-100 rounded-full text-orange-700 text-sm font-medium mb-4">
                 <Keyboard className="h-4 w-4" />
                 Power User Feature
               </div>
@@ -263,7 +263,7 @@ export default function POSFeaturePage() {
             </div>
             <div className="bg-white p-8 rounded-2xl shadow-lg">
               <div className="aspect-video bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl flex items-center justify-center">
-                <Keyboard className="h-20 w-20 text-blue-600" />
+                <Keyboard className="h-20 w-20 text-orange-600" />
               </div>
             </div>
           </div>
@@ -283,7 +283,7 @@ export default function POSFeaturePage() {
                 </div>
               </div>
               <div className="flex items-center gap-4">
-                <Wifi className="h-12 w-12 text-blue-400" />
+                <Wifi className="h-12 w-12 text-orange-400" />
                 <div>
                   <p className="text-white font-bold text-lg">Back Online</p>
                   <p className="text-gray-400">All sales synced ✓</p>
@@ -317,18 +317,18 @@ export default function POSFeaturePage() {
       </section>
 
       {/* CTA Section */}
-      <section className="py-20 bg-blue-600">
+      <section className="py-20 bg-orange-600">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-3xl sm:text-4xl font-bold text-white mb-6">
             Ready to Speed Up Your Checkout?
           </h2>
-          <p className="text-xl text-blue-100 mb-8">
+          <p className="text-xl text-orange-100 mb-8">
             Start your free trial today and see why thousands of Kenyan businesses choose SmartDuka.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link 
               href="/register-shop" 
-              className="px-8 py-4 bg-white text-blue-600 rounded-xl font-bold text-lg hover:bg-blue-50 transition-colors"
+              className="px-8 py-4 bg-white text-orange-600 rounded-xl font-bold text-lg hover:bg-orange-50 transition-colors"
             >
               Get Started Free
             </Link>
@@ -347,7 +347,7 @@ export default function POSFeaturePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <Link href="/" className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+              <div className="w-8 h-8 bg-orange-600 rounded-lg flex items-center justify-center">
                 <Store className="h-5 w-5 text-white" />
               </div>
               <span className="text-white font-semibold">SmartDuka</span>

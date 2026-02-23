@@ -122,7 +122,7 @@ export default function BlogPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <Link href="/" className="flex items-center gap-2">
-              <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+              <div className="w-10 h-10 bg-orange-600 rounded-lg flex items-center justify-center">
                 <Store className="h-6 w-6 text-white" />
               </div>
               <span className="text-xl font-bold text-gray-900">SmartDuka</span>
@@ -131,7 +131,7 @@ export default function BlogPage() {
             <nav className="hidden md:flex items-center gap-8">
               <Link href="/features/pos" className="text-gray-600 hover:text-gray-900">Features</Link>
               <Link href="/pricing" className="text-gray-600 hover:text-gray-900">Pricing</Link>
-              <Link href="/blog" className="text-blue-600 font-medium">Blog</Link>
+              <Link href="/blog" className="text-orange-600 font-medium">Blog</Link>
               <Link href="/support" className="text-gray-600 hover:text-gray-900">Support</Link>
             </nav>
             
@@ -139,7 +139,7 @@ export default function BlogPage() {
               <Link href="/login" className="text-gray-600 hover:text-gray-900 font-medium">Login</Link>
               <Link 
                 href="/register-shop" 
-                className="px-5 py-2.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+                className="px-5 py-2.5 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700 transition-colors"
               >
                 Get Started Free
               </Link>
@@ -149,7 +149,7 @@ export default function BlogPage() {
       </header>
 
       {/* Hero Section */}
-      <section className="py-16 bg-gradient-to-br from-blue-50 via-white to-gray-50">
+      <section className="py-16 bg-gradient-to-br from-orange-50 via-white to-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-3xl mx-auto">
             <h1 className="text-4xl sm:text-5xl font-bold text-gray-900 mb-6">
@@ -170,7 +170,7 @@ export default function BlogPage() {
             {categories.map((category) => (
               <button
                 key={category.name}
-                className="px-4 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-700 hover:bg-blue-100 hover:text-blue-700 transition-colors"
+                className="px-4 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-700 hover:bg-orange-100 hover:text-orange-700 transition-colors"
               >
                 {category.name} ({category.count})
               </button>
@@ -191,12 +191,12 @@ export default function BlogPage() {
                 href={`/blog/${post.slug}`}
                 className="group bg-gray-50 rounded-2xl overflow-hidden hover:shadow-lg transition-all"
               >
-                <div className="aspect-video bg-gradient-to-br from-blue-100 to-blue-200 flex items-center justify-center">
-                  <Store className="h-16 w-16 text-blue-400" />
+                <div className="aspect-video bg-gradient-to-br from-orange-100 to-orange-200 flex items-center justify-center">
+                  <Store className="h-16 w-16 text-orange-400" />
                 </div>
                 <div className="p-6">
                   <div className="flex items-center gap-3 mb-3">
-                    <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">
+                    <span className="px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-sm font-medium">
                       {post.category}
                     </span>
                     <span className="text-gray-500 text-sm flex items-center gap-1">
@@ -204,7 +204,7 @@ export default function BlogPage() {
                       {post.readTime}
                     </span>
                   </div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-blue-600 transition-colors">
+                  <h3 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-orange-600 transition-colors">
                     {post.title}
                   </h3>
                   <p className="text-gray-600 mb-4">{post.excerpt}</p>
@@ -251,7 +251,7 @@ export default function BlogPage() {
                     </span>
                     <span className="text-gray-400 text-xs">{post.readTime}</span>
                   </div>
-                  <h3 className="font-bold text-gray-900 mb-2 group-hover:text-blue-600 transition-colors line-clamp-2">
+                  <h3 className="font-bold text-gray-900 mb-2 group-hover:text-orange-600 transition-colors line-clamp-2">
                     {post.title}
                   </h3>
                   <p className="text-gray-600 text-sm line-clamp-2 mb-3">{post.excerpt}</p>
@@ -270,12 +270,12 @@ export default function BlogPage() {
       </section>
 
       {/* Newsletter CTA */}
-      <section className="py-16 bg-blue-600">
+      <section className="py-16 bg-orange-600">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-2xl font-bold text-white mb-4">
             Get Retail Tips Delivered to Your Inbox
           </h2>
-          <p className="text-blue-100 mb-6">
+          <p className="text-orange-100 mb-6">
             Subscribe to our newsletter for weekly tips on running a successful retail business in Kenya.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
@@ -284,7 +284,7 @@ export default function BlogPage() {
               placeholder="Enter your email"
               className="px-4 py-3 rounded-lg text-gray-900 w-full sm:w-80"
             />
-            <button className="px-6 py-3 bg-white text-blue-600 rounded-lg font-semibold hover:bg-blue-50 transition-colors">
+            <button className="px-6 py-3 bg-white text-orange-600 rounded-lg font-semibold hover:bg-orange-50 transition-colors">
               Subscribe
             </button>
           </div>
@@ -296,7 +296,7 @@ export default function BlogPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <Link href="/" className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+              <div className="w-8 h-8 bg-orange-600 rounded-lg flex items-center justify-center">
                 <Store className="h-5 w-5 text-white" />
               </div>
               <span className="text-white font-semibold">SmartDuka</span>

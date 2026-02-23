@@ -47,7 +47,7 @@ export default function InventoryManagementSoftwarePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <Link href="/" className="flex items-center gap-2">
-              <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+              <div className="w-10 h-10 bg-orange-600 rounded-lg flex items-center justify-center">
                 <Store className="h-6 w-6 text-white" />
               </div>
               <span className="text-xl font-bold text-gray-900">SmartDuka</span>
@@ -56,7 +56,7 @@ export default function InventoryManagementSoftwarePage() {
               <Link href="/pricing" className="text-gray-600 hover:text-gray-900 font-medium">Pricing</Link>
               <Link
                 href="/register-shop"
-                className="px-5 py-2.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+                className="px-5 py-2.5 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700 transition-colors"
               >
                 Get Started Free
               </Link>
@@ -66,7 +66,7 @@ export default function InventoryManagementSoftwarePage() {
       </header>
 
       {/* Hero */}
-      <section className="py-20 bg-gradient-to-br from-green-50 via-white to-blue-50">
+      <section className="py-20 bg-gradient-to-br from-green-50 via-white to-orange-50">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h1 className="text-4xl sm:text-5xl font-bold text-gray-900 mb-6">
             Inventory Management Software
@@ -75,16 +75,16 @@ export default function InventoryManagementSoftwarePage() {
             Inventory management software tracks stock levels, manages purchase orders, provides
             low stock alerts, and maintains a complete history of every product movement. SmartDuka
             combines inventory management with a{' '}
-            <Link href="/point-of-sale-software" className="text-blue-600 hover:underline">point of sale system</Link>{' '}
+            <Link href="/point-of-sale-software" className="text-orange-600 hover:underline">point of sale system</Link>{' '}
             so every sale automatically updates your stock in real time. Built by{' '}
-            <a href="https://www.dtbtech.org" className="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer">
+            <a href="https://www.dtbtech.org" className="text-orange-600 hover:underline" target="_blank" rel="noopener noreferrer">
               DTB Technologies
             </a>.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link
               href="/register-shop"
-              className="inline-flex items-center gap-2 px-8 py-4 bg-blue-600 text-white rounded-xl font-bold text-lg hover:bg-blue-700 transition-all shadow-lg"
+              className="inline-flex items-center gap-2 px-8 py-4 bg-orange-600 text-white rounded-xl font-bold text-lg hover:bg-orange-700 transition-all shadow-lg"
             >
               Get Started Free
               <ArrowRight className="h-5 w-5" />
@@ -212,21 +212,21 @@ export default function InventoryManagementSoftwarePage() {
           <h2 className="text-3xl font-bold text-gray-900 mb-4">Integrated with POS</h2>
           <p className="text-lg text-gray-600 mb-12 max-w-3xl mx-auto">
             SmartDuka&rsquo;s inventory management is fully integrated with the{' '}
-            <Link href="/point-of-sale-software" className="text-blue-600 hover:underline">point of sale system</Link>.
+            <Link href="/point-of-sale-software" className="text-orange-600 hover:underline">point of sale system</Link>.
             Every sale reduces stock. Every purchase order adds stock. You never have to
             update inventory separately.
           </p>
 
           <div className="grid sm:grid-cols-2 gap-6 max-w-2xl mx-auto">
             <div className="bg-white p-6 rounded-xl shadow-sm flex gap-4">
-              <ShoppingCart className="h-8 w-8 text-blue-600 flex-shrink-0" />
+              <ShoppingCart className="h-8 w-8 text-orange-600 flex-shrink-0" />
               <div className="text-left">
                 <h3 className="font-bold text-gray-900 mb-1">POS Integration</h3>
                 <p className="text-gray-600 text-sm">Sales automatically deduct from inventory in real time.</p>
               </div>
             </div>
             <div className="bg-white p-6 rounded-xl shadow-sm flex gap-4">
-              <BarChart3 className="h-8 w-8 text-blue-600 flex-shrink-0" />
+              <BarChart3 className="h-8 w-8 text-orange-600 flex-shrink-0" />
               <div className="text-left">
                 <h3 className="font-bold text-gray-900 mb-1">Inventory Reports</h3>
                 <p className="text-gray-600 text-sm">Track stock value, turnover rate, and dead stock.</p>
@@ -264,18 +264,18 @@ export default function InventoryManagementSoftwarePage() {
       </section>
 
       {/* CTA */}
-      <section className="py-20 bg-blue-600">
+      <section className="py-20 bg-orange-600">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-3xl font-bold text-white mb-6">
             Try SmartDuka Inventory Management
           </h2>
-          <p className="text-xl text-blue-100 mb-8">
+          <p className="text-xl text-orange-100 mb-8">
             Start your free trial today. No credit card required.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link
               href="/register-shop"
-              className="px-8 py-4 bg-white text-blue-600 rounded-xl font-bold text-lg hover:bg-blue-50 transition-colors shadow-lg"
+              className="px-8 py-4 bg-white text-orange-600 rounded-xl font-bold text-lg hover:bg-orange-50 transition-colors shadow-lg"
             >
               Get Started Free
             </Link>

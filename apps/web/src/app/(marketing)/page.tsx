@@ -184,7 +184,7 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <Link href="/" className="flex items-center gap-2">
-              <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+              <div className="w-10 h-10 bg-orange-600 rounded-lg flex items-center justify-center">
                 <Store className="h-6 w-6 text-white" />
               </div>
               <span className="text-xl font-bold text-gray-900">SmartDuka</span>
@@ -203,7 +203,7 @@ export default function HomePage() {
               </Link>
               <Link 
                 href="/register-shop" 
-                className="px-5 py-2.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+                className="px-5 py-2.5 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700 transition-colors"
               >
                 Start Free
               </Link>
@@ -213,7 +213,7 @@ export default function HomePage() {
       </header>
 
       {/* Hero Section */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-blue-50 via-white to-green-50 py-20 lg:py-28">
+      <section className="relative overflow-hidden bg-gradient-to-br from-orange-50 via-white to-green-50 py-20 lg:py-28">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div>
@@ -223,20 +223,20 @@ export default function HomePage() {
               </div>
               
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900 leading-tight mb-6">
-                SmartDuka &ndash; <span className="text-blue-600">Point of Sale</span> & Inventory Management Software
+                SmartDuka &ndash; <span className="text-orange-600">Point of Sale</span> & Inventory Management Software
               </h1>
               
               <p className="text-xl text-gray-600 mb-8 leading-relaxed">
-                SmartDuka is a web-based <Link href="/point-of-sale-software" className="text-blue-600 hover:underline">point of sale</Link> and{' '}
-                <Link href="/inventory-management-software" className="text-blue-600 hover:underline">inventory management software</Link> built
-                by <a href="https://www.dtbtech.org" className="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer">DTB Technologies</a>.
+                SmartDuka is a web-based <Link href="/point-of-sale-software" className="text-orange-600 hover:underline">point of sale</Link> and{' '}
+                <Link href="/inventory-management-software" className="text-orange-600 hover:underline">inventory management software</Link> built
+                by <a href="https://www.dtbtech.org" className="text-orange-600 hover:underline" target="_blank" rel="noopener noreferrer">DTB Technologies</a>.
                 It helps retail businesses manage sales, inventory, reports, analytics, and barcode scanning using existing hardware.
               </p>
               
               <div className="flex flex-col sm:flex-row gap-4 mb-4">
                 <Link 
                   href="/register-shop" 
-                  className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-blue-600 text-white rounded-xl font-bold text-lg hover:bg-blue-700 transition-all shadow-lg hover:shadow-xl"
+                  className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-orange-600 text-white rounded-xl font-bold text-lg hover:bg-orange-700 transition-all shadow-lg hover:shadow-xl"
                 >
                   Get Started Free
                   <ArrowRight className="h-5 w-5" />
@@ -285,7 +285,7 @@ export default function HomePage() {
               <div className="bg-white rounded-2xl shadow-2xl p-4 border">
                 <div className="aspect-video bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl flex items-center justify-center">
                   <div className="text-center">
-                    <Store className="h-16 w-16 text-blue-600 mx-auto mb-4" />
+                    <Store className="h-16 w-16 text-orange-600 mx-auto mb-4" />
                     <p className="text-gray-500">SmartDuka POS Dashboard</p>
                   </div>
                 </div>
@@ -295,7 +295,7 @@ export default function HomePage() {
               <div className="absolute -top-4 -right-4 bg-green-500 text-white px-4 py-2 rounded-full font-bold text-sm shadow-lg">
                 ✓ M-Pesa Ready
               </div>
-              <div className="absolute -bottom-4 -left-4 bg-blue-600 text-white px-4 py-2 rounded-full font-bold text-sm shadow-lg">
+              <div className="absolute -bottom-4 -left-4 bg-orange-600 text-white px-4 py-2 rounded-full font-bold text-sm shadow-lg">
                 Works Offline
               </div>
             </div>
@@ -304,13 +304,13 @@ export default function HomePage() {
       </section>
 
       {/* Stats Section */}
-      <section className="py-12 bg-blue-600">
+      <section className="py-12 bg-orange-600">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
             {stats.map((stat, index) => (
               <div key={index} className="text-center">
                 <div className="text-3xl sm:text-4xl font-bold text-white mb-1">{stat.value}</div>
-                <div className="text-blue-100">{stat.label}</div>
+                <div className="text-orange-100">{stat.label}</div>
               </div>
             ))}
           </div>
@@ -331,34 +331,34 @@ export default function HomePage() {
           </div>
 
           {/* Visible feature bullet list for SEO */}
-          <div className="max-w-2xl mx-auto mb-16 bg-blue-50 rounded-2xl p-8">
+          <div className="max-w-2xl mx-auto mb-16 bg-orange-50 rounded-2xl p-8">
             <ul className="space-y-4 text-lg text-gray-800">
               <li className="flex items-start gap-3">
-                <CheckCircle className="h-6 w-6 text-blue-600 flex-shrink-0 mt-0.5" />
-                <span><Link href="/point-of-sale-software" className="font-semibold text-blue-700 hover:underline">Point of Sale (POS) system</Link> &ndash; fast checkout with receipt printing</span>
+                <CheckCircle className="h-6 w-6 text-orange-600 flex-shrink-0 mt-0.5" />
+                <span><Link href="/point-of-sale-software" className="font-semibold text-orange-700 hover:underline">Point of Sale (POS) system</Link> &ndash; fast checkout with receipt printing</span>
               </li>
               <li className="flex items-start gap-3">
-                <CheckCircle className="h-6 w-6 text-blue-600 flex-shrink-0 mt-0.5" />
-                <span><Link href="/inventory-management-software" className="font-semibold text-blue-700 hover:underline">Inventory and stock management</Link> &ndash; real-time tracking across stores</span>
+                <CheckCircle className="h-6 w-6 text-orange-600 flex-shrink-0 mt-0.5" />
+                <span><Link href="/inventory-management-software" className="font-semibold text-orange-700 hover:underline">Inventory and stock management</Link> &ndash; real-time tracking across stores</span>
               </li>
               <li className="flex items-start gap-3">
-                <CheckCircle className="h-6 w-6 text-blue-600 flex-shrink-0 mt-0.5" />
+                <CheckCircle className="h-6 w-6 text-orange-600 flex-shrink-0 mt-0.5" />
                 <span>Real-time sales tracking &ndash; know your numbers instantly</span>
               </li>
               <li className="flex items-start gap-3">
-                <CheckCircle className="h-6 w-6 text-blue-600 flex-shrink-0 mt-0.5" />
-                <span><Link href="/reports-and-analytics" className="font-semibold text-blue-700 hover:underline">Sales reports and analytics</Link> &ndash; daily, weekly, monthly insights</span>
+                <CheckCircle className="h-6 w-6 text-orange-600 flex-shrink-0 mt-0.5" />
+                <span><Link href="/reports-and-analytics" className="font-semibold text-orange-700 hover:underline">Sales reports and analytics</Link> &ndash; daily, weekly, monthly insights</span>
               </li>
               <li className="flex items-start gap-3">
-                <CheckCircle className="h-6 w-6 text-blue-600 flex-shrink-0 mt-0.5" />
-                <span><Link href="/barcode-pos-system" className="font-semibold text-blue-700 hover:underline">Barcode scanner and camera integration</Link> &ndash; faster, error-free checkout</span>
+                <CheckCircle className="h-6 w-6 text-orange-600 flex-shrink-0 mt-0.5" />
+                <span><Link href="/barcode-pos-system" className="font-semibold text-orange-700 hover:underline">Barcode scanner and camera integration</Link> &ndash; faster, error-free checkout</span>
               </li>
               <li className="flex items-start gap-3">
-                <CheckCircle className="h-6 w-6 text-blue-600 flex-shrink-0 mt-0.5" />
+                <CheckCircle className="h-6 w-6 text-orange-600 flex-shrink-0 mt-0.5" />
                 <span>Multi-user and multi-store support &ndash; scale your business</span>
               </li>
               <li className="flex items-start gap-3">
-                <CheckCircle className="h-6 w-6 text-blue-600 flex-shrink-0 mt-0.5" />
+                <CheckCircle className="h-6 w-6 text-orange-600 flex-shrink-0 mt-0.5" />
                 <span>Cloud-based web POS system &ndash; access from any device</span>
               </li>
             </ul>
@@ -368,10 +368,10 @@ export default function HomePage() {
             {features.map((feature, index) => (
               <div 
                 key={index} 
-                className="p-8 bg-gray-50 rounded-2xl hover:bg-blue-50 transition-colors group"
+                className="p-8 bg-gray-50 rounded-2xl hover:bg-orange-50 transition-colors group"
               >
-                <div className="w-14 h-14 bg-blue-100 rounded-xl flex items-center justify-center mb-6 group-hover:bg-blue-200 transition-colors">
-                  <feature.icon className="h-7 w-7 text-blue-600" />
+                <div className="w-14 h-14 bg-orange-100 rounded-xl flex items-center justify-center mb-6 group-hover:bg-orange-200 transition-colors">
+                  <feature.icon className="h-7 w-7 text-orange-600" />
                 </div>
                 <h3 className="text-xl font-bold text-gray-900 mb-3">{feature.title}</h3>
                 <p className="text-gray-600 leading-relaxed">{feature.description}</p>
@@ -382,7 +382,7 @@ export default function HomePage() {
           <div className="text-center mt-12">
             <Link 
               href="/point-of-sale-software" 
-              className="inline-flex items-center gap-2 text-blue-600 font-semibold hover:text-blue-700"
+              className="inline-flex items-center gap-2 text-orange-600 font-semibold hover:text-orange-700"
             >
               Learn more about our POS software
               <ArrowRight className="h-5 w-5" />
@@ -417,7 +417,7 @@ export default function HomePage() {
               <div className="mt-8">
                 <Link 
                   href="/register-shop" 
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700 transition-colors"
                 >
                   Get Started Today
                   <ArrowRight className="h-5 w-5" />
@@ -427,7 +427,7 @@ export default function HomePage() {
             
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-white p-6 rounded-xl shadow-sm">
-                <Shield className="h-10 w-10 text-blue-600 mb-4" />
+                <Shield className="h-10 w-10 text-orange-600 mb-4" />
                 <h3 className="font-bold text-gray-900 mb-2">Secure & Reliable</h3>
                 <p className="text-gray-600 text-sm">Bank-grade security for your business data</p>
               </div>
@@ -483,19 +483,19 @@ export default function HomePage() {
       </section>
 
       {/* CTA Section */}
-      <section className="py-20 bg-gradient-to-r from-blue-600 to-blue-700">
+      <section className="py-20 bg-gradient-to-r from-orange-600 to-orange-700">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-3xl sm:text-4xl font-bold text-white mb-6">
             Ready to Transform Your Business?
           </h2>
-          <p className="text-xl text-blue-100 mb-8">
+          <p className="text-xl text-orange-100 mb-8">
             Join thousands of Kenyan businesses using SmartDuka to grow their sales 
             and manage their inventory efficiently.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link 
               href="/register-shop" 
-              className="px-8 py-4 bg-white text-blue-600 rounded-xl font-bold text-lg hover:bg-blue-50 transition-colors shadow-lg"
+              className="px-8 py-4 bg-white text-orange-600 rounded-xl font-bold text-lg hover:bg-orange-50 transition-colors shadow-lg"
             >
               Get Started Free
             </Link>
@@ -515,7 +515,7 @@ export default function HomePage() {
           <h2 className="text-3xl font-bold text-gray-900 mb-6">About SmartDuka</h2>
           <p className="text-lg text-gray-700 leading-relaxed mb-4">
             SmartDuka is a web-based point of sale and inventory management software built and owned
-            by <a href="https://www.dtbtech.org" className="text-blue-600 font-semibold hover:underline" target="_blank" rel="noopener noreferrer">DTB Technologies</a>.
+            by <a href="https://www.dtbtech.org" className="text-orange-600 font-semibold hover:underline" target="_blank" rel="noopener noreferrer">DTB Technologies</a>.
             It is designed to help retail businesses manage sales, stock, reports, and analytics
             through a single cloud-based platform that works on any device.
           </p>
@@ -533,14 +533,14 @@ export default function HomePage() {
           <div className="grid md:grid-cols-4 gap-12 mb-12">
             <div>
               <Link href="/" className="flex items-center gap-2 mb-4">
-                <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+                <div className="w-10 h-10 bg-orange-600 rounded-lg flex items-center justify-center">
                   <Store className="h-6 w-6 text-white" />
                 </div>
                 <span className="text-xl font-bold text-white">SmartDuka</span>
               </Link>
               <p className="text-gray-400 mb-2">
                 Point of sale and inventory management software by{' '}
-                <a href="https://www.dtbtech.org" className="text-blue-400 hover:text-white transition-colors" target="_blank" rel="noopener noreferrer">DTB Technologies</a>.
+                <a href="https://www.dtbtech.org" className="text-orange-400 hover:text-white transition-colors" target="_blank" rel="noopener noreferrer">DTB Technologies</a>.
               </p>
               <div className="flex items-center gap-2 text-sm">
                 <Phone className="h-4 w-4" />
@@ -585,7 +585,7 @@ export default function HomePage() {
           
           <div className="border-t border-gray-800 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
             <p className="text-sm">
-              &copy; {new Date().getFullYear()} SmartDuka &ndash; Built by <a href="https://www.dtbtech.org" className="text-blue-400 hover:text-white" target="_blank" rel="noopener noreferrer">DTB Technologies</a>. All rights reserved.
+              &copy; {new Date().getFullYear()} SmartDuka &ndash; Built by <a href="https://www.dtbtech.org" className="text-orange-400 hover:text-white" target="_blank" rel="noopener noreferrer">DTB Technologies</a>. All rights reserved.
             </p>
             <p className="text-sm">
               <Link href="/" className="hover:text-white">Home</Link>

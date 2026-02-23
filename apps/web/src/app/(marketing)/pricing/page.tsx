@@ -102,14 +102,14 @@ export default function PricingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
             <Link href="/" className="flex items-center gap-2">
-              <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+              <div className="w-10 h-10 bg-orange-600 rounded-lg flex items-center justify-center">
                 <Store className="h-6 w-6 text-white" />
               </div>
               <span className="text-xl font-bold text-gray-900">SmartDuka</span>
             </Link>
             <nav className="hidden md:flex items-center gap-8">
               <Link href="/features/pos" className="text-gray-600 hover:text-gray-900">Features</Link>
-              <Link href="/pricing" className="text-blue-600 font-medium">Pricing</Link>
+              <Link href="/pricing" className="text-orange-600 font-medium">Pricing</Link>
               <Link href="/blog" className="text-gray-600 hover:text-gray-900">Blog</Link>
               <Link href="/support" className="text-gray-600 hover:text-gray-900">Support</Link>
             </nav>
@@ -119,7 +119,7 @@ export default function PricingPage() {
               </Link>
               <Link 
                 href="/register-shop" 
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
               >
                 Get Started
               </Link>
@@ -198,8 +198,8 @@ export default function PricingPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
             <div className="bg-white rounded-xl p-6 shadow-sm">
-              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mb-4">
-                <Zap className="h-6 w-6 text-blue-600" />
+              <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center mb-4">
+                <Zap className="h-6 w-6 text-orange-600" />
               </div>
               <h3 className="font-semibold text-lg mb-2">M-Pesa Integration</h3>
               <p className="text-gray-600 text-sm">
@@ -259,18 +259,18 @@ export default function PricingPage() {
       </section>
 
       {/* CTA Section */}
-      <section className="py-20 bg-blue-600">
+      <section className="py-20 bg-orange-600">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-3xl font-bold text-white mb-4">
             Ready to Transform Your Business?
           </h2>
-          <p className="text-blue-100 text-lg mb-8">
+          <p className="text-orange-100 text-lg mb-8">
             Join thousands of Kenyan businesses using SmartDuka to grow their sales.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link
               href="/register-shop"
-              className="px-8 py-3 bg-white text-blue-600 rounded-xl font-semibold hover:bg-blue-50 transition-colors"
+              className="px-8 py-3 bg-white text-orange-600 rounded-xl font-semibold hover:bg-orange-50 transition-colors"
             >
               Get Started Free
             </Link>
@@ -290,7 +290,7 @@ export default function PricingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+              <div className="w-8 h-8 bg-orange-600 rounded-lg flex items-center justify-center">
                 <Store className="h-5 w-5 text-white" />
               </div>
               <span className="text-white font-semibold">SmartDuka</span>

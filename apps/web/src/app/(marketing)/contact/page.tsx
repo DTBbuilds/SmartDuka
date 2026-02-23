@@ -38,7 +38,7 @@ export default function ContactPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <Link href="/" className="flex items-center gap-2">
-              <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+              <div className="w-10 h-10 bg-orange-600 rounded-lg flex items-center justify-center">
                 <Store className="h-6 w-6 text-white" />
               </div>
               <span className="text-xl font-bold text-gray-900">SmartDuka</span>
@@ -55,7 +55,7 @@ export default function ContactPage() {
               <Link href="/login" className="text-gray-600 hover:text-gray-900 font-medium">Login</Link>
               <Link 
                 href="/register-shop" 
-                className="px-5 py-2.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+                className="px-5 py-2.5 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700 transition-colors"
               >
                 Get Started Free
               </Link>
@@ -65,7 +65,7 @@ export default function ContactPage() {
       </header>
 
       {/* Hero Section */}
-      <section className="py-16 bg-gradient-to-br from-blue-50 via-white to-gray-50">
+      <section className="py-16 bg-gradient-to-br from-orange-50 via-white to-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h1 className="text-4xl sm:text-5xl font-bold text-gray-900 mb-6">
             Get in Touch
@@ -82,12 +82,12 @@ export default function ContactPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid md:grid-cols-3 gap-8 mb-16">
             <div className="bg-gray-50 p-8 rounded-2xl text-center">
-              <div className="w-14 h-14 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Phone className="h-7 w-7 text-blue-600" />
+              <div className="w-14 h-14 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Phone className="h-7 w-7 text-orange-600" />
               </div>
               <h3 className="text-xl font-bold text-gray-900 mb-2">Call Us</h3>
               <p className="text-gray-600 mb-4">Speak directly with our team</p>
-              <a href="tel:+254729983567" className="text-blue-600 font-semibold hover:underline">
+              <a href="tel:+254729983567" className="text-orange-600 font-semibold hover:underline">
                 0729983567 / 0104160502
               </a>
               <p className="text-sm text-gray-500 mt-2">Mon-Fri, 8am-6pm EAT</p>
@@ -99,7 +99,7 @@ export default function ContactPage() {
               </div>
               <h3 className="text-xl font-bold text-gray-900 mb-2">Email Us</h3>
               <p className="text-gray-600 mb-4">We&apos;ll respond within 24 hours</p>
-              <a href="mailto:smartdukainfo@gmail.com" className="text-blue-600 font-semibold hover:underline">
+              <a href="mailto:smartdukainfo@gmail.com" className="text-orange-600 font-semibold hover:underline">
                 smartdukainfo@gmail.com
               </a>
               <p className="text-sm text-gray-500 mt-2">For general inquiries</p>
@@ -111,7 +111,7 @@ export default function ContactPage() {
               </div>
               <h3 className="text-xl font-bold text-gray-900 mb-2">WhatsApp</h3>
               <p className="text-gray-600 mb-4">Quick support via chat</p>
-              <a href="https://wa.me/254729983567" className="text-blue-600 font-semibold hover:underline">
+              <a href="https://wa.me/254729983567" className="text-orange-600 font-semibold hover:underline">
                 0729983567
               </a>
               <p className="text-sm text-gray-500 mt-2">Available 24/7</p>
@@ -130,7 +130,7 @@ export default function ContactPage() {
                     </label>
                     <input
                       type="text"
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                       placeholder="John"
                     />
                   </div>
@@ -140,7 +140,7 @@ export default function ContactPage() {
                     </label>
                     <input
                       type="text"
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                       placeholder="Doe"
                     />
                   </div>
@@ -152,7 +152,7 @@ export default function ContactPage() {
                   </label>
                   <input
                     type="email"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                     placeholder="john@example.com"
                   />
                 </div>
@@ -163,7 +163,7 @@ export default function ContactPage() {
                   </label>
                   <input
                     type="tel"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                     placeholder="+254 7XX XXX XXX"
                   />
                 </div>
@@ -172,7 +172,7 @@ export default function ContactPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Subject
                   </label>
-                  <select className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                  <select className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent">
                     <option>Sales Inquiry</option>
                     <option>Technical Support</option>
                     <option>Billing Question</option>
@@ -187,14 +187,14 @@ export default function ContactPage() {
                   </label>
                   <textarea
                     rows={5}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                     placeholder="How can we help you?"
                   />
                 </div>
                 
                 <button
                   type="submit"
-                  className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+                  className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700 transition-colors"
                 >
                   <Send className="h-5 w-5" />
                   Send Message
@@ -208,8 +208,8 @@ export default function ContactPage() {
               
               <div className="bg-gray-50 rounded-2xl p-6 mb-6">
                 <div className="flex items-start gap-4 mb-6">
-                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <MapPin className="h-5 w-5 text-blue-600" />
+                  <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <MapPin className="h-5 w-5 text-orange-600" />
                   </div>
                   <div>
                     <h3 className="font-bold text-gray-900 mb-1">Nairobi Office</h3>
@@ -253,7 +253,7 @@ export default function ContactPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <Link href="/" className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+              <div className="w-8 h-8 bg-orange-600 rounded-lg flex items-center justify-center">
                 <Store className="h-5 w-5 text-white" />
               </div>
               <span className="text-white font-semibold">SmartDuka</span>

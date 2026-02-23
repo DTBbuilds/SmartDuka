@@ -277,34 +277,31 @@ export default function StaffMonitoringPage() {
   return (
     <div className="space-y-4 md:space-y-6 px-2 md:px-0">
       {/* Header - Mobile optimized */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Staff Monitoring</h1>
-          <p className="text-sm md:text-base text-muted-foreground mt-1 md:mt-2">
-            Real-time staff activity and performance tracking
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* Auto-refresh toggle with high contrast */}
+      <div>
+        <h1 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight">Staff Monitoring</h1>
+        <p className="text-xs sm:text-sm md:text-base text-muted-foreground mt-1">
+          Real-time staff activity and performance tracking
+        </p>
+        <div className="flex items-center gap-2 mt-3">
           <Button
             onClick={() => setAutoRefresh(!autoRefresh)}
             variant={autoRefresh ? 'default' : 'outline'}
             size="sm"
-            className={`gap-2 transition-all ${
+            className={`gap-1.5 text-xs transition-all ${
               autoRefresh 
                 ? 'bg-green-600 hover:bg-green-700 text-white' 
                 : 'bg-red-100 border-red-300 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:border-red-700 dark:text-red-400'
             }`}
           >
             {autoRefresh ? (
-              <><Play className="h-3 w-3" /> Auto-refresh ON</>
+              <><Play className="h-3 w-3" /> Auto-refresh</>
             ) : (
-              <><Pause className="h-3 w-3" /> Auto-refresh OFF</>
+              <><Pause className="h-3 w-3" /> Paused</>
             )}
           </Button>
-          <Button onClick={fetchData} variant="outline" size="sm" className="gap-2">
-            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-            <span className="hidden sm:inline">Refresh</span>
+          <Button onClick={fetchData} variant="outline" size="sm" className="gap-1.5 text-xs">
+            <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+            Refresh
           </Button>
         </div>
       </div>
@@ -356,7 +353,7 @@ export default function StaffMonitoringPage() {
           <Card className="p-3 md:p-0">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 p-0 md:p-6 md:pb-2">
               <CardTitle className="text-xs md:text-sm font-medium">Avg per Cashier</CardTitle>
-              <Target className="h-4 w-4 text-blue-600" />
+              <Target className="h-4 w-4 text-orange-600" />
             </CardHeader>
             <CardContent className="p-0 pt-2 md:p-6 md:pt-0">
               <div className="text-lg md:text-2xl font-bold truncate">{formatCurrency(dashboardStats.avgSalesPerCashier)}</div>
@@ -447,7 +444,7 @@ export default function StaffMonitoringPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Activity className="h-5 w-5 text-blue-600" />
+                  <Activity className="h-5 w-5 text-orange-600" />
                   Recent Activity
                 </CardTitle>
                 <CardDescription>Latest staff actions</CardDescription>
@@ -530,7 +527,7 @@ export default function StaffMonitoringPage() {
                             <p className="text-[10px] md:text-xs text-muted-foreground">Sales</p>
                           </div>
                           <div className="text-center p-1.5 md:p-2 bg-muted/50 rounded-lg">
-                            <p className="text-sm md:text-lg font-bold text-blue-600">{transactionCount}</p>
+                            <p className="text-sm md:text-lg font-bold text-orange-600">{transactionCount}</p>
                             <p className="text-[10px] md:text-xs text-muted-foreground">Trans.</p>
                           </div>
                           <div className="text-center p-1.5 md:p-2 bg-muted/50 rounded-lg">

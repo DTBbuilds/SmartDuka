@@ -43,28 +43,28 @@ export default function BarcodePosSystemPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <Link href="/" className="flex items-center gap-2">
-              <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+              <div className="w-10 h-10 bg-orange-600 rounded-lg flex items-center justify-center">
                 <Store className="h-6 w-6 text-white" />
               </div>
               <span className="text-xl font-bold text-gray-900">SmartDuka</span>
             </Link>
             <div className="flex items-center gap-4">
               <Link href="/pricing" className="text-gray-600 hover:text-gray-900 font-medium">Pricing</Link>
-              <Link href="/register-shop" className="px-5 py-2.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors">Get Started Free</Link>
+              <Link href="/register-shop" className="px-5 py-2.5 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700 transition-colors">Get Started Free</Link>
             </div>
           </div>
         </div>
       </header>
 
-      <section className="py-20 bg-gradient-to-br from-orange-50 via-white to-blue-50">
+      <section className="py-20 bg-gradient-to-br from-orange-50 via-white to-orange-50">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h1 className="text-4xl sm:text-5xl font-bold text-gray-900 mb-6">Barcode POS System &amp; Scanner Integration</h1>
           <p className="text-xl text-gray-600 mb-8 leading-relaxed max-w-3xl mx-auto">
             SmartDuka integrates with barcode scanners and device cameras to speed up checkout and reduce errors. Scan a product barcode and SmartDuka instantly looks up the item, adds it to the cart, and displays the price. Built by{' '}
-            <a href="https://www.dtbtech.org" className="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer">DTB Technologies</a>.
+            <a href="https://www.dtbtech.org" className="text-orange-600 hover:underline" target="_blank" rel="noopener noreferrer">DTB Technologies</a>.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link href="/register-shop" className="inline-flex items-center gap-2 px-8 py-4 bg-blue-600 text-white rounded-xl font-bold text-lg hover:bg-blue-700 shadow-lg">Get Started Free <ArrowRight className="h-5 w-5" /></Link>
+            <Link href="/register-shop" className="inline-flex items-center gap-2 px-8 py-4 bg-orange-600 text-white rounded-xl font-bold text-lg hover:bg-orange-700 shadow-lg">Get Started Free <ArrowRight className="h-5 w-5" /></Link>
             <Link href="/pricing" className="inline-flex items-center gap-2 px-8 py-4 border-2 border-gray-300 text-gray-700 rounded-xl font-bold text-lg hover:border-gray-400">View Pricing</Link>
           </div>
         </div>
@@ -110,7 +110,7 @@ export default function BarcodePosSystemPage() {
                 <li className="flex items-center gap-3 text-gray-700"><CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0" />Auto-increment quantity on repeat scans</li>
               </ul>
               <div className="mt-8">
-                <Link href="/point-of-sale-software" className="inline-flex items-center gap-2 text-blue-600 font-semibold hover:underline">Learn more about POS features <ArrowRight className="h-4 w-4" /></Link>
+                <Link href="/point-of-sale-software" className="inline-flex items-center gap-2 text-orange-600 font-semibold hover:underline">Learn more about POS features <ArrowRight className="h-4 w-4" /></Link>
               </div>
             </div>
             <div className="bg-white rounded-2xl shadow-lg p-8 flex items-center justify-center">
@@ -137,7 +137,7 @@ export default function BarcodePosSystemPage() {
                 <li className="flex items-center gap-3 text-gray-700"><CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0" />Inventory counts stay accurate</li>
               </ul>
               <div className="mt-8">
-                <Link href="/inventory-management-software" className="inline-flex items-center gap-2 text-blue-600 font-semibold hover:underline">Learn about inventory management <ArrowRight className="h-4 w-4" /></Link>
+                <Link href="/inventory-management-software" className="inline-flex items-center gap-2 text-orange-600 font-semibold hover:underline">Learn about inventory management <ArrowRight className="h-4 w-4" /></Link>
               </div>
             </div>
           </div>
@@ -152,14 +152,14 @@ export default function BarcodePosSystemPage() {
           </p>
           <div className="grid sm:grid-cols-2 gap-6 max-w-2xl mx-auto">
             <div className="bg-white p-6 rounded-xl shadow-sm flex gap-4">
-              <Monitor className="h-8 w-8 text-blue-600 flex-shrink-0" />
+              <Monitor className="h-8 w-8 text-orange-600 flex-shrink-0" />
               <div className="text-left">
                 <h3 className="font-bold text-gray-900 mb-1">Desktop &amp; Laptop</h3>
                 <p className="text-gray-600 text-sm">USB barcode scanners connect directly. No drivers needed.</p>
               </div>
             </div>
             <div className="bg-white p-6 rounded-xl shadow-sm flex gap-4">
-              <Smartphone className="h-8 w-8 text-blue-600 flex-shrink-0" />
+              <Smartphone className="h-8 w-8 text-orange-600 flex-shrink-0" />
               <div className="text-left">
                 <h3 className="font-bold text-gray-900 mb-1">Phone &amp; Tablet</h3>
                 <p className="text-gray-600 text-sm">Use the built-in camera or pair a Bluetooth scanner.</p>
@@ -169,12 +169,12 @@ export default function BarcodePosSystemPage() {
         </div>
       </section>
 
-      <section className="py-20 bg-blue-600">
+      <section className="py-20 bg-orange-600">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-3xl font-bold text-white mb-6">Try SmartDuka Barcode POS System</h2>
-          <p className="text-xl text-blue-100 mb-8">Start your free trial today. No credit card required.</p>
+          <p className="text-xl text-orange-100 mb-8">Start your free trial today. No credit card required.</p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link href="/register-shop" className="px-8 py-4 bg-white text-blue-600 rounded-xl font-bold text-lg hover:bg-blue-50 shadow-lg">Get Started Free</Link>
+            <Link href="/register-shop" className="px-8 py-4 bg-white text-orange-600 rounded-xl font-bold text-lg hover:bg-orange-50 shadow-lg">Get Started Free</Link>
             <Link href="/" className="px-8 py-4 border-2 border-white text-white rounded-xl font-bold text-lg hover:bg-white/10">Back to Home</Link>
           </div>
         </div>

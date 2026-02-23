@@ -16,6 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Plus,
   ArrowRight,
+  ArrowLeft,
   Package,
   Truck,
   CheckCircle,
@@ -32,6 +33,7 @@ import {
   Building2,
   ArrowLeftRight,
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 interface TransferItem {
   productId: string;
@@ -94,6 +96,7 @@ interface Product {
 export default function StockTransfersPage() {
   const { token, shop } = useAuth();
   const { branches: contextBranches } = useBranch();
+  const router = useRouter();
   
   const [transfers, setTransfers] = useState<StockTransfer[]>([]);
   const [stats, setStats] = useState<TransferStats | null>(null);
@@ -123,6 +126,12 @@ export default function StockTransfersPage() {
   // View transfer dialog
   const [viewTransfer, setViewTransfer] = useState<StockTransfer | null>(null);
   const [isViewOpen, setIsViewOpen] = useState(false);
+
+  // Receive transfer state
+  const [isReceiveMode, setIsReceiveMode] = useState(false);
+  const [receiveItems, setReceiveItems] = useState<{ productId: string; receivedQuantity: number; damagedQuantity: number }[]>([]);
+  const [receiveNotes, setReceiveNotes] = useState('');
+  const [isReceiving, setIsReceiving] = useState(false);
 
   const fetchTransfers = useCallback(async () => {
     if (!token) return;
@@ -323,6 +332,58 @@ export default function StockTransfersPage() {
     }
   };
 
+  const startReceive = (transfer: StockTransfer) => {
+    setReceiveItems(
+      transfer.items.map((item) => ({
+        productId: item.productId,
+        receivedQuantity: item.quantity,
+        damagedQuantity: 0,
+      })),
+    );
+    setReceiveNotes('');
+    setIsReceiveMode(true);
+  };
+
+  const handleReceive = async () => {
+    if (!viewTransfer) return;
+    setIsReceiving(true);
+    setError(null);
+
+    try {
+      const res = await fetch(`${config.apiUrl}/stock-transfers/${viewTransfer._id}/receive`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          items: receiveItems,
+          notes: receiveNotes || undefined,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        const msg = data.data?.status === 'received'
+          ? 'Transfer fully received — stock updated at destination branch'
+          : 'Transfer partially received — some items pending';
+        setSuccess(msg);
+        setIsReceiveMode(false);
+        setIsViewOpen(false);
+        fetchTransfers();
+        fetchStats();
+        setTimeout(() => setSuccess(null), 5000);
+      } else {
+        setError(data.message || 'Failed to receive transfer');
+      }
+    } catch (err: any) {
+      setError(`Receive failed: ${err?.message || 'Network error'}`);
+    } finally {
+      setIsReceiving(false);
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     const styles: Record<string, string> = {
       draft: 'bg-gray-100 text-gray-800',
@@ -397,19 +458,28 @@ export default function StockTransfersPage() {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6 px-2 md:px-0">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Stock Transfers</h1>
-          <p className="text-muted-foreground mt-2">
-            Transfer inventory between branches
-          </p>
+      <div>
+        <button
+          onClick={() => router.back()}
+          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mb-2 transition-colors"
+        >
+          <ArrowLeft className="h-3 w-3" /> Back
+        </button>
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight">Stock Transfers</h1>
+            <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+              Transfer inventory between branches
+            </p>
+          </div>
+          <Button onClick={() => setIsCreateOpen(true)} size="sm" className="gap-1.5 shrink-0">
+            <Plus className="h-4 w-4" />
+            <span className="hidden sm:inline">New Transfer</span>
+            <span className="sm:hidden">New</span>
+          </Button>
         </div>
-        <Button onClick={() => setIsCreateOpen(true)} className="gap-2">
-          <Plus className="h-4 w-4" />
-          New Transfer
-        </Button>
       </div>
 
       {/* Alerts */}
@@ -428,80 +498,82 @@ export default function StockTransfersPage() {
 
       {/* Stats Cards */}
       {stats && (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pending Approval</CardTitle>
+        <div className="grid grid-cols-2 gap-2 md:gap-4 lg:grid-cols-4">
+          <Card className="p-3 md:p-0">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 p-0 md:p-6 md:pb-2">
+              <CardTitle className="text-xs md:text-sm font-medium">Pending Approval</CardTitle>
               <Clock className="h-4 w-4 text-yellow-600" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.pending}</div>
-              <p className="text-xs text-muted-foreground">Awaiting review</p>
+            <CardContent className="p-0 pt-2 md:p-6 md:pt-0">
+              <div className="text-xl md:text-2xl font-bold">{stats.pending}</div>
+              <p className="text-[10px] md:text-xs text-muted-foreground">Awaiting review</p>
             </CardContent>
           </Card>
           
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">In Transit</CardTitle>
+          <Card className="p-3 md:p-0">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 p-0 md:p-6 md:pb-2">
+              <CardTitle className="text-xs md:text-sm font-medium">In Transit</CardTitle>
               <Truck className="h-4 w-4 text-purple-600" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.inTransit}</div>
-              <p className="text-xs text-muted-foreground">Being shipped</p>
+            <CardContent className="p-0 pt-2 md:p-6 md:pt-0">
+              <div className="text-xl md:text-2xl font-bold">{stats.inTransit}</div>
+              <p className="text-[10px] md:text-xs text-muted-foreground">Being shipped</p>
             </CardContent>
           </Card>
           
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Completed</CardTitle>
+          <Card className="p-3 md:p-0">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 p-0 md:p-6 md:pb-2">
+              <CardTitle className="text-xs md:text-sm font-medium">Completed</CardTitle>
               <CheckCircle className="h-4 w-4 text-green-600" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.received}</div>
-              <p className="text-xs text-muted-foreground">This month: {stats.thisMonth}</p>
+            <CardContent className="p-0 pt-2 md:p-6 md:pt-0">
+              <div className="text-xl md:text-2xl font-bold">{stats.received}</div>
+              <p className="text-[10px] md:text-xs text-muted-foreground">This month: {stats.thisMonth}</p>
             </CardContent>
           </Card>
           
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Value</CardTitle>
-              <Package className="h-4 w-4 text-blue-600" />
+          <Card className="p-3 md:p-0">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 p-0 md:p-6 md:pb-2">
+              <CardTitle className="text-xs md:text-sm font-medium">Total Value</CardTitle>
+              <Package className="h-4 w-4 text-orange-600" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{formatCurrency(stats.totalValue)}</div>
-              <p className="text-xs text-muted-foreground">Transferred goods</p>
+            <CardContent className="p-0 pt-2 md:p-6 md:pt-0">
+              <div className="text-lg md:text-2xl font-bold truncate">{formatCurrency(stats.totalValue)}</div>
+              <p className="text-[10px] md:text-xs text-muted-foreground">Transferred goods</p>
             </CardContent>
           </Card>
         </div>
       )}
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-4">
+      <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search transfers..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
+            className="pl-10 h-9 text-sm"
           />
         </div>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-3 py-2 border rounded-md bg-background"
-        >
-          <option value="all">All Status</option>
-          <option value="pending_approval">Pending Approval</option>
-          <option value="approved">Approved</option>
-          <option value="in_transit">In Transit</option>
-          <option value="received">Received</option>
-          <option value="cancelled">Cancelled</option>
-        </select>
-        <Button variant="outline" onClick={() => { fetchTransfers(); fetchStats(); }} className="gap-2">
-          <RefreshCw className="h-4 w-4" />
-          Refresh
-        </Button>
+        <div className="flex gap-2">
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="flex-1 sm:flex-none px-3 py-2 border rounded-md bg-background text-sm h-9"
+          >
+            <option value="all">All Status</option>
+            <option value="pending_approval">Pending</option>
+            <option value="approved">Approved</option>
+            <option value="in_transit">In Transit</option>
+            <option value="received">Received</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+          <Button variant="outline" size="sm" onClick={() => { fetchTransfers(); fetchStats(); }} className="gap-1.5 h-9">
+            <RefreshCw className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Refresh</span>
+          </Button>
+        </div>
       </div>
 
       {/* Transfers List */}
@@ -509,60 +581,45 @@ export default function StockTransfersPage() {
         <CartLoader size="md" className="h-64" />
       ) : filteredTransfers.length === 0 ? (
         <Card>
-          <CardContent className="flex flex-col items-center justify-center h-64">
-            <ArrowLeftRight className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold">No transfers found</h3>
-            <p className="text-muted-foreground text-sm mb-4">
+          <CardContent className="flex flex-col items-center justify-center h-48 md:h-64">
+            <ArrowLeftRight className="h-10 w-10 text-muted-foreground mb-3" />
+            <h3 className="text-base font-semibold">No transfers found</h3>
+            <p className="text-muted-foreground text-xs mb-4">
               {statusFilter !== 'all' ? 'Try changing the filter' : 'Create your first stock transfer'}
             </p>
-            <Button onClick={() => setIsCreateOpen(true)} variant="outline" className="gap-2">
+            <Button onClick={() => setIsCreateOpen(true)} variant="outline" size="sm" className="gap-2">
               <Plus className="h-4 w-4" />
               New Transfer
             </Button>
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {filteredTransfers.map((transfer) => (
-            <Card key={transfer._id} className="hover:shadow-md transition-shadow">
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="p-2 bg-primary/10 rounded-lg">
-                      <ArrowLeftRight className="h-5 w-5 text-primary" />
+            <Card
+              key={transfer._id}
+              className="hover:shadow-md transition-shadow cursor-pointer"
+              onClick={() => { setViewTransfer(transfer); setIsReceiveMode(false); setIsViewOpen(true); }}
+            >
+              <CardContent className="p-3 md:p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                      <span className="font-semibold text-sm">{transfer.transferNumber}</span>
+                      {getStatusBadge(transfer.status)}
+                      {getPriorityBadge(transfer.priority)}
                     </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold">{transfer.transferNumber}</span>
-                        {getStatusBadge(transfer.status)}
-                        {getPriorityBadge(transfer.priority)}
-                      </div>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
-                        <Building2 className="h-3 w-3" />
-                        <span>{transfer.fromBranchName}</span>
-                        <ArrowRight className="h-3 w-3" />
-                        <span>{transfer.toBranchName}</span>
-                      </div>
+                    <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+                      <Building2 className="h-3 w-3 shrink-0" />
+                      <span className="truncate max-w-[100px]">{transfer.fromBranchName}</span>
+                      <ArrowRight className="h-3 w-3 shrink-0" />
+                      <span className="truncate max-w-[100px]">{transfer.toBranchName}</span>
                     </div>
                   </div>
-                  
-                  <div className="flex items-center gap-4">
-                    <div className="text-right">
-                      <p className="font-medium">{transfer.items.length} items</p>
-                      <p className="text-sm text-muted-foreground">
-                        {formatCurrency(transfer.totalValue || 0)}
-                      </p>
-                    </div>
-                    <div className="text-right text-sm text-muted-foreground">
-                      {formatDate(transfer.createdAt)}
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => { setViewTransfer(transfer); setIsViewOpen(true); }}
-                    >
-                      <Eye className="h-4 w-4" />
-                    </Button>
+                  <div className="text-right shrink-0">
+                    <p className="text-sm font-medium">{transfer.items.length} items</p>
+                    <p className="text-xs text-muted-foreground">{formatCurrency(transfer.totalValue || 0)}</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5 hidden sm:block">{formatDate(transfer.createdAt)}</p>
                   </div>
                 </div>
               </CardContent>
@@ -573,7 +630,7 @@ export default function StockTransfersPage() {
 
       {/* Create Transfer Dialog */}
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto w-[95vw] sm:w-auto">
           <DialogHeader>
             <DialogTitle>Create Stock Transfer</DialogTitle>
             <DialogDescription>
@@ -583,7 +640,7 @@ export default function StockTransfersPage() {
           
           <div className="space-y-6 py-4">
             {/* Branch Selection */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <div className="space-y-2">
                 <Label>From Branch *</Label>
                 <select
@@ -613,7 +670,7 @@ export default function StockTransfersPage() {
             </div>
 
             {/* Priority & Reason */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <div className="space-y-2">
                 <Label>Priority</Label>
                 <select
@@ -752,109 +809,207 @@ export default function StockTransfersPage() {
       </Dialog>
 
       {/* View Transfer Dialog */}
-      <Dialog open={isViewOpen} onOpenChange={setIsViewOpen}>
-        <DialogContent className="max-w-2xl">
+      <Dialog open={isViewOpen} onOpenChange={(open) => { setIsViewOpen(open); if (!open) setIsReceiveMode(false); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto w-[95vw] sm:w-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              Transfer {viewTransfer?.transferNumber}
+            <DialogTitle className="flex flex-wrap items-center gap-2 text-base sm:text-lg">
+              {viewTransfer?.transferNumber}
               {viewTransfer && getStatusBadge(viewTransfer.status)}
             </DialogTitle>
           </DialogHeader>
           
           {viewTransfer && (
-            <div className="space-y-6">
+            <div className="space-y-4">
               {/* Transfer Info */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <p className="text-sm text-muted-foreground">From</p>
-                  <p className="font-medium">{viewTransfer.fromBranchName}</p>
+                  <p className="text-xs text-muted-foreground">From</p>
+                  <p className="text-sm font-medium">{viewTransfer.fromBranchName}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">To</p>
-                  <p className="font-medium">{viewTransfer.toBranchName}</p>
+                  <p className="text-xs text-muted-foreground">To</p>
+                  <p className="text-sm font-medium">{viewTransfer.toBranchName}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Priority</p>
+                  <p className="text-xs text-muted-foreground">Priority</p>
                   {getPriorityBadge(viewTransfer.priority)}
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Created</p>
-                  <p className="font-medium">{formatDate(viewTransfer.createdAt)}</p>
+                  <p className="text-xs text-muted-foreground">Created</p>
+                  <p className="text-sm font-medium">{formatDate(viewTransfer.createdAt)}</p>
                 </div>
               </div>
 
               {viewTransfer.reason && (
                 <div>
-                  <p className="text-sm text-muted-foreground">Reason</p>
-                  <p className="font-medium">{viewTransfer.reason}</p>
+                  <p className="text-xs text-muted-foreground">Reason</p>
+                  <p className="text-sm font-medium">{viewTransfer.reason}</p>
                 </div>
               )}
 
-              {/* Items */}
-              <div>
-                <p className="text-sm text-muted-foreground mb-2">Items ({viewTransfer.items.length})</p>
-                <div className="border rounded-md divide-y max-h-48 overflow-y-auto">
-                  {viewTransfer.items.map((item, index) => (
-                    <div key={index} className="flex items-center justify-between p-3">
-                      <div>
-                        <p className="font-medium">{item.productName}</p>
-                        <p className="text-xs text-muted-foreground">SKU: {item.sku}</p>
+              {/* Items — Normal view */}
+              {!isReceiveMode && (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-2">Items ({viewTransfer.items.length})</p>
+                  <div className="border rounded-md divide-y max-h-48 overflow-y-auto">
+                    {viewTransfer.items.map((item, index) => (
+                      <div key={index} className="flex items-center justify-between p-2.5 sm:p-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium truncate">{item.productName}</p>
+                          <p className="text-[10px] sm:text-xs text-muted-foreground">SKU: {item.sku}</p>
+                        </div>
+                        <div className="text-right shrink-0 ml-2">
+                          <p className="text-sm font-medium">{item.quantity} units</p>
+                          {item.receivedQuantity !== undefined && item.receivedQuantity > 0 && (
+                            <p className="text-[10px] sm:text-xs text-green-600">
+                              Received: {item.receivedQuantity}
+                            </p>
+                          )}
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <p className="font-medium">{item.quantity} units</p>
-                        {item.receivedQuantity !== undefined && (
-                          <p className="text-xs text-muted-foreground">
-                            Received: {item.receivedQuantity}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {/* Items — Receive mode: editable quantities */}
+              {isReceiveMode && (
+                <div>
+                  <p className="text-xs font-medium text-orange-600 mb-2">
+                    Confirm received quantities for each item:
+                  </p>
+                  <div className="border rounded-md divide-y max-h-60 overflow-y-auto">
+                    {viewTransfer.items.map((item, index) => {
+                      const ri = receiveItems[index];
+                      return (
+                        <div key={index} className="p-2.5 sm:p-3 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium truncate">{item.productName}</p>
+                              <p className="text-[10px] text-muted-foreground">
+                                Sent: {item.quantity} units
+                              </p>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <Label className="text-[10px] text-muted-foreground">Received</Label>
+                              <Input
+                                type="number"
+                                min="0"
+                                max={item.quantity}
+                                value={ri?.receivedQuantity ?? item.quantity}
+                                onChange={(e) => {
+                                  const newItems = [...receiveItems];
+                                  newItems[index] = { ...newItems[index], receivedQuantity: parseInt(e.target.value) || 0 };
+                                  setReceiveItems(newItems);
+                                }}
+                                className="h-8 text-sm"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-[10px] text-muted-foreground">Damaged</Label>
+                              <Input
+                                type="number"
+                                min="0"
+                                max={item.quantity}
+                                value={ri?.damagedQuantity ?? 0}
+                                onChange={(e) => {
+                                  const newItems = [...receiveItems];
+                                  newItems[index] = { ...newItems[index], damagedQuantity: parseInt(e.target.value) || 0 };
+                                  setReceiveItems(newItems);
+                                }}
+                                className="h-8 text-sm"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-3">
+                    <Label className="text-xs text-muted-foreground">Notes (optional)</Label>
+                    <Input
+                      value={receiveNotes}
+                      onChange={(e) => setReceiveNotes(e.target.value)}
+                      placeholder="e.g., 1 item arrived damaged"
+                      className="h-8 text-sm mt-1"
+                    />
+                  </div>
+                </div>
+              )}
 
               {/* Total Value */}
-              <div className="flex justify-between items-center p-3 bg-muted rounded-md">
-                <span className="font-medium">Total Value</span>
-                <span className="text-lg font-bold">{formatCurrency(viewTransfer.totalValue || 0)}</span>
+              <div className="flex justify-between items-center p-2.5 bg-muted rounded-md">
+                <span className="text-sm font-medium">Total Value</span>
+                <span className="text-base font-bold">{formatCurrency(viewTransfer.totalValue || 0)}</span>
               </div>
 
               {/* Actions */}
-              <div className="flex gap-2 justify-end">
-                {viewTransfer.status === 'pending_approval' && (
+              <div className="flex flex-wrap gap-2 justify-end">
+                {/* Receive mode actions */}
+                {isReceiveMode && (
                   <>
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        const reason = prompt('Enter rejection reason:');
-                        if (reason) handleAction(viewTransfer._id, 'reject', reason);
-                      }}
-                    >
-                      <XCircle className="h-4 w-4 mr-2" />
-                      Reject
+                    <Button variant="outline" size="sm" onClick={() => setIsReceiveMode(false)}>
+                      Cancel
                     </Button>
-                    <Button onClick={() => handleAction(viewTransfer._id, 'approve')}>
-                      <CheckCircle className="h-4 w-4 mr-2" />
-                      Approve
+                    <Button size="sm" onClick={handleReceive} disabled={isReceiving} className="gap-1.5 bg-green-600 hover:bg-green-700">
+                      {isReceiving ? (
+                        <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Processing...</>
+                      ) : (
+                        <><PackageCheck className="h-3.5 w-3.5" /> Confirm Receipt</>
+                      )}
                     </Button>
                   </>
                 )}
-                {viewTransfer.status === 'approved' && (
-                  <Button onClick={() => handleAction(viewTransfer._id, 'ship')}>
-                    <Truck className="h-4 w-4 mr-2" />
-                    Mark as Shipped
-                  </Button>
-                )}
-                {['pending_approval', 'approved'].includes(viewTransfer.status) && (
-                  <Button
-                    variant="destructive"
-                    onClick={() => {
-                      const reason = prompt('Enter cancellation reason:');
-                      if (reason) handleAction(viewTransfer._id, 'cancel', reason);
-                    }}
-                  >
-                    Cancel Transfer
-                  </Button>
+
+                {/* Normal mode actions */}
+                {!isReceiveMode && (
+                  <>
+                    {viewTransfer.status === 'pending_approval' && (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const reason = prompt('Enter rejection reason:');
+                            if (reason) handleAction(viewTransfer._id, 'reject', reason);
+                          }}
+                        >
+                          <XCircle className="h-3.5 w-3.5 mr-1.5" />
+                          Reject
+                        </Button>
+                        <Button size="sm" onClick={() => handleAction(viewTransfer._id, 'approve')}>
+                          <CheckCircle className="h-3.5 w-3.5 mr-1.5" />
+                          Approve
+                        </Button>
+                      </>
+                    )}
+                    {viewTransfer.status === 'approved' && (
+                      <Button size="sm" onClick={() => handleAction(viewTransfer._id, 'ship')}>
+                        <Truck className="h-3.5 w-3.5 mr-1.5" />
+                        Mark as Shipped
+                      </Button>
+                    )}
+                    {(viewTransfer.status === 'in_transit' || viewTransfer.status === 'partially_received') && (
+                      <Button size="sm" onClick={() => startReceive(viewTransfer)} className="gap-1.5 bg-green-600 hover:bg-green-700">
+                        <PackageCheck className="h-3.5 w-3.5" />
+                        Receive Transfer
+                      </Button>
+                    )}
+                    {['pending_approval', 'approved'].includes(viewTransfer.status) && (
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => {
+                          const reason = prompt('Enter cancellation reason:');
+                          if (reason) handleAction(viewTransfer._id, 'cancel', reason);
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    )}
+                  </>
                 )}
               </div>
             </div>

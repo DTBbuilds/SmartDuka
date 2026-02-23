@@ -66,7 +66,7 @@ const featureCategories = [
 ];
 
 const colorClasses: Record<string, { bg: string; icon: string; hover: string }> = {
-  blue: { bg: 'bg-blue-100', icon: 'text-blue-600', hover: 'hover:bg-blue-50' },
+  blue: { bg: 'bg-orange-100', icon: 'text-orange-600', hover: 'hover:bg-orange-50' },
   green: { bg: 'bg-green-100', icon: 'text-green-600', hover: 'hover:bg-green-50' },
   emerald: { bg: 'bg-emerald-100', icon: 'text-emerald-600', hover: 'hover:bg-emerald-50' },
   purple: { bg: 'bg-purple-100', icon: 'text-purple-600', hover: 'hover:bg-purple-50' },
@@ -80,14 +80,14 @@ export default function FeaturesPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <Link href="/" className="flex items-center gap-2">
-              <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+              <div className="w-10 h-10 bg-orange-600 rounded-lg flex items-center justify-center">
                 <Store className="h-6 w-6 text-white" />
               </div>
               <span className="text-xl font-bold text-gray-900">SmartDuka</span>
             </Link>
             
             <nav className="hidden md:flex items-center gap-8">
-              <Link href="/features" className="text-blue-600 font-medium">Features</Link>
+              <Link href="/features" className="text-orange-600 font-medium">Features</Link>
               <Link href="/pricing" className="text-gray-600 hover:text-gray-900">Pricing</Link>
               <Link href="/blog" className="text-gray-600 hover:text-gray-900">Blog</Link>
               <Link href="/support" className="text-gray-600 hover:text-gray-900">Support</Link>
@@ -97,7 +97,7 @@ export default function FeaturesPage() {
               <Link href="/login" className="text-gray-600 hover:text-gray-900 font-medium">Login</Link>
               <Link 
                 href="/register-shop" 
-                className="px-5 py-2.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+                className="px-5 py-2.5 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700 transition-colors"
               >
                 Get Started Free
               </Link>
@@ -107,7 +107,7 @@ export default function FeaturesPage() {
       </header>
 
       {/* Hero Section */}
-      <section className="py-20 bg-gradient-to-br from-blue-50 via-white to-gray-50">
+      <section className="py-20 bg-gradient-to-br from-orange-50 via-white to-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h1 className="text-4xl sm:text-5xl font-bold text-gray-900 mb-6">
             Powerful Features for Your Business
@@ -134,11 +134,11 @@ export default function FeaturesPage() {
                   <div className={`w-16 h-16 ${colors.bg} rounded-xl flex items-center justify-center mb-6`}>
                     <category.icon className={`h-8 w-8 ${colors.icon}`} />
                   </div>
-                  <h2 className="text-2xl font-bold text-gray-900 mb-3 group-hover:text-blue-600 transition-colors">
+                  <h2 className="text-2xl font-bold text-gray-900 mb-3 group-hover:text-orange-600 transition-colors">
                     {category.title}
                   </h2>
                   <p className="text-gray-600 mb-4">{category.description}</p>
-                  <span className="inline-flex items-center gap-2 text-blue-600 font-semibold">
+                  <span className="inline-flex items-center gap-2 text-orange-600 font-semibold">
                     Learn more
                     <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
                   </span>
@@ -168,7 +168,7 @@ export default function FeaturesPage() {
               { icon: BarChart3, title: 'Profit Tracking' },
             ].map((feature, index) => (
               <div key={index} className="bg-white p-6 rounded-xl shadow-sm">
-                <feature.icon className="h-8 w-8 text-blue-600 mb-3" />
+                <feature.icon className="h-8 w-8 text-orange-600 mb-3" />
                 <h3 className="font-bold text-gray-900">{feature.title}</h3>
               </div>
             ))}
@@ -177,17 +177,17 @@ export default function FeaturesPage() {
       </section>
 
       {/* CTA Section */}
-      <section className="py-20 bg-blue-600">
+      <section className="py-20 bg-orange-600">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-3xl font-bold text-white mb-6">
             Ready to Get Started?
           </h2>
-          <p className="text-xl text-blue-100 mb-8">
+          <p className="text-xl text-orange-100 mb-8">
             Try SmartDuka free for 14 days. No credit card required.
           </p>
           <Link 
             href="/register-shop" 
-            className="inline-flex items-center gap-2 px-8 py-4 bg-white text-blue-600 rounded-xl font-bold text-lg hover:bg-blue-50 transition-colors"
+            className="inline-flex items-center gap-2 px-8 py-4 bg-white text-orange-600 rounded-xl font-bold text-lg hover:bg-orange-50 transition-colors"
           >
             Get Started Free
             <ArrowRight className="h-5 w-5" />
@@ -200,7 +200,7 @@ export default function FeaturesPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <Link href="/" className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+              <div className="w-8 h-8 bg-orange-600 rounded-lg flex items-center justify-center">
                 <Store className="h-5 w-5 text-white" />
               </div>
               <span className="text-white font-semibold">SmartDuka</span>
