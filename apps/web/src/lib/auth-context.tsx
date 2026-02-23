@@ -121,10 +121,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           
           if (storedShop) {
             const parsedShop = JSON.parse(storedShop);
-            setShop(parsedShop);
-            // Restore demo mode only if shop is still pending
-            if (storedDemoMode === 'true' && parsedShop.status === 'pending') {
-              setIsDemoMode(true);
+            if (parsedShop) {
+              setShop(parsedShop);
+              // Restore demo mode only if shop is still pending
+              if (storedDemoMode === 'true' && parsedShop.status === 'pending') {
+                setIsDemoMode(true);
+              }
             }
           }
           
