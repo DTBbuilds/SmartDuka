@@ -187,7 +187,7 @@ ShopSchema.index({ isMonitored: 1 });
 ShopSchema.index({ deletedAt: 1 });
 // Compound indexes for super-admin queries
 ShopSchema.index({ status: 1, createdAt: -1 }); // For filtered shop lists
-ShopSchema.index({ email: 1 }, { sparse: true }); // For email-based lookups
+// email index already created by @Prop({ unique: true }) - do not duplicate
 ShopSchema.index({ subscriptionStatus: 1, status: 1 }); // For subscription filtering
 // Ensure kraPin is unique only when present (sparse index ignores null/undefined)
 ShopSchema.index(

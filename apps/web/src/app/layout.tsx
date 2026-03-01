@@ -22,6 +22,11 @@ export const metadata: Metadata = {
   description: "SmartDuka is a 100% free, open source point of sale and inventory management system. No subscriptions, no hidden fees, no user data collected. Manage sales, stock, reports, analytics, M-Pesa payments, and barcode scanning \u2014 completely free forever.",
   keywords: [
     "SmartDuka",
+    "Smart Duka",
+    "smart duka",
+    "smartduka",
+    "Smart Duka POS",
+    "Smart Duka point of sale",
     "free point of sale",
     "free POS system",
     "free POS software",

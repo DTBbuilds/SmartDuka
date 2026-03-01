@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unused-vars, @typescript-eslint/require-await */
-import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, Req, UseGuards, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, Req, UseGuards, BadRequestException, ForbiddenException, NotFoundException, Optional, Inject } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { CreateCashierDto } from './dto/create-cashier.dto';
@@ -8,10 +8,14 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { OtpService } from '../auth/services/otp.service';
 
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    @Optional() private readonly otpService: OtpService,
+  ) {}
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
@@ -430,6 +434,75 @@ export class UsersController {
       message: 'PIN reset successfully',
       pin: newPin,
     };
+  }
+
+  /**
+   * Update own profile (name, phone)
+   * PATCH /users/me/profile
+   */
+  @UseGuards(JwtAuthGuard)
+  @Patch('me/profile')
+  async updateProfile(
+    @Body() dto: { name?: string; phone?: string },
+    @CurrentUser() user: any,
+  ) {
+    const updated = await this.usersService.updateProfile(user.sub, dto);
+    if (!updated) {
+      throw new NotFoundException('User not found');
+    }
+    const { passwordHash, pinHash, ...safe } = (updated as any).toObject();
+    return safe;
+  }
+
+  /**
+   * Send OTP for password change verification
+   * POST /users/me/send-password-change-otp
+   */
+  @UseGuards(JwtAuthGuard)
+  @Post('me/send-password-change-otp')
+  async sendPasswordChangeOtp(
+    @CurrentUser() user: any,
+    @Req() req: any,
+  ) {
+    if (!this.otpService) {
+      throw new BadRequestException('OTP service not available');
+    }
+    const fullUser = await this.usersService.findById(user.sub);
+    const userName = (fullUser as any)?.name || user.email;
+    const ipAddress = req.ip || req.connection?.remoteAddress;
+    const userAgent = req.get('user-agent');
+    return this.otpService.sendPasswordChangeOtp(user.email, userName, ipAddress, userAgent);
+  }
+
+  /**
+   * Change own password (requires OTP verification)
+   * POST /users/me/change-password
+   */
+  @UseGuards(JwtAuthGuard)
+  @Post('me/change-password')
+  async changePassword(
+    @Body() dto: { currentPassword: string; newPassword: string; otpCode?: string },
+    @CurrentUser() user: any,
+  ) {
+    if (!dto.currentPassword || !dto.newPassword) {
+      throw new BadRequestException('Current password and new password are required');
+    }
+    if (dto.newPassword.length < 6) {
+      throw new BadRequestException('New password must be at least 6 characters');
+    }
+
+    // Verify OTP if service is available
+    if (this.otpService && dto.otpCode) {
+      const otpResult = await this.otpService.verifyOtp(user.email, dto.otpCode, 'password_change');
+      if (!otpResult.valid) {
+        throw new BadRequestException('Invalid verification code');
+      }
+    } else if (this.otpService && !dto.otpCode) {
+      throw new BadRequestException('Verification code is required');
+    }
+
+    await this.usersService.changePassword(user.sub, dto.currentPassword, dto.newPassword);
+    return { message: 'Password changed successfully' };
   }
 
   @UseGuards(JwtAuthGuard)

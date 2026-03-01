@@ -25,6 +25,10 @@ export const metadata: Metadata = {
   description: 'SmartDuka is a 100% free, open source point of sale and inventory management system. No subscriptions, no hidden fees, no user data collected. M-Pesa integration, barcode scanning, analytics \u2014 all free forever.',
   keywords: [
     'SmartDuka',
+    'Smart Duka',
+    'smart duka',
+    'smartduka',
+    'Smart Duka POS',
     'free point of sale software',
     'free POS system',
     'open source POS',
@@ -227,7 +231,7 @@ export default function HomePage() {
               </h1>
               
               <p className="text-xl text-gray-600 mb-8 leading-relaxed">
-                SmartDuka is a web-based <Link href="/point-of-sale-software" className="text-orange-600 hover:underline">point of sale</Link> and{' '}
+                SmartDuka (Smart Duka) is a web-based <Link href="/point-of-sale-software" className="text-orange-600 hover:underline">point of sale</Link> and{' '}
                 <Link href="/inventory-management-software" className="text-orange-600 hover:underline">inventory management software</Link> built
                 by <a href="https://www.dtbtech.org" className="text-orange-600 hover:underline" target="_blank" rel="noopener noreferrer">DTB Technologies</a>.
                 It helps retail businesses manage sales, inventory, reports, analytics, and barcode scanning using existing hardware.

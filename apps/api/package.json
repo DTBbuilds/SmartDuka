@@ -7,7 +7,7 @@
   "license": "UNLICENSED",
   "scripts": {
     "dev": "nest start --watch",
-    "prebuild": "cd ../../packages/business-types && npm run build",
+    "prebuild": "npm run build --workspace=@smartduka/business-types",
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",

@@ -255,6 +255,49 @@ export class UsersService {
     ).exec();
   }
 
+  /**
+   * Update own profile (name, phone)
+   */
+  async updateProfile(
+    userId: string,
+    data: { name?: string; phone?: string },
+  ): Promise<User | null> {
+    const updateFields: any = {};
+    if (data.name !== undefined) updateFields.name = data.name.trim();
+    if (data.phone !== undefined) updateFields.phone = data.phone?.trim() || null;
+
+    return this.userModel.findByIdAndUpdate(
+      userId,
+      { $set: updateFields },
+      { new: true },
+    ).exec();
+  }
+
+  /**
+   * Change own password (requires current password)
+   */
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    const user = await this.userModel.findById(userId).exec();
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const isValid = await bcrypt.compare(currentPassword, (user as any).passwordHash);
+    if (!isValid) {
+      throw new BadRequestException('Current password is incorrect');
+    }
+
+    const newHash = await bcrypt.hash(newPassword, 10);
+    await this.userModel.updateOne(
+      { _id: new Types.ObjectId(userId) },
+      { $set: { passwordHash: newHash } },
+    );
+  }
+
   async validatePassword(user: User, password: string): Promise<boolean> {
     return bcrypt.compare(password, (user as any).passwordHash);
   }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Card,
@@ -22,6 +22,9 @@ import {
   DollarSign,
   Percent,
   AlertTriangle,
+  X,
+  Copy,
+  Check,
 } from 'lucide-react';
 import {
   AreaChart,
@@ -81,6 +84,14 @@ export default function PaymentsAnalyticsPage() {
   const { currentBranch } = useBranch();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<PaymentStats | null>(null);
+  const [selectedTxn, setSelectedTxn] = useState<PaymentStats['recentTransactions'][0] | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const copyToClipboard = useCallback((text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, []);
 
   useEffect(() => {
     if (token) {
@@ -355,7 +366,7 @@ export default function PaymentsAnalyticsPage() {
                     <div
                       key={txn.id}
                       className="flex items-center justify-between p-2 md:p-3 border rounded-lg hover:bg-accent transition-colors cursor-pointer active:scale-[0.99]"
-                      onClick={() => router.push(`/orders?search=${txn.orderNumber}`)}
+                      onClick={() => setSelectedTxn(txn)}
                     >
                       <div className="flex items-center gap-2 md:gap-3 min-w-0">
                         <div className="hidden md:block">{getMethodIcon(txn.method)}</div>
@@ -426,6 +437,80 @@ export default function PaymentsAnalyticsPage() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Transaction Detail Modal */}
+          {selectedTxn && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setSelectedTxn(null)}>
+              <Card className="w-full max-w-md relative" onClick={(e) => e.stopPropagation()}>
+                <button
+                  onClick={() => setSelectedTxn(null)}
+                  className="absolute top-3 right-3 p-1 rounded-full hover:bg-muted transition-colors"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg">Transaction Details</CardTitle>
+                  <CardDescription>Order {selectedTxn.orderNumber}</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                    <span className="text-sm text-muted-foreground">Amount</span>
+                    <span className="text-xl font-bold">Ksh {selectedTxn.amount.toLocaleString('en-KE')}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="p-3 rounded-lg border">
+                      <p className="text-xs text-muted-foreground mb-1">Payment Method</p>
+                      <div className="flex items-center gap-2">
+                        {getMethodIcon(selectedTxn.method)}
+                        <span className="font-medium text-sm">{selectedTxn.method}</span>
+                      </div>
+                    </div>
+                    <div className="p-3 rounded-lg border">
+                      <p className="text-xs text-muted-foreground mb-1">Status</p>
+                      <div className="flex items-center gap-1.5">
+                        {getStatusIcon(selectedTxn.status)}
+                        <Badge variant={
+                          selectedTxn.status === 'completed' ? 'default' :
+                          selectedTxn.status === 'pending' ? 'secondary' : 'destructive'
+                        } className="text-xs">
+                          {selectedTxn.status}
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between py-2 border-b">
+                      <span className="text-sm text-muted-foreground">Order Number</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm font-medium">{selectedTxn.orderNumber}</span>
+                        <button onClick={() => copyToClipboard(selectedTxn.orderNumber)} className="p-1 hover:bg-muted rounded">
+                          {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3 text-muted-foreground" />}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between py-2 border-b">
+                      <span className="text-sm text-muted-foreground">Reference</span>
+                      <span className="text-sm font-medium font-mono">{selectedTxn.reference || 'N/A'}</span>
+                    </div>
+                    <div className="flex items-center justify-between py-2 border-b">
+                      <span className="text-sm text-muted-foreground">Date & Time</span>
+                      <span className="text-sm font-medium">{new Date(selectedTxn.timestamp).toLocaleString()}</span>
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => {
+                      setSelectedTxn(null);
+                      router.push(`/admin/orders?search=${selectedTxn.orderNumber}`);
+                    }}
+                  >
+                    View Full Order Details
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+          )}
         </>
       )}
     </div>

@@ -54,7 +54,6 @@ const superAdminNavSections: NavSection[] = [
     defaultOpen: true,
     items: [
       { name: 'Emails', href: '/super-admin/emails', icon: Mail },
-      { name: 'Email Logs', href: '/super-admin/email-logs', icon: FileText },
       { name: 'Email Settings', href: '/super-admin/email-settings', icon: Settings },
       { name: 'Broadcast', href: '/super-admin/communications', icon: Send },
       { name: 'Inbox', href: '/super-admin/inbox', icon: Inbox },

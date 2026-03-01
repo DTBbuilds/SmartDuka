@@ -120,7 +120,7 @@ export class OtpService {
   async verifyOtp(
     email: string,
     code: string,
-    type: 'registration' | 'password_reset' | 'email_verification' | 'login',
+    type: 'registration' | 'password_reset' | 'email_verification' | 'login' | 'password_change',
   ): Promise<{ valid: boolean; message: string }> {
     const normalizedEmail = email.toLowerCase().trim();
     const normalizedCode = code.trim();
@@ -382,12 +382,140 @@ export class OtpService {
   }
 
   /**
+   * Send OTP for password change verification
+   */
+  async sendPasswordChangeOtp(
+    email: string,
+    userName: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<{ success: boolean; message: string; expiresIn?: number }> {
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Check cooldown
+    const cooldownCheck = await this.canRequestOtp(normalizedEmail, 'password_change');
+    if (!cooldownCheck.allowed) {
+      throw new BadRequestException(
+        `Please wait ${cooldownCheck.waitSeconds} seconds before requesting a new code.`,
+      );
+    }
+
+    // Invalidate any existing unused OTPs for this email
+    await this.otpModel.updateMany(
+      { email: normalizedEmail, type: 'password_change', used: false },
+      { used: true },
+    );
+
+    // Generate new OTP
+    const code = this.generateOtpCode();
+    const expiresAt = new Date(Date.now() + this.OTP_EXPIRY_MINUTES * 60 * 1000);
+
+    // Save OTP to database
+    const otp = new this.otpModel({
+      email: normalizedEmail,
+      code,
+      type: 'password_change',
+      expiresAt,
+      ipAddress,
+      userAgent,
+      maxAttempts: this.MAX_OTP_ATTEMPTS,
+    });
+    await otp.save();
+
+    // Send OTP via email
+    const emailResult = await this.emailService.sendEmail({
+      to: normalizedEmail,
+      subject: `Your SmartDuka Password Change Code: ${code}`,
+      html: this.getPasswordChangeOtpEmailTemplate(code, userName, this.OTP_EXPIRY_MINUTES),
+      text: `Your SmartDuka password change verification code is: ${code}. This code expires in ${this.OTP_EXPIRY_MINUTES} minutes.`,
+      category: 'authentication',
+      templateName: 'otp_password_change',
+      templateVariables: { code, userName, expiryMinutes: this.OTP_EXPIRY_MINUTES },
+    });
+
+    if (!emailResult.success) {
+      this.logger.error(`Failed to send password change OTP email to ${normalizedEmail}: ${emailResult.error}`);
+    }
+
+    this.logger.log(`Password change OTP sent to ${normalizedEmail}`);
+
+    return {
+      success: true,
+      message: `Verification code sent to ${normalizedEmail}. Check your inbox and spam folder.`,
+      expiresIn: this.OTP_EXPIRY_MINUTES * 60,
+    };
+  }
+
+  /**
+   * Generate HTML email template for password change OTP
+   */
+  private getPasswordChangeOtpEmailTemplate(code: string, userName: string, expiryMinutes: number): string {
+    const digits = code.split('');
+    const digitBoxes = digits.map(d =>
+      `<td style="width:44px;height:52px;text-align:center;vertical-align:middle;font-size:28px;font-weight:700;font-family:'Menlo','Monaco','Courier New',monospace;color:#111827;background-color:#f3f4f6;border:1px solid #e5e7eb;border-radius:8px;padding:0;">${d}</td>`
+    ).join('<td style="width:8px;"></td>');
+    const year = new Date().getFullYear();
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="color-scheme" content="light">
+<title>SmartDuka Password Change Verification</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<div style="display:none;font-size:1px;color:#f4f4f5;line-height:1px;max-height:0;overflow:hidden;">Your SmartDuka password change code is ${code}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;padding:32px 16px;">
+<tr><td align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background-color:#ffffff;border-radius:8px;border-top:3px solid #ef4444;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+<!-- Header -->
+<tr><td style="padding:28px 32px 0;text-align:center;">
+  <p style="margin:0;font-size:20px;font-weight:700;color:#111827;letter-spacing:-0.3px;">SmartDuka</p>
+</td></tr>
+<!-- Content -->
+<tr><td style="padding:24px 32px;">
+  <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#111827;text-align:center;">Password Change Verification</h1>
+  <p style="margin:0 0 24px;font-size:14px;color:#6b7280;text-align:center;line-height:1.5;">
+    Hi <strong style="color:#111827;">${userName}</strong>, enter this code to confirm your password change.
+  </p>
+  <!-- OTP Code -->
+  <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 8px;">
+  <tr>${digitBoxes}</tr>
+  </table>
+  <p style="margin:0 0 24px;font-size:12px;color:#9ca3af;text-align:center;">Copy or type this code into the verification field</p>
+  <!-- Expiry -->
+  <p style="margin:0 0 24px;font-size:13px;color:#6b7280;text-align:center;">
+    This code expires in <strong style="color:#111827;">${expiryMinutes} minutes</strong>
+  </p>
+  <!-- Security -->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#fef2f2;border:1px solid #fecaca;border-radius:6px;">
+  <tr><td style="padding:14px 16px;">
+    <p style="margin:0 0 6px;font-size:12px;font-weight:600;color:#991b1b;">Security alert</p>
+    <p style="margin:0;font-size:12px;color:#6b7280;line-height:1.6;">
+      Someone is attempting to change your account password. If this wasn't you, do NOT share this code and consider securing your account immediately.
+    </p>
+  </td></tr>
+  </table>
+</td></tr>
+<!-- Footer -->
+<tr><td style="padding:20px 32px;border-top:1px solid #f3f4f6;text-align:center;">
+  <p style="margin:0 0 4px;font-size:11px;color:#9ca3af;">SmartDuka &mdash; Smart POS for Kenyan businesses</p>
+  <p style="margin:0;font-size:11px;color:#d1d5db;">&copy; ${year} SmartDuka. All rights reserved.</p>
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>`;
+  }
+
+  /**
    * Resend OTP (with cooldown check)
    */
   async resendOtp(
     email: string,
     shopName: string,
-    type: 'registration' | 'password_reset' | 'email_verification' | 'login',
+    type: 'registration' | 'password_reset' | 'email_verification' | 'login' | 'password_change',
     ipAddress?: string,
     userAgent?: string,
   ): Promise<{ success: boolean; message: string; expiresIn?: number }> {
@@ -397,6 +525,10 @@ export class OtpService {
 
     if (type === 'login') {
       return this.sendLoginOtp(email, shopName, ipAddress, userAgent);
+    }
+
+    if (type === 'password_change') {
+      return this.sendPasswordChangeOtp(email, shopName, ipAddress, userAgent);
     }
 
     // For other types, implement similar logic

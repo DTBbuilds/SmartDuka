@@ -64,6 +64,66 @@ export class StripeController {
   }
 
   // ============================================
+  // DONATIONS
+  // ============================================
+
+  /**
+   * Create payment intent for a donation (no auth required)
+   */
+  @Post('donation/create-payment')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Create payment intent for donation' })
+  async createDonationPayment(
+    @Body()
+    dto: {
+      amount: number;
+      currency?: string;
+      donorEmail?: string;
+      donorName?: string;
+      message?: string;
+    },
+  ): Promise<{
+    success: boolean;
+    paymentIntentId: string;
+    clientSecret: string;
+    amount: number;
+    currency: string;
+  }> {
+    if (!this.stripeService.isStripeConfigured()) {
+      throw new BadRequestException('Stripe is not configured');
+    }
+
+    const currency = (dto.currency || 'usd').toLowerCase();
+    const amount = Math.round(dto.amount);
+
+    if (amount < 100) {
+      throw new BadRequestException('Minimum donation is $1.00 (100 cents)');
+    }
+
+    const stripe = this.stripeService.getClient();
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount,
+      currency,
+      metadata: {
+        type: 'donation',
+        donorEmail: dto.donorEmail || '',
+        donorName: dto.donorName || '',
+        message: dto.message || '',
+      },
+      description: `SmartDuka Donation${dto.donorName ? ` from ${dto.donorName}` : ''}`,
+      receipt_email: dto.donorEmail || undefined,
+    });
+
+    return {
+      success: true,
+      paymentIntentId: paymentIntent.id,
+      clientSecret: paymentIntent.client_secret!,
+      amount: paymentIntent.amount,
+      currency: paymentIntent.currency,
+    };
+  }
+
+  // ============================================
   // POS PAYMENTS
   // ============================================
 

@@ -157,14 +157,16 @@ export default function StaffAssignmentPage() {
     }
   };
 
-  const getBranchName = (branchId?: string | { _id: string; name: string; code?: string }) => {
-    if (!branchId) return 'Unassigned';
+  const getBranchName = (member: StaffMember) => {
+    // Admin (shop owner) is the shop administrator - not "unassigned"
+    if (member.role === 'admin') return 'Shop Administrator';
+    if (!member.branchId) return 'Unassigned';
     // Handle populated branchId object
-    if (typeof branchId === 'object' && branchId.name) {
-      return branchId.name;
+    if (typeof member.branchId === 'object' && member.branchId.name) {
+      return member.branchId.name;
     }
     // Handle string branchId - lookup from branches list
-    const branch = branches.find((b) => b._id === branchId);
+    const branch = branches.find((b) => b._id === member.branchId);
     return branch?.name || 'Unknown';
   };
 
@@ -179,8 +181,8 @@ export default function StaffAssignmentPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Staff Assignment</h1>
-        <p className="text-muted-foreground mt-2">Assign staff members to branches</p>
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Staff Assignment</h1>
+        <p className="text-muted-foreground mt-1 text-sm">Assign staff members to branches</p>
       </div>
 
       {/* Alerts */}
@@ -211,50 +213,54 @@ export default function StaffAssignmentPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {staff.map((member) => (
             <Card key={member._id}>
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <h3 className="font-semibold">{member.name}</h3>
-                    <p className="text-sm text-muted-foreground">{member.email}</p>
-                    <div className="mt-2 flex items-center gap-4 text-sm">
-                      <span>Role: <span className="font-medium">{member.role}</span></span>
-                      <span>Branch: <span className="font-medium">{getBranchName(member.branchId)}</span></span>
+              <CardContent className="pt-4 pb-4">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="font-semibold truncate">{member.name}</h3>
                       <span
-                        className={`px-2 py-1 rounded text-xs font-medium ${
+                        className={`px-2 py-0.5 rounded text-xs font-medium flex-shrink-0 ${
                           member.status === 'active'
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-gray-100 text-gray-800'
+                            ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                            : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-400'
                         }`}
                       >
                         {member.status}
                       </span>
                     </div>
+                    <p className="text-sm text-muted-foreground truncate">{member.email}</p>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                      <span>Role: <span className="font-medium capitalize">{member.role.replace('_', ' ')}</span></span>
+                      <span>Branch: <span className="font-medium">{getBranchName(member)}</span></span>
+                    </div>
                   </div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleAssign(member)}
-                      className="gap-2"
-                    >
-                      <Edit2 className="h-4 w-4" />
-                      Assign
-                    </Button>
-                    {member.branchId && (
+                  {member.role !== 'admin' && (
+                    <div className="flex gap-2 flex-shrink-0">
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleRemove(member._id, getBranchIdString(member.branchId))}
-                        className="gap-2 text-red-600 hover:text-red-700"
+                        onClick={() => handleAssign(member)}
+                        className="gap-2 flex-1 sm:flex-initial"
                       >
-                        <Trash2 className="h-4 w-4" />
-                        Remove
+                        <Edit2 className="h-4 w-4" />
+                        Assign
                       </Button>
-                    )}
-                  </div>
+                      {member.branchId && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleRemove(member._id, getBranchIdString(member.branchId))}
+                          className="gap-2 text-red-600 hover:text-red-700 flex-1 sm:flex-initial"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Remove
+                        </Button>
+                      )}
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>

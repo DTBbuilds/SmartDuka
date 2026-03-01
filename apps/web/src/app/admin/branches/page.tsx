@@ -151,12 +151,12 @@ export default function BranchesPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Branch Management</h1>
-          <p className="text-muted-foreground mt-2">Manage your shop branches and locations</p>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Branch Management</h1>
+          <p className="text-muted-foreground mt-1 text-sm">Manage your shop branches and locations</p>
         </div>
-        <Button onClick={handleAdd} className="gap-2">
+        <Button onClick={handleAdd} className="gap-2 w-full sm:w-auto">
           <Plus className="h-4 w-4" />
           Add Branch
         </Button>

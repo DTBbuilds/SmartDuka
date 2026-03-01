@@ -170,15 +170,10 @@ export function OrderDetailsModal({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-lg p-0 overflow-hidden max-h-[90vh] flex flex-col">
         <DialogHeader className="px-4 pt-4 pb-2 border-b flex-shrink-0">
-          <div className="flex items-center justify-between">
-            <DialogTitle className="text-lg font-semibold flex items-center gap-2">
-              <Receipt className="h-5 w-5 text-primary" />
-              Order Details
-            </DialogTitle>
-            <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8">
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
+          <DialogTitle className="text-lg font-semibold flex items-center gap-2">
+            <Receipt className="h-5 w-5 text-primary" />
+            Order Details
+          </DialogTitle>
         </DialogHeader>
 
         {/* Scrollable Content */}

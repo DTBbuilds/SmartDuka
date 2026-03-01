@@ -76,6 +76,12 @@ export default function SettingsPage() {
     confirmPassword: "",
   });
 
+  // OTP verification for password change
+  const [passwordOtpStep, setPasswordOtpStep] = useState<'form' | 'otp'>('form');
+  const [otpCode, setOtpCode] = useState("");
+  const [otpCooldown, setOtpCooldown] = useState(0);
+  const [otpSending, setOtpSending] = useState(false);
+
   // Redirect cashiers away from settings page
   // Super-admins should go to their admin dashboard, not shop settings
   useEffect(() => {
@@ -90,14 +96,66 @@ export default function SettingsPage() {
 
   useEffect(() => {
     fetchShopData();
-    if (user) {
+    fetchProfileData();
+  }, [user]);
+
+  const fetchProfileData = async () => {
+    if (!token || !user) return;
+    try {
+      const res = await fetch(`${config.apiUrl}/users/${user.sub}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setProfileData({
+          name: data.name || user.email.split("@")[0],
+          email: data.email || user.email,
+          phone: data.phone || "",
+        });
+      } else {
+        setProfileData({
+          name: user.name || user.email.split("@")[0],
+          email: user.email,
+          phone: "",
+        });
+      }
+    } catch {
       setProfileData({
-        name: user.email.split("@")[0], // Fallback
+        name: user.name || user.email.split("@")[0],
         email: user.email,
         phone: "",
       });
     }
-  }, [user]);
+  };
+
+  const saveProfile = async () => {
+    setIsSaving(true);
+    setMessage(null);
+    try {
+      const res = await fetch(`${config.apiUrl}/users/me/profile`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          name: profileData.name,
+          phone: profileData.phone,
+        }),
+      });
+      if (res.ok) {
+        setMessage({ type: "success", text: "Profile updated successfully!" });
+      } else {
+        const errText = await res.text();
+        const data = errText ? JSON.parse(errText) : {};
+        throw new Error(data.message || "Failed to update profile");
+      }
+    } catch (error: any) {
+      setMessage({ type: "error", text: error.message || "Failed to update profile" });
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const fetchShopData = async () => {
     try {
@@ -172,14 +230,54 @@ export default function SettingsPage() {
     }
   };
 
-  const changePassword = async () => {
+  // Step 1: Validate form and send OTP
+  const requestPasswordChangeOtp = async () => {
     if (passwordData.newPassword !== passwordData.confirmPassword) {
       setMessage({ type: "error", text: "Passwords do not match" });
       return;
     }
-
     if (passwordData.newPassword.length < 6) {
       setMessage({ type: "error", text: "Password must be at least 6 characters" });
+      return;
+    }
+    if (!passwordData.currentPassword) {
+      setMessage({ type: "error", text: "Current password is required" });
+      return;
+    }
+
+    setOtpSending(true);
+    setMessage(null);
+
+    try {
+      const res = await fetch(`${config.apiUrl}/users/me/send-password-change-otp`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (res.ok) {
+        setPasswordOtpStep('otp');
+        setOtpCode("");
+        setOtpCooldown(60);
+        setMessage({ type: "success", text: "Verification code sent to your email." });
+      } else {
+        const errText = await res.text();
+        const data = errText ? JSON.parse(errText) : {};
+        throw new Error(data.message || "Failed to send verification code");
+      }
+    } catch (error: any) {
+      setMessage({ type: "error", text: error.message || "Failed to send verification code" });
+    } finally {
+      setOtpSending(false);
+    }
+  };
+
+  // Step 2: Verify OTP and change password
+  const changePassword = async () => {
+    if (!otpCode || otpCode.length !== 6) {
+      setMessage({ type: "error", text: "Please enter the 6-digit verification code" });
       return;
     }
 
@@ -187,8 +285,7 @@ export default function SettingsPage() {
     setMessage(null);
 
     try {
-      const base = config.apiUrl;
-      const res = await fetch(`${base}/users/change-password`, {
+      const res = await fetch(`${config.apiUrl}/users/me/change-password`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -197,12 +294,15 @@ export default function SettingsPage() {
         body: JSON.stringify({
           currentPassword: passwordData.currentPassword,
           newPassword: passwordData.newPassword,
+          otpCode,
         }),
       });
 
       if (res.ok) {
         setMessage({ type: "success", text: "Password changed successfully!" });
         setPasswordData({ currentPassword: "", newPassword: "", confirmPassword: "" });
+        setOtpCode("");
+        setPasswordOtpStep('form');
       } else {
         const errText = await res.text();
         const data = errText ? JSON.parse(errText) : {};
@@ -214,6 +314,13 @@ export default function SettingsPage() {
       setIsSaving(false);
     }
   };
+
+  // OTP cooldown timer
+  useEffect(() => {
+    if (otpCooldown <= 0) return;
+    const timer = setTimeout(() => setOtpCooldown(otpCooldown - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [otpCooldown]);
 
   // Show loading state
   if (loading || isLoading) {
@@ -521,8 +628,8 @@ export default function SettingsPage() {
               </div>
 
               <div className="pt-4">
-                <Button disabled>
-                  Save Profile (Coming Soon)
+                <Button onClick={saveProfile} disabled={isSaving}>
+                  {isSaving ? "Saving..." : "Save Profile"}
                 </Button>
               </div>
             </CardContent>
@@ -536,53 +643,107 @@ export default function SettingsPage() {
               <CardDescription>Update your password to keep your account secure</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="currentPassword">Current Password</Label>
-                <Input
-                  id="currentPassword"
-                  type="password"
-                  value={passwordData.currentPassword}
-                  onChange={(e) =>
-                    setPasswordData({ ...passwordData, currentPassword: e.target.value })
-                  }
-                  placeholder="••••••••"
-                />
-              </div>
+              {passwordOtpStep === 'form' ? (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="currentPassword">Current Password</Label>
+                    <Input
+                      id="currentPassword"
+                      type="password"
+                      value={passwordData.currentPassword}
+                      onChange={(e) =>
+                        setPasswordData({ ...passwordData, currentPassword: e.target.value })
+                      }
+                      placeholder="••••••••"
+                    />
+                  </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="newPassword">New Password</Label>
-                <Input
-                  id="newPassword"
-                  type="password"
-                  value={passwordData.newPassword}
-                  onChange={(e) =>
-                    setPasswordData({ ...passwordData, newPassword: e.target.value })
-                  }
-                  placeholder="••••••••"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Password must be at least 6 characters long
-                </p>
-              </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="newPassword">New Password</Label>
+                    <Input
+                      id="newPassword"
+                      type="password"
+                      value={passwordData.newPassword}
+                      onChange={(e) =>
+                        setPasswordData({ ...passwordData, newPassword: e.target.value })
+                      }
+                      placeholder="••••••••"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Password must be at least 6 characters long
+                    </p>
+                  </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirm New Password</Label>
-                <Input
-                  id="confirmPassword"
-                  type="password"
-                  value={passwordData.confirmPassword}
-                  onChange={(e) =>
-                    setPasswordData({ ...passwordData, confirmPassword: e.target.value })
-                  }
-                  placeholder="••••••••"
-                />
-              </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="confirmPassword">Confirm New Password</Label>
+                    <Input
+                      id="confirmPassword"
+                      type="password"
+                      value={passwordData.confirmPassword}
+                      onChange={(e) =>
+                        setPasswordData({ ...passwordData, confirmPassword: e.target.value })
+                      }
+                      placeholder="••••••••"
+                    />
+                  </div>
 
-              <div className="pt-4">
-                <Button onClick={changePassword} disabled={isSaving}>
-                  {isSaving ? "Changing..." : "Change Password"}
-                </Button>
-              </div>
+                  <div className="pt-4">
+                    <Button onClick={requestPasswordChangeOtp} disabled={otpSending}>
+                      {otpSending ? "Sending code..." : "Change Password"}
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="bg-blue-50 dark:bg-blue-950/20 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
+                    <p className="text-sm text-blue-800 dark:text-blue-300">
+                      A 6-digit verification code has been sent to <strong>{user?.email}</strong>. Enter it below to confirm your password change.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="otpCode">Verification Code</Label>
+                    <Input
+                      id="otpCode"
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={otpCode}
+                      onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      placeholder="000000"
+                      className="text-center text-2xl tracking-[0.5em] font-mono"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-3 pt-2">
+                    <Button onClick={changePassword} disabled={isSaving || otpCode.length !== 6}>
+                      {isSaving ? "Changing..." : "Verify & Change Password"}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setPasswordOtpStep('form');
+                        setOtpCode("");
+                        setMessage(null);
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      className="text-sm text-primary hover:underline disabled:opacity-50 disabled:no-underline"
+                      disabled={otpCooldown > 0 || otpSending}
+                      onClick={requestPasswordChangeOtp}
+                    >
+                      {otpCooldown > 0 ? `Resend code in ${otpCooldown}s` : "Resend verification code"}
+                    </button>
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -632,19 +793,23 @@ function SubscriptionSettingsTab() {
             </p>
           </div>
 
-          <div className="bg-rose-50 dark:bg-rose-950/20 rounded-xl p-4 border border-rose-200 dark:border-rose-800">
-            <p className="text-sm text-muted-foreground mb-3">
+          <div className="bg-rose-50 dark:bg-rose-950/20 rounded-xl p-4 border border-rose-200 dark:border-rose-800 space-y-4">
+            <p className="text-sm text-muted-foreground">
               SmartDuka is built by a small team. If you find it valuable, consider supporting us with a voluntary donation.
             </p>
-            <a 
-              href="https://wa.me/254729983567?text=Hello%20SmartDuka%2C%20I%20would%20like%20to%20make%20a%20donation%20to%20support%20the%20project"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
-            >
-              Donate via M-Pesa
-            </a>
-            <span className="ml-3 text-xs text-muted-foreground">Send to 0729 983 567</span>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <a 
+                href="https://wa.me/254729983567?text=Hello%20SmartDuka%2C%20I%20would%20like%20to%20make%20a%20donation%20to%20support%20the%20project"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
+              >
+                <Phone className="h-4 w-4" />
+                Donate via M-Pesa
+              </a>
+              <span className="text-xs text-muted-foreground self-center">Send to 0729 983 567</span>
+            </div>
+            <CardDonationSection />
           </div>
         </CardContent>
       </Card>
@@ -2793,6 +2958,154 @@ function SubscriptionSettingsTab() {
         </div>
         </Portal>
       )}
+    </div>
+  );
+}
+
+// Card Donation Section - Stripe card payment for donations
+function CardDonationSection() {
+  const [donationAmount, setDonationAmount] = useState(500); // cents ($5 default)
+  const [donorEmail, setDonorEmail] = useState('');
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [publishableKey, setPublishableKey] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+  const [stripeConfigured, setStripeConfigured] = useState<boolean | null>(null);
+
+  const presetAmounts = [
+    { label: '$5', value: 500 },
+    { label: '$10', value: 1000 },
+    { label: '$25', value: 2500 },
+    { label: '$50', value: 5000 },
+  ];
+
+  // Check if Stripe is configured
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`${config.apiUrl}/stripe/config`);
+        if (res.ok) {
+          const data = await res.json();
+          setStripeConfigured(data.isConfigured && !!data.publishableKey);
+          if (data.publishableKey) setPublishableKey(data.publishableKey);
+        } else {
+          setStripeConfigured(false);
+        }
+      } catch {
+        setStripeConfigured(false);
+      }
+    })();
+  }, []);
+
+  if (stripeConfigured === null) return null; // loading
+  if (!stripeConfigured) return null; // Stripe not configured, hide card option
+
+  const startCardDonation = async () => {
+    setCreating(true);
+    setError(null);
+    try {
+      const res = await fetch(`${config.apiUrl}/stripe/donation/create-payment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: donationAmount,
+          currency: 'usd',
+          donorEmail: donorEmail || undefined,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.message || 'Failed to create donation payment');
+      }
+      const data = await res.json();
+      setClientSecret(data.clientSecret);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  if (success) {
+    return (
+      <div className="bg-green-50 dark:bg-green-950/20 rounded-lg p-4 border border-green-200 dark:border-green-800 text-center">
+        <CheckCircle2 className="h-8 w-8 text-green-500 mx-auto mb-2" />
+        <p className="text-sm font-medium text-green-800 dark:text-green-300">Thank you for your donation!</p>
+        <p className="text-xs text-muted-foreground mt-1">Your support helps keep SmartDuka free for everyone.</p>
+      </div>
+    );
+  }
+
+  if (clientSecret) {
+    return (
+      <div className="border-t border-rose-200 dark:border-rose-800 pt-4">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-sm font-medium">Card Donation: ${(donationAmount / 100).toFixed(2)}</p>
+          <button
+            onClick={() => { setClientSecret(null); setError(null); }}
+            className="text-xs text-muted-foreground hover:underline"
+          >
+            Cancel
+          </button>
+        </div>
+        <StripePaymentForm
+          clientSecret={clientSecret}
+          amount={donationAmount}
+          currency="usd"
+          publishableKey={publishableKey}
+          onSuccess={() => {
+            setSuccess(true);
+            setClientSecret(null);
+          }}
+          onCancel={() => {
+            setClientSecret(null);
+          }}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="border-t border-rose-200 dark:border-rose-800 pt-4 space-y-3">
+      <p className="text-sm font-medium text-foreground">Donate with Card</p>
+      <div className="flex flex-wrap gap-2">
+        {presetAmounts.map((p) => (
+          <button
+            key={p.value}
+            onClick={() => setDonationAmount(p.value)}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+              donationAmount === p.value
+                ? 'bg-primary text-primary-foreground border-primary'
+                : 'bg-background text-foreground border-border hover:bg-muted'
+            }`}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+      <div>
+        <Input
+          type="email"
+          placeholder="Email for receipt (optional)"
+          value={donorEmail}
+          onChange={(e) => setDonorEmail(e.target.value)}
+          className="text-sm"
+        />
+      </div>
+      {error && <p className="text-xs text-red-600">{error}</p>}
+      <Button
+        onClick={startCardDonation}
+        disabled={creating}
+        variant="outline"
+        className="gap-2"
+      >
+        {creating ? (
+          <><Loader2 className="h-4 w-4 animate-spin" /> Processing...</>
+        ) : (
+          <><CreditCard className="h-4 w-4" /> Donate ${(donationAmount / 100).toFixed(2)} with Card</>
+        )}
+      </Button>
     </div>
   );
 }
