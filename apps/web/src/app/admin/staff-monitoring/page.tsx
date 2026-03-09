@@ -105,7 +105,10 @@ export default function StaffMonitoringPage() {
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
 
   const fetchData = useCallback(async () => {
-    if (!token) return;
+    if (!token) {
+      setIsLoading(false);
+      return;
+    }
     
     try {
       setIsLoading(true);

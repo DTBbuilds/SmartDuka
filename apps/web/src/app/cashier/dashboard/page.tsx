@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button } from '@smartduka/ui';
 import { useAuth } from '@/lib/auth-context';
 import { config } from '@/lib/config';
+import { formatMoney } from '@/lib/currency';
 import { useToast } from '@/lib/use-toast';
 import { ToastContainer } from '@/components/toast-container';
 import { AuthGuard } from '@/components/auth-guard';
@@ -234,7 +235,7 @@ function CashierDashboardContent() {
   };
 
   const formatCurrency = (value: number) =>
-    `Ksh ${value.toLocaleString('en-KE', { minimumFractionDigits: 0 })}`;
+    formatMoney(value, shop?.currency);
 
   const formatTime = (timestamp: string) => {
     const date = new Date(timestamp);

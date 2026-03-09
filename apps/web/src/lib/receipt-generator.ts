@@ -1,3 +1,5 @@
+import { formatMoney } from './currency';
+
 export interface ReceiptItem {
   name: string;
   quantity: number;
@@ -34,13 +36,14 @@ export interface ReceiptData {
   loyaltyPointsRedeemed?: number;
   loyaltyPointsBalance?: number;
   loyaltyDiscount?: number;
+  currency?: string;
 }
 
 // Standard thermal printer widths
 export type ReceiptWidth = 32 | 42 | 48; // 58mm = 32 chars, 80mm = 42-48 chars
 
-export function formatCurrency(value: number): string {
-  return `Ksh ${value.toLocaleString("en-KE", { minimumFractionDigits: 0 })}`;
+export function formatCurrency(value: number, currency?: string): string {
+  return formatMoney(value, currency);
 }
 
 // Helper functions for receipt formatting
@@ -73,6 +76,7 @@ function getPaymentMethodLabel(method?: string): string {
  * @param width - Character width (32 for 58mm, 42 for 80mm)
  */
 export function generateReceiptText(receipt: ReceiptData, width: ReceiptWidth = 32): string {
+  const fmt = (v: number) => formatCurrency(v, receipt.currency);
   const lines: string[] = [];
   const shopName = receipt.shopName || 'SmartDuka';
   const divider = '='.repeat(width);
@@ -119,24 +123,24 @@ export function generateReceiptText(receipt: ReceiptData, width: ReceiptWidth = 
     const name = item.name.length > maxNameLen ? item.name.substring(0, maxNameLen - 2) + '..' : item.name;
     lines.push(name);
     // Second line: quantity x price = total (indented)
-    const qtyPrice = `  ${item.quantity}x ${formatCurrency(item.unitPrice)}`;
-    const total = formatCurrency(itemTotal);
+    const qtyPrice = `  ${item.quantity}x ${fmt(item.unitPrice)}`;
+    const total = fmt(itemTotal);
     lines.push(formatLine(qtyPrice, total, width));
   });
   
   // Totals
   lines.push(thinDivider);
-  lines.push(formatLine('Subtotal:', formatCurrency(receipt.subtotal), width));
+  lines.push(formatLine('Subtotal:', fmt(receipt.subtotal), width));
   
   if (receipt.discount && receipt.discount > 0) {
-    lines.push(formatLine('Discount:', `-${formatCurrency(receipt.discount)}`, width));
+    lines.push(formatLine('Discount:', `-${fmt(receipt.discount)}`, width));
   }
   
   const taxPercent = receipt.taxRate ? (receipt.taxRate * 100).toFixed(0) : '16';
-  lines.push(formatLine(`Tax (${taxPercent}%):`, formatCurrency(receipt.tax), width));
+  lines.push(formatLine(`Tax (${taxPercent}%):`, fmt(receipt.tax), width));
   
   lines.push(divider);
-  lines.push(formatLine('TOTAL:', formatCurrency(receipt.total), width));
+  lines.push(formatLine('TOTAL:', fmt(receipt.total), width));
   lines.push(divider);
   
   // Payment info
@@ -148,8 +152,8 @@ export function generateReceiptText(receipt: ReceiptData, width: ReceiptWidth = 
   }
   
   if (receipt.amountTendered && receipt.paymentMethod === 'cash') {
-    lines.push(formatLine('Tendered:', formatCurrency(receipt.amountTendered), width));
-    lines.push(formatLine('Change:', formatCurrency(receipt.change || 0), width));
+    lines.push(formatLine('Tendered:', fmt(receipt.amountTendered), width));
+    lines.push(formatLine('Change:', fmt(receipt.change || 0), width));
   }
   
   // Loyalty Points
@@ -163,7 +167,7 @@ export function generateReceiptText(receipt: ReceiptData, width: ReceiptWidth = 
       lines.push(formatLine('Points Redeemed:', `-${receipt.loyaltyPointsRedeemed}`, width));
     }
     if (receipt.loyaltyDiscount && receipt.loyaltyDiscount > 0) {
-      lines.push(formatLine('Loyalty Discount:', `-${formatCurrency(receipt.loyaltyDiscount)}`, width));
+      lines.push(formatLine('Loyalty Discount:', `-${fmt(receipt.loyaltyDiscount)}`, width));
     }
     if (receipt.loyaltyPointsBalance !== undefined) {
       lines.push(formatLine('Points Balance:', `${receipt.loyaltyPointsBalance}`, width));
@@ -200,6 +204,7 @@ export function generateReceiptText(receipt: ReceiptData, width: ReceiptWidth = 
  * Generate WhatsApp-formatted receipt message
  */
 export function generateWhatsAppMessage(receipt: ReceiptData): string {
+  const fmt = (v: number) => formatCurrency(v, receipt.currency);
   const shopName = receipt.shopName || 'SmartDuka';
   let message = `🧾 *${shopName} Receipt*\n\n`;
   
@@ -217,19 +222,19 @@ export function generateWhatsAppMessage(receipt: ReceiptData): string {
   receipt.items.forEach((item) => {
     const itemTotal = item.quantity * item.unitPrice;
     message += `• ${item.name}\n`;
-    message += `  ${item.quantity} × ${formatCurrency(item.unitPrice)} = *${formatCurrency(itemTotal)}*\n`;
+    message += `  ${item.quantity} × ${fmt(item.unitPrice)} = *${fmt(itemTotal)}*\n`;
   });
   
   message += "\n*━━━ Summary ━━━*\n";
-  message += `Subtotal: ${formatCurrency(receipt.subtotal)}\n`;
+  message += `Subtotal: ${fmt(receipt.subtotal)}\n`;
   
   if (receipt.discount && receipt.discount > 0) {
-    message += `Discount: -${formatCurrency(receipt.discount)}\n`;
+    message += `Discount: -${fmt(receipt.discount)}\n`;
   }
   
   const taxPercent = receipt.taxRate ? (receipt.taxRate * 100).toFixed(0) : '16';
-  message += `Tax (${taxPercent}%): ${formatCurrency(receipt.tax)}\n`;
-  message += `\n💰 *TOTAL: ${formatCurrency(receipt.total)}*\n`;
+  message += `Tax (${taxPercent}%): ${fmt(receipt.tax)}\n`;
+  message += `\n💰 *TOTAL: ${fmt(receipt.total)}*\n`;
   
   if (receipt.paymentMethod) {
     const paymentLabel = getPaymentMethodLabel(receipt.paymentMethod);
@@ -240,8 +245,8 @@ export function generateWhatsAppMessage(receipt: ReceiptData): string {
   }
   
   if (receipt.amountTendered && receipt.paymentMethod === 'cash') {
-    message += `\n💵 Tendered: ${formatCurrency(receipt.amountTendered)}`;
-    message += `\n🔄 Change: ${formatCurrency(receipt.change || 0)}`;
+    message += `\n💵 Tendered: ${fmt(receipt.amountTendered)}`;
+    message += `\n🔄 Change: ${fmt(receipt.change || 0)}`;
   }
 
   if (receipt.loyaltyPointsEarned || receipt.loyaltyPointsRedeemed) {
@@ -253,7 +258,7 @@ export function generateWhatsAppMessage(receipt: ReceiptData): string {
       message += `\n🎁 Points Redeemed: -${receipt.loyaltyPointsRedeemed}`;
     }
     if (receipt.loyaltyDiscount && receipt.loyaltyDiscount > 0) {
-      message += `\n💎 Loyalty Discount: -${formatCurrency(receipt.loyaltyDiscount)}`;
+      message += `\n💎 Loyalty Discount: -${fmt(receipt.loyaltyDiscount)}`;
     }
     if (receipt.loyaltyPointsBalance !== undefined) {
       message += `\n📊 Points Balance: ${receipt.loyaltyPointsBalance}`;
@@ -286,6 +291,7 @@ export function shareViaWhatsApp(receipt: ReceiptData, phoneNumber?: string): vo
  * Generate email-formatted receipt
  */
 export function generateEmailReceipt(receipt: ReceiptData): { subject: string; body: string; html: string } {
+  const fmt = (v: number) => formatCurrency(v, receipt.currency);
   const shopName = receipt.shopName || 'SmartDuka';
   const subject = `Receipt #${receipt.orderNumber} from ${shopName}`;
   
@@ -336,9 +342,9 @@ export function generateEmailReceipt(receipt: ReceiptData): { subject: string; b
       <div class="item">
         <div>
           <div class="item-name">${item.name}</div>
-          <div class="item-details">${item.quantity} × ${formatCurrency(item.unitPrice)}</div>
+          <div class="item-details">${item.quantity} × ${fmt(item.unitPrice)}</div>
         </div>
-        <div style="font-weight: 500;">${formatCurrency(item.quantity * item.unitPrice)}</div>
+        <div style="font-weight: 500;">${fmt(item.quantity * item.unitPrice)}</div>
       </div>
     `).join('')}
   </div>
@@ -346,21 +352,21 @@ export function generateEmailReceipt(receipt: ReceiptData): { subject: string; b
   <div class="totals">
     <div class="total-row">
       <span>Subtotal</span>
-      <span>${formatCurrency(receipt.subtotal)}</span>
+      <span>${fmt(receipt.subtotal)}</span>
     </div>
     ${receipt.discount ? `
       <div class="total-row">
         <span>Discount</span>
-        <span>-${formatCurrency(receipt.discount)}</span>
+        <span>-${fmt(receipt.discount)}</span>
       </div>
     ` : ''}
     <div class="total-row">
       <span>Tax (${receipt.taxRate ? (receipt.taxRate * 100).toFixed(0) : '16'}%)</span>
-      <span>${formatCurrency(receipt.tax)}</span>
+      <span>${fmt(receipt.tax)}</span>
     </div>
     <div class="total-row grand-total">
       <span>TOTAL</span>
-      <span>${formatCurrency(receipt.total)}</span>
+      <span>${fmt(receipt.total)}</span>
     </div>
   </div>
   
@@ -368,8 +374,8 @@ export function generateEmailReceipt(receipt: ReceiptData): { subject: string; b
     <strong>Payment:</strong> ${getPaymentMethodLabel(receipt.paymentMethod)}
     ${receipt.mpesaReceiptNumber ? `<br>M-Pesa Ref: ${receipt.mpesaReceiptNumber}` : ''}
     ${receipt.amountTendered && receipt.paymentMethod === 'cash' ? `
-      <br>Tendered: ${formatCurrency(receipt.amountTendered)}
-      <br>Change: ${formatCurrency(receipt.change || 0)}
+      <br>Tendered: ${fmt(receipt.amountTendered)}
+      <br>Change: ${fmt(receipt.change || 0)}
     ` : ''}
   </div>
   

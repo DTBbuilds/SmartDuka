@@ -31,7 +31,7 @@ export function POSCheckoutBar({
   onOpenScanner,
   onCheckout,
   onOpenReceiptsHistory,
-  formatCurrency = (v) => `Ksh ${v.toLocaleString()}`,
+  formatCurrency = (v) => `KSh ${v.toLocaleString()}`,
 }: POSCheckoutBarProps) {
   return (
     <>

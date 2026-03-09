@@ -20,7 +20,7 @@ import { Portal } from "@/components/portal";
 export default function SettingsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, token, loading } = useAuth();
+  const { user, token, loading, updateShop } = useAuth();
   
   // Get initial tab from URL query parameter
   const initialTab = searchParams.get('tab') || 'shop';
@@ -220,6 +220,10 @@ export default function SettingsPage() {
 
       if (res.ok) {
         setMessage({ type: "success", text: "Shop settings saved successfully!" });
+        // Update auth context so currency change propagates immediately
+        if (shopData.currency) {
+          updateShop({ currency: shopData.currency });
+        }
       } else {
         throw new Error("Failed to save settings");
       }
@@ -539,12 +543,15 @@ export default function SettingsPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="currency">Currency</Label>
-                  <Input
+                  <select
                     id="currency"
-                    value={shopData.currency}
+                    value={shopData.currency || 'KES'}
                     onChange={(e) => setShopData({ ...shopData, currency: e.target.value })}
-                    placeholder="KES"
-                  />
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <option value="KES">KSh - Kenyan Shilling</option>
+                    <option value="AUD">A$ - Australian Dollar</option>
+                  </select>
                 </div>
               </div>
 

@@ -57,6 +57,7 @@ export class AuthService {
     if (dto.shop.address) shopData.address = dto.shop.address;
     if (dto.shop.kraPin) shopData.kraPin = dto.shop.kraPin;
     if (dto.shop.description) shopData.description = dto.shop.description;
+    if (dto.shop.currency) shopData.currency = dto.shop.currency;
 
     const shop = await this.shopsService.create('', shopData);
 

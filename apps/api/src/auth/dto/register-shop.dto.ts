@@ -57,6 +57,11 @@ export class ShopInfoDto {
 
   @IsOptional()
   @IsString()
+  @IsIn(['KES', 'AUD'], { message: 'Currency must be KES or AUD' })
+  currency?: string;
+
+  @IsOptional()
+  @IsString()
   subscriptionPlanCode?: string;
 
   @IsOptional()

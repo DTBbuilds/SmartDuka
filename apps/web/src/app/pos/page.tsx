@@ -24,6 +24,7 @@ import {
   Textarea,
 } from "@smartduka/ui";
 import { AuthGuard } from "@/components/auth-guard";
+import { formatMoney } from "@/lib/currency";
 import { ShiftGuard } from "@/components/shift-guard";
 import {
   Check,
@@ -130,9 +131,6 @@ const paymentOptions = [
   { id: "qr", label: "Pay by QR", icon: QrCode },
 ];
 
-const formatCurrency = (value: number) =>
-  `Ksh ${value.toLocaleString("en-KE", { minimumFractionDigits: 0 })}`;
-
 function POSContent() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
@@ -199,6 +197,7 @@ function POSContent() {
   const BARCODE_DEBOUNCE_MS = 1500; // Prevent same barcode within 1.5 seconds
 
   const { user, shop, token, logout } = useAuth();
+  const formatCurrency = useCallback((value: number) => formatMoney(value, shop?.currency), [shop?.currency]);
   const { currentBranch } = useBranch();
   const { toasts, toast, dismiss } = useToast();
   const { favorites, toggleFavorite, removeFavorite: removeFromFavorites, clearAll: clearFavorites } = useFavoriteProducts();
@@ -1123,6 +1122,7 @@ function POSContent() {
       shopEmail: receiptSettings.shopEmail,
       shopTaxPin: receiptSettings.shopTaxPin,
       footerMessage: receiptSettings.footerMessage || 'Thank you for your purchase!',
+      currency: shop?.currency,
       // Loyalty points info
       loyaltyPointsRedeemed: loyaltyPointsToRedeem > 0 ? loyaltyPointsToRedeem : undefined,
       loyaltyDiscount: loyaltyPointsToRedeem > 0 ? loyaltyPointsToRedeem : undefined,
@@ -1308,6 +1308,7 @@ function POSContent() {
         shopEmail: receiptSettings.shopEmail,
         shopTaxPin: receiptSettings.shopTaxPin,
         footerMessage: receiptSettings.footerMessage || 'Thank you for your purchase!',
+        currency: shop?.currency,
         // Loyalty points info
         loyaltyPointsEarned: loyaltyEarned > 0 ? loyaltyEarned : undefined,
         loyaltyPointsRedeemed: loyaltyPointsToRedeem > 0 ? loyaltyPointsToRedeem : undefined,
@@ -1632,7 +1633,7 @@ function POSContent() {
             )
           );
           itemDiscount.close();
-          toast({ type: 'success', title: 'Discount applied', message: `Ksh ${discountAmount.toLocaleString()} discount` });
+          toast({ type: 'success', title: 'Discount applied', message: `${formatCurrency(discountAmount)} discount` });
         }}
         onCancel={itemDiscount.close}
       />
@@ -2016,6 +2017,7 @@ function POSContent() {
         itemCount={cartItems.reduce((sum, item) => sum + item.quantity, 0)}
         customerName={customerName || undefined}
         mpesaConfigStatus={mpesaConfigStatus}
+        shopCurrency={shop?.currency}
         onConfirm={handlePaymentMethodConfirm}
         onCancel={() => setShowPaymentMethodModal(false)}
       />

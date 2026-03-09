@@ -1,7 +1,7 @@
 'use client';
 
 import { config } from '@/lib/config';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button, Badge } from '@smartduka/ui';
 import { useAuth } from '@/lib/auth-context';
@@ -9,7 +9,8 @@ import { useToast } from '@/lib/use-toast';
 import { ToastContainer } from '@/components/toast-container';
 import { AuthGuard } from '@/components/auth-guard';
 import { CashierStatusBadge } from '@/components/cashier-status-badge';
-import { Users, Activity, TrendingUp, RefreshCw, Eye } from 'lucide-react';
+import { formatMoney } from '@/lib/currency';
+import { Users, Activity, RefreshCw, Eye, Loader2 } from 'lucide-react';
 
 interface Cashier {
   _id: string;
@@ -48,20 +49,11 @@ function AdminMonitoringContent() {
   const [loading, setLoading] = useState(true);
   const [autoRefresh, setAutoRefresh] = useState(true);
 
-  useEffect(() => {
-    if (shop?.id && token) {
-      loadMonitoringData();
+  const loadMonitoringData = useCallback(async () => {
+    if (!token || !user || !shop?.id) {
+      setLoading(false);
+      return;
     }
-    
-    // Auto-refresh every 30 seconds if enabled
-    const interval = autoRefresh && shop?.id ? setInterval(loadMonitoringData, 30000) : null;
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [token, autoRefresh, shop?.id]);
-
-  const loadMonitoringData = async () => {
-    if (!token || !user || !shop?.id) return;
 
     try {
       setLoading(true);
@@ -85,18 +77,13 @@ function AdminMonitoringContent() {
 
         // Merge cashier data with sales stats
         const metricsData: CashierMetrics[] = cashiersData.map((cashier: any) => {
-          // Find matching sales stats by cashier ID
           const stats = salesStats.find((s: any) => s.userId === cashier._id) || {
             todaySales: 0,
             todayTransactions: 0,
             totalSales: 0,
             totalTransactions: 0,
           };
-
-          // Determine online status based on recent activity
-          // For now, mark as offline - could be enhanced with real-time status tracking
-          let status: 'online' | 'idle' | 'offline' = 'offline';
-          
+          const status: 'online' | 'idle' | 'offline' = 'offline';
           return {
             cashierId: cashier._id,
             cashierName: cashier.name,
@@ -104,32 +91,42 @@ function AdminMonitoringContent() {
             lastActivity: new Date().toISOString(),
             todaySales: stats.todaySales || 0,
             transactionCount: stats.todayTransactions || 0,
-            averageTransaction: stats.todayTransactions > 0 
-              ? Math.round(stats.todaySales / stats.todayTransactions) 
+            averageTransaction: stats.todayTransactions > 0
+              ? Math.round(stats.todaySales / stats.todayTransactions)
               : 0,
           };
         });
         setMetrics(metricsData);
       }
 
-      // Get activity log
-      const activityRes = await fetch(`${config.apiUrl}/activity/shop?limit=20`, {
+      // Get activity log — backend returns raw array for /activity/shop
+      const activityRes = await fetch(`${config.apiUrl}/activity/shop?limit=50`, {
         headers,
       });
 
       if (activityRes.ok) {
         const activityData = await activityRes.json();
-        setActivityLog(activityData);
+        setActivityLog(Array.isArray(activityData) ? activityData : (activityData.data || []));
       }
     } catch (err: any) {
       toast({ type: 'error', title: 'Load failed', message: err?.message });
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, user, shop?.id, shop?.currency, toast]);
 
-  const formatCurrency = (value: number) =>
-    `Ksh ${value.toLocaleString('en-KE', { minimumFractionDigits: 0 })}`;
+  useEffect(() => {
+    loadMonitoringData();
+  }, [loadMonitoringData]);
+
+  // Auto-refresh every 30 seconds if enabled
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const interval = setInterval(loadMonitoringData, 30000);
+    return () => clearInterval(interval);
+  }, [autoRefresh, loadMonitoringData]);
+
+  const formatCurrency = (value: number) => formatMoney(value, shop?.currency);
 
   const formatTime = (timestamp: string) => {
     const date = new Date(timestamp);
@@ -146,32 +143,33 @@ function AdminMonitoringContent() {
       <ToastContainer toasts={toasts} onDismiss={dismiss} />
       <div className="container">
         {/* Header */}
-        <div className="mb-8 flex items-center justify-between">
+        <div className="mb-6 space-y-3">
           <div>
             {shop && (
-              <p className="text-xs font-medium text-primary mb-2">
+              <p className="text-xs font-medium text-primary mb-1">
                 {shop.name} • Admin Monitoring
               </p>
             )}
-            <h1 className="text-3xl font-bold">Cashier Monitoring</h1>
-            <p className="text-muted-foreground">Real-time activity and performance tracking</p>
+            <h1 className="text-2xl sm:text-3xl font-bold">Cashier Monitoring</h1>
+            <p className="text-sm text-muted-foreground">Real-time activity and performance tracking</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
               size="sm"
               onClick={() => setAutoRefresh(!autoRefresh)}
-              className={autoRefresh ? 'bg-green-50 border-green-300' : ''}
+              className={`text-xs gap-1.5 ${autoRefresh ? 'bg-green-50 border-green-300 text-green-700' : 'bg-red-50 border-red-300 text-red-700'}`}
             >
-              {autoRefresh ? '✓ Auto-refresh' : 'Auto-refresh off'}
+              {autoRefresh ? '● Auto-refresh on' : '○ Auto-refresh off'}
             </Button>
             <Button
               variant="outline"
               size="sm"
               onClick={loadMonitoringData}
-              className="gap-2"
+              disabled={loading}
+              className="gap-1.5 text-xs"
             >
-              <RefreshCw className="h-4 w-4" />
+              {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
               Refresh
             </Button>
           </div>

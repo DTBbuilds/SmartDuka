@@ -27,6 +27,7 @@ import {
 import { StripePaymentModal } from './stripe-payment-form';
 import { useAuth } from '@/lib/auth-context';
 import { config } from '@/lib/config';
+import { formatMoney, toCents, isAmountSufficientForCard as checkCardMinimum, formatCardMinimum, getCurrencyConfig } from '@/lib/currency';
 
 export interface PaymentOption {
   id: string;
@@ -83,6 +84,7 @@ interface PaymentMethodModalProps {
   customerPhone?: string;
   paymentOptions?: PaymentOption[];
   mpesaConfigStatus?: MpesaConfigStatus | null;
+  shopCurrency?: string;
   onConfirm: (paymentMethod: string, amountTendered?: number, phoneNumber?: string) => void;
   onCancel: () => void;
 }
@@ -110,27 +112,6 @@ const formatPhoneDisplay = (phone: string) => {
   return phone;
 };
 
-/**
- * Minimum amount for card payments in KES (not cents)
- * Stripe requires minimum amounts to cover processing fees
- * Note: total prop is passed in KES, not cents
- */
-const CARD_MINIMUM_AMOUNT_KES = 50; // KSh 50.00
-
-/**
- * Check if amount meets minimum for card payment
- * @param amount - Amount in KES (not cents)
- */
-const isAmountSufficientForCard = (amount: number): boolean => {
-  return amount >= CARD_MINIMUM_AMOUNT_KES;
-};
-
-/**
- * Format minimum amount for display
- */
-const formatMinimumAmount = (): string => {
-  return `Ksh ${CARD_MINIMUM_AMOUNT_KES}`;
-};
 
 export function PaymentMethodModal({
   isOpen,
@@ -140,10 +121,12 @@ export function PaymentMethodModal({
   customerPhone: initialPhone,
   paymentOptions = defaultPaymentOptions,
   mpesaConfigStatus,
+  shopCurrency,
   onConfirm,
   onCancel,
 }: PaymentMethodModalProps) {
   const { token } = useAuth();
+  const currencyConfig = getCurrencyConfig(shopCurrency);
   const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
   const [amountTendered, setAmountTendered] = useState<number>(0);
   const [phoneNumber, setPhoneNumber] = useState<string>(initialPhone || '');
@@ -158,8 +141,7 @@ export function PaymentMethodModal({
   const [isCreatingPaymentIntent, setIsCreatingPaymentIntent] = useState(false);
   const [stripeError, setStripeError] = useState<string | null>(null);
 
-  const formatCurrency = (value: number) =>
-    `Ksh ${value.toLocaleString('en-KE', { minimumFractionDigits: 0 })}`;
+  const formatCurrency = (value: number) => formatMoney(value, shopCurrency);
 
   const handleMethodSelect = async (methodId: string) => {
     setSelectedMethod(methodId);
@@ -195,8 +177,8 @@ export function PaymentMethodModal({
       setSendMoneyConfirmed(false);
     } else if (methodId === 'stripe' || methodId === 'card') {
       // Check minimum amount for card payments
-      if (!isAmountSufficientForCard(total)) {
-        setStripeError(`Amount too small for card payment. Minimum is ${formatMinimumAmount()}. Please use Cash or M-Pesa instead.`);
+      if (!checkCardMinimum(total, shopCurrency)) {
+        setStripeError(`Amount too small for card payment. Minimum is ${formatCardMinimum(shopCurrency)}. Please use cash or M-Pesa for smaller amounts.`);
         setStep('card-input');
         return;
       }
@@ -241,8 +223,8 @@ export function PaymentMethodModal({
         body: JSON.stringify({
           orderId: `temp-${Date.now()}`,
           orderNumber: `POS-${Date.now()}`,
-          amount: total,
-          currency: 'kes',
+          amount: toCents(total, shopCurrency), // Convert to cents (smallest unit) for Stripe
+          currency: currencyConfig.stripeCurrency,
           customerName: customerName || 'Walk-in Customer',
           description: `POS Payment - ${itemCount} item(s)`,
         }),
@@ -594,8 +576,8 @@ export function PaymentMethodModal({
             <StripePaymentModal
               isOpen={!!stripeClientSecret && !isCreatingPaymentIntent}
               clientSecret={stripeClientSecret}
-              amount={Math.round(total * 100)}
-              currency="kes"
+              amount={toCents(total, shopCurrency)}
+              currency={currencyConfig.stripeCurrency}
               publishableKey={stripePublishableKey}
               title="Complete Card Payment"
               description={customerName ? `Payment for ${customerName}` : undefined}

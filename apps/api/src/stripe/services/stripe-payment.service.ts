@@ -104,10 +104,12 @@ export class StripePaymentService {
     });
 
     // Save to local database for tracking
+    // orderId may be a temp placeholder (e.g. 'temp-123') — only store as ObjectId if valid
+    const isValidObjectId = /^[a-fA-F0-9]{24}$/.test(params.orderId);
     const payment = new this.paymentModel({
       stripePaymentIntentId: paymentIntent.id,
       shopId: new Types.ObjectId(params.shopId),
-      orderId: new Types.ObjectId(params.orderId),
+      ...(isValidObjectId && { orderId: new Types.ObjectId(params.orderId) }),
       paymentType: StripePaymentType.POS_SALE,
       amount: params.amount,
       currency,

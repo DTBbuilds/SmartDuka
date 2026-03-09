@@ -70,7 +70,8 @@ export class StripeService implements OnModuleInit {
     usd: 50,   // $0.50
     gbp: 30,   // £0.30
     eur: 50,   // €0.50
-    kes: 5000, // KSh 50.00 (conservative estimate based on GBP conversion)
+    kes: 5000, // KSh 50.00
+    aud: 50,   // A$0.50
     default: 50,
   };
 
@@ -98,7 +99,7 @@ export class StripeService implements OnModuleInit {
    */
   private formatAmount(amount: number, currency: string): string {
     const divisor = currency === 'kes' ? 100 : 100;
-    const symbols: Record<string, string> = { usd: '$', gbp: '£', eur: '€', kes: 'KSh ' };
+    const symbols: Record<string, string> = { usd: '$', gbp: '£', eur: '€', kes: 'KSh ', aud: 'A$' };
     const symbol = symbols[currency] || '';
     return `${symbol}${(amount / divisor).toFixed(2)}`;
   }

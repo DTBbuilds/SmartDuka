@@ -139,6 +139,7 @@ function RegisterShopContent() {
     address: "",
     kraPin: "",
     description: "",
+    currency: "KES",
   });
   
   const [adminData, setAdminData] = useState({
@@ -812,6 +813,20 @@ function RegisterShopContent() {
                     onChange={(e) => setShopData({ ...shopData, address: e.target.value })}
                     className="mt-1.5"
                   />
+                </div>
+
+                {/* Currency */}
+                <div>
+                  <Label htmlFor="currency">Currency</Label>
+                  <select
+                    id="currency"
+                    value={shopData.currency}
+                    onChange={(e) => setShopData({ ...shopData, currency: e.target.value })}
+                    className="mt-1.5 w-full h-10 px-3 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <option value="KES">KSh - Kenyan Shilling</option>
+                    <option value="AUD">A$ - Australian Dollar</option>
+                  </select>
                 </div>
               </div>
 

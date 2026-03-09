@@ -24,6 +24,7 @@ export type Shop = {
   status: 'pending' | 'verified' | 'active' | 'suspended' | 'rejected';
   email?: string;
   rejectionReason?: string;
+  currency?: string;
 };
 
 // Demo mode key for localStorage
@@ -519,6 +520,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       id: shopData?.id || decoded.shopId,
       name: shopData?.name || 'Shop',
       status: shopData?.status || 'active',
+      currency: shopData?.currency || 'KES',
     };
     setShop(shopInfo);
 
@@ -565,6 +567,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           status: updatedShop.status,
           email: updatedShop.email,
           rejectionReason: updatedShop.rejectionReason,
+          currency: updatedShop.currency || 'KES',
         };
         
         setShop(newShop);

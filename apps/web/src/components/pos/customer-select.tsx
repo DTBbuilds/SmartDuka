@@ -50,6 +50,38 @@ export function CustomerSelect({
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollableRef = useRef<HTMLDivElement>(null);
 
+  // Track trigger position for portal dropdown
+  // NOTE: These hooks MUST be above the early return for selectedCustomer
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
+
+  // Update dropdown position when open
+  useEffect(() => {
+    if (!isOpen || !triggerRef.current) return;
+    const updatePosition = () => {
+      const rect = triggerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const gap = 4;
+      const bottomMargin = 16; // stay above taskbar
+      const availableBelow = window.innerHeight - rect.bottom - gap - bottomMargin;
+      setDropdownStyle({
+        position: 'fixed',
+        top: rect.bottom + gap,
+        left: rect.left,
+        width: rect.width,
+        maxHeight: Math.max(200, availableBelow),
+        zIndex: 9999,
+      });
+    };
+    updatePosition();
+    window.addEventListener('scroll', updatePosition, true);
+    window.addEventListener('resize', updatePosition);
+    return () => {
+      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [isOpen]);
+
   // Auto-scroll to bottom when Quick Register opens so buttons are visible
   useEffect(() => {
     if (showQuickRegister && scrollableRef.current) {
@@ -250,37 +282,6 @@ export function CustomerSelect({
       </div>
     );
   }
-
-  // Track trigger position for portal dropdown
-  const triggerRef = useRef<HTMLDivElement>(null);
-  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
-
-  // Update dropdown position when open
-  useEffect(() => {
-    if (!isOpen || !triggerRef.current) return;
-    const updatePosition = () => {
-      const rect = triggerRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      const gap = 4;
-      const bottomMargin = 16; // stay above taskbar
-      const availableBelow = window.innerHeight - rect.bottom - gap - bottomMargin;
-      setDropdownStyle({
-        position: 'fixed',
-        top: rect.bottom + gap,
-        left: rect.left,
-        width: rect.width,
-        maxHeight: Math.max(200, availableBelow),
-        zIndex: 9999,
-      });
-    };
-    updatePosition();
-    window.addEventListener('scroll', updatePosition, true);
-    window.addEventListener('resize', updatePosition);
-    return () => {
-      window.removeEventListener('scroll', updatePosition, true);
-      window.removeEventListener('resize', updatePosition);
-    };
-  }, [isOpen]);
 
   // Customer search/select dropdown
   return (

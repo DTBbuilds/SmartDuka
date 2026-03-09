@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { formatMoney } from '@/lib/currency';
 import {
   Badge,
   Button,
@@ -395,7 +396,7 @@ function AdminDashboardContent() {
                   </div>
                   <div>
                     <p className="font-bold text-lg text-green-700 dark:text-green-400">
-                      Ksh {(salesStats?.todayRevenue || 0).toLocaleString()}
+                      {formatMoney(salesStats?.todayRevenue || 0, shop?.currency)}
                     </p>
                     <p className="text-xs text-muted-foreground">Today's Sales</p>
                   </div>
@@ -466,7 +467,7 @@ function AdminDashboardContent() {
                   </div>
                   <div>
                     <p className="font-bold text-lg">
-                      Ksh {(salesStats?.totalRevenue || 0).toLocaleString()}
+                      {formatMoney(salesStats?.totalRevenue || 0, shop?.currency)}
                     </p>
                     <p className="text-xs text-muted-foreground">Total Revenue</p>
                   </div>
@@ -580,7 +581,7 @@ function AdminDashboardContent() {
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Today's Revenue</span>
                   <span className="font-semibold text-green-600">
-                    Ksh {(salesStats?.todayRevenue || 0).toLocaleString()}
+                    {formatMoney(salesStats?.todayRevenue || 0, shop?.currency)}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
@@ -590,7 +591,7 @@ function AdminDashboardContent() {
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Total Revenue</span>
                   <span className="font-semibold">
-                    Ksh {(salesStats?.totalRevenue || 0).toLocaleString()}
+                    {formatMoney(salesStats?.totalRevenue || 0, shop?.currency)}
                   </span>
                 </div>
                 <Button 

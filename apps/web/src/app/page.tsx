@@ -9,9 +9,12 @@ import {
   ShoppingCart, Smartphone, Package, BarChart3, Users, CheckCircle, ArrowRight, 
   Shield, Zap, Camera, Receipt, Brain, Wallet, Phone, Mail, Clock, 
   Sparkles, TrendingUp, ChevronRight, Star, CreditCard, Building2,
-  Heart, Globe, Lock, Code
+  Heart, Globe, Lock, Code, Loader2
 } from 'lucide-react';
 import { ThemeToggleOutline } from '@/components/theme-toggle';
+import { StripePaymentForm } from '@/components/stripe-payment-form';
+import { Button, Input } from '@smartduka/ui';
+import { config } from '@/lib/config';
 
 export default function Home() {
   const router = useRouter();
@@ -338,7 +341,7 @@ export default function Home() {
             SmartDuka is built and maintained by a small team. If you find it valuable, 
             consider making a voluntary donation to help us keep it free and keep improving.
           </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-6">
             <a 
               href="https://wa.me/254729983567?text=Hello%20SmartDuka%2C%20I%20would%20like%20to%20make%20a%20donation%20to%20support%20the%20project" 
               target="_blank"
@@ -352,6 +355,8 @@ export default function Home() {
               Send to <strong>0729 983 567</strong> (SmartDuka)
             </p>
           </div>
+          {/* Card Donation Option */}
+          <HomepageCardDonation />
           <p className="text-xs text-muted-foreground mt-4">
             Donations are completely voluntary and do not unlock any additional features.
           </p>
@@ -548,6 +553,174 @@ export default function Home() {
           </div>
         </div>
       </footer>
+    </div>
+  );
+}
+
+// Card Donation Section for Homepage - no auth required
+function HomepageCardDonation() {
+  const [donationAmount, setDonationAmount] = useState(500); // cents ($5 default)
+  const [donorEmail, setDonorEmail] = useState('');
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [publishableKey, setPublishableKey] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+  const [stripeConfigured, setStripeConfigured] = useState<boolean | null>(null);
+  const [showCardForm, setShowCardForm] = useState(false);
+
+  const presetAmounts = [
+    { label: '$5', value: 500 },
+    { label: '$10', value: 1000 },
+    { label: '$25', value: 2500 },
+    { label: '$50', value: 5000 },
+  ];
+
+  // Check if Stripe is configured
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`${config.apiUrl}/stripe/config`);
+        if (res.ok) {
+          const data = await res.json();
+          setStripeConfigured(data.isConfigured && !!data.publishableKey);
+          if (data.publishableKey) setPublishableKey(data.publishableKey);
+        } else {
+          setStripeConfigured(false);
+        }
+      } catch {
+        setStripeConfigured(false);
+      }
+    })();
+  }, []);
+
+  if (stripeConfigured === null || !stripeConfigured) return null;
+
+  const startCardDonation = async () => {
+    setCreating(true);
+    setError(null);
+    try {
+      const res = await fetch(`${config.apiUrl}/stripe/donation/create-payment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: donationAmount,
+          currency: 'usd',
+          donorEmail: donorEmail || undefined,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.message || 'Failed to create donation payment');
+      }
+      const data = await res.json();
+      setClientSecret(data.clientSecret);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  if (success) {
+    return (
+      <div className="max-w-md mx-auto bg-green-50 dark:bg-green-950/20 rounded-xl p-6 border border-green-200 dark:border-green-800 text-center">
+        <CheckCircle className="h-10 w-10 text-green-500 mx-auto mb-3" />
+        <p className="text-base font-semibold text-green-800 dark:text-green-300">Thank you for your donation!</p>
+        <p className="text-sm text-muted-foreground mt-1">Your support helps keep SmartDuka free for everyone.</p>
+      </div>
+    );
+  }
+
+  if (clientSecret) {
+    return (
+      <div className="max-w-md mx-auto bg-background rounded-xl border shadow-lg p-6 text-left">
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-sm font-semibold">Card Donation: ${(donationAmount / 100).toFixed(2)}</p>
+          <button
+            onClick={() => { setClientSecret(null); setError(null); }}
+            className="text-xs text-muted-foreground hover:underline"
+          >
+            Cancel
+          </button>
+        </div>
+        <StripePaymentForm
+          clientSecret={clientSecret}
+          amount={donationAmount}
+          currency="usd"
+          publishableKey={publishableKey}
+          onSuccess={() => {
+            setSuccess(true);
+            setClientSecret(null);
+          }}
+          onCancel={() => {
+            setClientSecret(null);
+          }}
+        />
+      </div>
+    );
+  }
+
+  if (!showCardForm) {
+    return (
+      <button
+        onClick={() => setShowCardForm(true)}
+        className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors shadow-lg"
+      >
+        <CreditCard className="h-5 w-5" />
+        Donate via Card
+      </button>
+    );
+  }
+
+  return (
+    <div className="max-w-md mx-auto bg-background rounded-xl border shadow-lg p-6 space-y-4 text-left">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-semibold text-foreground flex items-center gap-2">
+          <CreditCard className="h-4 w-4" />
+          Donate with Card
+        </p>
+        <button
+          onClick={() => setShowCardForm(false)}
+          className="text-xs text-muted-foreground hover:underline"
+        >
+          Close
+        </button>
+      </div>
+      <div className="flex flex-wrap gap-2 justify-center">
+        {presetAmounts.map((p) => (
+          <button
+            key={p.value}
+            onClick={() => setDonationAmount(p.value)}
+            className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
+              donationAmount === p.value
+                ? 'bg-primary text-primary-foreground border-primary'
+                : 'bg-background text-foreground border-border hover:bg-muted'
+            }`}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+      <Input
+        type="email"
+        placeholder="Email for receipt (optional)"
+        value={donorEmail}
+        onChange={(e) => setDonorEmail(e.target.value)}
+        className="text-sm"
+      />
+      {error && <p className="text-xs text-red-600">{error}</p>}
+      <Button
+        onClick={startCardDonation}
+        disabled={creating}
+        className="w-full gap-2"
+      >
+        {creating ? (
+          <><Loader2 className="h-4 w-4 animate-spin" /> Processing...</>
+        ) : (
+          <><CreditCard className="h-4 w-4" /> Donate ${(donationAmount / 100).toFixed(2)}</>
+        )}
+      </Button>
     </div>
   );
 }
