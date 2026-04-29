@@ -28,7 +28,7 @@ export class StripeService implements OnModuleInit {
   onModuleInit() {
     if (this.apiKey) {
       this.stripe = new Stripe(this.apiKey, {
-        apiVersion: '2025-11-17.clover',
+        apiVersion: '2026-02-25.clover',
         typescript: true,
       });
       this.isConfigured = true;
