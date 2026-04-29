@@ -13,6 +13,7 @@ import { RegisterShopDto } from './dto/register-shop.dto';
 import { LoginDto } from './dto/login.dto';
 import { TokenService } from './token.service';
 import { OtpService } from './services/otp.service';
+import { LoginAttemptService } from './services/login-attempt.service';
 import { EmailService } from '../notifications/email.service';
 import * as bcryptjs from 'bcryptjs';
 
@@ -32,6 +33,7 @@ export class AuthService {
     @Optional() private readonly subscriptionsService?: SubscriptionsService,
     @Optional() private readonly otpService?: OtpService,
     @Optional() private readonly emailService?: EmailService,
+    @Optional() private readonly loginAttemptService?: LoginAttemptService,
   ) {}
 
   async registerShop(dto: RegisterShopDto) {
@@ -198,6 +200,9 @@ export class AuthService {
   }
 
   async login(dto: LoginDto, ipAddress?: string, userAgent?: string) {
+    // Enforce account lockout BEFORE credential check
+    this.loginAttemptService?.ensureNotLocked(dto.email);
+
     // Check if this is a super admin login
     if (dto.role === 'super_admin') {
       return this.loginSuperAdmin(dto);
@@ -207,6 +212,7 @@ export class AuthService {
     const user = await this.usersService.findByEmail(dto.email);
     if (!user) {
       console.log(`[Auth] Login failed: No user found with email ${dto.email}`);
+      this.loginAttemptService?.recordFailure(dto.email);
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -214,8 +220,12 @@ export class AuthService {
     const isValid = await this.usersService.validatePassword(user, dto.password);
     if (!isValid) {
       console.log(`[Auth] Login failed: Invalid password for user ${dto.email}`);
+      this.loginAttemptService?.recordFailure(dto.email);
       throw new UnauthorizedException('Invalid credentials');
     }
+
+    // Successful credential validation — clear failed attempts
+    this.loginAttemptService?.recordSuccess(dto.email);
 
     // Check if user is active
     if (user.status !== 'active') {
@@ -314,7 +324,10 @@ export class AuthService {
 
   async loginSuperAdmin(dto: LoginDto) {
     console.log('[SuperAdmin Login] Attempting login for:', dto.email);
-    
+
+    // Enforce account lockout BEFORE credential check
+    this.loginAttemptService?.ensureNotLocked(dto.email);
+
     // Check if super admin model is available
     if (!this.superAdminModel) {
       console.error('[SuperAdmin Login] Model not available');
@@ -332,6 +345,7 @@ export class AuthService {
     
     if (!superAdmin) {
       console.error('[SuperAdmin Login] User not found:', dto.email);
+      this.loginAttemptService?.recordFailure(dto.email);
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -341,13 +355,18 @@ export class AuthService {
       isValid = await bcryptjs.compare(dto.password, superAdmin.passwordHash);
     } catch (error) {
       console.error('[SuperAdmin Login] Password comparison error:', error);
+      this.loginAttemptService?.recordFailure(dto.email);
       throw new UnauthorizedException('Invalid credentials');
     }
 
     if (!isValid) {
       console.error('[SuperAdmin Login] Invalid password');
+      this.loginAttemptService?.recordFailure(dto.email);
       throw new UnauthorizedException('Invalid credentials');
     }
+
+    // Successful credential validation — clear failed attempts
+    this.loginAttemptService?.recordSuccess(dto.email);
 
     // Check if super admin is active
     if (superAdmin.status !== 'active') {
@@ -1039,8 +1058,8 @@ export class AuthService {
     // Verify token and get user ID
     const userId = await this.tokenService.verifyPasswordResetToken(token);
 
-    // Hash new password
-    const hashedPassword = await bcryptjs.hash(newPassword, 10);
+    // Hash new password (bcrypt cost 12 - OWASP 2024 minimum)
+    const hashedPassword = await bcryptjs.hash(newPassword, 12);
 
     // Update user password
     await this.usersService.updatePassword(userId, hashedPassword);
@@ -1090,6 +1109,9 @@ export class AuthService {
    * If email is not verified, returns requiresEmailVerification instead of tokens
    */
   async loginWithTokens(dto: LoginDto, ipAddress?: string, userAgent?: string) {
+    // Enforce account lockout BEFORE credential check
+    this.loginAttemptService?.ensureNotLocked(dto.email);
+
     // Check if this is a super admin login
     if (dto.role === 'super_admin') {
       return this.loginSuperAdminWithTokens(dto, ipAddress, userAgent);
@@ -1098,14 +1120,19 @@ export class AuthService {
     // Find user by email
     const user = await this.usersService.findByEmail(dto.email);
     if (!user) {
+      this.loginAttemptService?.recordFailure(dto.email);
       throw new UnauthorizedException('Invalid credentials');
     }
 
     // Validate password
     const isValid = await this.usersService.validatePassword(user, dto.password);
     if (!isValid) {
+      this.loginAttemptService?.recordFailure(dto.email);
       throw new UnauthorizedException('Invalid credentials');
     }
+
+    // Successful credential validation — clear failed attempts
+    this.loginAttemptService?.recordSuccess(dto.email);
 
     // Check if user is active
     if (user.status !== 'active') {
@@ -1381,6 +1408,10 @@ export class AuthService {
    * Super admin login with tokens
    */
   private async loginSuperAdminWithTokens(dto: LoginDto, ipAddress?: string, userAgent?: string) {
+    // Lockout already checked by caller (loginWithTokens), but double-check
+    // for any direct callers in the future.
+    this.loginAttemptService?.ensureNotLocked(dto.email);
+
     if (!this.superAdminModel) {
       throw new UnauthorizedException('Super admin authentication not available');
     }
@@ -1390,13 +1421,18 @@ export class AuthService {
     });
     
     if (!superAdmin) {
+      this.loginAttemptService?.recordFailure(dto.email);
       throw new UnauthorizedException('Invalid credentials');
     }
 
     const isValid = await bcryptjs.compare(dto.password, superAdmin.passwordHash);
     if (!isValid) {
+      this.loginAttemptService?.recordFailure(dto.email);
       throw new UnauthorizedException('Invalid credentials');
     }
+
+    // Successful credential validation — clear failed attempts
+    this.loginAttemptService?.recordSuccess(dto.email);
 
     if (superAdmin.status !== 'active') {
       throw new UnauthorizedException('Account is disabled');

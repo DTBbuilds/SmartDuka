@@ -25,6 +25,7 @@ import { Session, SessionSchema } from './schemas/session.schema';
 import { Otp, OtpSchema } from './schemas/otp.schema';
 import { CookieService } from './services/cookie.service';
 import { CsrfService } from './services/csrf.service';
+import { LoginAttemptService } from './services/login-attempt.service';
 import { CsrfGuard } from './guards/csrf.guard';
 import { RefreshTokenGuard } from './guards/refresh-token.guard';
 import { JwtCookieAuthGuard } from './guards/jwt-cookie-auth.guard';
@@ -79,6 +80,7 @@ import { JwtCookieAuthGuard } from './guards/jwt-cookie-auth.guard';
     OtpService,
     CookieService,
     CsrfService,
+    LoginAttemptService,
     JwtStrategy,
     GoogleStrategy,
     SubscriptionStatusGuard,
@@ -93,6 +95,7 @@ import { JwtCookieAuthGuard } from './guards/jwt-cookie-auth.guard';
     OtpService,
     CookieService,
     CsrfService,
+    LoginAttemptService,
     SubscriptionStatusGuard,
     CsrfGuard,
     RefreshTokenGuard,

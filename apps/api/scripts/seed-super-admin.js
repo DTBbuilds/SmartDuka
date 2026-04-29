@@ -4,15 +4,18 @@
  * Run: node scripts/seed-super-admin.js
  */
 
+const dns = require('dns');
+dns.setServers(['8.8.8.8', '1.1.1.1']); // Force public DNS for SRV lookups
+
 const mongoose = require('mongoose');
 const bcryptjs = require('bcryptjs');
 
 // MongoDB URI
-const MONGODB_URI = 'mongodb+srv://dontech1914_db_user:greatful%40dtb@smartduka.0vkcqh5.mongodb.net/smartduka?appName=smartduka';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://smartduka:xpa0zq1w2rKaF9Mj@cluster0.31fjvb8.mongodb.net/smartduka?retryWrites=true&w=majority&appName=Cluster0';
 
 // Super Admin credentials
 const SUPER_ADMIN_EMAIL = 'smartduka@admin.auth';
-const SUPER_ADMIN_PASSWORD = 'duka-smart';
+const SUPER_ADMIN_PASSWORD = 'smart@duka2';
 
 // Super Admin Schema - use 'super_admins' collection to match API
 const SuperAdminSchema = new mongoose.Schema({

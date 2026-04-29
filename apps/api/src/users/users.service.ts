@@ -23,7 +23,8 @@ export class UsersService {
     }
 
     const { password, ...rest } = dto as any;
-    const passwordHash = await bcrypt.hash(password, 10);
+    // bcrypt cost 12 (OWASP 2024 minimum). Existing 10-round hashes still verify (forward-compatible).
+    const passwordHash = await bcrypt.hash(password, 12);
     
     // Convert empty phone to null to avoid duplicate key errors
     const userData = {
@@ -291,7 +292,8 @@ export class UsersService {
       throw new BadRequestException('Current password is incorrect');
     }
 
-    const newHash = await bcrypt.hash(newPassword, 10);
+    // bcrypt cost 12 (OWASP 2024 minimum)
+    const newHash = await bcrypt.hash(newPassword, 12);
     await this.userModel.updateOne(
       { _id: new Types.ObjectId(userId) },
       { $set: { passwordHash: newHash } },
@@ -628,7 +630,8 @@ export class UsersService {
   }): Promise<User> {
     // Generate a random password hash (user won't use it, they'll use Google)
     const randomPassword = Math.random().toString(36).slice(-12);
-    const passwordHash = await bcrypt.hash(randomPassword, 10);
+    // bcrypt cost 12 (OWASP 2024 minimum)
+    const passwordHash = await bcrypt.hash(randomPassword, 12);
 
     const user = new this.userModel({
       shopId: new Types.ObjectId(data.shopId),

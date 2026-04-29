@@ -9,11 +9,11 @@ import * as mongoose from 'mongoose';
 import * as bcryptjs from 'bcryptjs';
 
 // MongoDB URI - update this or set MONGODB_URI env var
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://dontech1914_db_user:greatful%40dtb@smartduka.0vkcqh5.mongodb.net/smartduka?appName=smartduka';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://smartduka:xpa0zq1w2rKaF9Mj@cluster0.31fjvb8.mongodb.net/smartduka?retryWrites=true&w=majority&appName=Cluster0';
 
 // Super Admin credentials
 const SUPER_ADMIN_EMAIL = 'smartduka@admin.auth';
-const SUPER_ADMIN_PASSWORD = 'admin123';
+const SUPER_ADMIN_PASSWORD = 'smart@duka2';
 
 // Super Admin Schema (inline for script)
 const SuperAdminSchema = new mongoose.Schema({
