@@ -18,6 +18,7 @@ import { StripeService } from './stripe.service';
 import { StripePaymentService } from './services/stripe-payment.service';
 import { StripeSubscriptionService } from './services/stripe-subscription.service';
 import { StripeCustomerService } from './services/stripe-customer.service';
+import { StripeConnectService } from './services/stripe-connect.service';
 import { StripeWebhookEvent, StripeWebhookEventDocument } from './schemas/stripe-webhook-event.schema';
 
 /**
@@ -36,6 +37,7 @@ export class StripeWebhookController {
     private readonly paymentService: StripePaymentService,
     private readonly subscriptionService: StripeSubscriptionService,
     private readonly customerService: StripeCustomerService,
+    private readonly connectService: StripeConnectService,
     @Inject('STRIPE_WEBHOOK_SECRET') private readonly webhookSecret: string,
     @InjectModel(StripeWebhookEvent.name)
     private readonly webhookEventModel: Model<StripeWebhookEventDocument>,
@@ -183,6 +185,15 @@ export class StripeWebhookController {
         await this.handleChargeRefunded(event);
         break;
 
+      // Stripe Connect events — keep shop.stripeConnect in sync
+      case 'account.updated':
+        await this.handleAccountUpdated(event);
+        break;
+
+      case 'account.application.deauthorized':
+        await this.handleAccountDeauthorized(event);
+        break;
+
       default:
         this.logger.log(`Unhandled event type: ${event.type}`);
     }
@@ -248,5 +259,45 @@ export class StripeWebhookController {
     this.logger.log(`Charge ${charge.id} refunded: ${charge.amount_refunded}`);
 
     // Refunds are handled through the refund API, this is just for logging
+  }
+
+  // ============================================
+  // STRIPE CONNECT EVENTS
+  // ============================================
+
+  /**
+   * Handle account.updated event — fired when a connected account's capabilities,
+   * requirements, or status change. We mirror the flags to shop.stripeConnect so
+   * the POS guard and settings UI always have fresh data without an extra API call.
+   */
+  private async handleAccountUpdated(event: Stripe.Event): Promise<void> {
+    const account = event.data.object as Stripe.Account;
+    try {
+      await this.connectService.applyAccountUpdate(account);
+      this.logger.log(
+        `Connect account ${account.id} updated: charges_enabled=${account.charges_enabled}, payouts_enabled=${account.payouts_enabled}`,
+      );
+    } catch (err: any) {
+      this.logger.error(`Failed to apply account.updated for ${account.id}: ${err.message}`);
+    }
+  }
+
+  /**
+   * Handle account.application.deauthorized — fired when a shop owner removes our
+   * platform from their Stripe dashboard. We clear their connection so card sales stop.
+   */
+  private async handleAccountDeauthorized(event: Stripe.Event): Promise<void> {
+    const data = event.data.object as any;
+    const accountId: string = event.account || data?.id || '';
+    if (!accountId) {
+      this.logger.warn('Received account.application.deauthorized without an account ID');
+      return;
+    }
+    try {
+      await this.connectService.applyDeauthorization(accountId);
+      this.logger.log(`Connect account ${accountId} deauthorized from their dashboard`);
+    } catch (err: any) {
+      this.logger.error(`Failed to handle deauthorization for ${accountId}: ${err.message}`);
+    }
   }
 }

@@ -118,6 +118,22 @@ export class StripeService implements OnModuleInit {
     receiptEmail?: string;
     paymentMethodTypes?: string[];
     idempotencyKey?: string; // Optional idempotency key for safe retries
+    /**
+     * Stripe Connect: ID of the connected account (acct_xxx) that should receive the funds.
+     * When provided, the charge is created as a DIRECT CHARGE on that account using the
+     * `Stripe-Account` header. Funds land in the shop's balance, not the platform's.
+     */
+    stripeAccount?: string;
+    /**
+     * Stripe Connect: platform fee (in smallest currency unit) taken from the charge and
+     * transferred to the platform account. Only valid when `stripeAccount` is set.
+     */
+    applicationFeeAmount?: number;
+    /**
+     * Stripe Connect: on_behalf_of — sets the business of record for the charge.
+     * Usually same as `stripeAccount` for direct charges.
+     */
+    onBehalfOf?: string;
   }): Promise<Stripe.PaymentIntent> {
     const stripe = this.getClient();
     const currencyLower = params.currency.toLowerCase();
@@ -148,25 +164,47 @@ export class StripeService implements OnModuleInit {
       (paymentIntentParams as any).payment_method_types = params.paymentMethodTypes;
     }
 
-    // Use idempotency key if provided for safe retries
+    if (params.applicationFeeAmount && params.applicationFeeAmount > 0) {
+      paymentIntentParams.application_fee_amount = params.applicationFeeAmount;
+    }
+    if (params.onBehalfOf) {
+      paymentIntentParams.on_behalf_of = params.onBehalfOf;
+    }
+
+    // Request options — idempotency + optional connected-account targeting
     const options: Stripe.RequestOptions = {};
     if (params.idempotencyKey) {
       options.idempotencyKey = params.idempotencyKey;
     }
+    if (params.stripeAccount) {
+      options.stripeAccount = params.stripeAccount;
+    }
 
     const paymentIntent = await stripe.paymentIntents.create(paymentIntentParams, options);
 
-    this.logger.log(`PaymentIntent created: ${paymentIntent.id} for ${params.amount} ${currencyLower}`);
+    this.logger.log(
+      `PaymentIntent created: ${paymentIntent.id} for ${params.amount} ${currencyLower}` +
+        (params.stripeAccount ? ` on connected account ${params.stripeAccount}` : ' (platform)'),
+    );
 
     return paymentIntent;
   }
 
   /**
-   * Retrieve a Payment Intent
+   * Retrieve a Payment Intent.
+   * When the intent was created on a connected account (Direct Charge), pass
+   * `stripeAccount` so the request is scoped correctly.
    */
-  async retrievePaymentIntent(paymentIntentId: string): Promise<Stripe.PaymentIntent> {
+  async retrievePaymentIntent(
+    paymentIntentId: string,
+    options?: { stripeAccount?: string },
+  ): Promise<Stripe.PaymentIntent> {
     const stripe = this.getClient();
-    return stripe.paymentIntents.retrieve(paymentIntentId);
+    const reqOpts: Stripe.RequestOptions = {};
+    if (options?.stripeAccount) {
+      reqOpts.stripeAccount = options.stripeAccount;
+    }
+    return stripe.paymentIntents.retrieve(paymentIntentId, undefined, reqOpts);
   }
 
   /**
@@ -297,6 +335,16 @@ export class StripeService implements OnModuleInit {
     amount?: number;
     reason?: 'duplicate' | 'fraudulent' | 'requested_by_customer';
     metadata?: Record<string, string>;
+    /**
+     * Stripe Connect: refund a charge on a connected account.
+     * Must match the account the original PaymentIntent was created on.
+     */
+    stripeAccount?: string;
+    /**
+     * Stripe Connect: when refunding a Direct Charge, also refund the application fee
+     * that was collected by the platform. Defaults to true when `stripeAccount` is set.
+     */
+    refundApplicationFee?: boolean;
   }): Promise<Stripe.Refund> {
     const stripe = this.getClient();
 
@@ -320,9 +368,22 @@ export class StripeService implements OnModuleInit {
       refundParams.reason = params.reason;
     }
 
-    const refund = await stripe.refunds.create(refundParams);
+    if (params.stripeAccount) {
+      // Default: also refund the platform fee so the shop isn't left out of pocket.
+      refundParams.refund_application_fee =
+        params.refundApplicationFee === undefined ? true : params.refundApplicationFee;
+    }
 
-    this.logger.log(`Refund created: ${refund.id}`);
+    const options: Stripe.RequestOptions = {};
+    if (params.stripeAccount) {
+      options.stripeAccount = params.stripeAccount;
+    }
+
+    const refund = await stripe.refunds.create(refundParams, options);
+
+    this.logger.log(
+      `Refund created: ${refund.id}` + (params.stripeAccount ? ` on ${params.stripeAccount}` : ''),
+    );
 
     return refund;
   }

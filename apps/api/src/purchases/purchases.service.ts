@@ -268,6 +268,279 @@ export class PurchasesService {
   }
 
   /**
+   * Export purchase orders to CSV.
+   * One row per PO line item (so accounting/spreadsheets can analyse spend per product).
+   */
+  async exportPurchasesCSV(shopId: string, res: any, status?: string): Promise<void> {
+    const filter: any = { shopId: new Types.ObjectId(shopId) };
+    if (status && ['pending', 'received', 'cancelled'].includes(status)) {
+      filter.status = status;
+    }
+
+    const purchases = await this.purchaseModel
+      .find(filter)
+      .populate('supplierId', 'name')
+      .sort({ createdAt: -1 })
+      .lean()
+      .exec();
+
+    // Resolve SKUs for all unique product IDs across all POs so the exported CSV is re-importable
+    const productIds = Array.from(new Set(
+      (purchases as any[])
+        .flatMap(po => Array.isArray(po.items) ? po.items : [])
+        .map((item: any) => item?.productId?.toString())
+        .filter(Boolean)
+    ));
+    const skuByProductId = new Map<string, string>();
+    if (productIds.length > 0) {
+      try {
+        const productDocs = await this.purchaseModel.db
+          .collection('products')
+          .find({ _id: { $in: productIds.map(id => new Types.ObjectId(id)) } })
+          .project({ sku: 1 })
+          .toArray();
+        productDocs.forEach((p: any) => {
+          if (p?.sku) skuByProductId.set(p._id.toString(), p.sku);
+        });
+      } catch (err) {
+        this.logger.warn(`Could not resolve product SKUs for PO export: ${(err as any)?.message}`);
+      }
+    }
+
+    const headers = [
+      'purchaseNumber', 'status', 'supplier', 'invoiceNumber',
+      'createdAt', 'expectedDeliveryDate', 'receivedDate',
+      'productName', 'productSku', 'quantity', 'unitCost', 'lineTotal',
+      'poTotal', 'notes',
+    ];
+
+    const rows: (string | number)[][] = [];
+    for (const po of purchases as any[]) {
+      const supplierName = po.supplierId?.name || '';
+      const created = po.createdAt ? new Date(po.createdAt).toISOString().split('T')[0] : '';
+      const expected = po.expectedDeliveryDate
+        ? new Date(po.expectedDeliveryDate).toISOString().split('T')[0]
+        : '';
+      const received = po.receivedDate
+        ? new Date(po.receivedDate).toISOString().split('T')[0]
+        : '';
+      const items = Array.isArray(po.items) && po.items.length > 0 ? po.items : [{}];
+      for (const item of items) {
+        const productIdStr = item?.productId?.toString?.() || '';
+        rows.push([
+          po.purchaseNumber || '',
+          po.status || '',
+          supplierName,
+          po.invoiceNumber || '',
+          created,
+          expected,
+          received,
+          item.productName || '',
+          skuByProductId.get(productIdStr) || '',
+          item.quantity ?? '',
+          item.unitCost ?? '',
+          item.totalCost ?? '',
+          po.totalCost ?? 0,
+          po.notes || '',
+        ]);
+      }
+    }
+
+    const escape = (cell: any) => {
+      const str = String(cell ?? '');
+      return str.includes(',') || str.includes('"') || str.includes('\n')
+        ? `"${str.replace(/"/g, '""')}"`
+        : str;
+    };
+    const csv = '\ufeff' + [
+      headers.join(','),
+      ...rows.map(r => r.map(escape).join(',')),
+    ].join('\n');
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=purchase-orders-${new Date().toISOString().split('T')[0]}.csv`,
+    );
+    res.send(csv);
+  }
+
+  /**
+   * Bulk import purchase orders from CSV rows.
+   * Accepts the same row format produced by exportPurchasesCSV: one row per line item,
+   * grouped by purchaseNumber. Rows without a purchaseNumber are grouped per (supplier+invoice)
+   * and a new PO number is generated.
+   *
+   * Resolution rules:
+   *  - supplier: looked up by name (case-insensitive) within shop
+   *  - product:  looked up by sku, then by exact name within shop
+   *  - status defaults to 'pending'; receiving stock updates require the standard PUT flow
+   */
+  async importPurchasesCSV(
+    shopId: string,
+    userId: string,
+    rows: Array<Record<string, any>>,
+  ): Promise<{ created: number; skipped: number; errors: string[] }> {
+    const errors: string[] = [];
+    let created = 0;
+    let skipped = 0;
+
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return { created: 0, skipped: 0, errors: ['No rows provided'] };
+    }
+
+    const shopObjId = new Types.ObjectId(shopId);
+
+    // Preload suppliers and products for resolution
+    const db = this.purchaseModel.db;
+    const suppliers = await db
+      .collection('suppliers')
+      .find({ shopId: shopObjId })
+      .project({ _id: 1, name: 1 })
+      .toArray();
+    const supplierByName = new Map<string, Types.ObjectId>();
+    suppliers.forEach((s: any) => {
+      if (s.name) supplierByName.set(String(s.name).toLowerCase().trim(), s._id);
+    });
+
+    const products = await db
+      .collection('products')
+      .find({ shopId: shopObjId })
+      .project({ _id: 1, name: 1, sku: 1 })
+      .toArray();
+    const productBySku = new Map<string, any>();
+    const productByName = new Map<string, any>();
+    products.forEach((p: any) => {
+      if (p.sku) productBySku.set(String(p.sku).toLowerCase().trim(), p);
+      if (p.name) productByName.set(String(p.name).toLowerCase().trim(), p);
+    });
+
+    // Group rows by purchaseNumber (or synthetic key)
+    const groups = new Map<string, { meta: any; lines: any[]; rowNums: number[] }>();
+    rows.forEach((raw, idx) => {
+      const rowNum = idx + 2; // account for header row
+      const supplierName = String(raw.supplier || '').trim();
+      const purchaseNumber = String(raw.purchaseNumber || '').trim();
+      const invoiceNumber = String(raw.invoiceNumber || '').trim();
+      const groupKey = purchaseNumber || `__new__:${supplierName.toLowerCase()}|${invoiceNumber}|${idx}`;
+
+      if (!groups.has(groupKey)) {
+        groups.set(groupKey, {
+          meta: {
+            purchaseNumber: purchaseNumber || undefined,
+            supplier: supplierName,
+            invoiceNumber: invoiceNumber || undefined,
+            status: String(raw.status || 'pending').toLowerCase(),
+            expectedDeliveryDate: raw.expectedDeliveryDate || undefined,
+            receivedDate: raw.receivedDate || undefined,
+            notes: raw.notes || undefined,
+          },
+          lines: [],
+          rowNums: [],
+        });
+      }
+      const group = groups.get(groupKey)!;
+      group.rowNums.push(rowNum);
+
+      const productName = String(raw.productName || '').trim();
+      const productSku = String(raw.productSku || '').trim();
+      const quantity = Number(raw.quantity);
+      const unitCost = Number(raw.unitCost);
+
+      if (!productName && !productSku) {
+        errors.push(`Row ${rowNum}: missing productName/productSku`);
+        return;
+      }
+      if (!Number.isFinite(quantity) || quantity <= 0) {
+        errors.push(`Row ${rowNum}: quantity must be a positive number`);
+        return;
+      }
+      if (!Number.isFinite(unitCost) || unitCost < 0) {
+        errors.push(`Row ${rowNum}: unitCost must be a non-negative number`);
+        return;
+      }
+
+      let product =
+        (productSku && productBySku.get(productSku.toLowerCase())) ||
+        (productName && productByName.get(productName.toLowerCase()));
+      if (!product) {
+        errors.push(`Row ${rowNum}: product "${productName || productSku}" not found in inventory`);
+        return;
+      }
+
+      group.lines.push({
+        productId: product._id,
+        productName: product.name,
+        quantity,
+        unitCost,
+        totalCost: quantity * unitCost,
+      });
+    });
+
+    // Persist each group as a PO
+    for (const [groupKey, group] of groups.entries()) {
+      if (group.lines.length === 0) {
+        skipped++;
+        continue;
+      }
+
+      const supplierId = supplierByName.get(group.meta.supplier.toLowerCase());
+      if (!supplierId) {
+        errors.push(
+          `Rows ${group.rowNums.join(',')}: supplier "${group.meta.supplier}" not found - create it first`,
+        );
+        skipped++;
+        continue;
+      }
+
+      // Skip if a PO with this purchaseNumber already exists (idempotent re-import)
+      if (group.meta.purchaseNumber) {
+        const existing = await this.purchaseModel.findOne({
+          shopId: shopObjId,
+          purchaseNumber: group.meta.purchaseNumber,
+        }).lean();
+        if (existing) {
+          skipped++;
+          continue;
+        }
+      }
+
+      const totalCost = group.lines.reduce((sum, l) => sum + l.totalCost, 0);
+      const status = ['pending', 'received', 'cancelled'].includes(group.meta.status)
+        ? group.meta.status
+        : 'pending';
+
+      try {
+        await this.purchaseModel.create({
+          purchaseNumber: group.meta.purchaseNumber || `PO-${Date.now()}-${nanoid(6)}`,
+          supplierId,
+          shopId: shopObjId,
+          items: group.lines,
+          totalCost,
+          status,
+          expectedDeliveryDate: group.meta.expectedDeliveryDate
+            ? new Date(group.meta.expectedDeliveryDate)
+            : undefined,
+          receivedDate: group.meta.receivedDate
+            ? new Date(group.meta.receivedDate)
+            : undefined,
+          invoiceNumber: group.meta.invoiceNumber,
+          notes: group.meta.notes,
+          createdBy: new Types.ObjectId(userId),
+        });
+        created++;
+      } catch (err: any) {
+        errors.push(
+          `PO ${group.meta.purchaseNumber || groupKey}: failed to create - ${err?.message || 'unknown error'}`,
+        );
+        skipped++;
+      }
+    }
+
+    return { created, skipped, errors };
+  }
+
+  /**
    * Get branch purchase stats
    * Multi-tenant safe: filters by shopId and branchId
    */

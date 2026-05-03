@@ -829,14 +829,39 @@ export class AuthService {
       role: 'admin',
     });
 
-    // Generate JWT token
-    const token = this.jwtService.sign({
-      sub: (user as any)._id,
+    // Generate token pair (matches shape returned by registerShopWithTokens)
+    const payload = {
+      sub: (user as any)._id.toString(),
       email: user.email,
       name: (user as any).name || user.email,
       role: user.role,
-      shopId: (shop as any)._id,
-    });
+      shopId: (shop as any)._id.toString(),
+    };
+
+    let tokens: any;
+    if (this.tokenService) {
+      tokens = await this.tokenService.generateTokenPair(payload, {
+        ipAddress,
+        userAgent,
+        clientType: 'web',
+      });
+    } else {
+      // Fallback when TokenService is not wired in
+      const accessToken = this.jwtService.sign(payload);
+      tokens = { accessToken };
+    }
+
+    // Fire-and-forget super admin notification (mirrors registerShop flow)
+    try {
+      this.notifySuperAdminNewShop(
+        shop.name,
+        (user as any).name || user.email,
+        user.email,
+        shopData.phone,
+      );
+    } catch (err) {
+      this.logger.warn('Failed to notify super admin (Google flow):', err);
+    }
 
     return {
       shop: {
@@ -853,7 +878,7 @@ export class AuthService {
         role: user.role,
         avatarUrl: (user as any).avatarUrl,
       },
-      token,
+      tokens,
     };
   }
 

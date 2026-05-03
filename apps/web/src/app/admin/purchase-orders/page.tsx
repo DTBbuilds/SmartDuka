@@ -19,7 +19,10 @@ import {
   XCircle,
   ChevronRight,
   ShoppingCart,
+  Download,
+  Upload,
 } from 'lucide-react';
+import Papa from 'papaparse';
 import { CartLoader } from '@/components/ui/cart-loader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -65,6 +68,9 @@ export default function PurchaseOrdersPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   
   // Create order modal state
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -127,6 +133,90 @@ export default function PurchaseOrdersPage() {
       }
     } catch (error) {
       console.error('Failed to fetch products:', error);
+    }
+  };
+
+  const handleExportCSV = async () => {
+    setIsExporting(true);
+    setError(null);
+    try {
+      const res = await fetch(`${config.apiUrl}/purchases/export/csv`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        setError('Failed to export purchase orders');
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `purchase-orders-${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setSuccessMessage('Purchase orders exported');
+      setTimeout(() => setSuccessMessage(null), 4000);
+    } catch (err) {
+      console.error('Export failed', err);
+      setError('Failed to export purchase orders');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleImportCSV = async (file: File) => {
+    setIsImporting(true);
+    setError(null);
+    setSuccessMessage(null);
+    try {
+      const text = await file.text();
+      const parsed = Papa.parse<Record<string, any>>(text, {
+        header: true,
+        skipEmptyLines: true,
+        transformHeader: (h) => h.trim(),
+      });
+      if (parsed.errors.length > 0) {
+        setError(`CSV parse error: ${parsed.errors[0].message}`);
+        return;
+      }
+      const rows = (parsed.data || []).filter(r => r && Object.keys(r).length > 0);
+      if (rows.length === 0) {
+        setError('CSV contained no data rows');
+        return;
+      }
+
+      const res = await fetch(`${config.apiUrl}/purchases/import/csv`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ rows }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data?.message || 'Failed to import purchase orders');
+        return;
+      }
+
+      await fetchOrders();
+
+      const summary = `Imported ${data.created} PO(s), skipped ${data.skipped}`;
+      if (data.errors?.length) {
+        const preview = data.errors.slice(0, 3).join(' | ');
+        const more = data.errors.length > 3 ? ` (+${data.errors.length - 3} more)` : '';
+        setError(`${summary}. Errors: ${preview}${more}`);
+      } else {
+        setSuccessMessage(summary);
+        setTimeout(() => setSuccessMessage(null), 5000);
+      }
+    } catch (err) {
+      console.error('Import failed', err);
+      setError('Failed to import purchase orders');
+    } finally {
+      setIsImporting(false);
     }
   };
 
@@ -227,13 +317,41 @@ export default function PurchaseOrdersPage() {
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Purchase Orders</h1>
           <p className="text-sm md:text-base text-muted-foreground mt-1 md:mt-2">Manage purchase orders and track deliveries</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Link href="/admin/suppliers">
             <Button variant="outline" className="gap-2">
               <Building2 className="h-4 w-4" />
               <span className="hidden sm:inline">Suppliers</span>
             </Button>
           </Link>
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={handleExportCSV}
+            disabled={isExporting || isImporting}
+          >
+            {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            <span className="hidden sm:inline">Export CSV</span>
+          </Button>
+          <label className={isImporting || isExporting ? 'pointer-events-none opacity-60' : ''}>
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              disabled={isImporting || isExporting}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleImportCSV(file);
+                e.target.value = '';
+              }}
+            />
+            <Button asChild variant="outline" className="gap-2">
+              <span>
+                {isImporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                <span className="hidden sm:inline">{isImporting ? 'Importing...' : 'Import CSV'}</span>
+              </span>
+            </Button>
+          </label>
           <Button className="gap-2" onClick={() => setShowCreateModal(true)}>
             <Plus className="h-4 w-4" />
             New Order
@@ -293,6 +411,12 @@ export default function PurchaseOrdersPage() {
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+      {successMessage && (
+        <Alert className="border-green-200 bg-green-50 text-green-900 dark:bg-green-950/30 dark:text-green-200 dark:border-green-800">
+          <CheckCircle className="h-4 w-4 text-green-600" />
+          <AlertDescription>{successMessage}</AlertDescription>
         </Alert>
       )}
 

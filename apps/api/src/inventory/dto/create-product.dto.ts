@@ -71,6 +71,25 @@ export class CreateProductDto {
   reorderPoint?: number;
 
   @IsOptional()
+  @IsNumber()
+  @Min(0)
+  reorderQuantity?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  leadTimeDays?: number;
+
+  // Supplier name (resolved to preferredSupplierId during import)
+  @IsOptional()
+  @IsString()
+  supplier?: string;
+
+  @IsOptional()
+  @IsString()
+  preferredSupplierId?: string;
+
+  @IsOptional()
   @IsString()
   image?: string;
 

@@ -13,6 +13,7 @@ import { TableSkeleton } from "@/components/shared/loading-skeleton";
 import { useSubscription, useSubscriptionPlans, useBillingHistory, type BillingCycle, type SubscriptionPlan } from "@/hooks/use-subscription";
 import { MpesaSettings } from "@/components/settings/mpesa-settings";
 import { PaymentConfigs } from "@/components/settings/payment-configs";
+import { StripeConnectSettings } from "@/components/settings/stripe-connect-settings";
 import { StripePaymentForm } from "@/components/stripe-payment-form";
 import { useStripePayment } from "@/hooks/use-stripe-payment";
 import { Portal } from "@/components/portal";
@@ -38,6 +39,7 @@ export default function SettingsPage() {
   const settingsNavItems = [
     { id: 'shop', label: 'Shop Settings', icon: Store, description: 'Business information' },
     { id: 'mpesa', label: 'M-Pesa', icon: Smartphone, description: 'Payment configuration' },
+    { id: 'stripe', label: 'Card Payments', icon: CreditCard, description: 'Stripe card payments' },
     { id: 'subscription', label: 'Plan', icon: Crown, description: 'Free plan details' },
     { id: 'profile', label: 'Profile', icon: User, description: 'Personal information' },
     { id: 'security', label: 'Security', icon: Lock, description: 'Password & access' },
@@ -586,6 +588,13 @@ export default function SettingsPage() {
               />
             </div>
           </div>
+        </TabsContent>
+
+        <TabsContent value="stripe">
+          <StripeConnectSettings
+            token={token || ''}
+            onMessage={setMessage}
+          />
         </TabsContent>
 
         <TabsContent value="subscription">

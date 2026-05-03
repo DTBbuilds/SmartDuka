@@ -82,6 +82,43 @@ export class Shop {
     updatedAt?: Date;
   };
 
+  /**
+   * Stripe Connect Configuration (per-shop)
+   *
+   * Platform uses Stripe Connect (Standard accounts) so card payments land directly
+   * in the shop owner's own Stripe account. The platform only stores the connected
+   * account ID and cached capability flags — it NEVER holds the shop's secret key.
+   *
+   * Card sales must be blocked unless accountId is set and chargesEnabled === true.
+   */
+  @Prop({ type: Object, default: {} })
+  stripeConnect?: {
+    // Stripe connected account ID (e.g. "acct_1Abc..."). Absence means not connected.
+    accountId?: string;
+    // Account type: 'standard' (OAuth, shop has own dashboard) or 'express' (platform-branded)
+    accountType?: 'standard' | 'express';
+    // Capabilities flags mirrored from Stripe account object — refreshed via account.updated webhook
+    chargesEnabled?: boolean;
+    payoutsEnabled?: boolean;
+    detailsSubmitted?: boolean;
+    // If Stripe flags outstanding requirements, their due date (e.g. "2025-12-01")
+    currentlyDueRequirements?: string[];
+    pastDueRequirements?: string[];
+    disabledReason?: string;
+    // Cached account metadata (for UI display)
+    country?: string;
+    defaultCurrency?: string;
+    displayName?: string;
+    email?: string;
+    // Connection lifecycle
+    environment?: 'live' | 'test';
+    connectedAt?: Date;
+    disconnectedAt?: Date;
+    lastSyncedAt?: Date;
+    // Audit
+    connectedByUserId?: Types.ObjectId;
+  };
+
   @Prop({ enum: ['pending', 'verified', 'active', 'suspended', 'rejected', 'flagged'], default: 'pending' })
   status: 'pending' | 'verified' | 'active' | 'suspended' | 'rejected' | 'flagged';
 
@@ -199,6 +236,17 @@ ShopSchema.index(
     unique: true,
     sparse: true,
     name: 'unique_kraPin_when_present',
+  },
+);
+
+// Fast lookup of shop by Stripe connected account ID (used by Connect webhooks).
+// Unique+sparse so multiple shops with no stripeConnect.accountId don't collide.
+ShopSchema.index(
+  { 'stripeConnect.accountId': 1 },
+  {
+    unique: true,
+    sparse: true,
+    name: 'unique_stripe_connect_account',
   },
 );
 

@@ -644,6 +644,7 @@ export class UsersService {
       role: data.role || 'admin',
       status: 'active',
       passwordHash,
+      emailVerified: true,
     });
 
     return user.save();

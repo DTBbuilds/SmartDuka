@@ -3,7 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Button, Dialog, DialogContent, DialogHeader, DialogTitle } from "@smartduka/ui";
 import { Upload, X, AlertCircle, CheckCircle, FolderPlus, Sparkles, AlertTriangle, FileSpreadsheet, Folder } from "lucide-react";
-import { parseProductsCSV, getCSVTemplate, downloadCSV, CSVParseResult } from "@/lib/csv-parser";
+import { downloadCSV } from "@/lib/csv-parser";
+import {
+  parseProductsCSVEnhanced as parseProductsCSV,
+  getCSVTemplateEnhanced as getCSVTemplate,
+  CSVParseResult,
+} from "@/lib/csv-parser-enhanced";
 import { config } from "@/lib/config";
 
 interface Category {
@@ -368,7 +373,9 @@ export function CSVImportModal({ isOpen, onClose, onImport, token, categories: p
           </div>
 
           <p className="text-xs text-muted-foreground text-center">
-            CSV columns: name, sku, barcode, price, cost, stock, category, brand, tax, status, description
+            Template covers: name, sku, barcode, price, cost, stock, category, brand, tax, status,
+            description, tags, unit of measure, weight, supplier, reorder point / quantity,
+            low stock alert, lead time, expiry/batch/lot.
           </p>
         </div>
       </DialogContent>

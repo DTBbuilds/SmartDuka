@@ -888,6 +888,21 @@ export class InventoryService implements OnModuleInit {
       if (cat.slug) categoryNameToId.set(cat.slug, cat._id);
     });
 
+    // Step 1b: Build supplier name → ID map (for resolving `supplier` column)
+    const supplierNameToId = new Map<string, Types.ObjectId>();
+    try {
+      const suppliersCol = this.productModel.db.collection('suppliers');
+      const existingSuppliers = await suppliersCol
+        .find({ shopId: shopObjId })
+        .project({ _id: 1, name: 1 })
+        .toArray();
+      existingSuppliers.forEach((s: any) => {
+        if (s.name) supplierNameToId.set(String(s.name).toLowerCase().trim(), s._id);
+      });
+    } catch (err) {
+      this.logger.warn(`Could not preload suppliers for import: ${(err as any)?.message}`);
+    }
+
     // Step 2: Collect all unique category names and suggest categories
     const categoryNamesToCreate = new Set<string>();
     
@@ -999,6 +1014,85 @@ export class InventoryService implements OnModuleInit {
       const existingByBarcode = dto.barcode ? existingProductsMap.get(`barcode:${dto.barcode}`) : null;
       const existingProduct = existingBySku || existingByBarcode;
 
+      // Resolve preferredSupplierId from dto.supplier (name) or dto.preferredSupplierId (ObjectId)
+      let preferredSupplierId: Types.ObjectId | undefined;
+      if ((dto as any).preferredSupplierId) {
+        try {
+          preferredSupplierId = new Types.ObjectId((dto as any).preferredSupplierId);
+        } catch {
+          // Invalid ObjectId, fall through to name resolution
+        }
+      }
+      if (!preferredSupplierId && (dto as any).supplier) {
+        const supplierName = String((dto as any).supplier).toLowerCase().trim();
+        preferredSupplierId = supplierNameToId.get(supplierName);
+        if (!preferredSupplierId) {
+          // Non-blocking: product will still import, but without supplier link.
+          // Surface as a warning via the errors list so the UI can show it.
+          errors.push(
+            `Row ${i + 1}: Supplier "${(dto as any).supplier}" not found — product imported without supplier link (create the supplier and re-import to link it)`,
+          );
+        }
+      }
+
+      // Build extended field payload (only include fields explicitly present on DTO)
+      const extendedFields: any = {};
+      const optionalStringFields = [
+        'unitOfMeasure', 'weightUnit', 'batchNumber', 'lotNumber',
+        'serialNumber', 'imeiNumber', 'drugSchedule', 'dosageForm', 'strength',
+        'activeIngredient', 'storageConditions', 'manufacturer',
+        'size', 'color', 'material', 'season',
+        'vehicleMake', 'vehicleModel', 'vehicleYear', 'partNumber', 'oemNumber',
+        'withdrawalPeriod',
+      ];
+      for (const f of optionalStringFields) {
+        if ((dto as any)[f] !== undefined && (dto as any)[f] !== null && (dto as any)[f] !== '') {
+          extendedFields[f] = (dto as any)[f];
+        }
+      }
+      const optionalNumberFields = [
+        'weight', 'pricePerUnit', 'warrantyMonths', 'preparationTime',
+        'calorieCount', 'coreCharge', 'duration', 'reorderQuantity', 'leadTimeDays',
+      ];
+      for (const f of optionalNumberFields) {
+        const v = (dto as any)[f];
+        if (v !== undefined && v !== null && v !== '' && !isNaN(Number(v))) {
+          extendedFields[f] = Number(v);
+        }
+      }
+      // Date fields
+      if ((dto as any).expiryDate) {
+        const d = new Date((dto as any).expiryDate);
+        if (!isNaN(d.getTime())) extendedFields.expiryDate = d;
+      }
+      if ((dto as any).warrantyExpiry) {
+        const d = new Date((dto as any).warrantyExpiry);
+        if (!isNaN(d.getTime())) extendedFields.warrantyExpiry = d;
+      }
+      // Boolean fields
+      if ((dto as any).requiresPrescription !== undefined) {
+        extendedFields.requiresPrescription = !!(dto as any).requiresPrescription;
+      }
+      if ((dto as any).isService !== undefined) {
+        extendedFields.isService = !!(dto as any).isService;
+      }
+      // Array fields
+      if (Array.isArray((dto as any).tags) && (dto as any).tags.length) {
+        extendedFields.tags = (dto as any).tags;
+      }
+      if (Array.isArray((dto as any).ingredients) && (dto as any).ingredients.length) {
+        extendedFields.ingredients = (dto as any).ingredients;
+      }
+      if (Array.isArray((dto as any).allergens) && (dto as any).allergens.length) {
+        extendedFields.allergens = (dto as any).allergens;
+      }
+      if (Array.isArray((dto as any).targetSpecies) && (dto as any).targetSpecies.length) {
+        extendedFields.targetSpecies = (dto as any).targetSpecies;
+      }
+      if (preferredSupplierId) {
+        extendedFields.preferredSupplierId = preferredSupplierId;
+      }
+
       if (existingProduct) {
         if (updateExisting) {
           updateOperations.push({
@@ -1017,6 +1111,7 @@ export class InventoryService implements OnModuleInit {
                   brand: dto.brand ?? existingProduct.brand,
                   lowStockThreshold: dto.lowStockThreshold ?? existingProduct.lowStockThreshold ?? 10,
                   reorderPoint: dto.reorderPoint ?? existingProduct.reorderPoint ?? 0,
+                  ...extendedFields,
                   updatedAt: new Date(),
                 },
               },
@@ -1047,6 +1142,7 @@ export class InventoryService implements OnModuleInit {
         brand: dto.brand,
         lowStockThreshold: dto.lowStockThreshold ?? 10,
         reorderPoint: dto.reorderPoint ?? 0,
+        ...extendedFields,
         createdAt: new Date(),
         updatedAt: new Date(),
       });
@@ -1218,20 +1314,65 @@ export class InventoryService implements OnModuleInit {
         .select('_id name')
         .exec();
       const categoryMap = new Map(categories.map(c => [c._id.toString(), c.name]));
-      
-      const headers = ['name', 'sku', 'barcode', 'price', 'cost', 'stock', 'category', 'tax', 'status', 'description'];
-      const rows = products.map((product) => [
-        product.name || '',
-        product.sku || '',
-        product.barcode || '',
-        product.price ?? 0,
-        product.cost ?? 0,
-        product.stock ?? 0,
-        (product.categoryId ? categoryMap.get(product.categoryId.toString()) : '') || '',
-        product.tax ?? 0,
-        product.status || 'active',
-        product.description || '',
-      ]);
+
+      // Get suppliers for name lookup (preferredSupplierId -> name)
+      const supplierIds = Array.from(new Set(
+        products
+          .map(p => (p as any).preferredSupplierId?.toString())
+          .filter(Boolean)
+      ));
+      const supplierMap = new Map<string, string>();
+      if (supplierIds.length > 0) {
+        try {
+          const suppliers = await this.productModel.db
+            .collection('suppliers')
+            .find({ _id: { $in: supplierIds.map(id => new Types.ObjectId(id)) } })
+            .project({ name: 1 })
+            .toArray();
+          suppliers.forEach((s: any) => supplierMap.set(s._id.toString(), s.name));
+        } catch (err) {
+          this.logger.warn(`Could not resolve supplier names for export: ${(err as any)?.message}`);
+        }
+      }
+
+      // Headers cover every field the import pipeline can persist (see importProducts)
+      const headers = [
+        'name', 'sku', 'barcode', 'price', 'cost', 'stock', 'category', 'brand',
+        'tax', 'status', 'description', 'lowStockThreshold', 'reorderPoint',
+        'reorderQuantity', 'leadTimeDays', 'supplier', 'unitOfMeasure', 'weight',
+        'weightUnit', 'expiryDate', 'batchNumber', 'lotNumber', 'tags',
+      ];
+      const rows = products.map((product) => {
+        const p: any = product;
+        const supplierName = p.preferredSupplierId
+          ? supplierMap.get(p.preferredSupplierId.toString()) || ''
+          : '';
+        return [
+          p.name || '',
+          p.sku || '',
+          p.barcode || '',
+          p.price ?? 0,
+          p.cost ?? 0,
+          p.stock ?? 0,
+          (p.categoryId ? categoryMap.get(p.categoryId.toString()) : '') || '',
+          p.brand || '',
+          p.tax ?? 0,
+          p.status || 'active',
+          p.description || '',
+          p.lowStockThreshold ?? '',
+          p.reorderPoint ?? '',
+          p.reorderQuantity ?? '',
+          p.leadTimeDays ?? '',
+          supplierName,
+          p.unitOfMeasure || '',
+          p.weight ?? '',
+          p.weightUnit || '',
+          p.expiryDate ? new Date(p.expiryDate).toISOString().split('T')[0] : '',
+          p.batchNumber || '',
+          p.lotNumber || '',
+          Array.isArray(p.tags) ? p.tags.join(';') : '',
+        ];
+      });
 
       const csvContent = [
         headers.join(','),

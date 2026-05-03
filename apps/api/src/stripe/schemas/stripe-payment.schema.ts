@@ -48,6 +48,14 @@ export class StripePayment {
   @Prop({ required: false })
   stripeCustomerId?: string;
 
+  /**
+   * Stripe Connect connected account ID (acct_xxx) that this payment was charged on.
+   * Empty for legacy/platform payments (e.g. donations, subscription billing to platform).
+   * Required to retrieve/refund the PaymentIntent later — must be passed via stripeAccount header.
+   */
+  @Prop({ required: false })
+  connectedAccountId?: string;
+
   @Prop({ required: false, type: Types.ObjectId, ref: 'Shop' })
   shopId?: Types.ObjectId;
 

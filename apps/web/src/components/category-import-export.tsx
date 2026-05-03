@@ -104,6 +104,22 @@ export function CategoryImportExport({ token, isOpen, onClose, onImportComplete 
           return;
         }
 
+        // Validate tax range (percentage 0-100)
+        if (row.tax !== undefined && row.tax !== '') {
+          const taxVal = parseFloat(row.tax);
+          if (isNaN(taxVal) || taxVal < 0 || taxVal > 100) {
+            parseErrors.push(`Row ${rowNum}: Tax must be a number between 0 and 100`);
+            return;
+          }
+        }
+
+        // Validate status whitelist
+        const normalizedStatus = (row.status?.trim() || 'active').toLowerCase();
+        if (!['active', 'inactive'].includes(normalizedStatus)) {
+          parseErrors.push(`Row ${rowNum}: Status must be 'active' or 'inactive'`);
+          return;
+        }
+
         products.push({
           name: row.name.trim(),
           sku: row.sku?.trim() || undefined,
@@ -113,7 +129,7 @@ export function CategoryImportExport({ token, isOpen, onClose, onImportComplete 
           stock: row.stock ? parseInt(row.stock, 10) : undefined,
           categoryId: selectedCategoryId, // Use selected category
           tax: row.tax ? parseFloat(row.tax) : undefined,
-          status: row.status?.trim() || 'active',
+          status: normalizedStatus,
         });
       });
 
@@ -206,8 +222,9 @@ export function CategoryImportExport({ token, isOpen, onClose, onImportComplete 
   };
 
   const downloadTemplate = () => {
+    // Tax is a percentage (e.g. 16 = 16% VAT), matching the main product importer
     const headers = ['name', 'sku', 'barcode', 'price', 'cost', 'stock', 'tax', 'status'];
-    const exampleRow = ['Sample Product', 'SKU001', '1234567890123', '1000', '500', '50', '0.02', 'active'];
+    const exampleRow = ['Sample Product', 'SKU001', '1234567890123', '1000', '500', '50', '16', 'active'];
 
     const csvContent = [headers.join(','), exampleRow.join(',')].join('\n');
 

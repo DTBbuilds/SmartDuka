@@ -84,6 +84,7 @@ interface PaymentMethodModalProps {
   customerPhone?: string;
   paymentOptions?: PaymentOption[];
   mpesaConfigStatus?: MpesaConfigStatus | null;
+  stripeConnectReady?: boolean;
   shopCurrency?: string;
   onConfirm: (paymentMethod: string, amountTendered?: number, phoneNumber?: string) => void;
   onCancel: () => void;
@@ -121,6 +122,7 @@ export function PaymentMethodModal({
   customerPhone: initialPhone,
   paymentOptions = defaultPaymentOptions,
   mpesaConfigStatus,
+  stripeConnectReady,
   shopCurrency,
   onConfirm,
   onCancel,
@@ -176,6 +178,12 @@ export function PaymentMethodModal({
       setSendMoneyReference('');
       setSendMoneyConfirmed(false);
     } else if (methodId === 'stripe' || methodId === 'card') {
+      // Block if Stripe Connect is not ready
+      if (stripeConnectReady === false) {
+        setStripeError('Card payments are not configured. Go to Settings → Card Payments to connect your Stripe account.');
+        setStep('card-input');
+        return;
+      }
       // Check minimum amount for card payments
       if (!checkCardMinimum(total, shopCurrency)) {
         setStripeError(`Amount too small for card payment. Minimum is ${formatCardMinimum(shopCurrency)}. Please use cash or M-Pesa for smaller amounts.`);
@@ -400,16 +408,31 @@ export function PaymentMethodModal({
                   </div>
 
                   <div className="grid grid-cols-2 gap-2">
-                    {secondaryOptions.map((option) => (
-                      <button
-                        key={option.id}
-                        onClick={() => handleMethodSelect(option.id)}
-                        className="flex items-center gap-2 p-3 rounded-lg border border-border bg-card hover:border-primary/50 hover:bg-muted/50 transition-all duration-200"
-                      >
-                        <option.icon className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm font-medium">{option.label}</span>
-                      </button>
-                    ))}
+                    {secondaryOptions.map((option) => {
+                      const isCardDisabled = (option.id === 'card' || option.id === 'stripe') && stripeConnectReady === false;
+                      return (
+                        <button
+                          key={option.id}
+                          onClick={() => handleMethodSelect(option.id)}
+                          className={`flex items-center gap-2 p-3 rounded-lg border transition-all duration-200 relative ${
+                            isCardDisabled
+                              ? 'border-amber-300 bg-amber-50 dark:bg-amber-950/30 hover:border-amber-400'
+                              : 'border-border bg-card hover:border-primary/50 hover:bg-muted/50'
+                          }`}
+                        >
+                          {isCardDisabled && (
+                            <span className="absolute -top-1.5 -right-1.5 bg-amber-500 text-white text-[9px] px-1.5 py-0.5 rounded-full font-medium">Setup</span>
+                          )}
+                          <option.icon className={`h-4 w-4 ${isCardDisabled ? 'text-amber-600' : 'text-muted-foreground'}`} />
+                          <div className="text-left">
+                            <span className="text-sm font-medium">{option.label}</span>
+                            {isCardDisabled && (
+                              <p className="text-[10px] text-amber-600 dark:text-amber-400 leading-tight">Not configured</p>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
                 </>
               )}

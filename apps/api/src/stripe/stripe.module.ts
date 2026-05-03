@@ -3,11 +3,14 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { StripeService } from './stripe.service';
 import { StripeController } from './stripe.controller';
+import { StripeConnectController } from './stripe-connect.controller';
 import { StripeWebhookController } from './stripe-webhook.controller';
 import { StripeCustomerService } from './services/stripe-customer.service';
 import { StripePaymentService } from './services/stripe-payment.service';
 import { StripeSubscriptionService } from './services/stripe-subscription.service';
 import { StripeAnalyticsService } from './services/stripe-analytics.service';
+import { StripeConnectService } from './services/stripe-connect.service';
+import { Shop, ShopSchema } from '../shops/schemas/shop.schema';
 import {
   StripeCustomer,
   StripeCustomerSchema,
@@ -38,9 +41,10 @@ export class StripeModule {
           { name: StripePayment.name, schema: StripePaymentSchema },
           { name: StripeSubscription.name, schema: StripeSubscriptionSchema },
           { name: StripeWebhookEvent.name, schema: StripeWebhookEventSchema },
+          { name: Shop.name, schema: ShopSchema },
         ]),
       ],
-      controllers: [StripeController, StripeWebhookController],
+      controllers: [StripeController, StripeConnectController, StripeWebhookController],
       providers: [
         {
           provide: 'STRIPE_API_KEY',
@@ -61,6 +65,7 @@ export class StripeModule {
         StripePaymentService,
         StripeSubscriptionService,
         StripeAnalyticsService,
+        StripeConnectService,
       ],
       exports: [
         StripeService,
@@ -68,6 +73,7 @@ export class StripeModule {
         StripePaymentService,
         StripeSubscriptionService,
         StripeAnalyticsService,
+        StripeConnectService,
         'STRIPE_API_KEY',
       ],
     };

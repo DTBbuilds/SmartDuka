@@ -187,6 +187,7 @@ function POSContent() {
     isEnabled: boolean;
     shortCode?: string;
   } | null>(null);
+  const [stripeConnectReady, setStripeConnectReady] = useState<boolean | undefined>(undefined);
   const [showMobileCart, setShowMobileCart] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   
@@ -773,6 +774,25 @@ function POSContent() {
     };
 
     fetchMpesaConfigStatus();
+  }, [token]);
+
+  // Fetch Stripe Connect status on mount
+  useEffect(() => {
+    const fetchStripeConnectStatus = async () => {
+      try {
+        if (!token) return;
+        const res = await fetch(`${config.apiUrl}/stripe/connect/status`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setStripeConnectReady(data.isCardReady === true);
+        }
+      } catch {
+        setStripeConnectReady(false);
+      }
+    };
+    fetchStripeConnectStatus();
   }, [token]);
 
   const subtotal = cartItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
@@ -2017,6 +2037,7 @@ function POSContent() {
         itemCount={cartItems.reduce((sum, item) => sum + item.quantity, 0)}
         customerName={customerName || undefined}
         mpesaConfigStatus={mpesaConfigStatus}
+        stripeConnectReady={stripeConnectReady}
         shopCurrency={shop?.currency}
         onConfirm={handlePaymentMethodConfirm}
         onCancel={() => setShowPaymentMethodModal(false)}

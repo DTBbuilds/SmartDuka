@@ -1,51 +1,48 @@
 import Papa from "papaparse";
 
-// Enhanced Product CSV Row with all new fields
+// Enhanced Product CSV Row - fields the backend actually persists
 export interface ProductCSVRowEnhanced {
   // Core fields
   name: string;
   sku?: string;
   barcode?: string;
-  
+
   // Pricing
   price: number;
   cost?: number;
-  compareAtPrice?: number;
-  taxRate?: number;
-  taxIncluded?: boolean;
-  
+  tax?: number; // Tax rate % (aligned with Product schema field name)
+
   // Inventory
   stock?: number;
   lowStockThreshold?: number;
   reorderPoint?: number;
-  allowBackorder?: boolean;
-  trackInventory?: boolean;
-  
+  reorderQuantity?: number;
+  leadTimeDays?: number;
+
   // Classification
   categoryId?: string;
   category?: string;  // Category name (will be converted to ID)
   brand?: string;
-  productType?: 'simple' | 'variable' | 'bundle';
   tags?: string[];
-  
+
   // Description
   description?: string;
-  shortDescription?: string;
-  
+
   // Physical attributes
   weight?: number;
   weightUnit?: string;
-  
-  // Supplier
+  unitOfMeasure?: string;
+
+  // Supplier (resolved by name to preferredSupplierId)
   supplier?: string;
-  
+
   // Expiry & Batch
   expiryDate?: Date;
   batchNumber?: string;
-  
+  lotNumber?: string;
+
   // Status
-  status?: 'active' | 'inactive' | 'draft';
-  featured?: boolean;
+  status?: 'active' | 'inactive';
 }
 
 export interface CSVParseResult {
@@ -53,6 +50,8 @@ export interface CSVParseResult {
   data?: ProductCSVRowEnhanced[];
   errors: string[];
   warnings: string[];
+  totalRows?: number;
+  validRows?: number;
 }
 
 // Field mapping: CSV header → internal field name
@@ -90,11 +89,6 @@ const FIELD_MAPPINGS: { [key: string]: string } = {
   'Cost': 'cost',
   'cost': 'cost',
   
-  // Compare At Price
-  'Compare At Price (KES)': 'compareAtPrice',
-  'Compare At Price': 'compareAtPrice',
-  'Original Price': 'compareAtPrice',
-  
   // Stock variations
   'Stock Quantity': 'stock',
   'Stock': 'stock',
@@ -118,16 +112,12 @@ const FIELD_MAPPINGS: { [key: string]: string } = {
   'description': 'description',
   'Long Description': 'description',
   
-  // Short Description
-  'Short Description': 'shortDescription',
-  'Summary': 'shortDescription',
-  
-  // Tax
-  'Tax Rate (%)': 'taxRate',
-  'Tax Rate': 'taxRate',
-  'Tax': 'taxRate',
-  'tax': 'taxRate',
-  'VAT (%)': 'taxRate',
+  // Tax (maps to schema field `tax` on Product)
+  'Tax Rate (%)': 'tax',
+  'Tax Rate': 'tax',
+  'Tax': 'tax',
+  'tax': 'tax',
+  'VAT (%)': 'tax',
   
   // Status
   'Status': 'status',
@@ -157,14 +147,6 @@ const FIELD_MAPPINGS: { [key: string]: string } = {
   'Low Stock Threshold': 'lowStockThreshold',
   'Minimum Stock': 'lowStockThreshold',
   
-  // Allow Backorder
-  'Allow Backorder': 'allowBackorder',
-  'Backorder': 'allowBackorder',
-  
-  // Product Type
-  'Product Type': 'productType',
-  'Type': 'productType',
-  
   // Expiry Date
   'Expiry Date': 'expiryDate',
   'Expiration Date': 'expiryDate',
@@ -173,25 +155,26 @@ const FIELD_MAPPINGS: { [key: string]: string } = {
   // Batch Number
   'Batch Number': 'batchNumber',
   'Batch': 'batchNumber',
-  'Lot Number': 'batchNumber',
-  
-  // Featured
-  'Featured': 'featured',
-  'Is Featured': 'featured',
-  
-  // Track Inventory
-  'Track Inventory': 'trackInventory',
-  'Track Stock': 'trackInventory',
-};
 
-// Helper function to parse yes/no values
-function parseYesNo(value: string | undefined): boolean | undefined {
-  if (!value) return undefined;
-  const normalized = value.toLowerCase().trim();
-  if (normalized === 'yes' || normalized === 'true' || normalized === '1') return true;
-  if (normalized === 'no' || normalized === 'false' || normalized === '0') return false;
-  return undefined;
-}
+  // Unit of Measure
+  'Unit of Measure': 'unitOfMeasure',
+  'UOM': 'unitOfMeasure',
+  'Unit': 'unitOfMeasure',
+
+  // Weight Unit
+  'Weight Unit': 'weightUnit',
+
+  // Reorder Quantity
+  'Reorder Quantity': 'reorderQuantity',
+  'Reorder Qty': 'reorderQuantity',
+
+  // Lead Time
+  'Lead Time (days)': 'leadTimeDays',
+  'Lead Time': 'leadTimeDays',
+
+  // Lot Number
+  'Lot Number': 'lotNumber',
+};
 
 // Helper function to parse date
 function parseDate(value: string | undefined): Date | undefined {
@@ -313,17 +296,6 @@ export function parseProductsCSVEnhanced(file: File): Promise<CSVParseResult> {
             }
           }
 
-          // Compare At Price
-          if (mappedRow.compareAtPrice && mappedRow.compareAtPrice.trim() !== '') {
-            const compareAt = parseFloat(mappedRow.compareAtPrice);
-            if (!isNaN(compareAt) && compareAt > 0) {
-              product.compareAtPrice = compareAt;
-              if (compareAt < price) {
-                warnings.push(`Row ${rowNum}: Compare-at price (${compareAt}) should be higher than selling price (${price})`);
-              }
-            }
-          }
-
           // Stock
           if (mappedRow.stock && mappedRow.stock.trim() !== '') {
             const stock = parseInt(mappedRow.stock, 10);
@@ -338,9 +310,9 @@ export function parseProductsCSVEnhanced(file: File): Promise<CSVParseResult> {
             product.stock = stock;
           }
 
-          // Tax Rate
-          if (mappedRow.taxRate && mappedRow.taxRate.trim() !== '') {
-            const tax = parseFloat(mappedRow.taxRate);
+          // Tax Rate (persisted as `tax` on Product schema)
+          if (mappedRow.tax && mappedRow.tax.trim() !== '') {
+            const tax = parseFloat(mappedRow.tax);
             if (isNaN(tax)) {
               errors.push(`Row ${rowNum}: Tax rate must be a valid number`);
               return;
@@ -349,7 +321,7 @@ export function parseProductsCSVEnhanced(file: File): Promise<CSVParseResult> {
               errors.push(`Row ${rowNum}: Tax rate must be between 0 and 100`);
               return;
             }
-            product.taxRate = tax;
+            product.tax = tax;
           }
 
           // Category
@@ -369,19 +341,14 @@ export function parseProductsCSVEnhanced(file: File): Promise<CSVParseResult> {
             product.description = mappedRow.description.trim();
           }
 
-          // Short Description
-          if (mappedRow.shortDescription && mappedRow.shortDescription.trim()) {
-            product.shortDescription = mappedRow.shortDescription.trim();
-          }
-
           // Status
           if (mappedRow.status && mappedRow.status.trim()) {
             const status = mappedRow.status.trim().toLowerCase();
-            if (!['active', 'inactive', 'draft'].includes(status)) {
-              errors.push(`Row ${rowNum}: Status must be 'active', 'inactive', or 'draft'`);
+            if (!['active', 'inactive'].includes(status)) {
+              errors.push(`Row ${rowNum}: Status must be 'active' or 'inactive'`);
               return;
             }
-            product.status = status as 'active' | 'inactive' | 'draft';
+            product.status = status as 'active' | 'inactive';
           }
 
           // Tags
@@ -420,26 +387,35 @@ export function parseProductsCSVEnhanced(file: File): Promise<CSVParseResult> {
             }
           }
 
-          // Allow Backorder
-          const backorder = parseYesNo(mappedRow.allowBackorder);
-          if (backorder !== undefined) {
-            product.allowBackorder = backorder;
-          }
-
-          // Track Inventory
-          const trackInventory = parseYesNo(mappedRow.trackInventory);
-          if (trackInventory !== undefined) {
-            product.trackInventory = trackInventory;
-          }
-
-          // Product Type
-          if (mappedRow.productType && mappedRow.productType.trim()) {
-            const type = mappedRow.productType.trim().toLowerCase();
-            if (!['simple', 'variable', 'bundle'].includes(type)) {
-              errors.push(`Row ${rowNum}: Product type must be 'simple', 'variable', or 'bundle'`);
-              return;
+          // Reorder Quantity
+          if (mappedRow.reorderQuantity && mappedRow.reorderQuantity.trim() !== '') {
+            const qty = parseInt(mappedRow.reorderQuantity, 10);
+            if (!isNaN(qty) && qty >= 0) {
+              product.reorderQuantity = qty;
             }
-            product.productType = type as 'simple' | 'variable' | 'bundle';
+          }
+
+          // Lead Time Days
+          if (mappedRow.leadTimeDays && mappedRow.leadTimeDays.trim() !== '') {
+            const days = parseInt(mappedRow.leadTimeDays, 10);
+            if (!isNaN(days) && days >= 0) {
+              product.leadTimeDays = days;
+            }
+          }
+
+          // Unit of Measure
+          if (mappedRow.unitOfMeasure && mappedRow.unitOfMeasure.trim()) {
+            product.unitOfMeasure = mappedRow.unitOfMeasure.trim();
+          }
+
+          // Weight Unit (explicit override of default kg)
+          if (mappedRow.weightUnit && mappedRow.weightUnit.trim()) {
+            product.weightUnit = mappedRow.weightUnit.trim();
+          }
+
+          // Lot Number
+          if (mappedRow.lotNumber && mappedRow.lotNumber.trim()) {
+            product.lotNumber = mappedRow.lotNumber.trim();
           }
 
           // Expiry Date
@@ -460,12 +436,6 @@ export function parseProductsCSVEnhanced(file: File): Promise<CSVParseResult> {
             product.batchNumber = mappedRow.batchNumber.trim();
           }
 
-          // Featured
-          const featured = parseYesNo(mappedRow.featured);
-          if (featured !== undefined) {
-            product.featured = featured;
-          }
-
           data.push(product);
         });
 
@@ -474,11 +444,16 @@ export function parseProductsCSVEnhanced(file: File): Promise<CSVParseResult> {
           errors.push('No valid products found in CSV file');
         }
 
+        // Allow partial success - import valid rows even if some had errors
+        const hasValidData = data.length > 0;
+
         resolve({
-          success: errors.length === 0,
-          data: errors.length === 0 ? data : undefined,
+          success: hasValidData,
+          data: hasValidData ? data : undefined,
           errors,
           warnings,
+          totalRows: results.data.length,
+          validRows: data.length,
         });
       },
       error: (error: any) => {
@@ -486,13 +461,15 @@ export function parseProductsCSVEnhanced(file: File): Promise<CSVParseResult> {
           success: false,
           errors: [error.message || "Failed to parse CSV file. Make sure it's a valid CSV format."],
           warnings: [],
+          totalRows: 0,
+          validRows: 0,
         });
       },
     });
   });
 }
 
-// Generate enhanced CSV with all fields
+// Generate enhanced CSV covering every field the backend bulk importer persists
 export function generateProductsCSVEnhanced(products: any[]): string {
   const headers = [
     "Product Name*",
@@ -504,48 +481,46 @@ export function generateProductsCSVEnhanced(products: any[]): string {
     "Category",
     "Brand",
     "Description",
-    "Short Description",
     "Tax Rate (%)",
     "Status",
     "Tags",
+    "Unit of Measure",
     "Weight (kg)",
+    "Weight Unit",
     "Supplier",
     "Reorder Point",
+    "Reorder Quantity",
     "Low Stock Alert",
-    "Allow Backorder",
-    "Product Type",
+    "Lead Time (days)",
     "Expiry Date",
     "Batch Number",
-    "Featured",
-    "Compare At Price (KES)",
-    "Track Inventory",
+    "Lot Number",
   ];
-  
+
   const rows = products.map((product) => [
     product.name || "",
     product.sku || "",
     product.barcode || "",
-    product.price || "",
-    product.cost || "",
-    product.stock || "",
+    product.price ?? "",
+    product.cost ?? "",
+    product.stock ?? "",
     product.category || "",
     product.brand || "",
     product.description || "",
-    product.shortDescription || "",
-    product.taxRate || product.tax || "",
+    product.tax ?? "",
     product.status || "active",
-    Array.isArray(product.tags) ? product.tags.join(',') : (product.tags || ""),
-    product.weight || "",
-    product.supplier || "",
-    product.reorderPoint || "",
-    product.lowStockThreshold || "",
-    product.allowBackorder ? "yes" : "no",
-    product.productType || "simple",
+    Array.isArray(product.tags) ? product.tags.join(';') : (product.tags || ""),
+    product.unitOfMeasure || "",
+    product.weight ?? "",
+    product.weightUnit || "",
+    product.supplier || product.supplierName || "",
+    product.reorderPoint ?? "",
+    product.reorderQuantity ?? "",
+    product.lowStockThreshold ?? "",
+    product.leadTimeDays ?? "",
     product.expiryDate ? new Date(product.expiryDate).toISOString().split('T')[0] : "",
     product.batchNumber || "",
-    product.featured ? "yes" : "no",
-    product.compareAtPrice || "",
-    product.trackInventory !== false ? "yes" : "no",
+    product.lotNumber || "",
   ]);
 
   const csvContent = [
@@ -568,6 +543,7 @@ export function generateProductsCSVEnhanced(products: any[]): string {
 }
 
 // Get enhanced CSV template
+// Headers must match generateProductsCSVEnhanced exactly so users can round-trip export→edit→import
 export function getCSVTemplateEnhanced(includeExamples: boolean = true): string {
   const headers = [
     "Product Name*",
@@ -579,49 +555,52 @@ export function getCSVTemplateEnhanced(includeExamples: boolean = true): string 
     "Category",
     "Brand",
     "Description",
-    "Short Description",
     "Tax Rate (%)",
     "Status",
     "Tags",
+    "Unit of Measure",
     "Weight (kg)",
+    "Weight Unit",
     "Supplier",
     "Reorder Point",
+    "Reorder Quantity",
     "Low Stock Alert",
-    "Allow Backorder",
-    "Product Type",
+    "Lead Time (days)",
     "Expiry Date",
     "Batch Number",
-    "Featured",
+    "Lot Number",
   ];
-  
+
   if (!includeExamples) {
     return headers.join(",");
   }
-  
+
+  // Column order matches headers exactly
   const exampleRows = [
     [
-      "Afia Mixed Fruit Juice 500ml",
-      "AFI-JUI-001",
-      "6008459000972",
-      "80",
-      "55",
-      "150",
-      "Beverages",
-      "Afia",
-      "Delicious mixed fruit juice with no added sugar",
-      "Fresh mixed fruit juice",
-      "16",
-      "active",
-      "drinks,juice,beverages",
-      "0.52",
-      "Afia Distributors",
-      "20",
-      "10",
-      "no",
-      "simple",
-      "2025-12-31",
-      "BATCH-2025-320",
-      "yes",
+      "Afia Mixed Fruit Juice 500ml", // Product Name*
+      "AFI-JUI-001",                  // SKU
+      "6008459000972",                // Barcode/UPC
+      "80",                           // Selling Price (KES)*
+      "55",                           // Cost Price (KES)
+      "150",                          // Stock Quantity
+      "Beverages",                    // Category
+      "Afia",                         // Brand
+      "Delicious mixed fruit juice with no added sugar", // Description
+      "16",                           // Tax Rate (%)
+      "active",                       // Status
+      "drinks;juice;beverages",       // Tags (semicolon-separated to avoid CSV issues)
+      "piece",                        // Unit of Measure
+      "0.52",                         // Weight (kg)
+      "kg",                           // Weight Unit
+      "Afia Distributors",            // Supplier (must exist in Suppliers list)
+      "20",                           // Reorder Point
+      "50",                           // Reorder Quantity
+      "10",                           // Low Stock Alert
+      "3",                            // Lead Time (days)
+      "2025-12-31",                   // Expiry Date (YYYY-MM-DD)
+      "BATCH-2025-320",               // Batch Number
+      "LOT-A-001",                    // Lot Number
     ],
     [
       "Oraimo Lite Wireless Earbuds",
@@ -633,19 +612,20 @@ export function getCSVTemplateEnhanced(includeExamples: boolean = true): string 
       "Electronics",
       "Oraimo",
       "True wireless earbuds with 10-hour battery life",
-      "Premium wireless earbuds",
       "16",
       "active",
-      "electronics,audio,earbuds",
+      "electronics;audio;earbuds",
+      "piece",
       "0.05",
+      "kg",
       "Oraimo Kenya",
       "5",
+      "10",
       "3",
-      "yes",
-      "simple",
+      "7",
       "",
       "",
-      "yes",
+      "",
     ],
   ];
 

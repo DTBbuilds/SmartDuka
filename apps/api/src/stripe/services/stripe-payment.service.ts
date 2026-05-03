@@ -1,9 +1,11 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import Stripe from 'stripe';
 import { StripeService } from '../stripe.service';
 import { StripeCustomerService } from './stripe-customer.service';
+import { StripeConnectService } from './stripe-connect.service';
 import {
   StripePayment,
   StripePaymentDocument,
@@ -29,9 +31,23 @@ export class StripePaymentService {
   constructor(
     private readonly stripeService: StripeService,
     private readonly customerService: StripeCustomerService,
+    private readonly connectService: StripeConnectService,
+    private readonly configService: ConfigService,
     @InjectModel(StripePayment.name)
     private readonly paymentModel: Model<StripePaymentDocument>,
   ) {}
+
+  /**
+   * Platform fee (basis points) taken from every POS card sale, routed from the shop's
+   * connected account back to the platform account via Stripe's application_fee_amount.
+   * Configurable via env `STRIPE_APPLICATION_FEE_BPS` (e.g. 150 = 1.50%). Default 0 (no fee).
+   */
+  private computeApplicationFee(amount: number): number {
+    const bpsRaw = this.configService.get<string | number>('STRIPE_APPLICATION_FEE_BPS', 0);
+    const bps = typeof bpsRaw === 'number' ? bpsRaw : parseInt(bpsRaw || '0', 10);
+    if (!bps || bps <= 0) return 0;
+    return Math.floor((amount * bps) / 10000);
+  }
 
   /**
    * Create a payment intent for POS sale
@@ -84,10 +100,16 @@ export class StripePaymentService {
       };
     }
 
+    // Stripe Connect: require the shop to have a connected account that can accept charges.
+    // This both enforces "no card sales without Stripe configured" and routes funds directly
+    // to the shop's own Stripe balance — the platform never touches the money.
+    const connectedAccountId = await this.connectService.requireConnectedAccountId(params.shopId);
+    const applicationFeeAmount = this.computeApplicationFee(params.amount);
+
     // Generate idempotency key to prevent duplicate payments on retry
     const idempotencyKey = this.generateIdempotencyKey(params.shopId, params.orderId, 'pos');
 
-    // Create payment intent with idempotency
+    // Create payment intent with idempotency — DIRECT CHARGE on the shop's connected account.
     const paymentIntent = await this.stripeService.createPaymentIntent({
       amount: params.amount,
       currency,
@@ -99,8 +121,11 @@ export class StripePaymentService {
         orderNumber: params.orderNumber,
         type: StripePaymentType.POS_SALE,
         source: 'smartduka_pos',
+        connectedAccountId,
       },
       idempotencyKey,
+      stripeAccount: connectedAccountId,
+      applicationFeeAmount: applicationFeeAmount > 0 ? applicationFeeAmount : undefined,
     });
 
     // Save to local database for tracking
@@ -108,6 +133,7 @@ export class StripePaymentService {
     const isValidObjectId = /^[a-fA-F0-9]{24}$/.test(params.orderId);
     const payment = new this.paymentModel({
       stripePaymentIntentId: paymentIntent.id,
+      connectedAccountId,
       shopId: new Types.ObjectId(params.shopId),
       ...(isValidObjectId && { orderId: new Types.ObjectId(params.orderId) }),
       paymentType: StripePaymentType.POS_SALE,
@@ -120,12 +146,17 @@ export class StripePaymentService {
         orderNumber: params.orderNumber,
         customerName: params.customerName || '',
         idempotencyKey,
+        connectedAccountId,
+        applicationFeeAmount: String(applicationFeeAmount),
       },
     });
 
     await payment.save();
 
-    this.logger.log(`Created POS payment intent ${paymentIntent.id} for order ${params.orderNumber} (shop: ${params.shopId})`);
+    this.logger.log(
+      `Created POS payment intent ${paymentIntent.id} for order ${params.orderNumber} ` +
+        `(shop: ${params.shopId}, connected account: ${connectedAccountId}, fee: ${applicationFeeAmount})`,
+    );
 
     return {
       paymentIntentId: paymentIntent.id,
@@ -254,7 +285,16 @@ export class StripePaymentService {
    * Get payment status from Stripe and sync
    */
   async syncPaymentStatus(paymentIntentId: string): Promise<StripePaymentDocument> {
-    const paymentIntent = await this.stripeService.retrievePaymentIntent(paymentIntentId);
+    // Look up the local record first so we know which connected account (if any) to scope against.
+    const existing = await this.paymentModel
+      .findOne({ stripePaymentIntentId: paymentIntentId })
+      .select('connectedAccountId')
+      .lean();
+
+    const paymentIntent = await this.stripeService.retrievePaymentIntent(
+      paymentIntentId,
+      existing?.connectedAccountId ? { stripeAccount: existing.connectedAccountId } : undefined,
+    );
 
     const payment = await this.paymentModel.findOneAndUpdate(
       { stripePaymentIntentId: paymentIntentId },
@@ -299,6 +339,9 @@ export class StripePaymentService {
       paymentIntentId: params.paymentIntentId,
       amount: params.amount,
       reason: params.reason,
+      // If the original charge was a Direct Charge on a connected account, the refund
+      // must be scoped to that same account — otherwise Stripe returns "No such payment_intent".
+      stripeAccount: payment.connectedAccountId || undefined,
     });
 
     // Update payment record

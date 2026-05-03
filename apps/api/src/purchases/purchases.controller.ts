@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, Query, Res, UseGuards } from '@nestjs/common';
+import type { Response } from 'express';
 import type { CreatePurchaseDto, UpdatePurchaseDto } from './purchases.service';
 import { PurchasesService } from './purchases.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -27,6 +28,34 @@ export class PurchasesController {
   @Get('pending')
   async getPending(@CurrentUser() user: Record<string, any>) {
     return this.purchasesService.getPending(user.shopId);
+  }
+
+  /**
+   * Export purchase orders as CSV.
+   * Optional query: ?status=pending|received|cancelled
+   */
+  @UseGuards(JwtAuthGuard)
+  @Get('export/csv')
+  async exportCSV(
+    @Res() res: Response,
+    @CurrentUser() user: Record<string, any>,
+    @Query('status') status?: string,
+  ) {
+    return this.purchasesService.exportPurchasesCSV(user.shopId, res, status);
+  }
+
+  /**
+   * Bulk import purchase orders from parsed CSV rows.
+   * Body: { rows: Array<{ purchaseNumber?, supplier, productName/productSku, quantity, unitCost, ... }> }
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Post('import/csv')
+  async importCSV(
+    @Body() body: { rows: Array<Record<string, any>> },
+    @CurrentUser() user: Record<string, any>,
+  ) {
+    return this.purchasesService.importPurchasesCSV(user.shopId, user.sub, body?.rows || []);
   }
 
   @UseGuards(JwtAuthGuard)
