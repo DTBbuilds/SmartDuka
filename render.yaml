@@ -102,7 +102,7 @@ services:
       # ==================== AI REPORTS ====================
       - key: AI_REPORTS_ENABLED
         value: true
-    healthCheckPath: /health
+    healthCheckPath: /health/live
     autoDeploy: true
 
   # Cron job to keep the free-tier web service alive

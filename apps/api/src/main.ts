@@ -18,6 +18,9 @@ if (process.env.NODE_ENV !== 'production') {
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
+  // Immediate startup signal - if this doesn't appear in logs, the crash is pre-bootstrap
+  console.log(`[Bootstrap] Starting SmartDuka API... NODE_ENV=${process.env.NODE_ENV} PORT=${process.env.PORT}`);
+  console.log(`[Bootstrap] MONGODB_URI set: ${!!process.env.MONGODB_URI}`);
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     logger: process.env.NODE_ENV === 'production' 
       ? ['error', 'warn', 'log'] 
