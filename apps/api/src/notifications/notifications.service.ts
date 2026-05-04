@@ -223,8 +223,12 @@ export class NotificationsService {
     });
   }
 
-  // Seed email templates on startup
-  async onModuleInit(): Promise<void> {
-    await this.emailService.seedTemplates();
+  // Seed email templates on startup (fire-and-forget to not block port binding on Render)
+  onModuleInit(): void {
+    setImmediate(() => {
+      this.emailService.seedTemplates().catch((err) => {
+        console.error('Email template seeding failed:', err?.message || err);
+      });
+    });
   }
 }

@@ -105,8 +105,13 @@ export class SubscriptionMpesaService implements OnModuleInit {
   // Super Admin email for payment notifications
   private readonly SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL || 'smartdukainfo@gmail.com';
 
-  async onModuleInit() {
-    await this.loadConfiguration();
+  onModuleInit(): void {
+    // Fire-and-forget to not block app.listen() on Render
+    setImmediate(() => {
+      this.loadConfiguration().catch((err) => {
+        console.error('M-Pesa configuration load failed:', err?.message || err);
+      });
+    });
   }
 
   /**

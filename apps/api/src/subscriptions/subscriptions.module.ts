@@ -72,25 +72,20 @@ import { NotificationsModule } from '../notifications/notifications.module';
 export class SubscriptionsModule implements OnModuleInit {
   constructor(private readonly subscriptionsService: SubscriptionsService) {}
 
-  async onModuleInit() {
-    // Seed default subscription plans on startup
-    await this.subscriptionsService.seedPlans();
-    
-    // Ensure trial plan exists for existing databases
-    await this.subscriptionsService.ensureTrialPlanExists();
-    
-    // Ensure daily plan exists for existing databases (KES 99/day with Silver features)
-    await this.subscriptionsService.ensureDailyPlanExists();
-    
-    // Update plan display orders (trial=0, daily=1, starter=2, basic=3, silver=4, gold=5)
-    await this.subscriptionsService.updatePlanDisplayOrders();
-    
-    // Update plan product limits (Trial: 25, Starter: 250, Basic: 750)
-    await this.subscriptionsService.updatePlanProductLimits();
-    
-    // Update existing plans with new setup pricing (KES 3,000, 1 month training & support, optional)
-    await this.subscriptionsService.updatePlansSetupPricing();
-    
+  onModuleInit(): void {
+    // Fire-and-forget to not block app.listen() on Render (20s port-bind timeout)
+    setImmediate(async () => {
+      try {
+        await this.subscriptionsService.seedPlans();
+        await this.subscriptionsService.ensureTrialPlanExists();
+        await this.subscriptionsService.ensureDailyPlanExists();
+        await this.subscriptionsService.updatePlanDisplayOrders();
+        await this.subscriptionsService.updatePlanProductLimits();
+        await this.subscriptionsService.updatePlansSetupPricing();
+      } catch (err: any) {
+        console.error('Subscription plan initialization failed:', err?.message || err);
+      }
+    });
     // Note: Migration runs automatically via SubscriptionMigrationService.onModuleInit()
   }
 }
