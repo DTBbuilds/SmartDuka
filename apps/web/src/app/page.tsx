@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { ThemeToggleOutline } from '@/components/theme-toggle';
 import { StripePaymentForm } from '@/components/stripe-payment-form';
+import { PaymentTrustBadges } from '@/components/payment-trust-badges';
 import { Button, Input } from '@smartduka/ui';
 import { config } from '@/lib/config';
 
@@ -527,7 +528,12 @@ export default function Home() {
             </div>
           </div>
           
-          <div className="pt-8 border-t border-border flex flex-col md:flex-row items-center justify-between gap-4">
+          {/* Payment Trust Badges */}
+          <div className="pt-6 pb-2">
+            <PaymentTrustBadges variant="footer" />
+          </div>
+
+          <div className="pt-6 border-t border-border flex flex-col md:flex-row items-center justify-between gap-4">
             <p className="text-sm text-muted-foreground">
               © {new Date().getFullYear()} SmartDuka. All rights reserved.
             </p>

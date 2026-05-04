@@ -1,5 +1,5 @@
 import { IsEnum, IsMongoId, IsNumber, IsOptional, IsString, IsBoolean, Min, MinLength, IsArray, IsDate, ValidateNested } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 
 export class CreateProductDto {
   @IsString()
@@ -43,6 +43,21 @@ export class CreateProductDto {
   tax?: number;
 
   @IsOptional()
+  @Transform(({ value }) => {
+    // Normalize status values - handle common variations from CSV imports
+    if (!value || typeof value !== 'string') return 'active';
+    const normalized = value.toString().toLowerCase().trim();
+    // Values that mean "active"
+    if (['active', '1', 'true', 'yes', 'enabled', 'on', 'y', 'a'].includes(normalized)) {
+      return 'active';
+    }
+    // Values that mean "inactive"
+    if (['inactive', '0', 'false', 'no', 'disabled', 'off', 'n', 'i', 'disabled', 'draft', 'pending'].includes(normalized)) {
+      return 'inactive';
+    }
+    // Default to active for any other unexpected value
+    return 'active';
+  })
   @IsEnum(['active', 'inactive'])
   status?: 'active' | 'inactive';
 

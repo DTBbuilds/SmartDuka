@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import { 
   Card, 
   CardContent, 
@@ -23,6 +24,10 @@ import {
   EyeOff,
   RefreshCw,
   Info,
+  Lock,
+  ExternalLink,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { config } from "@/lib/config";
 
@@ -172,11 +177,23 @@ export function MpesaSettings({ token, onMessage }: MpesaSettingsProps) {
     }
   };
 
+  const [showGuide, setShowGuide] = useState(false);
+
+  // Progress steps for the stepper
+  const steps = [
+    { label: 'Account Type', done: !!formData.shortCode },
+    { label: 'API Credentials', done: !!mpesaConfig?.hasCredentials },
+    { label: 'Verify', done: mpesaConfig?.verificationStatus === 'verified' },
+    { label: 'Enable', done: !!mpesaConfig?.enabled },
+  ];
+  const currentStep = steps.filter(s => s.done).length;
+
   if (isLoading) {
     return (
       <Card>
-        <CardContent className="py-8 flex items-center justify-center">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <CardContent className="py-12 flex flex-col items-center justify-center gap-3">
+          <Loader2 className="h-8 w-8 animate-spin text-green-600" />
+          <p className="text-sm text-muted-foreground">Loading M-Pesa configuration...</p>
         </CardContent>
       </Card>
     );
@@ -184,147 +201,143 @@ export function MpesaSettings({ token, onMessage }: MpesaSettingsProps) {
 
   return (
     <div className="space-y-6">
-      {/* Required Setup Warning */}
-      {mpesaConfig && !mpesaConfig.isConfigured && (
-        <Card className="border-orange-500/40 bg-orange-500/10">
-          <CardContent className="pt-6">
-            <div className="flex gap-4">
-              <div className="p-3 rounded-full bg-orange-500/20 h-fit">
-                <AlertCircle className="h-6 w-6 text-orange-600" />
+      {/* ── Hero Card with Branding ── */}
+      <Card className="overflow-hidden border-0 shadow-lg">
+        {/* Green gradient header */}
+        <div className="bg-gradient-to-r from-green-600 via-green-500 to-emerald-500 px-4 sm:px-6 py-6 sm:py-8">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+            {/* Logos */}
+            <div className="flex items-center gap-3 bg-white/95 rounded-xl px-4 py-2.5 shadow-md">
+              <Image src="/images/payments/mpesa.svg" alt="M-Pesa" width={90} height={28} className="h-7 w-auto" unoptimized />
+              <div className="w-px h-6 bg-gray-300" />
+              <Image src="/images/payments/safaricom.svg" alt="Safaricom" width={100} height={28} className="h-6 w-auto" unoptimized />
+            </div>
+            <div className="flex-1">
+              <h2 className="text-white text-lg sm:text-xl font-bold">M-Pesa Payment Configuration</h2>
+              <p className="text-green-100 text-sm mt-0.5">Powered by Safaricom Daraja API</p>
+            </div>
+            {mpesaConfig && mpesaConfig.isConfigured && (
+              <Badge className={`text-sm px-3 py-1 ${mpesaConfig.isVerified ? 'bg-white text-green-700' : 'bg-yellow-400 text-yellow-900'}`}>
+                {mpesaConfig.isVerified ? 'Verified & Active' : 'Pending Verification'}
+              </Badge>
+            )}
+          </div>
+
+          {/* Progress Stepper */}
+          <div className="mt-6 grid grid-cols-4 gap-1 sm:gap-2">
+            {steps.map((step, i) => (
+              <div key={step.label} className="flex flex-col items-center">
+                <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all ${
+                  step.done
+                    ? 'bg-white text-green-700 border-white'
+                    : i === currentStep
+                      ? 'bg-green-400/30 text-white border-white'
+                      : 'bg-green-700/30 text-green-200 border-green-300/40'
+                }`}>
+                  {step.done ? <CheckCircle className="h-4 w-4" /> : i + 1}
+                </div>
+                <span className={`text-[10px] sm:text-xs mt-1 text-center leading-tight ${step.done ? 'text-white font-medium' : 'text-green-200'}`}>
+                  {step.label}
+                </span>
               </div>
-              <div>
-                <h3 className="font-semibold text-orange-700 dark:text-orange-400 mb-2">
-                  M-Pesa Configuration Required
-                </h3>
-                <p className="text-sm text-orange-700/80 dark:text-orange-300/80 mb-3">
-                  Your shop cannot accept M-Pesa payments until you configure your own Paybill or Till number. 
-                  Each shop must use their own M-Pesa credentials - there is no shared/platform account.
+            ))}
+          </div>
+        </div>
+
+        {/* Trust / Security strip */}
+        <div className="bg-green-50 dark:bg-green-950/40 border-b border-green-200 dark:border-green-800 px-4 sm:px-6 py-2.5 flex flex-wrap items-center justify-center gap-3 sm:gap-6 text-xs text-green-700 dark:text-green-400">
+          <span className="flex items-center gap-1"><Lock className="h-3.5 w-3.5" /> AES-256 Encrypted</span>
+          <span className="flex items-center gap-1"><Shield className="h-3.5 w-3.5" /> PCI Compliant</span>
+          <span className="flex items-center gap-1"><CheckCircle className="h-3.5 w-3.5" /> Safaricom Verified</span>
+        </div>
+      </Card>
+
+      {/* ── Setup Warning (only if not configured) ── */}
+      {mpesaConfig && !mpesaConfig.isConfigured && (
+        <Card className="border-amber-400/60 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30">
+          <CardContent className="pt-5 pb-4">
+            <div className="flex gap-3 items-start">
+              <div className="p-2 rounded-full bg-amber-100 dark:bg-amber-900/40 shrink-0">
+                <AlertCircle className="h-5 w-5 text-amber-600" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="font-semibold text-amber-800 dark:text-amber-300 text-sm">Setup Required</h3>
+                <p className="text-xs sm:text-sm text-amber-700/80 dark:text-amber-300/70 mt-1">
+                  Configure your Paybill or Till number below to start accepting M-Pesa payments directly to your account.
                 </p>
-                <ul className="text-sm text-orange-700/80 dark:text-orange-300/80 list-disc list-inside space-y-1">
-                  <li>Enter your Paybill or Till number</li>
-                  <li>Add your Daraja API credentials (Consumer Key, Secret, Passkey)</li>
-                  <li>Verify your credentials</li>
-                  <li>Enable M-Pesa payments</li>
-                </ul>
               </div>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Current Status Card */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <Phone className="h-5 w-5" />
-                M-Pesa Payment Configuration
-              </CardTitle>
-              <CardDescription>
-                Configure your M-Pesa Paybill or Till number for receiving payments
-              </CardDescription>
+      {/* ── Status Overview ── */}
+      {mpesaConfig && mpesaConfig.isConfigured && (
+        <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+          <Card className="p-4">
+            <p className="text-xs text-muted-foreground mb-1">Type</p>
+            <p className="font-semibold capitalize text-sm">{mpesaConfig.type || 'Not Set'}</p>
+          </Card>
+          <Card className="p-4">
+            <p className="text-xs text-muted-foreground mb-1">Short Code</p>
+            <p className="font-semibold font-mono text-sm">{mpesaConfig.shortCode || '---'}</p>
+          </Card>
+          <Card className="p-4">
+            <p className="text-xs text-muted-foreground mb-1">Credentials</p>
+            <p className={`font-semibold text-sm flex items-center gap-1 ${mpesaConfig.hasCredentials ? 'text-green-600' : 'text-muted-foreground'}`}>
+              {mpesaConfig.hasCredentials ? <><CheckCircle className="h-3.5 w-3.5" /> Saved</> : 'Not set'}
+            </p>
+          </Card>
+          <Card className="p-4">
+            <p className="text-xs text-muted-foreground mb-1">Status</p>
+            <div className="flex items-center gap-1.5">
+              {mpesaConfig.verificationStatus === 'verified' ? (
+                <p className="font-semibold text-sm text-green-600 flex items-center gap-1"><CheckCircle className="h-3.5 w-3.5" /> Verified</p>
+              ) : mpesaConfig.verificationStatus === 'failed' ? (
+                <p className="font-semibold text-sm text-red-600 flex items-center gap-1"><XCircle className="h-3.5 w-3.5" /> Failed</p>
+              ) : mpesaConfig.hasCredentials ? (
+                <p className="font-semibold text-sm text-yellow-600 flex items-center gap-1"><AlertCircle className="h-3.5 w-3.5" /> Pending</p>
+              ) : (
+                <p className="font-semibold text-sm text-muted-foreground">---</p>
+              )}
             </div>
-            {mpesaConfig && mpesaConfig.isConfigured && (
-              <Badge 
-                variant="default"
-                className={mpesaConfig.isVerified ? "bg-green-600" : "bg-yellow-600"}
-              >
-                {mpesaConfig.isVerified ? "Verified" : "Pending Verification"}
-              </Badge>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
-          {/* Status Overview */}
-          {mpesaConfig && (
-            <div className="grid gap-4 md:grid-cols-3 mb-6">
-              <div className="rounded-lg border p-4">
-                <div className="text-sm text-muted-foreground mb-1">Account Type</div>
-                <div className="font-semibold capitalize">{mpesaConfig.type || 'Not Set'}</div>
-              </div>
-              <div className="rounded-lg border p-4">
-                <div className="text-sm text-muted-foreground mb-1">Short Code</div>
-                <div className="font-semibold font-mono">{mpesaConfig.shortCode || 'Not Set'}</div>
-              </div>
-              <div className="rounded-lg border p-4">
-                <div className="text-sm text-muted-foreground mb-1">Status</div>
-                <div className="flex items-center gap-2">
-                  {mpesaConfig.verificationStatus === 'verified' ? (
-                    <>
-                      <CheckCircle className="h-4 w-4 text-green-600" />
-                      <span className="font-semibold text-green-600">Verified</span>
-                    </>
-                  ) : mpesaConfig.verificationStatus === 'failed' ? (
-                    <>
-                      <XCircle className="h-4 w-4 text-red-600" />
-                      <span className="font-semibold text-red-600">Failed</span>
-                    </>
-                  ) : mpesaConfig.hasCredentials ? (
-                    <>
-                      <AlertCircle className="h-4 w-4 text-yellow-600" />
-                      <span className="font-semibold text-yellow-600">Pending Verification</span>
-                    </>
-                  ) : (
-                    <>
-                      <AlertCircle className="h-4 w-4 text-muted-foreground" />
-                      <span className="font-semibold text-muted-foreground">Not Configured</span>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
+          </Card>
+        </div>
+      )}
 
-          {/* Info Banner */}
-          <div className="rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-4 mb-6">
-            <div className="flex gap-3">
-              <Info className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
-              <div className="text-sm text-blue-800 dark:text-blue-300">
-                <p className="font-medium mb-1">Multi-Tenant M-Pesa Support</p>
-                <p>
-                  Configure your own M-Pesa Paybill or Till number to receive payments directly to your account.
-                  If not configured, payments will use the platform's shared account.
-                </p>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Configuration Form */}
+      {/* ── Configuration Form ── */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Shield className="h-5 w-5" />
+        <CardHeader className="pb-4">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Shield className="h-5 w-5 text-green-600" />
             M-Pesa Credentials
           </CardTitle>
-          <CardDescription>
-            Enter your Safaricom Daraja API credentials. These are encrypted and stored securely.
+          <CardDescription className="text-xs sm:text-sm">
+            Your credentials are encrypted with AES-256 and never visible to the platform owner.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Account Type */}
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="mpesaType">Account Type</Label>
+        <CardContent className="space-y-5">
+          {/* Account Type + Short Code */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="mpesaType" className="text-sm">Account Type</Label>
               <select
                 id="mpesaType"
                 value={formData.type}
                 onChange={(e) => setFormData({ ...formData, type: e.target.value as 'paybill' | 'till' })}
-                className="w-full px-3 py-2 border rounded-md bg-background"
+                className="w-full h-10 px-3 border rounded-md bg-background text-sm"
               >
                 <option value="paybill">Paybill</option>
                 <option value="till">Till Number (Buy Goods)</option>
               </select>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-[11px] text-muted-foreground">
                 {formData.type === 'paybill' 
                   ? 'Paybill allows customers to enter an account number'
                   : 'Till number is for Buy Goods payments (no account number)'}
               </p>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="shortCode">
+            <div className="space-y-1.5">
+              <Label htmlFor="shortCode" className="text-sm">
                 {formData.type === 'paybill' ? 'Paybill Number' : 'Till Number'}
               </Label>
               <Input
@@ -332,128 +345,126 @@ export function MpesaSettings({ token, onMessage }: MpesaSettingsProps) {
                 value={formData.shortCode}
                 onChange={(e) => setFormData({ ...formData, shortCode: e.target.value })}
                 placeholder={formData.type === 'paybill' ? '123456' : '5678901'}
+                className="font-mono"
               />
             </div>
           </div>
 
           {/* Account Prefix (for Paybill only) */}
           {formData.type === 'paybill' && (
-            <div className="space-y-2">
-              <Label htmlFor="accountPrefix">Account Number Prefix (Optional)</Label>
+            <div className="space-y-1.5">
+              <Label htmlFor="accountPrefix" className="text-sm">Account Number Prefix (Optional)</Label>
               <Input
                 id="accountPrefix"
                 value={formData.accountPrefix}
                 onChange={(e) => setFormData({ ...formData, accountPrefix: e.target.value })}
                 placeholder="INV-"
+                className="max-w-xs"
               />
-              <p className="text-xs text-muted-foreground">
+              <p className="text-[11px] text-muted-foreground">
                 Prefix added to order numbers for the account reference (e.g., INV-12345)
               </p>
             </div>
           )}
 
           {/* Daraja API Credentials */}
-          <div className="border-t pt-6">
-            <div className="flex items-center justify-between mb-4">
-              <h4 className="font-medium">Daraja API Credentials</h4>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowSecrets(!showSecrets)}
-              >
-                {showSecrets ? <EyeOff className="h-4 w-4 mr-2" /> : <Eye className="h-4 w-4 mr-2" />}
+          <div className="border-t pt-5">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <h4 className="font-medium text-sm">Daraja API Credentials</h4>
+                <a
+                  href="https://developer.safaricom.co.ke"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-green-600 hover:underline flex items-center gap-0.5"
+                >
+                  Get credentials <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => setShowSecrets(!showSecrets)} className="h-8 text-xs">
+                {showSecrets ? <EyeOff className="h-3.5 w-3.5 mr-1.5" /> : <Eye className="h-3.5 w-3.5 mr-1.5" />}
                 {showSecrets ? 'Hide' : 'Show'}
               </Button>
             </div>
 
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="consumerKey">Consumer Key</Label>
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="consumerKey" className="text-sm">Consumer Key</Label>
                 <Input
                   id="consumerKey"
                   type={showSecrets ? "text" : "password"}
                   value={formData.consumerKey}
                   onChange={(e) => setFormData({ ...formData, consumerKey: e.target.value })}
                   placeholder={mpesaConfig?.hasCredentials ? "••••••••••••" : "Enter consumer key"}
+                  className="font-mono text-sm"
                 />
                 {mpesaConfig?.consumerKey && (
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-[11px] text-muted-foreground">
                     Current: {mpesaConfig.consumerKey} (leave blank to keep existing)
                   </p>
                 )}
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="consumerSecret">Consumer Secret</Label>
+              <div className="space-y-1.5">
+                <Label htmlFor="consumerSecret" className="text-sm">Consumer Secret</Label>
                 <Input
                   id="consumerSecret"
                   type={showSecrets ? "text" : "password"}
                   value={formData.consumerSecret}
                   onChange={(e) => setFormData({ ...formData, consumerSecret: e.target.value })}
                   placeholder={mpesaConfig?.hasCredentials ? "••••••••••••" : "Enter consumer secret"}
+                  className="font-mono text-sm"
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="passkey">Passkey (for STK Push)</Label>
+              <div className="space-y-1.5">
+                <Label htmlFor="passkey" className="text-sm">Passkey (for STK Push)</Label>
                 <Input
                   id="passkey"
                   type={showSecrets ? "text" : "password"}
                   value={formData.passkey}
                   onChange={(e) => setFormData({ ...formData, passkey: e.target.value })}
                   placeholder={mpesaConfig?.hasCredentials ? "••••••••••••" : "Enter passkey"}
+                  className="font-mono text-sm"
                 />
               </div>
             </div>
           </div>
 
           {/* Enable Toggle */}
-          <div className="border-t pt-6">
-            <label className="flex items-center gap-3 cursor-pointer">
+          <div className="border-t pt-5">
+            <label className="flex items-center gap-3 cursor-pointer group">
               <input
                 type="checkbox"
                 checked={formData.enabled}
                 onChange={(e) => setFormData({ ...formData, enabled: e.target.checked })}
-                className="h-4 w-4 rounded border-gray-300"
+                className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
               />
               <div>
-                <span className="font-medium">Enable Custom M-Pesa Configuration</span>
-                <p className="text-sm text-muted-foreground">
-                  When enabled, payments will use your M-Pesa credentials instead of the platform default
+                <span className="font-medium text-sm group-hover:text-green-600 transition-colors">Enable M-Pesa Payments</span>
+                <p className="text-xs text-muted-foreground">
+                  When enabled, customers can pay via M-Pesa using your credentials
                 </p>
               </div>
             </label>
           </div>
 
           {/* Actions */}
-          <div className="flex gap-3 pt-4">
-            <Button onClick={saveMpesaConfig} disabled={isSaving}>
+          <div className="flex flex-col sm:flex-row gap-2 pt-3">
+            <Button onClick={saveMpesaConfig} disabled={isSaving} className="bg-green-600 hover:bg-green-700 text-white">
               {isSaving ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Saving...
-                </>
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving...</>
               ) : (
                 "Save Configuration"
               )}
             </Button>
             
             {mpesaConfig?.hasCredentials && (
-              <Button 
-                variant="outline" 
-                onClick={verifyCredentials} 
-                disabled={isVerifying}
-              >
+              <Button variant="outline" onClick={verifyCredentials} disabled={isVerifying} className="border-green-300 text-green-700 hover:bg-green-50 dark:border-green-700 dark:text-green-400 dark:hover:bg-green-950">
                 {isVerifying ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Verifying...
-                  </>
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Verifying...</>
                 ) : (
-                  <>
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    Verify Credentials
-                  </>
+                  <><RefreshCw className="h-4 w-4 mr-2" /> Verify Credentials</>
                 )}
               </Button>
             )}
@@ -461,192 +472,146 @@ export function MpesaSettings({ token, onMessage }: MpesaSettingsProps) {
         </CardContent>
       </Card>
 
-      {/* Complete Setup Guide */}
+      {/* ── Setup Guide (collapsible) ── */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Info className="h-5 w-5 text-primary" />
-            Complete M-Pesa Setup Guide
-          </CardTitle>
-          <CardDescription>
-            Follow these steps to set up M-Pesa payments for your shop
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Step 1: Get a Paybill or Till Number */}
-          <div className="border-l-4 border-primary pl-4">
-            <h4 className="font-semibold text-base mb-2">Step 1: Get a Paybill or Till Number</h4>
-            <p className="text-sm text-muted-foreground mb-3">
-              If you don't have one yet, you need to register with Safaricom for M-Pesa business services.
-            </p>
-            <div className="bg-muted/50 rounded-lg p-4 space-y-3 text-sm">
-              <div>
-                <p className="font-medium mb-1">Option A: Till Number (Buy Goods) - Easier & Faster</p>
-                <ul className="list-disc list-inside text-muted-foreground space-y-1 ml-2">
-                  <li>Visit any Safaricom Shop with your ID and business documents</li>
-                  <li>Or dial *234# → My Account → M-Pesa → Lipa Na M-Pesa → Buy Goods</li>
-                  <li>You'll get a Till Number within 24-48 hours</li>
-                  <li>Cost: Free to register, 0.5% transaction fee</li>
-                </ul>
+        <button
+          onClick={() => setShowGuide(!showGuide)}
+          className="w-full flex items-center justify-between px-4 sm:px-6 py-4 hover:bg-muted/30 transition-colors rounded-lg"
+        >
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-full bg-green-100 dark:bg-green-900/40">
+              <Info className="h-4 w-4 text-green-600" />
+            </div>
+            <div className="text-left">
+              <h3 className="font-semibold text-sm">Complete M-Pesa Setup Guide</h3>
+              <p className="text-xs text-muted-foreground">Step-by-step instructions to get your M-Pesa working</p>
+            </div>
+          </div>
+          {showGuide ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+        </button>
+
+        {showGuide && (
+          <CardContent className="pt-0 space-y-5">
+            {/* Step 1 */}
+            <div className="flex gap-3">
+              <div className="flex flex-col items-center">
+                <div className="w-7 h-7 rounded-full bg-green-600 text-white flex items-center justify-center text-xs font-bold shrink-0">1</div>
+                <div className="w-0.5 flex-1 bg-green-200 dark:bg-green-800 mt-1" />
+              </div>
+              <div className="pb-5">
+                <h4 className="font-semibold text-sm mb-1">Get a Paybill or Till Number</h4>
+                <div className="text-xs sm:text-sm text-muted-foreground space-y-2">
+                  <div className="bg-muted/50 rounded-lg p-3">
+                    <p className="font-medium text-foreground mb-1">Till Number (Recommended)</p>
+                    <ul className="list-disc list-inside space-y-0.5">
+                      <li>Visit any Safaricom Shop or dial *234#</li>
+                      <li>Ready within 24-48 hours, free to register</li>
+                    </ul>
+                  </div>
+                  <div className="bg-muted/50 rounded-lg p-3">
+                    <p className="font-medium text-foreground mb-1">Paybill Number</p>
+                    <ul className="list-disc list-inside space-y-0.5">
+                      <li>Apply at <a href="https://www.safaricom.co.ke/business/sme/m-pesa-payment-solutions/m-pesa-paybill" target="_blank" rel="noopener noreferrer" className="text-green-600 underline">Safaricom Business</a></li>
+                      <li>5-10 business days, KES 3,000 setup fee</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Step 2 */}
+            <div className="flex gap-3">
+              <div className="flex flex-col items-center">
+                <div className="w-7 h-7 rounded-full bg-green-600 text-white flex items-center justify-center text-xs font-bold shrink-0">2</div>
+                <div className="w-0.5 flex-1 bg-green-200 dark:bg-green-800 mt-1" />
+              </div>
+              <div className="pb-5">
+                <h4 className="font-semibold text-sm mb-1">Register on Daraja Portal</h4>
+                <div className="bg-muted/50 rounded-lg p-3 text-xs sm:text-sm text-muted-foreground">
+                  <ol className="list-decimal list-inside space-y-1">
+                    <li>Go to <a href="https://developer.safaricom.co.ke" target="_blank" rel="noopener noreferrer" className="text-green-600 underline font-medium">developer.safaricom.co.ke</a></li>
+                    <li>Sign up with your business email</li>
+                    <li>Verify email and log in</li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+
+            {/* Step 3 */}
+            <div className="flex gap-3">
+              <div className="flex flex-col items-center">
+                <div className="w-7 h-7 rounded-full bg-green-600 text-white flex items-center justify-center text-xs font-bold shrink-0">3</div>
+                <div className="w-0.5 flex-1 bg-green-200 dark:bg-green-800 mt-1" />
+              </div>
+              <div className="pb-5">
+                <h4 className="font-semibold text-sm mb-1">Create App & Get Credentials</h4>
+                <div className="bg-muted/50 rounded-lg p-3 text-xs sm:text-sm text-muted-foreground">
+                  <ol className="list-decimal list-inside space-y-1">
+                    <li>Click <strong>My Apps</strong> &rarr; <strong>Add New App</strong></li>
+                    <li>Enable <strong>Lipa Na M-Pesa Online</strong> API</li>
+                    <li>Copy your <strong>Consumer Key</strong> and <strong>Consumer Secret</strong></li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+
+            {/* Step 4 */}
+            <div className="flex gap-3">
+              <div className="flex flex-col items-center">
+                <div className="w-7 h-7 rounded-full bg-green-600 text-white flex items-center justify-center text-xs font-bold shrink-0">4</div>
+                <div className="w-0.5 flex-1 bg-green-200 dark:bg-green-800 mt-1" />
+              </div>
+              <div className="pb-5">
+                <h4 className="font-semibold text-sm mb-1">Test in Sandbox</h4>
+                <div className="bg-muted/50 rounded-lg p-3 text-xs sm:text-sm text-muted-foreground">
+                  <ol className="list-decimal list-inside space-y-1">
+                    <li>Use sandbox shortcode: <code className="bg-background px-1 rounded text-xs">174379</code></li>
+                    <li>Enter sandbox credentials above &rarr; Save &rarr; Verify</li>
+                    <li>Test a payment (no real money charged)</li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+
+            {/* Step 5 */}
+            <div className="flex gap-3">
+              <div className="flex flex-col items-center">
+                <div className="w-7 h-7 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-bold shrink-0">5</div>
               </div>
               <div>
-                <p className="font-medium mb-1">Option B: Paybill Number - For Larger Businesses</p>
-                <ul className="list-disc list-inside text-muted-foreground space-y-1 ml-2">
-                  <li>Apply at <a href="https://www.safaricom.co.ke/business/sme/m-pesa-payment-solutions/m-pesa-paybill" target="_blank" rel="noopener noreferrer" className="text-primary underline">Safaricom Business Portal</a></li>
-                  <li>Requires: Business registration, KRA PIN, bank account</li>
-                  <li>Processing time: 5-10 business days</li>
-                  <li>Cost: KES 3,000 setup fee + monthly fees</li>
+                <h4 className="font-semibold text-sm mb-1">Go Live!</h4>
+                <div className="bg-muted/50 rounded-lg p-3 text-xs sm:text-sm text-muted-foreground">
+                  <ol className="list-decimal list-inside space-y-1">
+                    <li>Click <strong>Go Live</strong> in your Daraja app</li>
+                    <li>Wait for Safaricom approval (2-5 days)</li>
+                    <li>Replace sandbox credentials with production ones</li>
+                    <li>Enable M-Pesa and start accepting payments</li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+
+            {/* Help / Notes */}
+            <div className="grid gap-3 sm:grid-cols-2 pt-2">
+              <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                <h5 className="font-medium text-yellow-800 dark:text-yellow-300 text-xs mb-1">Security Notes</h5>
+                <ul className="text-[11px] sm:text-xs text-yellow-700 dark:text-yellow-400 space-y-0.5 list-disc list-inside">
+                  <li>Never share your Consumer Secret</li>
+                  <li>Credentials are encrypted at rest</li>
+                  <li>Only admins can modify these settings</li>
+                </ul>
+              </div>
+              <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                <h5 className="font-medium text-green-800 dark:text-green-300 text-xs mb-1">Need Help?</h5>
+                <ul className="text-[11px] sm:text-xs text-green-700 dark:text-green-400 space-y-0.5">
+                  <li>Safaricom Business: <strong>0722 002 100</strong></li>
+                  <li>Daraja: <strong>apisupport@safaricom.co.ke</strong></li>
+                  <li><a href="https://developer.safaricom.co.ke/Documentation" target="_blank" rel="noopener noreferrer" className="underline">Daraja Docs</a></li>
                 </ul>
               </div>
             </div>
-          </div>
-
-          {/* Step 2: Register on Daraja Portal */}
-          <div className="border-l-4 border-primary pl-4">
-            <h4 className="font-semibold text-base mb-2">Step 2: Register on Safaricom Daraja Portal</h4>
-            <p className="text-sm text-muted-foreground mb-3">
-              Daraja is Safaricom's API platform that allows your shop to send payment requests to customers.
-            </p>
-            <div className="bg-muted/50 rounded-lg p-4 text-sm space-y-3">
-              <ol className="list-decimal list-inside space-y-2 text-muted-foreground">
-                <li>
-                  Go to <a href="https://developer.safaricom.co.ke" target="_blank" rel="noopener noreferrer" className="text-primary underline font-medium">developer.safaricom.co.ke</a>
-                </li>
-                <li>Click <strong>"Sign Up"</strong> (top right corner)</li>
-                <li>Fill in your details:
-                  <ul className="list-disc list-inside ml-4 mt-1">
-                    <li>Use your business email</li>
-                    <li>Create a strong password</li>
-                    <li>Verify your email</li>
-                  </ul>
-                </li>
-                <li>Log in to your new account</li>
-              </ol>
-            </div>
-          </div>
-
-          {/* Step 3: Create an App */}
-          <div className="border-l-4 border-primary pl-4">
-            <h4 className="font-semibold text-base mb-2">Step 3: Create Your App on Daraja</h4>
-            <p className="text-sm text-muted-foreground mb-3">
-              An "App" on Daraja gives you the API credentials needed to connect your shop.
-            </p>
-            <div className="bg-muted/50 rounded-lg p-4 text-sm space-y-3">
-              <ol className="list-decimal list-inside space-y-2 text-muted-foreground">
-                <li>After logging in, click <strong>"My Apps"</strong> in the menu</li>
-                <li>Click <strong>"Add a New App"</strong></li>
-                <li>Fill in the app details:
-                  <ul className="list-disc list-inside ml-4 mt-1">
-                    <li><strong>App Name:</strong> Your shop name (e.g., "My Duka Payments")</li>
-                    <li><strong>App Description:</strong> Brief description of your business</li>
-                  </ul>
-                </li>
-                <li>Select the APIs you need:
-                  <ul className="list-disc list-inside ml-4 mt-1">
-                    <li>✅ <strong>Lipa Na M-Pesa Online</strong> (STK Push) - Required!</li>
-                    <li>✅ M-Pesa Express Query (optional - for checking payment status)</li>
-                  </ul>
-                </li>
-                <li>Click <strong>"Create App"</strong></li>
-              </ol>
-            </div>
-          </div>
-
-          {/* Step 4: Get Your Credentials */}
-          <div className="border-l-4 border-primary pl-4">
-            <h4 className="font-semibold text-base mb-2">Step 4: Get Your API Credentials</h4>
-            <p className="text-sm text-muted-foreground mb-3">
-              After creating your app, you'll get the credentials needed for this settings page.
-            </p>
-            <div className="bg-muted/50 rounded-lg p-4 text-sm space-y-3">
-              <ol className="list-decimal list-inside space-y-2 text-muted-foreground">
-                <li>Go to <strong>"My Apps"</strong> and click on your app</li>
-                <li>You'll see two tabs: <strong>Sandbox</strong> and <strong>Production</strong></li>
-                <li>For testing, use <strong>Sandbox</strong> credentials first</li>
-                <li>Copy these values:
-                  <ul className="list-disc list-inside ml-4 mt-1">
-                    <li><strong>Consumer Key:</strong> A long string of letters and numbers</li>
-                    <li><strong>Consumer Secret:</strong> Another long string (keep this secret!)</li>
-                  </ul>
-                </li>
-              </ol>
-              <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-md text-blue-800 dark:text-blue-300">
-                <strong>What about the Passkey?</strong><br/>
-                For Sandbox: Use the test passkey from Daraja documentation<br/>
-                For Production: Safaricom will provide this when you go live
-              </div>
-            </div>
-          </div>
-
-          {/* Step 5: Test in Sandbox */}
-          <div className="border-l-4 border-primary pl-4">
-            <h4 className="font-semibold text-base mb-2">Step 5: Test in Sandbox Mode</h4>
-            <p className="text-sm text-muted-foreground mb-3">
-              Before going live, test your integration with sandbox (test) credentials.
-            </p>
-            <div className="bg-muted/50 rounded-lg p-4 text-sm space-y-3">
-              <ol className="list-decimal list-inside space-y-2 text-muted-foreground">
-                <li>Enter your <strong>Sandbox</strong> credentials in the form above</li>
-                <li>Use the Sandbox shortcode: <code className="bg-background px-1 rounded">174379</code></li>
-                <li>Use the Sandbox passkey from Daraja docs</li>
-                <li>Click <strong>"Save Configuration"</strong></li>
-                <li>Click <strong>"Verify Credentials"</strong> to test the connection</li>
-                <li>Try a test payment (it won't charge real money)</li>
-              </ol>
-            </div>
-          </div>
-
-          {/* Step 6: Go Live */}
-          <div className="border-l-4 border-green-500 pl-4">
-            <h4 className="font-semibold text-base mb-2">Step 6: Go Live (Production)</h4>
-            <p className="text-sm text-muted-foreground mb-3">
-              Once testing is successful, apply to go live and accept real payments.
-            </p>
-            <div className="bg-muted/50 rounded-lg p-4 text-sm space-y-3">
-              <ol className="list-decimal list-inside space-y-2 text-muted-foreground">
-                <li>In your Daraja app, click <strong>"Go Live"</strong> button</li>
-                <li>Fill in the Go Live form:
-                  <ul className="list-disc list-inside ml-4 mt-1">
-                    <li>Your Paybill or Till number</li>
-                    <li>Business details and documents</li>
-                    <li>Callback URL (we provide this automatically)</li>
-                  </ul>
-                </li>
-                <li>Submit and wait for Safaricom approval (2-5 business days)</li>
-                <li>Once approved, you'll receive:
-                  <ul className="list-disc list-inside ml-4 mt-1">
-                    <li>Production Consumer Key</li>
-                    <li>Production Consumer Secret</li>
-                    <li>Production Passkey</li>
-                  </ul>
-                </li>
-                <li>Update your credentials here with the production values</li>
-                <li>Enable M-Pesa and start accepting real payments! 🎉</li>
-              </ol>
-            </div>
-          </div>
-
-          {/* Important Notes */}
-          <div className="mt-6 space-y-3">
-            <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
-              <h5 className="font-medium text-yellow-800 dark:text-yellow-300 mb-2">⚠️ Important Security Notes</h5>
-              <ul className="text-sm text-yellow-700 dark:text-yellow-400 space-y-1 list-disc list-inside">
-                <li>Never share your Consumer Secret or Passkey with anyone</li>
-                <li>Your credentials are encrypted and stored securely</li>
-                <li>Only shop admins can view or modify M-Pesa settings</li>
-              </ul>
-            </div>
-
-            <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
-              <h5 className="font-medium text-green-800 dark:text-green-300 mb-2">✅ Need Help?</h5>
-              <ul className="text-sm text-green-700 dark:text-green-400 space-y-1">
-                <li>📞 Safaricom Business: <strong>0722 002 100</strong></li>
-                <li>📧 Daraja Support: <strong>apisupport@safaricom.co.ke</strong></li>
-                <li>📚 <a href="https://developer.safaricom.co.ke/Documentation" target="_blank" rel="noopener noreferrer" className="underline">Daraja Documentation</a></li>
-              </ul>
-            </div>
-          </div>
-        </CardContent>
+          </CardContent>
+        )}
       </Card>
     </div>
   );

@@ -13,16 +13,19 @@ import { PaymentConfigService } from './services/payment-config.service';
 import { MpesaTransactionManagerService } from './services/mpesa-transaction-manager.service';
 import { MpesaController } from './mpesa.controller';
 import { PaymentConfigController } from './payment-config.controller';
+import { PaymentReadinessController } from './payment-readiness.controller';
 import { PaymentTransaction, PaymentTransactionSchema } from './schemas/payment-transaction.schema';
 import { MpesaTransaction, MpesaTransactionSchema } from './schemas/mpesa-transaction.schema';
 import { PaymentConfig, PaymentConfigSchema } from './schemas/payment-config.schema';
 import { VerificationLog, VerificationLogSchema } from './schemas/verification-log.schema';
 import { ConfigAuditLog, ConfigAuditLogSchema } from './schemas/config-audit-log.schema';
 import { Shop, ShopSchema } from '../shops/schemas/shop.schema';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
     ConfigModule,
+    NotificationsModule,
     MongooseModule.forFeature([
       { name: PaymentTransaction.name, schema: PaymentTransactionSchema },
       { name: MpesaTransaction.name, schema: MpesaTransactionSchema },
@@ -43,7 +46,7 @@ import { Shop, ShopSchema } from '../shops/schemas/shop.schema';
     PaymentConfigService,
     MpesaTransactionManagerService,
   ],
-  controllers: [PaymentsController, MpesaController, PaymentConfigController],
+  controllers: [PaymentsController, MpesaController, PaymentConfigController, PaymentReadinessController],
   exports: [
     PaymentsService,
     DarajaService,

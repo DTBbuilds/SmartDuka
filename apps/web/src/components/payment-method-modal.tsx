@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import {
   Button,
   Dialog,
@@ -23,6 +24,7 @@ import {
   Loader2,
   Shield,
   Send,
+  Lock,
 } from 'lucide-react';
 import { StripePaymentModal } from './stripe-payment-form';
 import { useAuth } from '@/lib/auth-context';
@@ -249,7 +251,14 @@ export function PaymentMethodModal({
       setStripeClientSecret(clientSecret);
     } catch (err: any) {
       console.error('Stripe payment intent error:', err);
-      setStripeError(err.message || 'Failed to initialize card payment');
+      // Provide user-friendly error message based on error type
+      let errorMessage = 'Failed to initialize card payment';
+      if (err instanceof TypeError && err.message === 'Failed to fetch') {
+        errorMessage = 'Unable to connect to payment service. Please check your internet connection or try again later.';
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      setStripeError(errorMessage);
     } finally {
       setIsCreatingPaymentIntent(false);
     }
@@ -375,13 +384,24 @@ export function PaymentMethodModal({
                           Setup
                         </div>
                       )}
-                      <div className={`h-12 w-12 rounded-full flex items-center justify-center transition-colors ${
-                        isMpesaDisabled 
-                          ? 'bg-amber-100 dark:bg-amber-900/50 group-hover:bg-amber-200 dark:group-hover:bg-amber-900' 
-                          : 'bg-primary/10 group-hover:bg-primary/20'
-                      }`}>
-                        <option.icon className={`h-6 w-6 ${isMpesaDisabled ? 'text-amber-600' : 'text-primary'}`} />
-                      </div>
+                      {/* Branded logo or icon */}
+                      {option.id === 'mpesa' ? (
+                        <div className="h-12 w-full flex items-center justify-center">
+                          <Image src="/images/payments/mpesa.svg" alt="M-Pesa" width={80} height={26} className="h-6 w-auto" unoptimized />
+                        </div>
+                      ) : option.id === 'cash' ? (
+                        <div className={`h-12 w-12 rounded-full flex items-center justify-center transition-colors bg-primary/10 group-hover:bg-primary/20`}>
+                          <option.icon className="h-6 w-6 text-primary" />
+                        </div>
+                      ) : (
+                        <div className={`h-12 w-12 rounded-full flex items-center justify-center transition-colors ${
+                          isMpesaDisabled
+                            ? 'bg-amber-100 dark:bg-amber-900/50 group-hover:bg-amber-200 dark:group-hover:bg-amber-900'
+                            : 'bg-primary/10 group-hover:bg-primary/20'
+                        }`}>
+                          <option.icon className={`h-6 w-6 ${isMpesaDisabled ? 'text-amber-600' : 'text-primary'}`} />
+                        </div>
+                      )}
                       <div className="text-center">
                         <p className="font-semibold text-sm">{option.label}</p>
                         {isMpesaDisabled ? (
@@ -410,6 +430,7 @@ export function PaymentMethodModal({
                   <div className="grid grid-cols-2 gap-2">
                     {secondaryOptions.map((option) => {
                       const isCardDisabled = (option.id === 'card' || option.id === 'stripe') && stripeConnectReady === false;
+                      const isCard = option.id === 'card' || option.id === 'stripe';
                       return (
                         <button
                           key={option.id}
@@ -423,7 +444,14 @@ export function PaymentMethodModal({
                           {isCardDisabled && (
                             <span className="absolute -top-1.5 -right-1.5 bg-amber-500 text-white text-[9px] px-1.5 py-0.5 rounded-full font-medium">Setup</span>
                           )}
-                          <option.icon className={`h-4 w-4 ${isCardDisabled ? 'text-amber-600' : 'text-muted-foreground'}`} />
+                          {isCard ? (
+                            <div className="flex items-center gap-1">
+                              <Image src="/images/payments/visa.svg" alt="Visa" width={32} height={12} className="h-3 w-auto" unoptimized />
+                              <Image src="/images/payments/mastercard.svg" alt="Mastercard" width={20} height={14} className="h-3.5 w-auto" unoptimized />
+                            </div>
+                          ) : (
+                            <option.icon className={`h-4 w-4 ${isCardDisabled ? 'text-amber-600' : 'text-muted-foreground'}`} />
+                          )}
                           <div className="text-left">
                             <span className="text-sm font-medium">{option.label}</span>
                             {isCardDisabled && (
@@ -438,8 +466,19 @@ export function PaymentMethodModal({
               )}
             </div>
 
+            {/* Trust strip */}
+            <div className="px-4 flex items-center justify-center gap-3 text-[10px] text-muted-foreground/60">
+              <span className="flex items-center gap-0.5"><Lock className="h-2.5 w-2.5" /> Secure</span>
+              <span className="flex items-center gap-0.5"><Shield className="h-2.5 w-2.5" /> Encrypted</span>
+              <div className="flex items-center gap-1.5">
+                <Image src="/images/payments/mpesa.svg" alt="M-Pesa" width={36} height={12} className="h-2.5 w-auto opacity-40" unoptimized />
+                <Image src="/images/payments/visa.svg" alt="Visa" width={24} height={8} className="h-2 w-auto opacity-40" unoptimized />
+                <Image src="/images/payments/mastercard.svg" alt="Mastercard" width={16} height={10} className="h-2.5 w-auto opacity-40" unoptimized />
+              </div>
+            </div>
+
             {/* Cancel Button */}
-            <div className="px-4 pb-4">
+            <div className="px-4 pb-4 pt-1">
               <Button variant="outline" size="sm" onClick={handleClose} className="w-full">
                 <X className="h-4 w-4 mr-2" />
                 Cancel
@@ -578,9 +617,21 @@ export function PaymentMethodModal({
                   <div className="p-3 rounded-lg bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 text-center">
                     <p className="text-sm font-medium">{stripeError}</p>
                   </div>
-                  <Button variant="outline" onClick={() => createStripePaymentIntent()}>
-                    Try Again
-                  </Button>
+                  <div className="flex gap-2 w-full px-4">
+                    {stripeError?.toLowerCase().includes('not configured') ? (
+                      <Button
+                        variant="default"
+                        className="flex-1 bg-blue-600 hover:bg-blue-700"
+                        onClick={() => window.location.href = '/settings?tab=stripe'}
+                      >
+                        Configure Card Payments
+                      </Button>
+                    ) : (
+                      <Button variant="outline" className="flex-1" onClick={() => createStripePaymentIntent()}>
+                        Try Again
+                      </Button>
+                    )}
+                  </div>
                 </div>
               ) : (
                 <div className="text-center py-4">

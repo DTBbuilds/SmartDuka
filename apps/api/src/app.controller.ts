@@ -1,4 +1,4 @@
-import { Controller, Get, Head, Header } from '@nestjs/common';
+import { Controller, Get, Head, Post, Header } from '@nestjs/common';
 import { AppService } from './app.service';
 
 @Controller()
@@ -24,6 +24,16 @@ export class AppController {
   headRoot(): void {
     // HEAD request for health probes - returns 200 with no body
     return;
+  }
+
+  @Post()
+  postRoot(): object {
+    // Handle POST / from bots or misconfigured probes to avoid 404 noise
+    return {
+      name: 'SmartDuka API',
+      status: 'running',
+      message: 'Use the documented API endpoints.',
+    };
   }
 
   @Get('robots.txt')

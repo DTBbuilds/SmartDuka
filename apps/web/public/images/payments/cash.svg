@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 60" fill="none">
+  <!-- Hand -->
+  <path d="M10 52 C10 52, 14 40, 22 38 C30 36, 38 38, 40 36" stroke="#2E7D32" stroke-width="3" stroke-linecap="round" fill="none"/>
+  <path d="M40 36 C42 34, 46 32, 50 34 C54 36, 56 42, 52 46 C48 50, 30 52, 22 50 C14 48, 10 52, 10 52" stroke="#2E7D32" stroke-width="3" stroke-linecap="round" fill="none"/>
+  <!-- Banknote -->
+  <rect x="18" y="6" width="52" height="30" rx="3" fill="#E8F5E9" stroke="#4CAF50" stroke-width="2"/>
+  <circle cx="44" cy="21" r="8" fill="none" stroke="#4CAF50" stroke-width="1.5"/>
+  <text x="40" y="25" font-family="Arial, Helvetica, sans-serif" font-weight="bold" font-size="12" fill="#2E7D32" text-anchor="middle">$</text>
+  <line x1="24" y1="12" x2="24" y2="30" stroke="#A5D6A7" stroke-width="1"/>
+  <line x1="64" y1="12" x2="64" y2="30" stroke="#A5D6A7" stroke-width="1"/>
+</svg>

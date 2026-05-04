@@ -1,11 +1,13 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import helmet from 'helmet';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
+import { json, urlencoded } from 'express';
 import dns from 'dns';
 
 // Fix for networks with slow/unreliable DNS that can't resolve MongoDB Atlas SRV records.
@@ -16,11 +18,16 @@ if (process.env.NODE_ENV !== 'production') {
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     logger: process.env.NODE_ENV === 'production' 
       ? ['error', 'warn', 'log'] 
       : ['error', 'warn', 'log', 'debug', 'verbose'],
+    rawBody: true,
   });
+
+  // Increase body parser limits for large CSV imports (50MB)
+  app.use(json({ limit: '50mb' }));
+  app.use(urlencoded({ limit: '50mb', extended: true }));
 
   // Enable CORS FIRST - before any other middleware
   // This ensures preflight requests work correctly
@@ -36,7 +43,7 @@ async function bootstrap() {
           'https://www.smartduka.org',
           'https://smartduka.org',
           process.env.CORS_ORIGIN,
-        ].filter(Boolean),
+        ].filter((o): o is string => typeof o === 'string'),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'X-CSRF-Token', 'x-csrf-token'],

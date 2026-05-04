@@ -182,7 +182,8 @@ class StatusManager {
         console.error('Heartbeat failed:', response.status);
       }
     } catch (error) {
-      // Network error - increment failures but don't log
+      // Network error - increment failures but don't log to console
+      // "Failed to fetch" is typically API down or network unreachable - expected during dev
       this.consecutiveFailures++;
     }
   }
@@ -192,6 +193,12 @@ class StatusManager {
    */
   private async updateStatus() {
     if (!this.token || !this.userId) return;
+
+    // Skip if API URL is not configured
+    if (!this.baseUrl || this.baseUrl === 'undefined' || this.baseUrl === 'null') {
+      console.warn('[StatusManager] API URL not configured, skipping status update');
+      return;
+    }
 
     try {
       await fetch(`${this.baseUrl}/activity/status`, {
@@ -208,7 +215,12 @@ class StatusManager {
         }),
       });
     } catch (error) {
-      console.error('Status update error:', error);
+      // "Failed to fetch" usually means API is down or unreachable - don't spam console
+      if (error instanceof TypeError && error.message === 'Failed to fetch') {
+        // Silently ignore - this is typically a network/API unavailability issue
+        return;
+      }
+      console.error('[StatusManager] Status update error:', error);
     }
   }
 

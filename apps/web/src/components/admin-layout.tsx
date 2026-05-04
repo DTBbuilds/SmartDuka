@@ -71,11 +71,12 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   }
 
   const isAdmin = user?.role === 'admin';
-  
-  // Show admin layout if user is admin AND (shop is active OR in demo mode)
-  const showAdminLayout = isAdmin && (!isShopPending || isDemoMode);
 
-  // For non-admin users or pending shops without demo mode, just render children without sidebar
+  // Show admin layout for all admin users
+  // The sidebar provides navigation for all admin functions
+  const showAdminLayout = isAdmin;
+
+  // For non-admin users, just render children without sidebar
   if (!showAdminLayout) {
     return <>{children}</>;
   }

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 60" fill="none">
+  <!-- Swoosh -->
+  <path d="M8 38 C12 18, 28 8, 48 12 C38 6, 18 14, 8 38Z" fill="#E53935"/>
+  <path d="M8 38 C14 22, 28 12, 48 12 C52 28, 42 42, 28 44 C18 44, 10 42, 8 38Z" fill="none" stroke="#E53935" stroke-width="3" stroke-linecap="round"/>
+  <text x="50" y="43" font-family="Arial, Helvetica, sans-serif" font-weight="bold" font-size="36" fill="#4CAF50">Safaricom</text>
+</svg>
