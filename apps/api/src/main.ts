@@ -174,4 +174,8 @@ Include the token in the Authorization header: \`Bearer <token>\`
   logger.log(`❤️ Health check at http://localhost:${port}/health`);
   logger.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
 }
-bootstrap();
+bootstrap().catch((error) => {
+  console.error('FATAL: Bootstrap failed:', error?.message || error);
+  console.error(error?.stack || '');
+  process.exit(1);
+});
