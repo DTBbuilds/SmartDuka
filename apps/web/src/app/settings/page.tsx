@@ -815,7 +815,7 @@ function SubscriptionSettingsTab() {
             </p>
             <div className="flex flex-col sm:flex-row gap-3">
               <a 
-                href="https://wa.me/254729983567?text=Hello%20SmartDuka%2C%20I%20would%20like%20to%20make%20a%20donation%20to%20support%20the%20project"
+                href="https://wa.me/61450275013?text=Hello%20SmartDuka%2C%20I%20would%20like%20to%20make%20a%20donation%20to%20support%20the%20project"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
@@ -823,7 +823,7 @@ function SubscriptionSettingsTab() {
                 <Phone className="h-4 w-4" />
                 Donate via M-Pesa
               </a>
-              <span className="text-xs text-muted-foreground self-center">Send to 0729 983 567</span>
+              <span className="text-xs text-muted-foreground self-center">Send to 0727 068 107 (KE)</span>
             </div>
             <CardDonationSection />
           </div>
@@ -2516,8 +2516,8 @@ function SubscriptionSettingsTab() {
                                 <span className="w-6 h-6 rounded-full bg-emerald-200 dark:bg-emerald-800 flex items-center justify-center text-sm font-bold flex-shrink-0">2</span>
                                 <div>
                                   <span>Send to: </span>
-                                  <button onClick={() => copyToClipboard('0729925567')} className="font-mono font-bold text-lg bg-white dark:bg-emerald-900 px-3 py-1 rounded inline-flex items-center gap-2">
-                                    0729925567 {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                                  <button onClick={() => copyToClipboard('0727068107')} className="font-mono font-bold text-lg bg-white dark:bg-emerald-900 px-3 py-1 rounded inline-flex items-center gap-2">
+                                    0727068107 {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                                   </button>
                                 </div>
                               </li>

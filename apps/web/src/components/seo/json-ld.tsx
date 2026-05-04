@@ -260,7 +260,7 @@ export function WebSiteJsonLd() {
   );
 }
 
-// Local Business Schema for Kenya targeting
+// Local Business Schema for global targeting
 export function WebPageJsonLd({ name, description, url }: { name: string; description: string; url: string }) {
   const schema = {
     '@context': 'https://schema.org',
@@ -299,25 +299,23 @@ export function LocalBusinessJsonLd() {
     alternateName: 'SmartDuka',
     description: 'DTB Technologies builds SmartDuka, a 100% free and open source point of sale and inventory management system. No subscriptions, no user data collected.',
     url: 'https://www.smartduka.org',
-    telephone: '+254-729-983-567',
+    telephone: '+61-450-275-013',
     email: 'smartdukainfo@gmail.com',
     address: {
       '@type': 'PostalAddress',
-      streetAddress: 'Nairobi',
-      addressLocality: 'Nairobi',
-      addressRegion: 'Nairobi County',
-      postalCode: '00100',
-      addressCountry: 'KE',
+      addressLocality: 'Sydney',
+      addressRegion: 'NSW',
+      postalCode: '2000',
+      addressCountry: 'AU',
     },
     geo: {
       '@type': 'GeoCoordinates',
-      latitude: -1.2921,
-      longitude: 36.8219,
+      latitude: -33.8688,
+      longitude: 151.2093,
     },
     areaServed: [
+      { '@type': 'Country', name: 'Australia' },
       { '@type': 'Country', name: 'Kenya' },
-      { '@type': 'Country', name: 'Uganda' },
-      { '@type': 'Country', name: 'Tanzania' },
     ],
     priceRange: 'Free',
     openingHoursSpecification: {

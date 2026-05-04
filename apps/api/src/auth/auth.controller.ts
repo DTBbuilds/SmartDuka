@@ -336,7 +336,7 @@ export class AuthController {
   async registerShopWithGoogle(
     @Body() body: {
       googleProfile: { googleId: string; email: string; name: string; avatarUrl?: string; phone?: string };
-      shop: { shopName: string; businessType: string; county: string; city: string; address?: string; kraPin?: string; description?: string; phone?: string };
+      shop: { shopName: string; businessType: string; country: string; county: string; city: string; currency: string; address?: string; kraPin?: string; description?: string; phone?: string };
     },
     @Req() req: any,
   ) {

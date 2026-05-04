@@ -38,11 +38,14 @@ export class AuthService {
 
   async registerShop(dto: RegisterShopDto) {
     // Enforce email OTP verification before registration
-    if (this.otpService) {
-      const isVerified = await this.otpService.isEmailRecentlyVerified(dto.admin.email, 'registration');
-      if (!isVerified) {
-        throw new BadRequestException('Email not verified. Please verify your email with OTP before registering.');
-      }
+    // SECURITY: If OtpService is unavailable, block registration entirely to prevent bypass
+    if (!this.otpService) {
+      this.logger.error('OtpService not available — blocking registration to prevent OTP bypass');
+      throw new BadRequestException('Email verification service is temporarily unavailable. Please try again later.');
+    }
+    const isVerified = await this.otpService.isEmailRecentlyVerified(dto.admin.email, 'registration');
+    if (!isVerified) {
+      throw new BadRequestException('Email not verified. Please verify your email with OTP before registering.');
     }
 
     // Create shop with proper shop name and admin contact info
@@ -51,15 +54,16 @@ export class AuthService {
       email: dto.admin.email,   // Use admin email as shop contact email
       phone: dto.admin.phone,   // Use admin phone as shop contact phone
       businessType: dto.shop.businessType,
+      country: dto.shop.country,
       county: dto.shop.county,
       city: dto.shop.city,
+      currency: dto.shop.currency,
     };
 
     // Add optional fields if they have values
     if (dto.shop.address) shopData.address = dto.shop.address;
     if (dto.shop.kraPin) shopData.kraPin = dto.shop.kraPin;
     if (dto.shop.description) shopData.description = dto.shop.description;
-    if (dto.shop.currency) shopData.currency = dto.shop.currency;
 
     const shop = await this.shopsService.create('', shopData);
 
@@ -775,7 +779,7 @@ export class AuthService {
 
   async registerShopWithGoogle(
     googleProfile: { googleId: string; email: string; name: string; avatarUrl?: string },
-    shopData: { shopName: string; businessType: string; county: string; city: string; address?: string; kraPin?: string; description?: string; phone?: string },
+    shopData: { shopName: string; businessType: string; country: string; county: string; city: string; currency: string; address?: string; kraPin?: string; description?: string; phone?: string },
     ipAddress?: string,
     userAgent?: string,
   ) {
@@ -790,8 +794,10 @@ export class AuthService {
       email: googleProfile.email,
       phone: shopData.phone,
       businessType: shopData.businessType,
+      country: shopData.country,
       county: shopData.county,
       city: shopData.city,
+      currency: shopData.currency,
     };
 
     if (shopData.address) shopPayload.address = shopData.address;

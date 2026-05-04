@@ -27,7 +27,7 @@ import { SubscriptionPaymentDto } from './dto/subscription.dto';
  * Handles M-Pesa payments for subscription invoices
  * Payment options:
  * 1. STK Push - Automated payment prompt
- * 2. Send Money - Manual payment to 0729983567
+ * 2. Send Money - Manual payment to 0727068107
  */
 @Controller('subscriptions/payments')
 @SkipSubscriptionCheck() // Payment routes must be accessible even when subscription is expired
@@ -44,7 +44,7 @@ export class SubscriptionPaymentController {
    * Initiate M-Pesa STK Push payment for an invoice
    * 
    * This endpoint triggers an STK push to the customer's phone
-   * for subscription payment to SmartDuka (0729983567)
+   * for subscription payment to SmartDuka (0727068107)
    */
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
@@ -140,7 +140,7 @@ export class SubscriptionPaymentController {
   /**
    * Get manual payment instructions
    * 
-   * Returns instructions for sending money directly to 0729983567
+   * Returns instructions for sending money directly to 0727068107
    */
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')

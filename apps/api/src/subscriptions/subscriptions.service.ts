@@ -2810,7 +2810,7 @@ export class SubscriptionsService {
               </a>
             </div>
             <p style="color: #666; font-size: 14px;">
-              <strong>M-Pesa:</strong> Pay to <strong>0729983567</strong> (SmartDuka)
+              <strong>M-Pesa:</strong> Pay to <strong>0727068107</strong> (SmartDuka)
             </p>
             <p>Best regards,<br>SmartDuka Team</p>
           </div>

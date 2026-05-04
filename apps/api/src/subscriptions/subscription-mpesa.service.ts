@@ -853,13 +853,13 @@ export class SubscriptionMpesaService implements OnModuleInit {
     instructions: string[];
   } {
     return {
-      phoneNumber: '0729983567',
+      phoneNumber: '0727068107',
       amount,
       reference: `SD-${invoiceNumber}`,
       instructions: [
         '1. Open M-Pesa on your phone',
         '2. Select "Send Money"',
-        '3. Enter number: 0729983567',
+        '3. Enter number: 0727068107',
         `4. Enter amount: KES ${amount.toLocaleString()}`,
         `5. Enter reference: SD-${invoiceNumber}`,
         '6. Enter your M-Pesa PIN and confirm',
@@ -1434,7 +1434,7 @@ export class SubscriptionMpesaService implements OnModuleInit {
     return {
       amount,
       formattedAmount: `KES ${amount.toLocaleString()}`,
-      recipient: '0729983567',
+      recipient: '0727068107',
       recipientName: 'SmartDuka',
       reference: `SD-${invoiceNumber}`,
       stkPushInstructions: [
@@ -1447,7 +1447,7 @@ export class SubscriptionMpesaService implements OnModuleInit {
       sendMoneyInstructions: [
         'Open M-Pesa on your phone',
         'Select "Send Money"',
-        'Enter number: 0729983567',
+        'Enter number: 0727068107',
         `Enter amount: KES ${amount.toLocaleString()}`,
         'Enter your M-Pesa PIN and confirm',
         'Save the confirmation message',

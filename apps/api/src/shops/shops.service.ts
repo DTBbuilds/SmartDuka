@@ -10,10 +10,12 @@ export interface CreateShopDto {
   phone: string;
   tillNumber?: string;
   address?: string;
+  county?: string;
   city?: string;
   country?: string;
   businessType?: string;
   kraPin?: string;
+  currency?: string;
   language?: 'en' | 'sw';
 }
 
@@ -23,10 +25,12 @@ export interface UpdateShopDto {
   phone?: string;
   email?: string;
   address?: string;
+  county?: string;
   city?: string;
   country?: string;
   businessType?: string;
   kraPin?: string;
+  currency?: string;
   language?: 'en' | 'sw';
   status?: 'pending' | 'verified' | 'active' | 'suspended';
   settings?: Record<string, any>;

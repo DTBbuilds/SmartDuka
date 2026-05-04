@@ -34,9 +34,9 @@ export default function SupportPage() {
 
   const contactInfo = {
     email: 'smartdukainfo@gmail.com',
-    phones: ['0729983567', '0104160502'],
+    phones: ['0450 275 013 (AU)', '0727 068 107 (KE)'],
     hours: 'Monday - Friday: 8:00 AM - 6:00 PM',
-    location: 'Nairobi, Kenya',
+    location: 'Sydney, Australia',
   };
 
   const handleOpenInbox = () => {

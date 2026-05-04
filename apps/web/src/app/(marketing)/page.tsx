@@ -46,7 +46,7 @@ export const metadata: Metadata = {
   ],
   openGraph: {
     title: 'SmartDuka \u2013 Free Open Source Point of Sale & Inventory Management',
-    description: '100% free, open source POS and inventory management. No subscriptions, no hidden fees, no user data collected. Built for African retailers.',
+    description: '100% free, open source POS and inventory management. No subscriptions, no hidden fees, no user data collected. Built for modern businesses everywhere.',
     type: 'website',
     locale: 'en_KE',
     siteName: 'SmartDuka',
@@ -55,7 +55,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'SmartDuka \u2013 Free Open Source POS System',
-    description: '100% free, open source POS and inventory management. No subscriptions, no data collection. Built for African retailers.',
+    description: '100% free, open source POS and inventory management. No subscriptions, no data collection. Built for modern businesses everywhere.',
     creator: '@smartduka',
     site: '@smartduka',
   },
@@ -401,12 +401,12 @@ export default function HomePage() {
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div>
               <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-6">
-                Why Kenyan Businesses Choose SmartDuka
+                Why Businesses Choose SmartDuka
               </h2>
               <p className="text-lg text-gray-600 mb-8">
-                Built specifically for the Kenyan market, SmartDuka understands the unique 
-                needs of local retailers. From M-Pesa integration to Swahili support, 
-                we&apos;ve got you covered.
+                Built for modern businesses in Africa and Australia, SmartDuka understands 
+                the unique needs of local retailers. From M-Pesa integration to multi-currency 
+                support, we&apos;ve got you covered.
               </p>
               
               <div className="space-y-4">
@@ -493,7 +493,7 @@ export default function HomePage() {
             Ready to Transform Your Business?
           </h2>
           <p className="text-xl text-orange-100 mb-8">
-            Join thousands of Kenyan businesses using SmartDuka to grow their sales 
+            Join thousands of businesses worldwide using SmartDuka to grow their sales 
             and manage their inventory efficiently.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -548,7 +548,7 @@ export default function HomePage() {
               </p>
               <div className="flex items-center gap-2 text-sm">
                 <Phone className="h-4 w-4" />
-                <span>0729983567 / 0104160502</span>
+                <span>0450 275 013 (AU) / 0727 068 107 (KE)</span>
               </div>
               <div className="flex items-center gap-2 text-sm mt-2">
                 <Mail className="h-4 w-4" />

@@ -7,7 +7,7 @@
  * Background: #f4f4f5 / #ffffff
  * All styles inline for maximum email client compatibility
  * 
- * Contact: 0729983567, 0104160502 | smartdukainfo@gmail.com | www.smartduka.org
+ * Contact: 0450 275 013 (AU), 0727 068 107 (KE) | smartdukainfo@gmail.com | www.smartduka.org
  */
 
 // Base email wrapper with SmartDuka branding — clean, professional, all inline styles

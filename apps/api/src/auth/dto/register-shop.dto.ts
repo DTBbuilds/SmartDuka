@@ -1,6 +1,18 @@
 import { IsEmail, IsString, IsOptional, MinLength, ValidateNested, Matches, MaxLength, IsIn, ValidateIf } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 
+// Supported countries and their codes
+const SUPPORTED_COUNTRIES = ['KE', 'AU'];
+
+// Country → currency mapping (used for auto-population on frontend)
+const COUNTRY_CURRENCIES: Record<string, string> = {
+  KE: 'KES',
+  AU: 'AUD',
+};
+
+// Valid currencies
+const SUPPORTED_CURRENCIES = ['KES', 'AUD', 'USD', 'GBP', 'EUR'];
+
 // Kenya counties
 const KENYA_COUNTIES = [
   "Baringo", "Bomet", "Bungoma", "Busia", "Elgeyo-Marakwet", "Embu", "Garissa",
@@ -11,6 +23,15 @@ const KENYA_COUNTIES = [
   "Siaya", "Taita-Taveta", "Tana River", "Tharaka-Nithi", "Trans-Nzoia", "Turkana",
   "Uasin Gishu", "Vihiga", "Wajir", "West Pokot"
 ];
+
+// Australian states/territories
+const AUSTRALIA_STATES = [
+  "Australian Capital Territory", "New South Wales", "Northern Territory",
+  "Queensland", "South Australia", "Tasmania", "Victoria", "Western Australia"
+];
+
+// All valid regions
+const ALL_REGIONS = [...KENYA_COUNTIES, ...AUSTRALIA_STATES];
 
 export class ShopInfoDto {
   @IsString()
@@ -23,7 +44,11 @@ export class ShopInfoDto {
   businessType: string;
 
   @IsString()
-  @IsIn(KENYA_COUNTIES, { message: 'Please select a valid county' })
+  @IsIn(SUPPORTED_COUNTRIES, { message: 'Please select a valid country' })
+  country: string;
+
+  @IsString()
+  @IsIn(ALL_REGIONS, { message: 'Please select a valid region/county/state' })
   county: string;
 
   @IsString()
@@ -39,11 +64,11 @@ export class ShopInfoDto {
   @Transform(({ value }) => {
     if (typeof value === 'string') {
       const trimmed = value.trim().toUpperCase();
-      return trimmed || undefined; // Return undefined if empty string
+      return trimmed || undefined;
     }
     return undefined;
   })
-  @ValidateIf((o) => o.kraPin !== undefined && o.kraPin !== null && o.kraPin !== '')
+  @ValidateIf((o) => o.country === 'KE' && o.kraPin !== undefined && o.kraPin !== null && o.kraPin !== '')
   @IsString()
   @Matches(/^[A-Z][0-9]{9}[A-Z]$/, { 
     message: 'Invalid KRA PIN format (e.g., A123456789B)',
@@ -55,10 +80,9 @@ export class ShopInfoDto {
   @MaxLength(500)
   description?: string;
 
-  @IsOptional()
   @IsString()
-  @IsIn(['KES', 'AUD'], { message: 'Currency must be KES or AUD' })
-  currency?: string;
+  @IsIn(SUPPORTED_CURRENCIES, { message: 'Please select a valid currency' })
+  currency: string;
 
   @IsOptional()
   @IsString()

@@ -1,6 +1,9 @@
 import { IsEmail, IsString, IsOptional, MinLength, Matches, MaxLength, IsIn, ValidateIf } from 'class-validator';
 import { Transform } from 'class-transformer';
 
+const SUPPORTED_COUNTRIES = ['KE', 'AU'];
+const SUPPORTED_CURRENCIES = ['KES', 'AUD', 'USD', 'GBP', 'EUR'];
+
 // Kenya counties
 const KENYA_COUNTIES = [
   "Baringo", "Bomet", "Bungoma", "Busia", "Elgeyo-Marakwet", "Embu", "Garissa",
@@ -11,6 +14,14 @@ const KENYA_COUNTIES = [
   "Siaya", "Taita-Taveta", "Tana River", "Tharaka-Nithi", "Trans-Nzoia", "Turkana",
   "Uasin Gishu", "Vihiga", "Wajir", "West Pokot"
 ];
+
+// Australian states/territories
+const AUSTRALIA_STATES = [
+  "Australian Capital Territory", "New South Wales", "Northern Territory",
+  "Queensland", "South Australia", "Tasmania", "Victoria", "Western Australia"
+];
+
+const ALL_REGIONS = [...KENYA_COUNTIES, ...AUSTRALIA_STATES];
 
 export class CreateShopDto {
   @IsString()
@@ -29,8 +40,13 @@ export class CreateShopDto {
   @MinLength(2, { message: 'Business type is required' })
   businessType: string;
 
+  @IsOptional()
   @IsString()
-  @IsIn(KENYA_COUNTIES, { message: 'Please select a valid county' })
+  @IsIn(SUPPORTED_COUNTRIES, { message: 'Please select a valid country' })
+  country?: string;
+
+  @IsString()
+  @IsIn(ALL_REGIONS, { message: 'Please select a valid region/county/state' })
   county: string;
 
   @IsString()
@@ -50,7 +66,7 @@ export class CreateShopDto {
     }
     return undefined;
   })
-  @ValidateIf((o) => o.kraPin !== undefined && o.kraPin !== null && o.kraPin !== '')
+  @ValidateIf((o) => o.country === 'KE' && o.kraPin !== undefined && o.kraPin !== null && o.kraPin !== '')
   @IsString()
   @Matches(/^[A-Z][0-9]{9}[A-Z]$/, { 
     message: 'Invalid KRA PIN format (e.g., A123456789B)',
@@ -61,6 +77,11 @@ export class CreateShopDto {
   @IsString()
   @MaxLength(500)
   description?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(SUPPORTED_CURRENCIES, { message: 'Please select a valid currency' })
+  currency?: string;
 
   @IsOptional()
   @IsString()

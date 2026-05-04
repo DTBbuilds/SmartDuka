@@ -29,7 +29,10 @@ export class Shop {
   @Prop({ required: true, trim: true })
   businessType: string;
 
-  @Prop({ enum: ['KES', 'AUD'], default: 'KES', trim: true })
+  @Prop({ required: false, trim: true })
+  country?: string;
+
+  @Prop({ enum: ['KES', 'AUD', 'USD', 'GBP', 'EUR'], default: 'KES', trim: true })
   currency: string;
 
   @Prop({ required: false, trim: true })

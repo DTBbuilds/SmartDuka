@@ -88,7 +88,7 @@ export default function PrivacyPolicyPage() {
             <br />
             Email: smartdukainfo@gmail.com
             <br />
-            Phone: 0729983567 / 0104160502
+            Phone: 0450 275 013 (AU) / 0727 068 107 (KE)
           </p>
         </div>
       </div>

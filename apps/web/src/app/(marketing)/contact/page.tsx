@@ -11,19 +11,19 @@ import {
 } from 'lucide-react';
 
 export const metadata: Metadata = {
-  title: 'Contact SmartDuka - Get Support & Sales Help | Kenya',
-  description: 'Contact SmartDuka for sales inquiries, technical support, or general questions. We\'re here to help your business succeed. Phone, email, or visit us in Nairobi.',
+  title: 'Contact SmartDuka - Get Support & Sales Help',
+  description: 'Contact SmartDuka for sales inquiries, technical support, or general questions. We\'re here to help your business succeed. Phone, email, or WhatsApp.',
   keywords: [
     'contact SmartDuka',
-    'POS support Kenya',
+    'POS support',
     'SmartDuka phone number',
     'retail software help',
   ],
   openGraph: {
-    title: 'Contact SmartDuka | Kenya',
+    title: 'Contact SmartDuka',
     description: 'Get in touch with our team for sales or support.',
     type: 'website',
-    locale: 'en_KE',
+    locale: 'en_AU',
   },
   alternates: {
     canonical: 'https://www.smartduka.org/contact',
@@ -87,10 +87,15 @@ export default function ContactPage() {
               </div>
               <h3 className="text-xl font-bold text-gray-900 mb-2">Call Us</h3>
               <p className="text-gray-600 mb-4">Speak directly with our team</p>
-              <a href="tel:+254729983567" className="text-orange-600 font-semibold hover:underline">
-                0729983567 / 0104160502
-              </a>
-              <p className="text-sm text-gray-500 mt-2">Mon-Fri, 8am-6pm EAT</p>
+              <div className="space-y-1">
+                <a href="tel:+61450275013" className="text-orange-600 font-semibold hover:underline block">
+                  0450 275 013 (AU)
+                </a>
+                <a href="tel:+254727068107" className="text-orange-600 font-semibold hover:underline block">
+                  0727 068 107 (KE)
+                </a>
+              </div>
+              <p className="text-sm text-gray-500 mt-2">Mon-Fri, 8am-6pm</p>
             </div>
             
             <div className="bg-gray-50 p-8 rounded-2xl text-center">
@@ -111,8 +116,8 @@ export default function ContactPage() {
               </div>
               <h3 className="text-xl font-bold text-gray-900 mb-2">WhatsApp</h3>
               <p className="text-gray-600 mb-4">Quick support via chat</p>
-              <a href="https://wa.me/254729983567" className="text-orange-600 font-semibold hover:underline">
-                0729983567
+              <a href="https://wa.me/61450275013" className="text-orange-600 font-semibold hover:underline">
+                0450 275 013
               </a>
               <p className="text-sm text-gray-500 mt-2">Available 24/7</p>
             </div>
@@ -212,11 +217,13 @@ export default function ContactPage() {
                     <MapPin className="h-5 w-5 text-orange-600" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-gray-900 mb-1">Nairobi Office</h3>
+                    <h3 className="font-bold text-gray-900 mb-1">Sydney Office</h3>
                     <p className="text-gray-600">
-                      Westlands Business Park<br />
-                      Waiyaki Way<br />
-                      Nairobi, Kenya
+                      Sydney, NSW<br />
+                      Australia
+                    </p>
+                    <p className="text-gray-500 text-sm mt-2">
+                      Also supporting businesses in Nairobi, Kenya
                     </p>
                   </div>
                 </div>

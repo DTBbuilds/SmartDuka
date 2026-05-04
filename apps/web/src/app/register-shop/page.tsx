@@ -40,6 +40,59 @@ const KENYA_COUNTIES = [
   "Uasin Gishu", "Vihiga", "Wajir", "West Pokot"
 ];
 
+// Australian states/territories
+const AUSTRALIA_STATES = [
+  "Australian Capital Territory", "New South Wales", "Northern Territory",
+  "Queensland", "South Australia", "Tasmania", "Victoria", "Western Australia"
+];
+
+// Country configuration map
+const COUNTRY_CONFIG: Record<string, {
+  name: string;
+  flag: string;
+  currency: string;
+  currencySymbol: string;
+  currencyName: string;
+  regions: string[];
+  regionLabel: string;
+  phonePlaceholder: string;
+  cityPlaceholder: string;
+  addressPlaceholder: string;
+}> = {
+  KE: {
+    name: 'Kenya',
+    flag: '🇰🇪',
+    currency: 'KES',
+    currencySymbol: 'KSh',
+    currencyName: 'Kenyan Shilling',
+    regions: KENYA_COUNTIES,
+    regionLabel: 'County',
+    phonePlaceholder: 'e.g., 0727 068 107',
+    cityPlaceholder: 'e.g., Westlands, Kisumu CBD',
+    addressPlaceholder: 'e.g., Kenyatta Avenue, Shop 12',
+  },
+  AU: {
+    name: 'Australia',
+    flag: '🇦🇺',
+    currency: 'AUD',
+    currencySymbol: 'A$',
+    currencyName: 'Australian Dollar',
+    regions: AUSTRALIA_STATES,
+    regionLabel: 'State/Territory',
+    phonePlaceholder: 'e.g., 0450 275 013',
+    cityPlaceholder: 'e.g., Sydney, Melbourne CBD',
+    addressPlaceholder: 'e.g., 123 George St, Shop 4',
+  },
+};
+
+const CURRENCY_OPTIONS = [
+  { code: 'KES', symbol: 'KSh', name: 'Kenyan Shilling' },
+  { code: 'AUD', symbol: 'A$', name: 'Australian Dollar' },
+  { code: 'USD', symbol: '$', name: 'US Dollar' },
+  { code: 'GBP', symbol: '£', name: 'British Pound' },
+  { code: 'EUR', symbol: '€', name: 'Euro' },
+];
+
 // Business types from shared package
 import { getBusinessTypeOptions, getCategoryLabel } from '@smartduka/business-types';
 
@@ -134,6 +187,7 @@ function RegisterShopContent() {
   const [shopData, setShopData] = useState({
     shopName: "",
     businessType: "",
+    country: "KE",
     county: "",
     city: "",
     address: "",
@@ -141,6 +195,22 @@ function RegisterShopContent() {
     description: "",
     currency: "KES",
   });
+
+  // Auto-set currency and reset region when country changes
+  const handleCountryChange = (countryCode: string) => {
+    const cfg = COUNTRY_CONFIG[countryCode];
+    setShopData(prev => ({
+      ...prev,
+      country: countryCode,
+      county: "",
+      city: "",
+      address: "",
+      kraPin: "",
+      currency: cfg?.currency || prev.currency,
+    }));
+  };
+
+  const countryConfig = COUNTRY_CONFIG[shopData.country] || COUNTRY_CONFIG.KE;
   
   const [adminData, setAdminData] = useState({
     name: "",
@@ -228,16 +298,20 @@ function RegisterShopContent() {
       setError("Please select a business type");
       return false;
     }
+    if (!shopData.country) {
+      setError("Please select a country");
+      return false;
+    }
     if (!shopData.county) {
-      setError("Please select a county");
+      setError(`Please select a ${countryConfig.regionLabel.toLowerCase()}`);
       return false;
     }
     if (!shopData.city.trim()) {
       setError("City/Town is required");
       return false;
     }
-    // Validate KRA PIN format if provided
-    if (shopData.kraPin.trim()) {
+    // Validate KRA PIN format if provided (Kenya only)
+    if (shopData.country === 'KE' && shopData.kraPin.trim()) {
       const kraRegex = /^[A-Z][0-9]{9}[A-Z]$/;
       if (!kraRegex.test(shopData.kraPin.trim().toUpperCase())) {
         setError("Invalid KRA PIN format (e.g., A123456789B)");
@@ -261,10 +335,12 @@ function RegisterShopContent() {
       setError("Phone number is required");
       return false;
     }
-    // Validate Kenyan phone format
-    const phoneRegex = /^(?:\+254|254|0)?[17]\d{8}$/;
-    if (!phoneRegex.test(adminData.phone.replace(/\s/g, ''))) {
-      setError("Please enter a valid Kenyan phone number (e.g., 0712345678)");
+    // Validate phone format (supports AU and KE formats)
+    const phoneClean = adminData.phone.replace(/\s/g, '');
+    const kePhoneRegex = /^(?:\+254|254|0)?[17]\d{8}$/;
+    const auPhoneRegex = /^(?:\+61|61|0)?4\d{8}$/;
+    if (!kePhoneRegex.test(phoneClean) && !auPhoneRegex.test(phoneClean)) {
+      setError("Please enter a valid phone number (e.g., 0712345678 for KE or 0450275013 for AU)");
       return false;
     }
     // Password validation only for non-Google flow
@@ -480,7 +556,7 @@ function RegisterShopContent() {
               <span className="text-primary">Digital Journey</span>
             </h1>
             <p className="mt-4 text-slate-300">
-              Join thousands of Kenyan retailers using SmartDuka to grow their business.
+              Join thousands of retailers worldwide using SmartDuka to grow their business.
             </p>
           </div>
           
@@ -502,7 +578,7 @@ function RegisterShopContent() {
         </div>
         
         <div className="relative z-10 text-slate-500 text-sm">
-          © 2024 SmartDuka. Built for Kenyan businesses.
+          © 2024 SmartDuka. Built for businesses everywhere.
         </div>
       </div>
 
@@ -752,6 +828,31 @@ function RegisterShopContent() {
                 <p className="text-xs text-muted-foreground mt-1">This will be displayed on receipts and invoices</p>
               </div>
 
+              {/* Country Selector */}
+              <div>
+                <Label htmlFor="country">Country *</Label>
+                <div className="mt-1.5 grid grid-cols-2 gap-3">
+                  {Object.entries(COUNTRY_CONFIG).map(([code, cfg]) => (
+                    <button
+                      key={code}
+                      type="button"
+                      onClick={() => handleCountryChange(code)}
+                      className={`flex items-center gap-3 p-3 rounded-lg border-2 transition-all ${
+                        shopData.country === code
+                          ? 'border-primary bg-primary/5 shadow-sm'
+                          : 'border-border hover:border-muted-foreground/30'
+                      }`}
+                    >
+                      <span className="text-2xl">{cfg.flag}</span>
+                      <div className="text-left">
+                        <p className={`text-sm font-medium ${shopData.country === code ? 'text-primary' : 'text-foreground'}`}>{cfg.name}</p>
+                        <p className="text-xs text-muted-foreground">{cfg.currencySymbol} - {cfg.currencyName}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Business Type - Required Dropdown */}
                 <div>
@@ -775,18 +876,18 @@ function RegisterShopContent() {
                   </select>
                 </div>
 
-                {/* County - Required Dropdown */}
+                {/* Region/County/State - Required Dropdown */}
                 <div>
-                  <Label htmlFor="county">County *</Label>
+                  <Label htmlFor="county">{countryConfig.regionLabel} *</Label>
                   <select
                     id="county"
                     value={shopData.county}
                     onChange={(e) => setShopData({ ...shopData, county: e.target.value })}
                     className="mt-1.5 w-full h-10 px-3 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                   >
-                    <option value="">Select county...</option>
-                    {KENYA_COUNTIES.map((county) => (
-                      <option key={county} value={county}>{county}</option>
+                    <option value="">Select {countryConfig.regionLabel.toLowerCase()}...</option>
+                    {countryConfig.regions.map((region) => (
+                      <option key={region} value={region}>{region}</option>
                     ))}
                   </select>
                 </div>
@@ -796,7 +897,7 @@ function RegisterShopContent() {
                   <Label htmlFor="city">City/Town *</Label>
                   <Input
                     id="city"
-                    placeholder="e.g., Westlands, Kisumu CBD"
+                    placeholder={countryConfig.cityPlaceholder}
                     value={shopData.city}
                     onChange={(e) => setShopData({ ...shopData, city: e.target.value })}
                     className="mt-1.5"
@@ -808,14 +909,14 @@ function RegisterShopContent() {
                   <Label htmlFor="address">Street Address (Optional)</Label>
                   <Input
                     id="address"
-                    placeholder="e.g., Kenyatta Avenue, Shop 12"
+                    placeholder={countryConfig.addressPlaceholder}
                     value={shopData.address}
                     onChange={(e) => setShopData({ ...shopData, address: e.target.value })}
                     className="mt-1.5"
                   />
                 </div>
 
-                {/* Currency */}
+                {/* Currency - auto-set from country but can override */}
                 <div>
                   <Label htmlFor="currency">Currency</Label>
                   <select
@@ -824,33 +925,37 @@ function RegisterShopContent() {
                     onChange={(e) => setShopData({ ...shopData, currency: e.target.value })}
                     className="mt-1.5 w-full h-10 px-3 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                   >
-                    <option value="KES">KSh - Kenyan Shilling</option>
-                    <option value="AUD">A$ - Australian Dollar</option>
+                    {CURRENCY_OPTIONS.map((c) => (
+                      <option key={c.code} value={c.code}>{c.symbol} - {c.name}</option>
+                    ))}
                   </select>
+                  <p className="text-xs text-muted-foreground mt-1">Auto-set based on country. You can override if needed.</p>
                 </div>
               </div>
 
-              {/* KRA PIN - Optional with info */}
-              <div className="p-4 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg">
-                <div className="flex items-start gap-3">
-                  <Info className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                  <div className="flex-1">
-                    <Label htmlFor="kra-pin" className="text-blue-900 dark:text-blue-100">KRA PIN (Optional)</Label>
-                    <Input
-                      id="kra-pin"
-                      placeholder="A123456789B"
-                      value={shopData.kraPin}
-                      onChange={(e) => setShopData({ ...shopData, kraPin: e.target.value.toUpperCase() })}
-                      className="mt-1.5 bg-white dark:bg-background"
-                      maxLength={11}
-                    />
-                    <p className="text-xs text-blue-700 dark:text-blue-300 mt-2">
-                      Leave blank if your business is not registered with KRA. You can add this later in settings.
-                      Shops without KRA PIN can still operate but won't have tax compliance features.
-                    </p>
+              {/* KRA PIN - Only for Kenya */}
+              {shopData.country === 'KE' && (
+                <div className="p-4 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg">
+                  <div className="flex items-start gap-3">
+                    <Info className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <Label htmlFor="kra-pin" className="text-blue-900 dark:text-blue-100">KRA PIN (Optional)</Label>
+                      <Input
+                        id="kra-pin"
+                        placeholder="A123456789B"
+                        value={shopData.kraPin}
+                        onChange={(e) => setShopData({ ...shopData, kraPin: e.target.value.toUpperCase() })}
+                        className="mt-1.5 bg-white dark:bg-background"
+                        maxLength={11}
+                      />
+                      <p className="text-xs text-blue-700 dark:text-blue-300 mt-2">
+                        Leave blank if your business is not registered with KRA. You can add this later in settings.
+                        Shops without KRA PIN can still operate but won't have tax compliance features.
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* Shop Description - Optional */}
               <div>

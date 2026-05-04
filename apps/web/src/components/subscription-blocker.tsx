@@ -58,7 +58,7 @@ export function SubscriptionBlocker({ children }: { children: React.ReactNode })
   const [copiedNumber, setCopiedNumber] = useState(false);
   
   // Official SmartDuka Send Money number
-  const SMARTDUKA_SEND_MONEY_NUMBER = '0729983567';
+  const SMARTDUKA_SEND_MONEY_NUMBER = '0727068107';
 
   // Check if there's a pending verification invoice
   const hasPendingVerification = pendingInvoices?.some(
@@ -512,9 +512,9 @@ export function SubscriptionBlocker({ children }: { children: React.ReactNode })
                     <Mail className="w-4 h-4" />
                     smartdukainfo@gmail.com
                   </a>
-                  <a href="tel:0729983567" className="flex items-center gap-1 text-blue-600 hover:underline">
+                  <a href="tel:+61450275013" className="flex items-center gap-1 text-blue-600 hover:underline">
                     <Phone className="w-4 h-4" />
-                    0729983567
+                    0450 275 013 (AU)
                   </a>
                 </div>
               </div>
@@ -658,11 +658,11 @@ export function SubscriptionBlocker({ children }: { children: React.ReactNode })
                     smartdukainfo@gmail.com
                   </a>
                   <a 
-                    href="tel:0729983567" 
+                    href="tel:+61450275013" 
                     className="flex items-center gap-2 text-blue-700 hover:text-blue-900"
                   >
                     <Phone className="w-4 h-4" />
-                    0729983567
+                    0450 275 013 (AU)
                   </a>
                 </div>
               </div>
@@ -904,18 +904,18 @@ export function SubscriptionBlocker({ children }: { children: React.ReactNode })
                       smartdukainfo@gmail.com
                     </a>
                     <a 
-                      href="tel:0729983567" 
+                      href="tel:+61450275013" 
                       className="flex items-center gap-2 text-sm text-blue-700 hover:text-blue-900"
                     >
                       <Phone className="w-4 h-4" />
-                      0729983567
+                      0450 275 013 (AU)
                     </a>
                     <a 
-                      href="tel:0104160502" 
+                      href="tel:+254727068107" 
                       className="flex items-center gap-2 text-sm text-blue-700 hover:text-blue-900"
                     >
                       <Phone className="w-4 h-4" />
-                      0104160502
+                      0727 068 107 (KE)
                     </a>
                   </div>
                 </div>
@@ -1116,7 +1116,7 @@ export function SubscriptionBlocker({ children }: { children: React.ReactNode })
                       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800 mb-4">
                         <p><strong>Contact us if you need help:</strong></p>
                         <p>📧 smartdukainfo@gmail.com</p>
-                        <p>📞 0729983567 / 0104160502</p>
+                        <p>📞 0450 275 013 (AU) / 0727 068 107 (KE)</p>
                       </div>
                       <button
                         onClick={async () => {
@@ -1199,8 +1199,8 @@ export function SubscriptionBlocker({ children }: { children: React.ReactNode })
 
                   <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                     <p className="text-sm text-green-800 font-medium mb-2">Send money directly to:</p>
-                    <p className="text-2xl font-bold text-green-700 font-mono">0729983567</p>
-                    <p className="text-xs text-green-600 mt-1">SmartDuka Payments</p>
+                    <p className="text-2xl font-bold text-green-700 font-mono">0727068107</p>
+                    <p className="text-xs text-green-600 mt-1">SmartDuka Kenya Payments</p>
                   </div>
 
                   <button

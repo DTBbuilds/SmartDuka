@@ -176,7 +176,7 @@ export default function HelpPage() {
                 <Phone className="h-5 w-5 text-primary mt-0.5" />
                 <div>
                   <p className="font-medium">Phone Support</p>
-                  <p className="text-sm text-muted-foreground">0729983567 / 0104160502</p>
+                  <p className="text-sm text-muted-foreground">0450 275 013 (AU) / 0727 068 107 (KE)</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">

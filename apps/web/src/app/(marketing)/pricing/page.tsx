@@ -75,7 +75,7 @@ const faqs = [
   },
   {
     question: 'How can I support SmartDuka?',
-    answer: 'You can support SmartDuka with a voluntary M-Pesa donation to 0729 983 567. Donations help us maintain and improve the system. They are entirely optional and do not unlock any additional features.',
+    answer: 'You can support SmartDuka with a voluntary M-Pesa donation to 0727 068 107 (Kenya). Donations help us maintain and improve the system. They are entirely optional and do not unlock any additional features.',
   },
   {
     question: 'Is SmartDuka open source?',
@@ -265,7 +265,7 @@ export default function PricingPage() {
             Ready to Transform Your Business?
           </h2>
           <p className="text-orange-100 text-lg mb-8">
-            Join thousands of Kenyan businesses using SmartDuka to grow their sales.
+            Join thousands of businesses worldwide using SmartDuka to grow their sales.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link
@@ -275,7 +275,7 @@ export default function PricingPage() {
               Get Started Free
             </Link>
             <a
-              href="tel:+254729983567"
+              href="tel:+61450275013"
               className="flex items-center gap-2 px-8 py-3 border-2 border-white text-white rounded-xl font-semibold hover:bg-white/10 transition-colors"
             >
               <Phone className="h-5 w-5" />

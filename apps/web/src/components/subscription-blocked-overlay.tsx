@@ -232,11 +232,11 @@ export function SubscriptionBlockedOverlay({ onPaymentSuccess }: SubscriptionBlo
               </p>
               <div className="flex justify-center gap-4">
                 <a
-                  href="tel:0729983567"
+                  href="tel:+61450275013"
                   className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900"
                 >
                   <Phone className="h-4 w-4" />
-                  0729983567
+                  0450 275 013 (AU)
                 </a>
                 <a
                   href="mailto:smartdukainfo@gmail.com"

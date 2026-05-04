@@ -27,10 +27,16 @@ export class Shop {
   address?: string;
 
   @Prop({ required: false, trim: true })
+  county?: string;
+
+  @Prop({ required: false, trim: true })
   city?: string;
 
   @Prop({ required: false, trim: true })
   country?: string;
+
+  @Prop({ enum: ['KES', 'AUD', 'USD', 'GBP', 'EUR'], default: 'KES', trim: true })
+  currency: string;
 
   @Prop({ required: false, trim: true })
   businessType?: string;

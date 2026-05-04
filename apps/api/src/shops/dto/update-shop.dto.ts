@@ -1,6 +1,9 @@
 import { IsOptional, IsString, IsEnum, Matches, MaxLength, IsIn, ValidateIf } from 'class-validator';
 import { Transform } from 'class-transformer';
 
+const SUPPORTED_COUNTRIES = ['KE', 'AU'];
+const SUPPORTED_CURRENCIES = ['KES', 'AUD', 'USD', 'GBP', 'EUR'];
+
 // Kenya counties
 const KENYA_COUNTIES = [
   "Baringo", "Bomet", "Bungoma", "Busia", "Elgeyo-Marakwet", "Embu", "Garissa",
@@ -11,6 +14,14 @@ const KENYA_COUNTIES = [
   "Siaya", "Taita-Taveta", "Tana River", "Tharaka-Nithi", "Trans-Nzoia", "Turkana",
   "Uasin Gishu", "Vihiga", "Wajir", "West Pokot"
 ];
+
+// Australian states/territories
+const AUSTRALIA_STATES = [
+  "Australian Capital Territory", "New South Wales", "Northern Territory",
+  "Queensland", "South Australia", "Tasmania", "Victoria", "Western Australia"
+];
+
+const ALL_REGIONS = [...KENYA_COUNTIES, ...AUSTRALIA_STATES];
 
 export class UpdateShopDto {
   @IsOptional()
@@ -25,7 +36,12 @@ export class UpdateShopDto {
 
   @IsOptional()
   @IsString()
-  @IsIn(KENYA_COUNTIES, { message: 'Please select a valid county' })
+  @IsIn(SUPPORTED_COUNTRIES, { message: 'Please select a valid country' })
+  country?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(ALL_REGIONS, { message: 'Please select a valid region/county/state' })
   county?: string;
 
   @IsOptional()
@@ -55,6 +71,11 @@ export class UpdateShopDto {
   @IsString()
   @MaxLength(500)
   description?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(SUPPORTED_CURRENCIES, { message: 'Please select a valid currency' })
+  currency?: string;
 
   @IsOptional()
   @IsString()

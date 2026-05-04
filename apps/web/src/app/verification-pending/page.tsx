@@ -330,11 +330,11 @@ export default function VerificationPendingPage() {
                 <div>
                   <p className="font-medium text-slate-900">Call our support team</p>
                   <p className="text-sm text-slate-600">
-                    <a href="tel:0729983567" className="text-blue-600 hover:underline font-semibold">
-                      0729983567
+                    <a href="tel:+61450275013" className="text-blue-600 hover:underline font-semibold">
+                      0450 275 013 (AU)
                     </a>
                   </p>
-                  <p className="text-xs text-slate-500 mt-1">Mon-Fri, 9 AM - 5 PM EAT</p>
+                  <p className="text-xs text-slate-500 mt-1">Mon-Fri, 9 AM - 5 PM</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">

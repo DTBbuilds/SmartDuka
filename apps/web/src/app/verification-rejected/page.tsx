@@ -43,7 +43,7 @@ export default function VerificationRejectedPage() {
 
   const handleContactSupport = () => {
     // Open phone dialer
-    window.location.href = "tel:0729983567";
+    window.location.href = "tel:+61450275013";
   };
 
   if (!user || !shop) {
@@ -165,11 +165,11 @@ export default function VerificationRejectedPage() {
                 <div>
                   <p className="font-medium text-slate-900">Call us</p>
                   <p className="text-sm text-slate-600">
-                    <a href="tel:0729983567" className="text-blue-600 hover:underline font-semibold">
-                      0729983567
+                    <a href="tel:+61450275013" className="text-blue-600 hover:underline font-semibold">
+                      0450 275 013 (AU)
                     </a>
                   </p>
-                  <p className="text-xs text-slate-500 mt-1">Mon-Fri, 9 AM - 5 PM EAT</p>
+                  <p className="text-xs text-slate-500 mt-1">Mon-Fri, 9 AM - 5 PM</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
