@@ -7,6 +7,7 @@ import { ShoppingCart, Eye, EyeOff, Store, User, ArrowRight, ArrowLeft, Building
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label } from "@smartduka/ui";
 import { useAuth, GoogleProfile } from "@/lib/auth-context";
 import { config } from "@/lib/config";
+import { CURRENCY_OPTIONS, getDefaultCurrencyForCountry, SUPPORTED_COUNTRIES } from "@/lib/currency";
 import { CartLoader } from "@/components/ui/cart-loader";
 import { ThemeToggleOutline } from "@/components/theme-toggle";
 import { api } from "@/lib/api-client";
@@ -46,7 +47,8 @@ const AUSTRALIA_STATES = [
   "Queensland", "South Australia", "Tasmania", "Victoria", "Western Australia"
 ];
 
-// Country configuration map
+// Country configuration map (expanded for global support)
+// For countries without detailed region lists, we use text input instead of dropdown
 const COUNTRY_CONFIG: Record<string, {
   name: string;
   flag: string;
@@ -59,39 +61,56 @@ const COUNTRY_CONFIG: Record<string, {
   cityPlaceholder: string;
   addressPlaceholder: string;
 }> = {
-  KE: {
-    name: 'Kenya',
-    flag: '🇰🇪',
-    currency: 'KES',
-    currencySymbol: 'KSh',
-    currencyName: 'Kenyan Shilling',
-    regions: KENYA_COUNTIES,
-    regionLabel: 'County',
-    phonePlaceholder: 'e.g., 0727 068 107',
-    cityPlaceholder: 'e.g., Westlands, Kisumu CBD',
-    addressPlaceholder: 'e.g., Kenyatta Avenue, Shop 12',
-  },
-  AU: {
-    name: 'Australia',
-    flag: '🇦🇺',
-    currency: 'AUD',
-    currencySymbol: 'A$',
-    currencyName: 'Australian Dollar',
-    regions: AUSTRALIA_STATES,
-    regionLabel: 'State/Territory',
-    phonePlaceholder: 'e.g., 0450 275 013',
-    cityPlaceholder: 'e.g., Sydney, Melbourne CBD',
-    addressPlaceholder: 'e.g., 123 George St, Shop 4',
-  },
-};
+  // Africa
+  KE: { name: 'Kenya', flag: '🇰🇪', currency: 'KES', currencySymbol: 'KSh', currencyName: 'Kenyan Shilling', regions: KENYA_COUNTIES, regionLabel: 'County', phonePlaceholder: 'e.g., 0727 068 107', cityPlaceholder: 'e.g., Westlands, Kisumu CBD', addressPlaceholder: 'e.g., Kenyatta Avenue, Shop 12' },
+  NG: { name: 'Nigeria', flag: '🇳🇬', currency: 'NGN', currencySymbol: '₦', currencyName: 'Nigerian Naira', regions: [], regionLabel: 'State', phonePlaceholder: 'e.g., 0803 123 4567', cityPlaceholder: 'e.g., Lagos, Abuja', addressPlaceholder: 'e.g., 12 Broad Street, Lagos Island' },
+  ZA: { name: 'South Africa', flag: '🇿🇦', currency: 'ZAR', currencySymbol: 'R', currencyName: 'South African Rand', regions: [], regionLabel: 'Province', phonePlaceholder: 'e.g., 071 234 5678', cityPlaceholder: 'e.g., Johannesburg, Cape Town', addressPlaceholder: 'e.g., 123 Main Road, Sandton' },
+  GH: { name: 'Ghana', flag: '🇬🇭', currency: 'GHS', currencySymbol: 'GH₵', currencyName: 'Ghanaian Cedi', regions: [], regionLabel: 'Region', phonePlaceholder: 'e.g., 024 123 4567', cityPlaceholder: 'e.g., Accra, Kumasi', addressPlaceholder: 'e.g., 45 Oxford Street, Osu' },
+  UG: { name: 'Uganda', flag: '🇺🇬', currency: 'UGX', currencySymbol: 'USh', currencyName: 'Ugandan Shilling', regions: [], regionLabel: 'Region', phonePlaceholder: 'e.g., 0772 123456', cityPlaceholder: 'e.g., Kampala, Entebbe', addressPlaceholder: 'e.g., Plot 45 Kampala Road' },
+  TZ: { name: 'Tanzania', flag: '🇹🇿', currency: 'TZS', currencySymbol: 'TSh', currencyName: 'Tanzanian Shilling', regions: [], regionLabel: 'Region', phonePlaceholder: 'e.g., 0712 345 678', cityPlaceholder: 'e.g., Dar es Salaam, Arusha', addressPlaceholder: 'e.g., 123 Samora Avenue, CBD' },
+  RW: { name: 'Rwanda', flag: '🇷🇼', currency: 'RWF', currencySymbol: 'FRw', currencyName: 'Rwandan Franc', regions: [], regionLabel: 'Province', phonePlaceholder: 'e.g., 078 123 4567', cityPlaceholder: 'e.g., Kigali, Butare', addressPlaceholder: 'e.g., KN 12 Ave, Nyarugenge' },
+  EG: { name: 'Egypt', flag: '🇪🇬', currency: 'EGP', currencySymbol: 'E£', currencyName: 'Egyptian Pound', regions: [], regionLabel: 'Governorate', phonePlaceholder: 'e.g., 0100 123 4567', cityPlaceholder: 'e.g., Cairo, Alexandria', addressPlaceholder: 'e.g., 15 Talaat Harb St, Downtown' },
+  MA: { name: 'Morocco', flag: '🇲🇦', currency: 'MAD', currencySymbol: 'DH', currencyName: 'Moroccan Dirham', regions: [], regionLabel: 'Region', phonePlaceholder: 'e.g., 0612 345 678', cityPlaceholder: 'e.g., Casablanca, Marrakech', addressPlaceholder: 'e.g., 45 Boulevard Mohammed VI' },
+  ET: { name: 'Ethiopia', flag: '🇪🇹', currency: 'ETB', currencySymbol: 'Br', currencyName: 'Ethiopian Birr', regions: [], regionLabel: 'Region', phonePlaceholder: 'e.g., 091 234 5678', cityPlaceholder: 'e.g., Addis Ababa, Dire Dawa', addressPlaceholder: 'e.g., 123 Churchill Road, Bole' },
+  SN: { name: 'Senegal', flag: '🇸🇳', currency: 'XOF', currencySymbol: 'CFA', currencyName: 'West African CFA', regions: [], regionLabel: 'Region', phonePlaceholder: 'e.g., 77 123 45 67', cityPlaceholder: 'e.g., Dakar, Saint-Louis', addressPlaceholder: 'e.g., 12 Avenue Lamine Gueye' },
+  CM: { name: 'Cameroon', flag: '🇨🇲', currency: 'XAF', currencySymbol: 'FCFA', currencyName: 'Central African CFA', regions: [], regionLabel: 'Region', phonePlaceholder: 'e.g., 6 71 23 45 67', cityPlaceholder: 'e.g., Douala, Yaoundé', addressPlaceholder: 'e.g., 45 Boulevard de la Liberté' },
 
-const CURRENCY_OPTIONS = [
-  { code: 'KES', symbol: 'KSh', name: 'Kenyan Shilling' },
-  { code: 'AUD', symbol: 'A$', name: 'Australian Dollar' },
-  { code: 'USD', symbol: '$', name: 'US Dollar' },
-  { code: 'GBP', symbol: '£', name: 'British Pound' },
-  { code: 'EUR', symbol: '€', name: 'Euro' },
-];
+  // Americas
+  US: { name: 'United States', flag: '🇺🇸', currency: 'USD', currencySymbol: '$', currencyName: 'US Dollar', regions: [], regionLabel: 'State', phonePlaceholder: 'e.g., (555) 123-4567', cityPlaceholder: 'e.g., New York, Los Angeles', addressPlaceholder: 'e.g., 123 Main St, Suite 100' },
+  CA: { name: 'Canada', flag: '🇨🇦', currency: 'CAD', currencySymbol: 'C$', currencyName: 'Canadian Dollar', regions: [], regionLabel: 'Province', phonePlaceholder: 'e.g., (416) 123-4567', cityPlaceholder: 'e.g., Toronto, Vancouver', addressPlaceholder: 'e.g., 123 Bay Street, Unit 5' },
+  BR: { name: 'Brazil', flag: '🇧🇷', currency: 'BRL', currencySymbol: 'R$', currencyName: 'Brazilian Real', regions: [], regionLabel: 'State', phonePlaceholder: 'e.g., (11) 91234-5678', cityPlaceholder: 'e.g., São Paulo, Rio de Janeiro', addressPlaceholder: 'e.g., Av. Paulista, 1234 - Bela Vista' },
+  MX: { name: 'Mexico', flag: '🇲🇽', currency: 'MXN', currencySymbol: 'MX$', currencyName: 'Mexican Peso', regions: [], regionLabel: 'State', phonePlaceholder: 'e.g., 55 1234 5678', cityPlaceholder: 'e.g., Mexico City, Guadalajara', addressPlaceholder: 'e.g., Calle 123, Col. Centro' },
+  AR: { name: 'Argentina', flag: '🇦🇷', currency: 'ARS', currencySymbol: 'AR$', currencyName: 'Argentine Peso', regions: [], regionLabel: 'Province', phonePlaceholder: 'e.g., 11 1234-5678', cityPlaceholder: 'e.g., Buenos Aires, Córdoba', addressPlaceholder: 'e.g., Av. Corrientes 1234' },
+  CL: { name: 'Chile', flag: '🇨🇱', currency: 'CLP', currencySymbol: 'CLP$', currencyName: 'Chilean Peso', regions: [], regionLabel: 'Region', phonePlaceholder: 'e.g., +56 9 1234 5678', cityPlaceholder: 'e.g., Santiago, Valparaíso', addressPlaceholder: 'e.g., Av. Providencia 1234, Providencia' },
+  CO: { name: 'Colombia', flag: '🇨🇴', currency: 'COP', currencySymbol: 'COL$', currencyName: 'Colombian Peso', regions: [], regionLabel: 'Department', phonePlaceholder: 'e.g., 310 123 4567', cityPlaceholder: 'e.g., Bogotá, Medellín', addressPlaceholder: 'e.g., Carrera 12 # 34-56' },
+
+  // Europe
+  GB: { name: 'United Kingdom', flag: '🇬🇧', currency: 'GBP', currencySymbol: '£', currencyName: 'British Pound', regions: [], regionLabel: 'County', phonePlaceholder: 'e.g., 07123 456789', cityPlaceholder: 'e.g., London, Manchester', addressPlaceholder: 'e.g., 123 High Street, Westminster' },
+  DE: { name: 'Germany', flag: '🇩🇪', currency: 'EUR', currencySymbol: '€', currencyName: 'Euro', regions: [], regionLabel: 'State', phonePlaceholder: 'e.g., 01512 3456789', cityPlaceholder: 'e.g., Berlin, Munich', addressPlaceholder: 'e.g., Friedrichstraße 123, Mitte' },
+  FR: { name: 'France', flag: '🇫🇷', currency: 'EUR', currencySymbol: '€', currencyName: 'Euro', regions: [], regionLabel: 'Region', phonePlaceholder: 'e.g., 06 12 34 56 78', cityPlaceholder: 'e.g., Paris, Lyon', addressPlaceholder: 'e.g., 12 Rue de Rivoli, 1er' },
+  IT: { name: 'Italy', flag: '🇮🇹', currency: 'EUR', currencySymbol: '€', currencyName: 'Euro', regions: [], regionLabel: 'Region', phonePlaceholder: 'e.g., 312 345 6789', cityPlaceholder: 'e.g., Rome, Milan', addressPlaceholder: 'e.g., Via Roma 123, Centro' },
+  ES: { name: 'Spain', flag: '🇪🇸', currency: 'EUR', currencySymbol: '€', currencyName: 'Euro', regions: [], regionLabel: 'Region', phonePlaceholder: 'e.g., 612 34 56 78', cityPlaceholder: 'e.g., Madrid, Barcelona', addressPlaceholder: 'e.g., Calle Mayor 23, Centro' },
+  NL: { name: 'Netherlands', flag: '🇳🇱', currency: 'EUR', currencySymbol: '€', currencyName: 'Euro', regions: [], regionLabel: 'Province', phonePlaceholder: 'e.g., 06 12345678', cityPlaceholder: 'e.g., Amsterdam, Rotterdam', addressPlaceholder: 'e.g., Damrak 123, Centrum' },
+  CH: { name: 'Switzerland', flag: '🇨🇭', currency: 'CHF', currencySymbol: 'CHF', currencyName: 'Swiss Franc', regions: [], regionLabel: 'Canton', phonePlaceholder: 'e.g., 079 123 45 67', cityPlaceholder: 'e.g., Zurich, Geneva', addressPlaceholder: 'e.g., Bahnhofstrasse 123' },
+  NO: { name: 'Norway', flag: '🇳🇴', currency: 'NOK', currencySymbol: 'kr', currencyName: 'Norwegian Krone', regions: [], regionLabel: 'County', phonePlaceholder: 'e.g., 412 34 567', cityPlaceholder: 'e.g., Oslo, Bergen', addressPlaceholder: 'e.g., Karl Johans gate 12' },
+  SE: { name: 'Sweden', flag: '🇸🇪', currency: 'SEK', currencySymbol: 'kr', currencyName: 'Swedish Krona', regions: [], regionLabel: 'County', phonePlaceholder: 'e.g., 070-123 45 67', cityPlaceholder: 'e.g., Stockholm, Gothenburg', addressPlaceholder: 'e.g., Drottninggatan 12, Norrmalm' },
+  DK: { name: 'Denmark', flag: '🇩🇰', currency: 'DKK', currencySymbol: 'kr', currencyName: 'Danish Krone', regions: [], regionLabel: 'Region', phonePlaceholder: 'e.g., 20 12 34 56', cityPlaceholder: 'e.g., Copenhagen, Aarhus', addressPlaceholder: 'e.g., Strøget 12, Indre By' },
+  PL: { name: 'Poland', flag: '🇵🇱', currency: 'PLN', currencySymbol: 'zł', currencyName: 'Polish Złoty', regions: [], regionLabel: 'Voivodeship', phonePlaceholder: 'e.g., 512 345 678', cityPlaceholder: 'e.g., Warsaw, Kraków', addressPlaceholder: 'e.g., ul. Nowy Świat 45, Śródmieście' },
+  CZ: { name: 'Czech Republic', flag: '🇨🇿', currency: 'CZK', currencySymbol: 'Kč', currencyName: 'Czech Koruna', regions: [], regionLabel: 'Region', phonePlaceholder: 'e.g., 602 123 456', cityPlaceholder: 'e.g., Prague, Brno', addressPlaceholder: 'e.g., Václavské náměstí 12, Nové Město' },
+
+  // Asia / Middle East
+  IN: { name: 'India', flag: '🇮🇳', currency: 'INR', currencySymbol: '₹', currencyName: 'Indian Rupee', regions: [], regionLabel: 'State', phonePlaceholder: 'e.g., 98765 43210', cityPlaceholder: 'e.g., Mumbai, Delhi', addressPlaceholder: 'e.g., 123 Linking Road, Bandra West' },
+  JP: { name: 'Japan', flag: '🇯🇵', currency: 'JPY', currencySymbol: '¥', currencyName: 'Japanese Yen', regions: [], regionLabel: 'Prefecture', phonePlaceholder: 'e.g., 090-1234-5678', cityPlaceholder: 'e.g., Tokyo, Osaka', addressPlaceholder: 'e.g., 1-2-3 Shibuya, Shibuya-ku' },
+  CN: { name: 'China', flag: '🇨🇳', currency: 'CNY', currencySymbol: '¥', currencyName: 'Chinese Yuan', regions: [], regionLabel: 'Province', phonePlaceholder: 'e.g., 138 1234 5678', cityPlaceholder: 'e.g., Shanghai, Beijing', addressPlaceholder: 'e.g., 123 Nanjing Road, Huangpu' },
+  HK: { name: 'Hong Kong', flag: '🇭🇰', currency: 'HKD', currencySymbol: 'HK$', currencyName: 'Hong Kong Dollar', regions: [], regionLabel: 'District', phonePlaceholder: 'e.g., 5123 4567', cityPlaceholder: 'e.g., Central, Kowloon', addressPlaceholder: 'e.g., 12 Queen\'s Road Central' },
+  SG: { name: 'Singapore', flag: '🇸🇬', currency: 'SGD', currencySymbol: 'S$', currencyName: 'Singapore Dollar', regions: [], regionLabel: 'Region', phonePlaceholder: 'e.g., 9123 4567', cityPlaceholder: 'e.g., Orchard, Marina Bay', addressPlaceholder: 'e.g., 123 Orchard Road, #01-01' },
+  AE: { name: 'UAE', flag: '🇦🇪', currency: 'AED', currencySymbol: 'د.إ', currencyName: 'UAE Dirham', regions: [], regionLabel: 'Emirate', phonePlaceholder: 'e.g., 050 123 4567', cityPlaceholder: 'e.g., Dubai, Abu Dhabi', addressPlaceholder: 'e.g., Sheikh Zayed Road, Downtown' },
+  SA: { name: 'Saudi Arabia', flag: '🇸🇦', currency: 'SAR', currencySymbol: 'SR', currencyName: 'Saudi Riyal', regions: [], regionLabel: 'Region', phonePlaceholder: 'e.g., 050 123 4567', cityPlaceholder: 'e.g., Riyadh, Jeddah', addressPlaceholder: 'e.g., King Fahd Road, Al Olaya' },
+
+  // Oceania
+  AU: { name: 'Australia', flag: '🇦🇺', currency: 'AUD', currencySymbol: 'A$', currencyName: 'Australian Dollar', regions: AUSTRALIA_STATES, regionLabel: 'State/Territory', phonePlaceholder: 'e.g., 0450 275 013', cityPlaceholder: 'e.g., Sydney, Melbourne CBD', addressPlaceholder: 'e.g., 123 George St, Shop 4' },
+  NZ: { name: 'New Zealand', flag: '🇳🇿', currency: 'NZD', currencySymbol: 'NZ$', currencyName: 'New Zealand Dollar', regions: [], regionLabel: 'Region', phonePlaceholder: 'e.g., 021 123 456', cityPlaceholder: 'e.g., Auckland, Wellington', addressPlaceholder: 'e.g., 123 Queen Street, CBD' },
+};
 
 // Business types from shared package
 import { getBusinessTypeOptions, getCategoryLabel } from '@smartduka/business-types';
@@ -192,6 +211,7 @@ function RegisterShopContent() {
     city: "",
     address: "",
     kraPin: "",
+    abn: "",
     description: "",
     currency: "KES",
   });
@@ -205,7 +225,8 @@ function RegisterShopContent() {
       county: "",
       city: "",
       address: "",
-      kraPin: "",
+      kraPin: countryCode === 'KE' ? prev.kraPin : '',
+      abn: countryCode === 'AU' ? prev.abn : '',
       currency: cfg?.currency || prev.currency,
     }));
   };
@@ -597,43 +618,83 @@ function RegisterShopContent() {
             <ThemeToggleOutline />
           </div>
 
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-bold text-foreground">Register Your Shop</h2>
-              <p className="text-muted-foreground text-sm">
-                {FREE_MODE
-                  ? `Step ${step <= 4 ? step - 1 : 3} of 3: ${step === 2 ? 'Shop Information' : step === 3 ? 'Admin Account' : 'Email Verification'}`
-                  : `Step ${step} of 4: ${step === 1 ? 'Choose Plan' : step === 2 ? 'Shop Information' : step === 3 ? 'Admin Account' : 'Email Verification'}`
-                }
-              </p>
+          {/* Modern Stepper Header */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-foreground">Register Your Shop</h2>
+                <p className="text-muted-foreground text-sm mt-0.5">
+                  {step === 2 && 'Tell us about your business'}
+                  {step === 3 && 'Create your admin account'}
+                  {step === 4 && 'Verify your email to complete registration'}
+                </p>
+              </div>
             </div>
-            
-            {/* Progress Indicator */}
-            <div className="flex items-center gap-1.5">
-              {!FREE_MODE && (
-                <>
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all ${step >= 1 ? "bg-primary text-white" : "bg-gray-200 dark:bg-gray-700"}`}>
-                    {step > 1 ? <Check className="h-4 w-4" /> : "1"}
+
+            {/* Visual Stepper */}
+            <div className="relative">
+              {/* Progress Bar Background */}
+              <div className="absolute top-5 left-0 right-0 h-0.5 bg-gray-200 dark:bg-gray-700 rounded-full" />
+              {/* Active Progress */}
+              <div
+                className="absolute top-5 left-0 h-0.5 bg-primary rounded-full transition-all duration-500 ease-out"
+                style={{
+                  width: FREE_MODE
+                    ? step === 2 ? '0%' : step === 3 ? '50%' : '100%'
+                    : step === 1 ? '0%' : step === 2 ? '33%' : step === 3 ? '66%' : '100%'
+                }}
+              />
+
+              {/* Steps */}
+              <div className="relative flex justify-between">
+                {/* Step 1: Plan (hidden in FREE_MODE) */}
+                {!FREE_MODE && (
+                  <div className="flex flex-col items-center gap-2">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ${
+                      step > 1 ? 'bg-primary text-white shadow-lg shadow-primary/30' :
+                      step === 1 ? 'bg-primary text-white ring-4 ring-primary/20' :
+                      'bg-gray-200 dark:bg-gray-700 text-gray-500'
+                    }`}>
+                      {step > 1 ? <Check className="h-5 w-5" /> : <Crown className="h-5 w-5" />}
+                    </div>
+                    <span className={`text-xs font-medium ${step >= 1 ? 'text-primary' : 'text-muted-foreground'}`}>Plan</span>
                   </div>
-                  <div className="w-8 h-1 bg-gray-200 dark:bg-gray-700 rounded">
-                    <div className={`h-full rounded transition-all bg-primary ${step >= 2 ? "w-full" : "w-0"}`} />
+                )}
+
+                {/* Step 2: Shop */}
+                <div className="flex flex-col items-center gap-2">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ${
+                    step > 2 ? 'bg-primary text-white shadow-lg shadow-primary/30' :
+                    step === 2 ? 'bg-primary text-white ring-4 ring-primary/20' :
+                    'bg-gray-200 dark:bg-gray-700 text-gray-500'
+                  }`}>
+                    {step > 2 ? <Check className="h-5 w-5" /> : <Store className="h-5 w-5" />}
                   </div>
-                </>
-              )}
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all ${step >= 2 ? "bg-primary text-white" : "bg-gray-200 dark:bg-gray-700"}`}>
-                {step > 2 ? <Check className="h-4 w-4" /> : (FREE_MODE ? "1" : "2")}
-              </div>
-              <div className="w-8 h-1 bg-gray-200 dark:bg-gray-700 rounded">
-                <div className={`h-full rounded transition-all bg-primary ${step >= 3 ? "w-full" : "w-0"}`} />
-              </div>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all ${step >= 3 ? "bg-primary text-white" : "bg-gray-200 dark:bg-gray-700"}`}>
-                {step > 3 ? <Check className="h-4 w-4" /> : (FREE_MODE ? "2" : "3")}
-              </div>
-              <div className="w-8 h-1 bg-gray-200 dark:bg-gray-700 rounded">
-                <div className={`h-full rounded transition-all bg-primary ${step >= 4 ? "w-full" : "w-0"}`} />
-              </div>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all ${step >= 4 ? "bg-primary text-white" : "bg-gray-200 dark:bg-gray-700"}`}>
-                {FREE_MODE ? "3" : "4"}
+                  <span className={`text-xs font-medium ${step >= 2 ? 'text-primary' : 'text-muted-foreground'}`}>Shop</span>
+                </div>
+
+                {/* Step 3: Admin */}
+                <div className="flex flex-col items-center gap-2">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ${
+                    step > 3 ? 'bg-primary text-white shadow-lg shadow-primary/30' :
+                    step === 3 ? 'bg-primary text-white ring-4 ring-primary/20' :
+                    'bg-gray-200 dark:bg-gray-700 text-gray-500'
+                  }`}>
+                    {step > 3 ? <Check className="h-5 w-5" /> : <User className="h-5 w-5" />}
+                  </div>
+                  <span className={`text-xs font-medium ${step >= 3 ? 'text-primary' : 'text-muted-foreground'}`}>Account</span>
+                </div>
+
+                {/* Step 4: Verify */}
+                <div className="flex flex-col items-center gap-2">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ${
+                    step >= 4 ? 'bg-primary text-white ring-4 ring-primary/20' :
+                    'bg-gray-200 dark:bg-gray-700 text-gray-500'
+                  }`}>
+                    <ShieldCheck className="h-5 w-5" />
+                  </div>
+                  <span className={`text-xs font-medium ${step >= 4 ? 'text-primary' : 'text-muted-foreground'}`}>Verify</span>
+                </div>
               </div>
             </div>
           </div>
@@ -809,47 +870,96 @@ function RegisterShopContent() {
               </div>
             </div>
           ) : step === 2 ? (
-            <form onSubmit={handleShopNext} className="space-y-5">
-              <div className="flex items-center gap-2 text-primary mb-4">
-                <Store className="h-5 w-5" />
-                <h3 className="font-semibold">Shop Information</h3>
+            <form onSubmit={handleShopNext} className="space-y-6">
+              {/* Section Header */}
+              <div className="flex items-center gap-3 pb-4 border-b border-border">
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <Store className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-foreground">Shop Information</h3>
+                  <p className="text-xs text-muted-foreground">Tell us about your business</p>
+                </div>
               </div>
 
-              {/* Shop Name - Required */}
-              <div>
-                <Label htmlFor="shop-name">Shop Name *</Label>
-                <Input
-                  id="shop-name"
-                  placeholder="e.g., Mama Mboga Store, Quick Mart"
-                  value={shopData.shopName}
-                  onChange={(e) => setShopData({ ...shopData, shopName: e.target.value })}
-                  className="mt-1.5"
-                />
-                <p className="text-xs text-muted-foreground mt-1">This will be displayed on receipts and invoices</p>
+              {/* Basic Info Group */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                  <Building2 className="h-4 w-4" />
+                  <span>Basic Information</span>
+                </div>
+
+                {/* Shop Name - Required */}
+                <div className="group">
+                  <Label htmlFor="shop-name" className="flex items-center gap-1">
+                    Shop Name
+                    <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="shop-name"
+                    placeholder="e.g., Mama Mboga Store, Quick Mart"
+                    value={shopData.shopName}
+                    onChange={(e) => setShopData({ ...shopData, shopName: e.target.value })}
+                    className="mt-1.5 transition-all focus:ring-2 focus:ring-primary/20"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1">
+                    <Info className="h-3 w-3" />
+                    This will be displayed on receipts and invoices
+                  </p>
+                </div>
               </div>
 
-              {/* Country Selector */}
+              {/* Location Group */}
+              <div className="space-y-4 pt-2">
+                <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                  <MapPin className="h-4 w-4" />
+                  <span>Location & Currency</span>
+                </div>
+
+              {/* Country Selector - Featured + More dropdown */}
               <div>
                 <Label htmlFor="country">Country *</Label>
-                <div className="mt-1.5 grid grid-cols-2 gap-3">
-                  {Object.entries(COUNTRY_CONFIG).map(([code, cfg]) => (
-                    <button
-                      key={code}
-                      type="button"
-                      onClick={() => handleCountryChange(code)}
-                      className={`flex items-center gap-3 p-3 rounded-lg border-2 transition-all ${
-                        shopData.country === code
-                          ? 'border-primary bg-primary/5 shadow-sm'
-                          : 'border-border hover:border-muted-foreground/30'
-                      }`}
-                    >
-                      <span className="text-2xl">{cfg.flag}</span>
-                      <div className="text-left">
-                        <p className={`text-sm font-medium ${shopData.country === code ? 'text-primary' : 'text-foreground'}`}>{cfg.name}</p>
-                        <p className="text-xs text-muted-foreground">{cfg.currencySymbol} - {cfg.currencyName}</p>
-                      </div>
-                    </button>
-                  ))}
+                {/* Featured countries as cards */}
+                <div className="mt-1.5 grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {(['KE', 'NG', 'ZA', 'US', 'CA', 'GB', 'DE', 'IN', 'AU'] as const).map((code) => {
+                    const cfg = COUNTRY_CONFIG[code];
+                    if (!cfg) return null;
+                    return (
+                      <button
+                        key={code}
+                        type="button"
+                        onClick={() => handleCountryChange(code)}
+                        className={`flex items-center gap-3 p-3 rounded-lg border-2 transition-all ${
+                          shopData.country === code
+                            ? 'border-primary bg-primary/5 shadow-sm'
+                            : 'border-border hover:border-muted-foreground/30'
+                        }`}
+                      >
+                        <span className="text-2xl">{cfg.flag}</span>
+                        <div className="text-left">
+                          <p className={`text-sm font-medium ${shopData.country === code ? 'text-primary' : 'text-foreground'}`}>{cfg.name}</p>
+                          <p className="text-xs text-muted-foreground">{cfg.currencySymbol}</p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+                {/* More countries dropdown */}
+                <div className="mt-3">
+                  <select
+                    id="country-more"
+                    value={(['KE', 'NG', 'ZA', 'US', 'CA', 'GB', 'DE', 'IN', 'AU'] as string[]).includes(shopData.country) ? '' : shopData.country}
+                    onChange={(e) => e.target.value && handleCountryChange(e.target.value)}
+                    className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <option value="">More countries...</option>
+                    {Object.entries(COUNTRY_CONFIG)
+                      .filter(([code]) => !(['KE', 'NG', 'ZA', 'US', 'CA', 'GB', 'DE', 'IN', 'AU'] as string[]).includes(code))
+                      .sort((a, b) => a[1].name.localeCompare(b[1].name))
+                      .map(([code, cfg]) => (
+                        <option key={code} value={code}>{cfg.flag} {cfg.name} ({cfg.currencySymbol})</option>
+                      ))}
+                  </select>
                 </div>
               </div>
 
@@ -876,20 +986,30 @@ function RegisterShopContent() {
                   </select>
                 </div>
 
-                {/* Region/County/State - Required Dropdown */}
+                {/* Region/County/State - Dropdown for KE/AU, text input for others */}
                 <div>
                   <Label htmlFor="county">{countryConfig.regionLabel} *</Label>
-                  <select
-                    id="county"
-                    value={shopData.county}
-                    onChange={(e) => setShopData({ ...shopData, county: e.target.value })}
-                    className="mt-1.5 w-full h-10 px-3 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                  >
-                    <option value="">Select {countryConfig.regionLabel.toLowerCase()}...</option>
-                    {countryConfig.regions.map((region) => (
-                      <option key={region} value={region}>{region}</option>
-                    ))}
-                  </select>
+                  {countryConfig.regions.length > 0 ? (
+                    <select
+                      id="county"
+                      value={shopData.county}
+                      onChange={(e) => setShopData({ ...shopData, county: e.target.value })}
+                      className="mt-1.5 w-full h-10 px-3 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      <option value="">Select {countryConfig.regionLabel.toLowerCase()}...</option>
+                      {countryConfig.regions.map((region) => (
+                        <option key={region} value={region}>{region}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <Input
+                      id="county"
+                      value={shopData.county}
+                      onChange={(e) => setShopData({ ...shopData, county: e.target.value })}
+                      placeholder={`Enter ${countryConfig.regionLabel.toLowerCase()}`}
+                      className="mt-1.5"
+                    />
+                  )}
                 </div>
 
                 {/* City/Town - Required */}
@@ -926,36 +1046,79 @@ function RegisterShopContent() {
                     className="mt-1.5 w-full h-10 px-3 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                   >
                     {CURRENCY_OPTIONS.map((c) => (
-                      <option key={c.code} value={c.code}>{c.symbol} - {c.name}</option>
+                      <option key={c.value} value={c.value}>{c.label}</option>
                     ))}
                   </select>
                   <p className="text-xs text-muted-foreground mt-1">Auto-set based on country. You can override if needed.</p>
                 </div>
               </div>
+              </div>
 
-              {/* KRA PIN - Only for Kenya */}
-              {shopData.country === 'KE' && (
-                <div className="p-4 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg">
-                  <div className="flex items-start gap-3">
-                    <Info className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                    <div className="flex-1">
-                      <Label htmlFor="kra-pin" className="text-blue-900 dark:text-blue-100">KRA PIN (Optional)</Label>
-                      <Input
-                        id="kra-pin"
-                        placeholder="A123456789B"
-                        value={shopData.kraPin}
-                        onChange={(e) => setShopData({ ...shopData, kraPin: e.target.value.toUpperCase() })}
-                        className="mt-1.5 bg-white dark:bg-background"
-                        maxLength={11}
-                      />
-                      <p className="text-xs text-blue-700 dark:text-blue-300 mt-2">
-                        Leave blank if your business is not registered with KRA. You can add this later in settings.
-                        Shops without KRA PIN can still operate but won't have tax compliance features.
-                      </p>
+              {/* Additional Details */}
+              <div className="space-y-4 pt-2">
+                <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                  <FileText className="h-4 w-4" />
+                  <span>Additional Details</span>
+                </div>
+
+                {/* Tax ID Fields - Country Specific */}
+              <div className="space-y-4">
+                {/* KRA PIN - Only for Kenya */}
+                {shopData.country === 'KE' && (
+                  <div className="p-4 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg animate-in fade-in slide-in-from-top-2 duration-300">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-lg">
+                        <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                      </div>
+                      <div className="flex-1">
+                        <Label htmlFor="kra-pin" className="text-blue-900 dark:text-blue-100 font-medium">KRA PIN <span className="text-blue-600/70">(Optional)</span></Label>
+                        <Input
+                          id="kra-pin"
+                          placeholder="A123456789B"
+                          value={shopData.kraPin}
+                          onChange={(e) => setShopData({ ...shopData, kraPin: e.target.value.toUpperCase() })}
+                          className="mt-2 bg-white dark:bg-background border-blue-200 dark:border-blue-800 focus:border-blue-400"
+                          maxLength={11}
+                        />
+                        <p className="text-xs text-blue-700 dark:text-blue-300 mt-2">
+                          Your Kenya Revenue Authority PIN. Leave blank if not registered — you can add this later in settings.
+                        </p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
+
+                {/* ABN - Only for Australia */}
+                {shopData.country === 'AU' && (
+                  <div className="p-4 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg animate-in fade-in slide-in-from-top-2 duration-300">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 bg-green-100 dark:bg-green-900/50 rounded-lg">
+                        <FileText className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0" />
+                      </div>
+                      <div className="flex-1">
+                        <Label htmlFor="abn" className="text-green-900 dark:text-green-100 font-medium">ABN <span className="text-green-600/70">(Optional)</span></Label>
+                        <Input
+                          id="abn"
+                          placeholder="12 345 678 901"
+                          value={shopData.abn}
+                          onChange={(e) => {
+                            // Format ABN with spaces: XX XXX XXX XXX
+                            const raw = e.target.value.replace(/\s/g, '').replace(/\D/g, '').slice(0, 11);
+                            const formatted = raw.replace(/(\d{2})(\d{3})?(\d{3})?(\d{3})?/, (_, p1, p2, p3, p4) =>
+                              [p1, p2, p3, p4].filter(Boolean).join(' ')
+                            );
+                            setShopData({ ...shopData, abn: formatted });
+                          }}
+                          className="mt-2 bg-white dark:bg-background border-green-200 dark:border-green-800 focus:border-green-400"
+                        />
+                        <p className="text-xs text-green-700 dark:text-green-300 mt-2">
+                          Your Australian Business Number. Leave blank if not registered — you can add this later in settings.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {/* Shop Description - Optional */}
               <div>
@@ -969,6 +1132,7 @@ function RegisterShopContent() {
                   maxLength={500}
                 />
                 <p className="text-xs text-muted-foreground mt-1">{shopData.description.length}/500 characters</p>
+              </div>
               </div>
 
               {/* Selected Plan Reminder */}

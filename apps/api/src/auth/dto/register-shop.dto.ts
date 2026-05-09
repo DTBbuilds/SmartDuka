@@ -1,17 +1,6 @@
 import { IsEmail, IsString, IsOptional, MinLength, ValidateNested, Matches, MaxLength, IsIn, ValidateIf } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
-
-// Supported countries and their codes
-const SUPPORTED_COUNTRIES = ['KE', 'AU'];
-
-// Country → currency mapping (used for auto-population on frontend)
-const COUNTRY_CURRENCIES: Record<string, string> = {
-  KE: 'KES',
-  AU: 'AUD',
-};
-
-// Valid currencies
-const SUPPORTED_CURRENCIES = ['KES', 'AUD', 'USD', 'GBP', 'EUR'];
+import { SUPPORTED_CURRENCIES, SUPPORTED_COUNTRIES } from '../../common/currency';
 
 // Kenya counties
 const KENYA_COUNTIES = [
@@ -48,7 +37,7 @@ export class ShopInfoDto {
   country: string;
 
   @IsString()
-  @IsIn(ALL_REGIONS, { message: 'Please select a valid region/county/state' })
+  @MaxLength(100)
   county: string;
 
   @IsString()

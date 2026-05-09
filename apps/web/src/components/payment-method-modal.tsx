@@ -131,6 +131,14 @@ export function PaymentMethodModal({
 }: PaymentMethodModalProps) {
   const { token } = useAuth();
   const currencyConfig = getCurrencyConfig(shopCurrency);
+
+  // Filter payment options: hide M-Pesa/Send Money for non-KES shops
+  const isKes = shopCurrency === 'KES';
+  const filteredPaymentOptions = paymentOptions.filter(o => {
+    if (o.id === 'mpesa' || o.id === 'send_money') return isKes;
+    return true;
+  });
+
   const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
   const [amountTendered, setAmountTendered] = useState<number>(0);
   const [phoneNumber, setPhoneNumber] = useState<string>(initialPhone || '');
@@ -341,8 +349,8 @@ export function PaymentMethodModal({
   ].filter((v, i, a) => a.indexOf(v) === i && v >= total).slice(0, 4);
 
   // Separate primary and secondary payment options
-  const primaryOptions = paymentOptions.filter(o => o.primary);
-  const secondaryOptions = paymentOptions.filter(o => !o.primary);
+  const primaryOptions = filteredPaymentOptions.filter(o => o.primary);
+  const secondaryOptions = filteredPaymentOptions.filter(o => !o.primary);
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>

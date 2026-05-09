@@ -1,9 +1,9 @@
 /**
- * Currency configuration and utilities for SmartDuka
- * Global multi-currency support (ISO 4217)
+ * Backend currency utility - mirrors apps/web/src/lib/currency.ts
  *
- * To add a new currency: add an entry to CURRENCIES below with proper
- * symbol, locale, decimals (per ISO 4217) and Stripe support flag.
+ * Single source of truth for currency metadata on the API side.
+ * Used by receipt/invoice/email formatters to render amounts in
+ * the shop's configured currency (instead of hardcoded "Ksh").
  */
 
 export interface CurrencyConfig {
@@ -21,21 +21,16 @@ export interface CurrencyConfig {
   stripeSupported: boolean;
   /** Number of fractional digits per ISO 4217 */
   decimals: number;
-  /** Smallest charge in main currency unit (Stripe minimum or sane default) */
+  /** Smallest charge in main currency unit */
   cardMinimum: number;
-  /** Two-letter ISO country code for flag display (primary country) */
+  /** Two-letter ISO country code (primary) */
   countryCode: string;
-  /** Whether the currency is "zero-decimal" for Stripe (charged as integer) */
+  /** Whether the currency is "zero-decimal" for Stripe */
   zeroDecimal: boolean;
 }
 
-/**
- * Comprehensive global currency catalogue.
- * Decimals follow ISO 4217. cardMinimum approximates Stripe minimums
- * (https://docs.stripe.com/currencies#minimum-and-maximum-charge-amounts).
- */
 export const CURRENCIES: Record<string, CurrencyConfig> = {
-  // ===== Africa =====
+  // Africa
   KES: { code: 'KES', symbol: 'KSh', name: 'Kenyan Shilling', locale: 'en-KE', stripeCurrency: 'kes', stripeSupported: false, decimals: 0, cardMinimum: 50, countryCode: 'KE', zeroDecimal: true },
   NGN: { code: 'NGN', symbol: '₦', name: 'Nigerian Naira', locale: 'en-NG', stripeCurrency: 'ngn', stripeSupported: true, decimals: 2, cardMinimum: 50, countryCode: 'NG', zeroDecimal: false },
   ZAR: { code: 'ZAR', symbol: 'R', name: 'South African Rand', locale: 'en-ZA', stripeCurrency: 'zar', stripeSupported: true, decimals: 2, cardMinimum: 10, countryCode: 'ZA', zeroDecimal: false },
@@ -49,7 +44,7 @@ export const CURRENCIES: Record<string, CurrencyConfig> = {
   XOF: { code: 'XOF', symbol: 'CFA', name: 'West African CFA Franc', locale: 'fr-SN', stripeCurrency: 'xof', stripeSupported: true, decimals: 0, cardMinimum: 300, countryCode: 'SN', zeroDecimal: true },
   XAF: { code: 'XAF', symbol: 'FCFA', name: 'Central African CFA Franc', locale: 'fr-CM', stripeCurrency: 'xaf', stripeSupported: true, decimals: 0, cardMinimum: 300, countryCode: 'CM', zeroDecimal: true },
 
-  // ===== Americas =====
+  // Americas
   USD: { code: 'USD', symbol: '$', name: 'US Dollar', locale: 'en-US', stripeCurrency: 'usd', stripeSupported: true, decimals: 2, cardMinimum: 0.5, countryCode: 'US', zeroDecimal: false },
   CAD: { code: 'CAD', symbol: 'C$', name: 'Canadian Dollar', locale: 'en-CA', stripeCurrency: 'cad', stripeSupported: true, decimals: 2, cardMinimum: 0.5, countryCode: 'CA', zeroDecimal: false },
   BRL: { code: 'BRL', symbol: 'R$', name: 'Brazilian Real', locale: 'pt-BR', stripeCurrency: 'brl', stripeSupported: true, decimals: 2, cardMinimum: 0.5, countryCode: 'BR', zeroDecimal: false },
@@ -58,7 +53,7 @@ export const CURRENCIES: Record<string, CurrencyConfig> = {
   CLP: { code: 'CLP', symbol: 'CLP$', name: 'Chilean Peso', locale: 'es-CL', stripeCurrency: 'clp', stripeSupported: true, decimals: 0, cardMinimum: 500, countryCode: 'CL', zeroDecimal: true },
   COP: { code: 'COP', symbol: 'COL$', name: 'Colombian Peso', locale: 'es-CO', stripeCurrency: 'cop', stripeSupported: true, decimals: 2, cardMinimum: 2000, countryCode: 'CO', zeroDecimal: false },
 
-  // ===== Europe =====
+  // Europe
   EUR: { code: 'EUR', symbol: '€', name: 'Euro', locale: 'de-DE', stripeCurrency: 'eur', stripeSupported: true, decimals: 2, cardMinimum: 0.5, countryCode: 'EU', zeroDecimal: false },
   GBP: { code: 'GBP', symbol: '£', name: 'British Pound', locale: 'en-GB', stripeCurrency: 'gbp', stripeSupported: true, decimals: 2, cardMinimum: 0.3, countryCode: 'GB', zeroDecimal: false },
   CHF: { code: 'CHF', symbol: 'CHF', name: 'Swiss Franc', locale: 'de-CH', stripeCurrency: 'chf', stripeSupported: true, decimals: 2, cardMinimum: 0.5, countryCode: 'CH', zeroDecimal: false },
@@ -72,7 +67,7 @@ export const CURRENCIES: Record<string, CurrencyConfig> = {
   TRY: { code: 'TRY', symbol: '₺', name: 'Turkish Lira', locale: 'tr-TR', stripeCurrency: 'try', stripeSupported: true, decimals: 2, cardMinimum: 5, countryCode: 'TR', zeroDecimal: false },
   RUB: { code: 'RUB', symbol: '₽', name: 'Russian Ruble', locale: 'ru-RU', stripeCurrency: 'rub', stripeSupported: false, decimals: 2, cardMinimum: 50, countryCode: 'RU', zeroDecimal: false },
 
-  // ===== Asia / Middle East =====
+  // Asia / Middle East
   INR: { code: 'INR', symbol: '₹', name: 'Indian Rupee', locale: 'en-IN', stripeCurrency: 'inr', stripeSupported: true, decimals: 2, cardMinimum: 50, countryCode: 'IN', zeroDecimal: false },
   JPY: { code: 'JPY', symbol: '¥', name: 'Japanese Yen', locale: 'ja-JP', stripeCurrency: 'jpy', stripeSupported: true, decimals: 0, cardMinimum: 50, countryCode: 'JP', zeroDecimal: true },
   CNY: { code: 'CNY', symbol: '¥', name: 'Chinese Yuan', locale: 'zh-CN', stripeCurrency: 'cny', stripeSupported: true, decimals: 2, cardMinimum: 4, countryCode: 'CN', zeroDecimal: false },
@@ -91,23 +86,14 @@ export const CURRENCIES: Record<string, CurrencyConfig> = {
   ILS: { code: 'ILS', symbol: '₪', name: 'Israeli New Shekel', locale: 'he-IL', stripeCurrency: 'ils', stripeSupported: true, decimals: 2, cardMinimum: 2, countryCode: 'IL', zeroDecimal: false },
   QAR: { code: 'QAR', symbol: 'QR', name: 'Qatari Riyal', locale: 'ar-QA', stripeCurrency: 'qar', stripeSupported: true, decimals: 2, cardMinimum: 2, countryCode: 'QA', zeroDecimal: false },
 
-  // ===== Oceania =====
+  // Oceania
   AUD: { code: 'AUD', symbol: 'A$', name: 'Australian Dollar', locale: 'en-AU', stripeCurrency: 'aud', stripeSupported: true, decimals: 2, cardMinimum: 0.5, countryCode: 'AU', zeroDecimal: false },
   NZD: { code: 'NZD', symbol: 'NZ$', name: 'New Zealand Dollar', locale: 'en-NZ', stripeCurrency: 'nzd', stripeSupported: true, decimals: 2, cardMinimum: 0.5, countryCode: 'NZ', zeroDecimal: false },
 };
 
-/** All supported ISO codes, sorted alphabetically. */
 export const SUPPORTED_CURRENCIES: string[] = Object.keys(CURRENCIES).sort();
+export const DEFAULT_CURRENCY = 'KES';
 
-/** Type alias kept for backward compatibility. Use `string` for new code. */
-export type CurrencyCode = keyof typeof CURRENCIES;
-
-/** Default currency used when none configured. */
-export const DEFAULT_CURRENCY: CurrencyCode = 'KES';
-
-/**
- * Get currency config by code. Falls back to DEFAULT_CURRENCY when unknown.
- */
 export function getCurrencyConfig(code?: string | null): CurrencyConfig {
   if (!code) return CURRENCIES[DEFAULT_CURRENCY];
   const upper = code.toUpperCase();
@@ -115,12 +101,8 @@ export function getCurrencyConfig(code?: string | null): CurrencyConfig {
 }
 
 /**
- * Format a monetary value for display using the locale + symbol of the
- * configured currency. Uses Intl.NumberFormat under the hood for correct
- * separators and decimal handling per locale.
- *
- * @param value - Amount in the main currency unit (e.g. 1765 KES, 25.50 AUD)
- * @param currencyCode - Optional ISO 4217 code; defaults to DEFAULT_CURRENCY.
+ * Format a monetary value as "<symbol> <number>" using the locale of the
+ * configured currency. Mirrors apps/web/src/lib/currency.ts:formatMoney.
  */
 export function formatMoney(value: number, currencyCode?: string | null): string {
   const config = getCurrencyConfig(currencyCode);
@@ -137,11 +119,7 @@ export function formatMoney(value: number, currencyCode?: string | null): string
   return `${config.symbol} ${formatted}`;
 }
 
-/**
- * Format using Intl currency style (e.g. "$1,234.56", "€1.234,56").
- * Useful when you want native locale-formatted currency rather than
- * a simple `symbol + number` concatenation.
- */
+/** Native Intl currency-style format (e.g. "$1,234.56", "€1.234,56"). */
 export function formatCurrencyIntl(value: number, currencyCode?: string | null): string {
   const config = getCurrencyConfig(currencyCode);
   try {
@@ -156,52 +134,30 @@ export function formatCurrencyIntl(value: number, currencyCode?: string | null):
   }
 }
 
-/** Currency symbol only (e.g. "KSh", "$", "€"). */
 export function getCurrencySymbol(currencyCode?: string | null): string {
   return getCurrencyConfig(currencyCode).symbol;
 }
 
-/**
- * Convert main unit to smallest currency unit for Stripe.
- * Zero-decimal currencies (JPY, KES, etc.) keep the integer value.
- */
 export function toCents(amount: number, currencyCode?: string | null): number {
   const config = getCurrencyConfig(currencyCode);
   if (config.zeroDecimal) return Math.round(amount);
   return Math.round(amount * 100);
 }
 
-/** Convert smallest currency unit back to main unit. */
 export function fromCents(cents: number, currencyCode?: string | null): number {
   const config = getCurrencyConfig(currencyCode);
   if (config.zeroDecimal) return cents;
   return cents / 100;
 }
 
-/** Whether amount meets per-currency Stripe minimum. */
-export function isAmountSufficientForCard(amount: number, currencyCode?: string | null): boolean {
-  const config = getCurrencyConfig(currencyCode);
-  return amount >= config.cardMinimum;
-}
-
-/** Formatted card minimum, e.g. "$ 0.50" or "KSh 50". */
-export function formatCardMinimum(currencyCode?: string | null): string {
-  const config = getCurrencyConfig(currencyCode);
-  return formatMoney(config.cardMinimum, currencyCode);
-}
-
-/** Whether Stripe natively supports this currency for direct charges. */
 export function isStripeSupported(currencyCode?: string | null): boolean {
   return getCurrencyConfig(currencyCode).stripeSupported;
 }
 
 /**
- * List of currencies suitable for use in dropdowns. Each entry has the
- * full label "USD — US Dollar ($)".
- */
-/**
- * Country (ISO 3166-1 alpha-2) → default currency code.
- * Mirrors apps/api/src/common/currency.ts:COUNTRY_DEFAULT_CURRENCY.
+ * Country (ISO 3166-1 alpha-2) → default currency code (ISO 4217).
+ * Used at registration to auto-select the right currency. Users can
+ * override the default currency at registration / in settings.
  */
 export const COUNTRY_DEFAULT_CURRENCY: Record<string, string> = {
   KE: 'KES', NG: 'NGN', ZA: 'ZAR', GH: 'GHS', UG: 'UGX', TZ: 'TZS', RW: 'RWF',
@@ -223,12 +179,3 @@ export function getDefaultCurrencyForCountry(countryCode?: string | null): strin
   if (!countryCode) return DEFAULT_CURRENCY;
   return COUNTRY_DEFAULT_CURRENCY[countryCode.toUpperCase()] || DEFAULT_CURRENCY;
 }
-
-export const CURRENCY_OPTIONS: Array<{ value: string; label: string; symbol: string }> = Object
-  .values(CURRENCIES)
-  .map(c => ({
-    value: c.code,
-    label: `${c.code} — ${c.name} (${c.symbol})`,
-    symbol: c.symbol,
-  }))
-  .sort((a, b) => a.value.localeCompare(b.value));

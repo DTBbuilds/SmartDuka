@@ -1,8 +1,6 @@
 import { IsOptional, IsString, IsEnum, Matches, MaxLength, IsIn, ValidateIf } from 'class-validator';
 import { Transform } from 'class-transformer';
-
-const SUPPORTED_COUNTRIES = ['KE', 'AU'];
-const SUPPORTED_CURRENCIES = ['KES', 'AUD', 'USD', 'GBP', 'EUR'];
+import { SUPPORTED_CURRENCIES, SUPPORTED_COUNTRIES } from '../../common/currency';
 
 // Kenya counties
 const KENYA_COUNTIES = [
@@ -41,7 +39,7 @@ export class UpdateShopDto {
 
   @IsOptional()
   @IsString()
-  @IsIn(ALL_REGIONS, { message: 'Please select a valid region/county/state' })
+  @MaxLength(100)
   county?: string;
 
   @IsOptional()

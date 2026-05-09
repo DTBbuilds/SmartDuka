@@ -17,12 +17,13 @@ import { StripeConnectSettings } from "@/components/settings/stripe-connect-sett
 import { StripePaymentForm } from "@/components/stripe-payment-form";
 import { useStripePayment } from "@/hooks/use-stripe-payment";
 import { Portal } from "@/components/portal";
+import { CURRENCY_OPTIONS } from "@/lib/currency";
 
 export default function SettingsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, token, loading, updateShop } = useAuth();
-  
+  const { user, shop, token, loading, updateShop } = useAuth();
+
   // Get initial tab from URL query parameter
   const initialTab = searchParams.get('tab') || 'shop';
   const [activeTab, setActiveTab] = useState(initialTab);
@@ -35,10 +36,11 @@ export default function SettingsPage() {
     }
   }, [searchParams]);
 
-  // Settings navigation items
+  // Settings navigation items - M-Pesa only for KES shops
+  const isKes = shop?.currency === 'KES';
   const settingsNavItems = [
     { id: 'shop', label: 'Shop Settings', icon: Store, description: 'Business information' },
-    { id: 'mpesa', label: 'M-Pesa', icon: Smartphone, description: 'Payment configuration' },
+    ...(isKes ? [{ id: 'mpesa', label: 'M-Pesa', icon: Smartphone, description: 'Payment configuration' }] : []),
     { id: 'stripe', label: 'Card Payments', icon: CreditCard, description: 'Stripe card payments' },
     { id: 'subscription', label: 'Plan', icon: Crown, description: 'Free plan details' },
     { id: 'profile', label: 'Profile', icon: User, description: 'Personal information' },
@@ -551,9 +553,13 @@ export default function SettingsPage() {
                     onChange={(e) => setShopData({ ...shopData, currency: e.target.value })}
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
-                    <option value="KES">KSh - Kenyan Shilling</option>
-                    <option value="AUD">A$ - Australian Dollar</option>
+                    {CURRENCY_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
                   </select>
+                  <p className="text-xs text-muted-foreground">
+                    This will be used for all prices, receipts, and invoices. Contact support to change after registration.
+                  </p>
                 </div>
               </div>
 
@@ -566,14 +572,15 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
+        {isKes && (
         <TabsContent value="mpesa">
           <div className="space-y-8">
             {/* Multiple Payment Configurations */}
-            <PaymentConfigs 
-              token={token || ''} 
+            <PaymentConfigs
+              token={token || ''}
               onMessage={setMessage}
             />
-            
+
             {/* Legacy Single Config (for backward compatibility) */}
             <div className="border-t pt-8">
               <h3 className="text-lg font-semibold mb-4 text-muted-foreground">
@@ -582,13 +589,14 @@ export default function SettingsPage() {
               <p className="text-sm text-muted-foreground mb-4">
                 This section is kept for backward compatibility. Please use the new configuration system above.
               </p>
-              <MpesaSettings 
-                token={token || ''} 
+              <MpesaSettings
+                token={token || ''}
                 onMessage={setMessage}
               />
             </div>
           </div>
         </TabsContent>
+        )}
 
         <TabsContent value="stripe">
           <StripeConnectSettings

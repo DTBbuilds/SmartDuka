@@ -6,6 +6,7 @@ import { Invoice, InvoiceDocument, PaymentApprovalStatus } from '../schemas/invo
 import { Order, OrderDocument } from '../schemas/order.schema';
 import { CreateInvoiceDto, RecordPaymentDto } from '../dto/invoice.dto';
 import { EmailService } from '../../notifications/email.service';
+import { formatMoney, getCurrencyConfig } from '../../common/currency';
 
 export interface InvoiceFilters {
   from?: string;
@@ -511,6 +512,10 @@ export class InvoiceService {
    * Generate invoice HTML for PDF/Email
    */
   generateInvoiceHTML(invoice: InvoiceDocument): string {
+    const currencyConfig = getCurrencyConfig(invoice.currency);
+    const fmt = (amt: number) => formatMoney(amt, invoice.currency);
+    const localeDate = (date: Date) => new Date(date).toLocaleDateString(currencyConfig.locale);
+
     return `
 <!DOCTYPE html>
 <html>
@@ -584,11 +589,11 @@ export class InvoiceService {
     <div class="meta">
       <div class="meta-item">
         <div class="meta-label">Issue Date</div>
-        <div class="meta-value">${new Date(invoice.issueDate).toLocaleDateString('en-KE')}</div>
+        <div class="meta-value">${localeDate(invoice.issueDate)}</div>
       </div>
       <div class="meta-item">
         <div class="meta-label">Due Date</div>
-        <div class="meta-value">${new Date(invoice.dueDate).toLocaleDateString('en-KE')}</div>
+        <div class="meta-value">${localeDate(invoice.dueDate)}</div>
       </div>
     </div>
 
@@ -606,8 +611,8 @@ export class InvoiceService {
           <tr>
             <td>${item.name}${item.description ? `<br><small style="color:#6b7280">${item.description}</small>` : ''}</td>
             <td class="text-right">${item.quantity}</td>
-            <td class="text-right">KES ${item.unitPrice.toLocaleString()}</td>
-            <td class="text-right">KES ${item.lineTotal.toLocaleString()}</td>
+            <td class="text-right">${fmt(item.unitPrice)}</td>
+            <td class="text-right">${fmt(item.lineTotal)}</td>
           </tr>
         `).join('')}
       </tbody>
@@ -616,30 +621,30 @@ export class InvoiceService {
     <div class="totals">
       <div class="totals-row">
         <span>Subtotal</span>
-        <span>KES ${invoice.subtotal.toLocaleString()}</span>
+        <span>${fmt(invoice.subtotal)}</span>
       </div>
       ${invoice.discount ? `
         <div class="totals-row">
           <span>Discount</span>
-          <span>-KES ${invoice.discount.toLocaleString()}</span>
+          <span>-${fmt(invoice.discount)}</span>
         </div>
       ` : ''}
       <div class="totals-row">
         <span>Tax</span>
-        <span>KES ${invoice.taxAmount.toLocaleString()}</span>
+        <span>${fmt(invoice.taxAmount)}</span>
       </div>
       <div class="totals-row total">
         <span>Total</span>
-        <span>KES ${invoice.total.toLocaleString()}</span>
+        <span>${fmt(invoice.total)}</span>
       </div>
       ${invoice.amountPaid > 0 ? `
         <div class="totals-row">
           <span>Amount Paid</span>
-          <span>KES ${invoice.amountPaid.toLocaleString()}</span>
+          <span>${fmt(invoice.amountPaid)}</span>
         </div>
         <div class="totals-row" style="font-weight:600;color:#dc2626">
           <span>Amount Due</span>
-          <span>KES ${invoice.amountDue.toLocaleString()}</span>
+          <span>${fmt(invoice.amountDue)}</span>
         </div>
       ` : ''}
     </div>

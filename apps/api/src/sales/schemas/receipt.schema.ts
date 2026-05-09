@@ -88,6 +88,9 @@ export class Receipt {
   @Prop()
   shopTaxPin?: string;
 
+  @Prop()
+  currency?: string;  // ISO 4217 currency code stored at creation time (e.g., 'KES', 'USD', 'EUR')
+
   // Branch-specific customization
   @Prop()
   branchName?: string;

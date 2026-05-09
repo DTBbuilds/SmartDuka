@@ -5,6 +5,7 @@ import { nanoid } from 'nanoid';
 import { Receipt, ReceiptDocument } from '../schemas/receipt.schema';
 import { Order, OrderDocument } from '../schemas/order.schema';
 import { CreateReceiptDto } from '../dto/receipt.dto';
+import { formatMoney, getCurrencyConfig } from '../../common/currency';
 
 // Import Branch schema for receipt customization
 interface BranchOperations {
@@ -36,6 +37,7 @@ export class ReceiptService {
     @InjectModel(Receipt.name) private readonly receiptModel: Model<ReceiptDocument>,
     @InjectModel(Order.name) private readonly orderModel: Model<OrderDocument>,
     @Optional() @InjectModel('Branch') private readonly branchModel?: Model<BranchDocument>,
+    @Optional() @InjectModel('Shop') private readonly shopModel?: Model<any>,
   ) {}
 
   /**
@@ -105,6 +107,17 @@ export class ReceiptService {
     const footerMessage = branchReceiptSettings?.receiptFooter || dto.footerMessage || 'Thank you for your purchase!';
     const shopLogo = branchReceiptSettings?.receiptLogo || dto.shopLogo;
 
+    // Fetch shop currency if available
+    let currency: string | undefined;
+    if (this.shopModel) {
+      try {
+        const shop = await this.shopModel.findById(shopId).select('currency').exec();
+        currency = shop?.currency;
+      } catch {
+        // Ignore shop lookup errors, currency will be undefined
+      }
+    }
+
     // Create receipt
     const receipt = new this.receiptModel({
       shopId: new Types.ObjectId(shopId),
@@ -118,6 +131,7 @@ export class ReceiptService {
       shopEmail: dto.shopEmail,
       shopLogo: shopLogo,
       shopTaxPin: dto.shopTaxPin,
+      currency,
       branchName: branchName,
       headerMessage: headerMessage,
       items: order.items.map(item => ({
@@ -344,7 +358,8 @@ export class ReceiptService {
     // Receipt info
     lines.push(`Receipt: ${receipt.receiptNumber}`);
     lines.push(`Order: ${receipt.orderNumber}`);
-    lines.push(`Date: ${new Date(receipt.createdAt!).toLocaleString('en-KE')}`);
+    const currencyConfig = getCurrencyConfig(receipt.currency);
+    lines.push(`Date: ${new Date(receipt.createdAt!).toLocaleString(currencyConfig.locale)}`);
     if (receipt.cashierName) {
       lines.push(`Cashier: ${receipt.cashierName}`);
     }
@@ -360,36 +375,36 @@ export class ReceiptService {
     for (const item of receipt.items) {
       const name = item.name.substring(0, width - 15);
       const qty = `${item.quantity}x`;
-      const price = this.formatCurrency(item.lineTotal);
+      const price = this.formatCurrency(item.lineTotal, receipt.currency);
       lines.push(`${name}`);
       lines.push(`  ${qty.padEnd(6)} ${price.padStart(width - 8)}`);
     }
 
     // Totals
     lines.push(thinDivider);
-    lines.push(this.formatLine('Subtotal:', this.formatCurrency(receipt.subtotal), width));
+    lines.push(this.formatLine('Subtotal:', this.formatCurrency(receipt.subtotal, receipt.currency), width));
     if (receipt.taxRate) {
-      lines.push(this.formatLine(`Tax (${(receipt.taxRate * 100).toFixed(0)}%):`, this.formatCurrency(receipt.tax), width));
+      lines.push(this.formatLine(`Tax (${(receipt.taxRate * 100).toFixed(0)}%):`, this.formatCurrency(receipt.tax, receipt.currency), width));
     } else {
-      lines.push(this.formatLine('Tax:', this.formatCurrency(receipt.tax), width));
+      lines.push(this.formatLine('Tax:', this.formatCurrency(receipt.tax, receipt.currency), width));
     }
     if (receipt.discount && receipt.discount > 0) {
-      lines.push(this.formatLine('Discount:', `-${this.formatCurrency(receipt.discount)}`, width));
+      lines.push(this.formatLine('Discount:', `-${this.formatCurrency(receipt.discount, receipt.currency)}`, width));
     }
     lines.push(divider);
-    lines.push(this.formatLine('TOTAL:', this.formatCurrency(receipt.total), width));
+    lines.push(this.formatLine('TOTAL:', this.formatCurrency(receipt.total, receipt.currency), width));
     lines.push(divider);
 
     // Payment info
     for (const payment of receipt.payments) {
       const methodLabel = this.getPaymentMethodLabel(payment.method);
-      lines.push(this.formatLine(methodLabel + ':', this.formatCurrency(payment.amount), width));
+      lines.push(this.formatLine(methodLabel + ':', this.formatCurrency(payment.amount, receipt.currency), width));
       if (payment.mpesaReceiptNumber) {
         lines.push(`  Ref: ${payment.mpesaReceiptNumber}`);
       }
       if (payment.amountTendered && payment.change) {
-        lines.push(this.formatLine('Tendered:', this.formatCurrency(payment.amountTendered), width));
-        lines.push(this.formatLine('Change:', this.formatCurrency(payment.change), width));
+        lines.push(this.formatLine('Tendered:', this.formatCurrency(payment.amountTendered, receipt.currency), width));
+        lines.push(this.formatLine('Change:', this.formatCurrency(payment.change, receipt.currency), width));
       }
     }
 
@@ -412,8 +427,8 @@ export class ReceiptService {
     return label + ' '.repeat(Math.max(1, space)) + value;
   }
 
-  private formatCurrency(amount: number): string {
-    return `Ksh ${amount.toLocaleString('en-KE', { minimumFractionDigits: 0 })}`;
+  private formatCurrency(amount: number, currencyCode?: string): string {
+    return formatMoney(amount, currencyCode);
   }
 
   private getPaymentMethodLabel(method: string): string {

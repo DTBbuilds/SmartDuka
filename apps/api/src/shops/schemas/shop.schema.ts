@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
+import { SUPPORTED_CURRENCIES, DEFAULT_CURRENCY } from '../../common/currency';
 
 export type ShopDocument = HydratedDocument<Shop>;
 
@@ -32,7 +33,7 @@ export class Shop {
   @Prop({ required: false, trim: true })
   country?: string;
 
-  @Prop({ enum: ['KES', 'AUD', 'USD', 'GBP', 'EUR'], default: 'KES', trim: true })
+  @Prop({ enum: SUPPORTED_CURRENCIES, default: DEFAULT_CURRENCY, trim: true })
   currency: string;
 
   @Prop({ required: false, trim: true })

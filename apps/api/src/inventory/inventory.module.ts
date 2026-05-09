@@ -3,6 +3,8 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { InventoryService } from './inventory.service';
 import { InventoryController } from './inventory.controller';
 import { CategorySuggestionService } from './services/category-suggestion.service';
+import { ExpiryTrackingService } from './services/expiry-tracking.service';
+import { ExpiryTrackingController } from './controllers/expiry-tracking.controller';
 import { Product, ProductSchema } from './schemas/product.schema';
 import { Category, CategorySchema } from './schemas/category.schema';
 import { StockAdjustment, StockAdjustmentSchema } from './schemas/stock-adjustment.schema';
@@ -23,8 +25,8 @@ import { CloudinaryModule } from '../cloudinary/cloudinary.module';
     forwardRef(() => SubscriptionsModule),
     CloudinaryModule,
   ],
-  providers: [InventoryService, CategorySuggestionService],
-  controllers: [InventoryController],
-  exports: [InventoryService, CategorySuggestionService],
+  providers: [InventoryService, CategorySuggestionService, ExpiryTrackingService],
+  controllers: [InventoryController, ExpiryTrackingController],
+  exports: [InventoryService, CategorySuggestionService, ExpiryTrackingService],
 })
 export class InventoryModule {}
