@@ -2,7 +2,7 @@
 import { Injectable, UnauthorizedException, BadRequestException, Optional, Inject, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { UsersService } from '../users/users.service';
 import { ShopsService } from '../shops/shops.service';
 import { ShopSettingsService } from '../shop-settings/shop-settings.service';
@@ -14,7 +14,9 @@ import { LoginDto } from './dto/login.dto';
 import { TokenService } from './token.service';
 import { OtpService } from './services/otp.service';
 import { LoginAttemptService } from './services/login-attempt.service';
+import { DeviceFingerprintService } from './services/device-fingerprint.service';
 import { EmailService } from '../notifications/email.service';
+import { LoginHistory, LoginHistoryDocument } from './schemas/login-history.schema';
 import * as bcryptjs from 'bcryptjs';
 
 @Injectable()
@@ -26,12 +28,14 @@ export class AuthService {
     private readonly shopsService: ShopsService,
     private readonly jwtService: JwtService,
     private readonly shopSettingsService: ShopSettingsService,
+    @InjectModel(LoginHistory.name) private readonly loginHistoryModel: Model<LoginHistoryDocument>,
     @Optional() private readonly tokenService?: TokenService,
     @Optional() @Inject('ActivityService') private readonly activityService?: any,
     @InjectModel('SuperAdmin') private readonly superAdminModel?: Model<any>,
     @Optional() private readonly systemEventManager?: SystemEventManagerService,
     @Optional() private readonly subscriptionsService?: SubscriptionsService,
     @Optional() private readonly otpService?: OtpService,
+    @Optional() private readonly deviceFingerprintService?: DeviceFingerprintService,
     @Optional() private readonly emailService?: EmailService,
     @Optional() private readonly loginAttemptService?: LoginAttemptService,
   ) {}
@@ -719,7 +723,90 @@ export class AuthService {
       throw new UnauthorizedException('Shop is suspended');
     }
 
-    // Generate secure token pair
+    // SMART OTP: Check if device is trusted for Google OAuth (more lenient)
+    let requiresOtp = true;
+    let otpReason = 'security_required';
+
+    if (this.deviceFingerprintService && this.otpService) {
+      const fingerprint = this.deviceFingerprintService.generateFingerprint(userAgent, ipAddress);
+      
+      const otpCheck = await this.deviceFingerprintService.shouldRequireOtp(
+        (user as any)._id.toString(),
+        fingerprint,
+        'google'
+      );
+      
+      requiresOtp = otpCheck.required;
+      otpReason = otpCheck.reason || 'security_required';
+      
+      this.logger.log(`Google OTP check for ${user.email}: required=${requiresOtp}, reason=${otpReason}`);
+    }
+
+    if (requiresOtp && this.otpService) {
+      try {
+        await this.otpService.sendLoginOtp(
+          user.email,
+          (user as any).name || user.email,
+          ipAddress,
+          userAgent,
+        );
+        this.logger.log(`Login OTP sent to ${user.email} (Google OAuth, reason: ${otpReason})`);
+      } catch (err: any) {
+        this.logger.warn(`Login OTP send issue for ${user.email}: ${err.message}`);
+      }
+
+      // Record device and login attempt
+      if (this.deviceFingerprintService && userAgent && ipAddress) {
+        const fingerprint = this.deviceFingerprintService.generateFingerprint(userAgent, ipAddress);
+        await this.deviceFingerprintService.recordLoginAttempt(
+          (user as any)._id.toString(),
+          fingerprint,
+          ipAddress,
+          userAgent,
+          true, // OTP was required
+        );
+      }
+
+      // Record login attempt in history
+      await this.saveLoginHistory({
+        userId: (user as any)._id,
+        email: user.email,
+        name: (user as any).name || user.email,
+        role: user.role,
+        shopId: (user as any).shopId,
+        shopName: shop.name,
+        loginMethod: 'google',
+        status: 'otp_required',
+        ipAddress,
+        userAgent,
+      });
+
+      return {
+        requiresEmailVerification: true,
+        email: user.email,
+        userName: (user as any).name || user.email,
+        shopName: shop.name,
+        isNewUser: false,
+        googleProfile: null,
+        user: null,
+        shop: null,
+        tokens: null,
+      };
+    }
+
+    // Record device when OTP is not required
+    if (this.deviceFingerprintService && userAgent && ipAddress) {
+      const fingerprint = this.deviceFingerprintService.generateFingerprint(userAgent, ipAddress);
+      await this.deviceFingerprintService.recordLoginAttempt(
+        (user as any)._id.toString(),
+        fingerprint,
+        ipAddress,
+        userAgent,
+        false, // OTP was not required
+      );
+    }
+
+    // Generate secure token pair (smart OTP skipped — device is trusted)
     let tokens: any = null;
     if (this.tokenService) {
       tokens = await this.tokenService.generateTokenPair(
@@ -748,10 +835,10 @@ export class AuthService {
         (user as any).name || user.email,
         user.role,
         'login_google',
-        { email: user.email, method: 'Google OAuth' },
+        { email: user.email, method: 'Google OAuth', deviceTrusted: !requiresOtp },
         ipAddress,
         userAgent,
-        (user as any).branchId?.toString(), // Include branchId for branch-specific activity tracking
+        (user as any).branchId?.toString(),
       );
     }
 
@@ -1191,8 +1278,26 @@ export class AuthService {
       throw new UnauthorizedException('Shop is suspended');
     }
 
-    // Check if email is verified - if not, send OTP and require verification
-    if (!(user as any).emailVerified && this.otpService) {
+    // SMART OTP: Check if device is trusted to skip OTP
+    let requiresOtp = true;
+    let otpReason = 'security_required';
+
+    if (this.deviceFingerprintService && this.otpService) {
+      const fingerprint = this.deviceFingerprintService.generateFingerprint(userAgent, ipAddress);
+      
+      const otpCheck = await this.deviceFingerprintService.shouldRequireOtp(
+        (user as any)._id.toString(),
+        fingerprint,
+        'password'
+      );
+      
+      requiresOtp = otpCheck.required;
+      otpReason = otpCheck.reason || 'security_required';
+      
+      this.logger.log(`OTP check for ${user.email}: required=${requiresOtp}, reason=${otpReason}`);
+    }
+
+    if (requiresOtp && this.otpService) {
       try {
         await this.otpService.sendLoginOtp(
           user.email,
@@ -1200,10 +1305,36 @@ export class AuthService {
           ipAddress,
           userAgent,
         );
+        this.logger.log(`Login OTP sent to ${user.email} (reason: ${otpReason})`);
       } catch (err: any) {
-        // If cooldown error, still return requiresEmailVerification
         this.logger.warn(`Login OTP send issue for ${user.email}: ${err.message}`);
       }
+
+      // Record device and login attempt
+      if (this.deviceFingerprintService && userAgent && ipAddress) {
+        const fingerprint = this.deviceFingerprintService.generateFingerprint(userAgent, ipAddress);
+        await this.deviceFingerprintService.recordLoginAttempt(
+          (user as any)._id.toString(),
+          fingerprint,
+          ipAddress,
+          userAgent,
+          true, // OTP was required
+        );
+      }
+
+      // Record login attempt in history
+      await this.saveLoginHistory({
+        userId: (user as any)._id,
+        email: user.email,
+        name: (user as any).name || user.email,
+        role: user.role,
+        shopId: (user as any).shopId,
+        shopName: shop.name,
+        loginMethod: 'password',
+        status: 'otp_required',
+        ipAddress,
+        userAgent,
+      });
 
       return {
         requiresEmailVerification: true,
@@ -1214,6 +1345,18 @@ export class AuthService {
         shop: null,
         tokens: null,
       };
+    }
+
+    // Record device when OTP is not required
+    if (this.deviceFingerprintService && userAgent && ipAddress) {
+      const fingerprint = this.deviceFingerprintService.generateFingerprint(userAgent, ipAddress);
+      await this.deviceFingerprintService.recordLoginAttempt(
+        (user as any)._id.toString(),
+        fingerprint,
+        ipAddress,
+        userAgent,
+        false, // OTP was not required
+      );
     }
 
     // Generate secure token pair
@@ -1245,7 +1388,7 @@ export class AuthService {
         (user as any).name || user.email,
         user.role,
         'login',
-        { email: user.email },
+        { email: user.email, deviceTrusted: !requiresOtp },
         ipAddress,
         userAgent,
         (user as any).branchId?.toString(), // Include branchId for branch-specific activity tracking
@@ -1310,6 +1453,24 @@ export class AuthService {
       this.logger.warn(`Failed to set emailVerified for ${email}: ${err}`);
     }
 
+    // Mark this device as trusted now that OTP has been successfully verified
+    // (User asked: OTP only once on new device — never again on same device)
+    if (this.deviceFingerprintService && userAgent && ipAddress) {
+      try {
+        const fingerprint = this.deviceFingerprintService.generateFingerprint(userAgent, ipAddress);
+        await this.deviceFingerprintService.recordLoginAttempt(
+          (user as any)._id.toString(),
+          fingerprint,
+          ipAddress,
+          userAgent,
+          true, // OTP was required and successfully verified
+        );
+        this.logger.log(`Device trusted after OTP verification for ${email}`);
+      } catch (err) {
+        this.logger.warn(`Failed to mark device trusted for ${email}: ${err}`);
+      }
+    }
+
     // Get shop info
     const shop = await this.shopsService.findById((user as any).shopId.toString());
     if (!shop) {
@@ -1351,6 +1512,33 @@ export class AuthService {
         (user as any).branchId?.toString(),
       );
     }
+
+    // Save successful login history
+    // Determine login method based on user's auth type
+    const hasGoogleAuth = !!(user as any).googleId;
+    const hasPin = !!(user as any).pinHash;
+    let loginMethod = 'password';
+    
+    // If user has Google auth, assume Google login
+    if (hasGoogleAuth) {
+      loginMethod = 'google';
+    } else if (hasPin) {
+      // If user has PIN but no Google, it's a PIN login
+      loginMethod = 'pin';
+    }
+    
+    await this.saveLoginHistory({
+      userId: (user as any)._id,
+      email: user.email,
+      name: (user as any).name || user.email,
+      role: user.role,
+      shopId: (user as any).shopId,
+      shopName: shop.name,
+      loginMethod,
+      status: 'success',
+      ipAddress,
+      userAgent,
+    });
 
     return {
       user: {
@@ -1518,6 +1706,46 @@ export class AuthService {
       throw new UnauthorizedException('Shop is suspended');
     }
 
+    // MANDATORY OTP: Even for PIN login, send OTP and require verification
+    if (this.otpService) {
+      try {
+        await this.otpService.sendLoginOtp(
+          user.email,
+          (user as any).name || user.email,
+          ipAddress,
+          userAgent,
+        );
+        this.logger.log(`PIN Login OTP sent to ${user.email}`);
+      } catch (err: any) {
+        this.logger.warn(`PIN Login OTP send issue for ${user.email}: ${err.message}`);
+      }
+
+      // Record login attempt in history
+      await this.saveLoginHistory({
+        userId: (user as any)._id,
+        email: user.email,
+        name: (user as any).name || user.email,
+        role: user.role,
+        shopId: (user as any).shopId,
+        shopName: shop.name,
+        loginMethod: 'pin',
+        status: 'otp_required',
+        ipAddress,
+        userAgent,
+      });
+
+      return {
+        requiresEmailVerification: true,
+        email: user.email,
+        userName: (user as any).name || user.email,
+        shopName: shop.name,
+        user: null,
+        shop: null,
+        tokens: null,
+      };
+    }
+
+    // Fallback if OTP service not available (should not happen in production)
     let tokens: any = null;
     if (this.tokenService) {
       tokens = await this.tokenService.generateTokenPair(
@@ -1707,6 +1935,46 @@ export class AuthService {
     } catch (err) {
       this.logger.error(`Failed to get user from session: ${err}`);
       return null;
+    }
+  }
+
+  /**
+   * Save login history record
+   * For super admin audit purposes only
+   */
+  private async saveLoginHistory(data: {
+    userId: any;
+    email: string;
+    name: string;
+    role: string;
+    shopId?: any;
+    shopName?: string;
+    loginMethod: string;
+    status: string;
+    ipAddress?: string;
+    userAgent?: string;
+    deviceInfo?: string;
+    failureReason?: string;
+  }): Promise<void> {
+    try {
+      const record = new this.loginHistoryModel({
+        userId: data.userId ? new Types.ObjectId(data.userId.toString()) : undefined,
+        email: data.email,
+        name: data.name,
+        role: data.role,
+        shopId: data.shopId ? new Types.ObjectId(data.shopId.toString()) : undefined,
+        shopName: data.shopName,
+        loginMethod: data.loginMethod,
+        status: data.status,
+        ipAddress: data.ipAddress,
+        userAgent: data.userAgent,
+        deviceInfo: data.deviceInfo,
+        failureReason: data.failureReason,
+      });
+      await record.save();
+    } catch (err) {
+      // Log but don't throw - login history should not block login flow
+      this.logger.warn(`Failed to save login history: ${err}`);
     }
   }
 }

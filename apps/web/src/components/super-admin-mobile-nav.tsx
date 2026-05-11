@@ -18,9 +18,10 @@ import {
   User,
   Shield,
   FileText,
-  Inbox,
+  HeadphonesIcon,
   ChevronDown,
   ChevronRight,
+  Monitor,
 } from 'lucide-react';
 import { Button } from '@smartduka/ui';
 import { useAuth } from '@/lib/auth-context';
@@ -46,6 +47,7 @@ const superAdminNavSections: NavSection[] = [
     defaultOpen: true,
     items: [
       { name: 'Dashboard', href: '/super-admin', icon: LayoutDashboard },
+      { name: 'Activity Monitor', href: '/super-admin/dashboard', icon: Monitor },
       { name: 'Shops', href: '/super-admin/shops', icon: ShoppingBag },
     ],
   },
@@ -56,7 +58,7 @@ const superAdminNavSections: NavSection[] = [
       { name: 'Emails', href: '/super-admin/emails', icon: Mail },
       { name: 'Email Settings', href: '/super-admin/email-settings', icon: Settings },
       { name: 'Broadcast', href: '/super-admin/communications', icon: Send },
-      { name: 'Inbox', href: '/super-admin/inbox', icon: Inbox },
+      { name: 'Support Inbox', href: '/super-admin/inbox', icon: HeadphonesIcon },
     ],
   },
   {
@@ -65,6 +67,13 @@ const superAdminNavSections: NavSection[] = [
     items: [
       { name: 'Subscriptions', href: '/super-admin/subscriptions', icon: Crown },
       { name: 'Payments', href: '/super-admin/payments', icon: Activity },
+    ],
+  },
+  {
+    title: 'Security',
+    defaultOpen: true,
+    items: [
+      { name: 'Trusted Devices', href: '/super-admin/devices', icon: Shield },
     ],
   },
   {

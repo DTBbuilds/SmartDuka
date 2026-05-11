@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ShoppingCart, Eye, EyeOff, Store, User, ArrowRight, ArrowLeft, Building2, MapPin, FileText, Info, CheckCircle, Loader2, BarChart3, Users, Shield, Zap, Package, Crown, Sparkles, Check, Star, Mail, ShieldCheck, AlertCircle } from "lucide-react";
+import { ShoppingCart, Eye, EyeOff, Store, User, ArrowRight, ArrowLeft, Building2, MapPin, FileText, Info, CheckCircle, Loader2, BarChart3, Users, Shield, Zap, Package, Crown, Sparkles, Check, Star, Mail, ShieldCheck, AlertCircle, ChevronDown, Search, Globe } from "lucide-react";
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label } from "@smartduka/ui";
 import { useAuth, GoogleProfile } from "@/lib/auth-context";
 import { config } from "@/lib/config";
@@ -177,6 +177,145 @@ const planColors: Record<string, {
     icon: 'text-amber-600',
   },
 };
+
+// Beautiful Country Dropdown Component
+interface CountryDropdownProps {
+  value: string;
+  onChange: (code: string) => void;
+  countries: Record<string, {
+    name: string;
+    flag: string;
+    currency: string;
+    currencySymbol: string;
+    currencyName: string;
+    regions: string[];
+    regionLabel: string;
+    phonePlaceholder: string;
+    cityPlaceholder: string;
+    addressPlaceholder: string;
+  }>;
+}
+
+function CountryDropdown({ value, onChange, countries }: CountryDropdownProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const selectedCountry = countries[value];
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Filter and sort countries
+  const sortedCountries = Object.entries(countries)
+    .filter(([, cfg]) => 
+      cfg.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      cfg.currency.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+    .sort((a, b) => a[1].name.localeCompare(b[1].name));
+
+  const handleSelect = (code: string) => {
+    onChange(code);
+    setIsOpen(false);
+    setSearchQuery('');
+  };
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      {/* Trigger Button */}
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className={`w-full mt-1.5 flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all duration-200 ${
+          isOpen
+            ? 'border-primary bg-primary/5 shadow-lg shadow-primary/10'
+            : 'border-border hover:border-muted-foreground/40 hover:shadow-md'
+        }`}
+      >
+        <span className="text-3xl">{selectedCountry?.flag || '🌍'}</span>
+        <div className="flex-1 text-left">
+          <p className="font-semibold text-foreground">{selectedCountry?.name || 'Select Country'}</p>
+          <p className="text-xs text-muted-foreground">
+            {selectedCountry ? `${selectedCountry.currency} (${selectedCountry.currencySymbol})` : 'Choose your country and currency'}
+          </p>
+        </div>
+        <ChevronDown className={`h-5 w-5 text-muted-foreground transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+
+      {/* Dropdown Menu */}
+      {isOpen && (
+        <div className="absolute z-50 w-full mt-2 bg-background border-2 border-border rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+          {/* Search Header */}
+          <div className="p-3 border-b border-border bg-muted/30">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Search country or currency..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-4 py-2.5 bg-background rounded-lg border border-input text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                autoFocus
+              />
+            </div>
+          </div>
+
+          {/* Country List */}
+          <div className="max-h-[320px] overflow-y-auto">
+            {sortedCountries.length === 0 ? (
+              <div className="p-8 text-center text-muted-foreground">
+                <Globe className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">No countries found</p>
+              </div>
+            ) : (
+              <div className="py-2">
+                {sortedCountries.map(([code, cfg]) => (
+                  <button
+                    key={code}
+                    type="button"
+                    onClick={() => handleSelect(code)}
+                    className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                      value === code
+                        ? 'bg-primary/10 border-l-4 border-primary'
+                        : 'hover:bg-accent border-l-4 border-transparent'
+                    }`}
+                  >
+                    <span className="text-2xl">{cfg.flag}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className={`font-medium truncate ${value === code ? 'text-primary' : 'text-foreground'}`}>
+                        {cfg.name}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {cfg.currency} • {cfg.currencyName}
+                      </p>
+                    </div>
+                    {value === code && (
+                      <Check className="h-4 w-4 text-primary flex-shrink-0" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="p-2 border-t border-border bg-muted/20 text-center">
+            <p className="text-xs text-muted-foreground">
+              {Object.keys(countries).length} countries supported
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function RegisterShopContent() {
   const router = useRouter();
@@ -916,51 +1055,14 @@ function RegisterShopContent() {
                   <span>Location & Currency</span>
                 </div>
 
-              {/* Country Selector - Featured + More dropdown */}
-              <div>
+              {/* Country Selector - Beautiful Unified Dropdown */}
+              <div className="relative">
                 <Label htmlFor="country">Country *</Label>
-                {/* Featured countries as cards */}
-                <div className="mt-1.5 grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {(['KE', 'NG', 'ZA', 'US', 'CA', 'GB', 'DE', 'IN', 'AU'] as const).map((code) => {
-                    const cfg = COUNTRY_CONFIG[code];
-                    if (!cfg) return null;
-                    return (
-                      <button
-                        key={code}
-                        type="button"
-                        onClick={() => handleCountryChange(code)}
-                        className={`flex items-center gap-3 p-3 rounded-lg border-2 transition-all ${
-                          shopData.country === code
-                            ? 'border-primary bg-primary/5 shadow-sm'
-                            : 'border-border hover:border-muted-foreground/30'
-                        }`}
-                      >
-                        <span className="text-2xl">{cfg.flag}</span>
-                        <div className="text-left">
-                          <p className={`text-sm font-medium ${shopData.country === code ? 'text-primary' : 'text-foreground'}`}>{cfg.name}</p>
-                          <p className="text-xs text-muted-foreground">{cfg.currencySymbol}</p>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-                {/* More countries dropdown */}
-                <div className="mt-3">
-                  <select
-                    id="country-more"
-                    value={(['KE', 'NG', 'ZA', 'US', 'CA', 'GB', 'DE', 'IN', 'AU'] as string[]).includes(shopData.country) ? '' : shopData.country}
-                    onChange={(e) => e.target.value && handleCountryChange(e.target.value)}
-                    className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                  >
-                    <option value="">More countries...</option>
-                    {Object.entries(COUNTRY_CONFIG)
-                      .filter(([code]) => !(['KE', 'NG', 'ZA', 'US', 'CA', 'GB', 'DE', 'IN', 'AU'] as string[]).includes(code))
-                      .sort((a, b) => a[1].name.localeCompare(b[1].name))
-                      .map(([code, cfg]) => (
-                        <option key={code} value={code}>{cfg.flag} {cfg.name} ({cfg.currencySymbol})</option>
-                      ))}
-                  </select>
-                </div>
+                <CountryDropdown
+                  value={shopData.country}
+                  onChange={handleCountryChange}
+                  countries={COUNTRY_CONFIG}
+                />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

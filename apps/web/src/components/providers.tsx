@@ -5,6 +5,7 @@ import { AuthProvider } from "@/lib/auth-context";
 import { BranchProvider } from "@/lib/branch-context";
 import { LoadingProvider } from "@/contexts/loading-context";
 import { ThemeProvider } from "@/components/theme-provider";
+import { KeyboardShortcutsProvider } from "@/hooks/use-keyboard-shortcuts-settings";
 import { NavbarEnhancedV2 } from "./navbar-enhanced-v2";
 import { AdminLayout } from "./admin-layout";
 import { DemoModeBanner, DemoModeIndicator } from "./demo-mode-banner";
@@ -64,21 +65,23 @@ export function Providers({ children }: { children: ReactNode }) {
     <AuthProvider>
       <BranchProvider>
         <LoadingProvider>
-          <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-            <SystemMonitors />
-            <DemoModeBanner />
-            <NavbarEnhancedV2 />
-            <AdminLayout>
-              <div className="demo-mode-wrapper">
-                {children}
-              </div>
-            </AdminLayout>
-            <DemoModeIndicator />
-            <SessionExpiryWarning />
-            <InactivityWarning />
-            <BackendStatusOverlay />
-            <PWAInstallPrompt />
-          </ThemeProvider>
+          <KeyboardShortcutsProvider>
+            <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+              <SystemMonitors />
+              <DemoModeBanner />
+              <NavbarEnhancedV2 />
+              <AdminLayout>
+                <div className="demo-mode-wrapper">
+                  {children}
+                </div>
+              </AdminLayout>
+              <DemoModeIndicator />
+              <SessionExpiryWarning />
+              <InactivityWarning />
+              <BackendStatusOverlay />
+              <PWAInstallPrompt />
+            </ThemeProvider>
+          </KeyboardShortcutsProvider>
         </LoadingProvider>
       </BranchProvider>
     </AuthProvider>

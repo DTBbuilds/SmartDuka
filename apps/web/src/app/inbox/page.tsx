@@ -14,6 +14,10 @@ import {
   CardTitle,
   Input,
   Badge,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
 } from '@smartduka/ui';
 import {
   MessageCircle,
@@ -26,6 +30,27 @@ import {
   ArrowLeft,
   Inbox,
   Filter,
+  HelpCircle,
+  BookOpen,
+  MessageSquare,
+  Zap,
+  ChevronRight,
+  Sparkles,
+  Bot,
+  User,
+  HeadphonesIcon,
+  FileText,
+  CreditCard,
+  ShoppingCart,
+  Settings,
+  Shield,
+  ThumbsUp,
+  ThumbsDown,
+  Smile,
+  X,
+  Mail,
+  ExternalLink,
+  ChevronDown,
 } from 'lucide-react';
 import { cn } from '@smartduka/ui';
 import {
@@ -37,6 +62,74 @@ import {
   getAdminMessages,
   markAdminMessagesRead,
 } from '@/lib/messaging-api';
+
+// FAQ Data
+const FAQ_CATEGORIES = [
+  {
+    id: 'getting-started',
+    name: 'Getting Started',
+    icon: Zap,
+    questions: [
+      { q: 'How do I set up my shop?', a: 'Go to Settings > Shop Settings to add your business details, logo, and configure your currency. Then add your products in the Products section.' },
+      { q: 'How do I add my first product?', a: 'Navigate to Products > Add New. Fill in the product name, price, stock quantity, and optional details like barcode, category, and images.' },
+      { q: 'Can I use SmartDuka without internet?', a: 'Yes! SmartDuka works offline. Your data syncs automatically when you reconnect. Perfect for areas with unstable internet.' },
+    ],
+  },
+  {
+    id: 'payments',
+    name: 'Payments & Billing',
+    icon: CreditCard,
+    questions: [
+      { q: 'How do I set up M-Pesa payments?', a: 'Go to Settings > M-Pesa. Enter your Paybill or Till number, and complete the verification process. You can test with a small amount first.' },
+      { q: 'Can I accept card payments?', a: 'Yes! For non-KES currencies, go to Settings > Card Payments to connect Stripe and accept credit/debit cards.' },
+      { q: 'How do I issue a refund?', a: 'Go to Orders, find the order, and click "Refund". You can do full or partial refunds. The customer will receive funds via their original payment method.' },
+      { q: 'What are the transaction fees?', a: 'M-Pesa fees are set by Safaricom. Card payments via Stripe have standard Stripe fees (typically 2.9% + 30¢ per transaction).' },
+    ],
+  },
+  {
+    id: 'pos',
+    name: 'POS & Sales',
+    icon: ShoppingCart,
+    questions: [
+      { q: 'How do I use the barcode scanner?', a: 'Click the barcode icon in the POS screen or press Ctrl+B. You can use your device camera or a USB barcode scanner.' },
+      { q: 'Can I apply discounts?', a: 'Yes! In the POS, click the discount icon on any item or apply a cart-level discount. You can set percentage or fixed amount discounts.' },
+      { q: 'How do I hold a sale?', a: 'Click "Hold Sale" in the POS. You can park multiple sales and recall them later by clicking "Held Sales".' },
+      { q: 'What keyboard shortcuts are available?', a: 'Press Ctrl+K to see all shortcuts. Common ones: F1=Search, F2=Checkout, F3=Hold Sale, F4=Clear Cart, F5=Barcode Scanner.' },
+    ],
+  },
+  {
+    id: 'inventory',
+    name: 'Inventory',
+    icon: FileText,
+    questions: [
+      { q: 'How do I track stock levels?', a: 'SmartDuka automatically tracks stock with every sale. Set reorder points to get alerts when stock is low.' },
+      { q: 'Can I manage multiple branches?', a: 'Yes! Go to Admin > Branches to add locations. Each branch has separate inventory, and you can transfer stock between them.' },
+      { q: 'How do I handle expiry dates?', a: 'Enable expiry tracking in your shop settings. You will get alerts for products nearing expiry and can use FEFO (First Expired First Out) rotation.' },
+      { q: 'What is stock reconciliation?', a: 'It is a feature to verify physical stock matches the system. Go to Stock > Reconciliation to perform regular stock counts.' },
+    ],
+  },
+  {
+    id: 'security',
+    name: 'Security & Accounts',
+    icon: Shield,
+    questions: [
+      { q: 'How do I add staff members?', a: 'Go to Admin > Staff. Add users with roles (Admin, Manager, Cashier). Each gets their own login and permissions.' },
+      { q: 'Can I control what staff can do?', a: 'Yes! Each role has different permissions. Admins have full access, Cashiers can only process sales, Managers can view reports.' },
+      { q: 'Is my data secure?', a: 'Absolutely. We use bank-grade encryption, regular backups, and comply with data protection regulations. Your data is never shared.' },
+      { q: 'How do I change my password?', a: 'Go to Settings > Security > Change Password. We recommend using a strong, unique password.' },
+    ],
+  },
+];
+
+// Quick Reply Suggestions
+const QUICK_REPLIES = [
+  'Thanks for the help!',
+  'I need more assistance',
+  'That solved my problem',
+  'Can you explain further?',
+  'I am having trouble with this',
+  'Is there a video tutorial?',
+];
 
 function InboxContent() {
   const { user, token } = useAuth();
@@ -55,6 +148,11 @@ function InboxContent() {
   const [newType, setNewType] = useState<string>('general');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [activeTab, setActiveTab] = useState('chat');
+  const [expandedFaq, setExpandedFaq] = useState<string | null>(null);
+  const [expandedFaqItem, setExpandedFaqItem] = useState<string | null>(null);
+  const [showQuickReplies, setShowQuickReplies] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -203,37 +301,216 @@ function InboxContent() {
       <ToastContainer toasts={toasts} onDismiss={dismiss} />
       
       <div className="container px-3 sm:px-6 py-4 sm:py-6">
-        {/* Header - Hidden on mobile when viewing chat */}
+        {/* Header with Tabs - Hidden on mobile when viewing chat */}
         <div className={cn(
-          "flex items-center justify-between mb-4 sm:mb-6",
-          showMobileChat && "hidden sm:flex"
+          "mb-4 sm:mb-6",
+          showMobileChat && "hidden sm:block"
         )}>
-          <div className="flex items-center gap-2 sm:gap-3">
-            <div className="p-1.5 sm:p-2 rounded-lg bg-primary/10">
-              <Inbox className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="p-1.5 sm:p-2 rounded-xl bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-lg">
+                <HeadphonesIcon className="h-5 w-5 sm:h-6 sm:w-6" />
+              </div>
+              <div>
+                <h1 className="text-xl sm:text-2xl font-bold">Help Center</h1>
+                <p className="text-xs sm:text-sm text-muted-foreground">
+                  Get answers or chat with our support team
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-xl sm:text-2xl font-bold">Support Inbox</h1>
-              <p className="text-xs sm:text-sm text-muted-foreground hidden sm:block">
-                Chat with SmartDuka support team
-              </p>
-            </div>
+            <Button 
+              onClick={() => setShowNewConversation(true)} 
+              className="gap-2 h-10 shadow-md hover:shadow-lg transition-shadow"
+            >
+              <MessageSquare className="h-4 w-4" />
+              <span>New Conversation</span>
+            </Button>
           </div>
-          <Button 
-            onClick={() => setShowNewConversation(true)} 
-            className="gap-2 h-9 sm:h-10 text-sm"
-            size="sm"
-          >
-            <Plus className="h-4 w-4" />
-            <span className="hidden sm:inline">New Conversation</span>
-            <span className="sm:hidden">New</span>
-          </Button>
-        </div>
 
-        {/* Main Content */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 h-[calc(100vh-140px)] sm:h-[calc(100vh-200px)]">
-          {/* Conversations List - Hidden on mobile when chat is open */}
-          <Card className={cn(
+          {/* Tabs */}
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-6">
+            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:max-w-md">
+              <TabsTrigger value="chat" className="gap-2">
+                <MessageCircle className="h-4 w-4" />
+                <span className="hidden sm:inline">Chat Support</span>
+                <span className="sm:hidden">Chat</span>
+              </TabsTrigger>
+              <TabsTrigger value="faq" className="gap-2">
+                <BookOpen className="h-4 w-4" />
+                <span className="hidden sm:inline">FAQ & Guides</span>
+                <span className="sm:hidden">FAQ</span>
+              </TabsTrigger>
+              <TabsTrigger value="contact" className="gap-2 hidden sm:flex">
+                <HelpCircle className="h-4 w-4" />
+                Contact
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="faq" className="mt-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-xl">
+                    <Sparkles className="h-5 w-5 text-yellow-500" />
+                    Frequently Asked Questions
+                  </CardTitle>
+                  <CardDescription>
+                    Find quick answers to common questions
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {FAQ_CATEGORIES.map((category) => (
+                    <div key={category.id} className="space-y-3">
+                      <button
+                        onClick={() => setExpandedFaq(expandedFaq === category.id ? null : category.id)}
+                        className="flex items-center gap-3 w-full text-left p-3 rounded-lg hover:bg-accent transition-colors"
+                      >
+                        <div className="p-2 rounded-lg bg-primary/10">
+                          <category.icon className="h-5 w-5 text-primary" />
+                        </div>
+                        <span className="font-semibold flex-1">{category.name}</span>
+                        <ChevronDown className={cn(
+                          "h-5 w-5 text-muted-foreground transition-transform",
+                          expandedFaq === category.id && "rotate-180"
+                        )} />
+                      </button>
+                      
+                      {expandedFaq === category.id && (
+                        <div className="ml-4 space-y-2 border-l-2 border-border pl-4">
+                          {category.questions.map((item, idx) => (
+                            <div key={idx} className="space-y-1">
+                              <button
+                                onClick={() => setExpandedFaqItem(expandedFaqItem === `${category.id}-${idx}` ? null : `${category.id}-${idx}`)}
+                                className="flex items-start gap-2 w-full text-left p-2 rounded hover:bg-accent/50 transition-colors"
+                              >
+                                <ChevronRight className={cn(
+                                  "h-4 w-4 mt-0.5 text-muted-foreground transition-transform",
+                                  expandedFaqItem === `${category.id}-${idx}` && "rotate-90"
+                                )} />
+                                <span className="text-sm font-medium text-foreground">{item.q}</span>
+                              </button>
+                              {expandedFaqItem === `${category.id}-${idx}` && (
+                                <div className="ml-6 p-3 bg-muted/50 rounded-lg text-sm text-muted-foreground">
+                                  {item.a}
+                                  <div className="mt-3 flex gap-2">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-8 text-xs"
+                                      onClick={() => {
+                                        toast({ type: 'success', title: 'Thanks for your feedback!' });
+                                      }}
+                                    >
+                                      <ThumbsUp className="h-3 w-3 mr-1" />
+                                      Helpful
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-8 text-xs"
+                                      onClick={() => {
+                                        setActiveTab('chat');
+                                        setShowNewConversation(true);
+                                      }}
+                                    >
+                                      <MessageCircle className="h-3 w-3 mr-1" />
+                                      Ask More
+                                    </Button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="contact" className="mt-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Contact Us</CardTitle>
+                  <CardDescription>Click any option below to connect with our support team</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {/* Live Chat - Switches to Chat tab */}
+                    <Card 
+                      className="p-4 hover:shadow-md transition-all cursor-pointer hover:border-blue-500/50 group"
+                      onClick={() => setActiveTab('chat')}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="p-3 rounded-lg bg-blue-500/10 group-hover:bg-blue-500/20 transition-colors">
+                          <MessageSquare className="h-5 w-5 text-blue-600" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1">
+                            <p className="font-medium">Live Chat</p>
+                            <ExternalLink className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </div>
+                          <p className="text-sm text-muted-foreground">Available 24/7</p>
+                        </div>
+                      </div>
+                    </Card>
+
+                    {/* WhatsApp - Opens WhatsApp app */}
+                    <a 
+                      href="https://wa.me/61450275013?text=Hi%20SmartDuka%20Support,%20I%20need%20help%20with%20my%20shop"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block"
+                    >
+                      <Card className="p-4 hover:shadow-md transition-all cursor-pointer hover:border-green-500/50 group h-full">
+                        <div className="flex items-center gap-3">
+                          <div className="p-3 rounded-lg bg-green-500/10 group-hover:bg-green-500/20 transition-colors">
+                            <svg className="h-5 w-5 text-green-600" viewBox="0 0 24 24" fill="currentColor">
+                              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                            </svg>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1">
+                              <p className="font-medium">WhatsApp</p>
+                              <ExternalLink className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                            </div>
+                            <p className="text-sm text-muted-foreground">+61 450 275 013</p>
+                          </div>
+                        </div>
+                      </Card>
+                    </a>
+
+                    {/* Email - Opens email app */}
+                    <a
+                      href="mailto:smartdukainfo@gmail.com?subject=Support%20Request%20-%20SmartDuka&body=Hi%20SmartDuka%20Team,%0A%0AI%20need%20help%20with:%0A%0A"
+                      className="block"
+                    >
+                      <Card className="p-4 hover:shadow-md transition-all cursor-pointer hover:border-red-500/50 group h-full">
+                        <div className="flex items-center gap-3">
+                          <div className="p-3 rounded-lg bg-red-500/10 group-hover:bg-red-500/20 transition-colors">
+                            <svg className="h-5 w-5 text-red-600" viewBox="0 0 24 24" fill="currentColor">
+                              <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
+                            </svg>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1">
+                              <p className="font-medium">Email</p>
+                              <ExternalLink className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                            </div>
+                            <p className="text-sm text-muted-foreground truncate">smartdukainfo@gmail.com</p>
+                          </div>
+                        </div>
+                      </Card>
+                    </a>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="chat" className="mt-0">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 h-[calc(100vh-280px)] sm:h-[calc(100vh-240px)]">
+                {/* Conversations List - Hidden on mobile when chat is open */}
+                <Card className={cn(
             "lg:col-span-1 flex flex-col overflow-hidden",
             showMobileChat ? "hidden lg:flex" : "flex"
           )}>
@@ -431,6 +708,9 @@ function InboxContent() {
               </div>
             )}
           </Card>
+                </div>
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
 

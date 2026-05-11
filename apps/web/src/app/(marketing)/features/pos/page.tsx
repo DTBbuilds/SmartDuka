@@ -153,7 +153,7 @@ export default function POSFeaturePage() {
             </div>
             
             <h1 className="text-4xl sm:text-5xl font-bold text-gray-900 mb-6">
-              Fast, Reliable <span className="text-orange-600">POS System</span> for Kenyan Retailers
+              Fast, Reliable <span className="text-orange-600">POS System</span> for Modern Retailers
             </h1>
             
             <p className="text-xl text-gray-600 mb-8">
@@ -323,7 +323,7 @@ export default function POSFeaturePage() {
             Ready to Speed Up Your Checkout?
           </h2>
           <p className="text-xl text-orange-100 mb-8">
-            Start your free trial today and see why thousands of Kenyan businesses choose SmartDuka.
+            Start your free trial today and see why thousands of businesses worldwide choose SmartDuka.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link 

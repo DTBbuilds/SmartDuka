@@ -249,10 +249,20 @@ export default function BranchDetailPage() {
     return icons[action] || { icon: <Activity className="h-4 w-4 text-gray-600" />, bg: 'bg-gray-100' };
   };
 
-  const formatActivityAction = (action: string): string => {
+  const formatActivityAction = (action: string, details?: any): string => {
+    if (action === 'status_change' && details?.status) {
+      const statusLabels: Record<string, string> = {
+        online: 'Came Online',
+        idle: 'Went Idle',
+        offline: 'Went Offline',
+        away: 'Went Away',
+      };
+      return statusLabels[details.status] || `Status: ${details.status}`;
+    }
     const labels: Record<string, string> = {
       login: 'Logged In',
       login_pin: 'Logged In (PIN)',
+      login_google: 'Logged In (Google)',
       logout: 'Logged Out',
       checkout: 'Completed Sale',
       product_add: 'Added Product',
@@ -600,7 +610,7 @@ export default function BranchDetailPage() {
                           {getActivityIcon(activity.action).icon}
                         </div>
                         <div>
-                          <p className="font-medium">{formatActivityAction(activity.action)}</p>
+                          <p className="font-medium">{formatActivityAction(activity.action, activity.details)}</p>
                           <div className="flex items-center gap-2 text-sm text-muted-foreground">
                             {activity.userName && <span>by {activity.userName}</span>}
                             {activity.userRole && (

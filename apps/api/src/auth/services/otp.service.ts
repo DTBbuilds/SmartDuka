@@ -88,7 +88,7 @@ export class OtpService {
     });
     await otp.save();
 
-    // Send OTP via email
+    // Send OTP via email (single provider to avoid duplicates)
     const emailResult = await this.emailService.sendEmail({
       to: normalizedEmail,
       subject: `Your SmartDuka Verification Code: ${code}`,
@@ -97,6 +97,8 @@ export class OtpService {
       category: 'authentication',
       templateName: 'otp_verification',
       templateVariables: { code, shopName, expiryMinutes: this.OTP_EXPIRY_MINUTES },
+      useSingleProvider: true,
+      preferredProvider: 'resend', // Use Resend for OTP emails
     });
 
     if (!emailResult.success) {
@@ -226,7 +228,15 @@ export class OtpService {
   <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 8px;">
   <tr>${digitBoxes}</tr>
   </table>
-  <p style="margin:0 0 24px;font-size:12px;color:#9ca3af;text-align:center;">Copy or type this code into the verification field</p>
+  
+  <!-- Copy Button -->
+  <div style="text-align:center;margin:0 auto 16px;">
+    <a href="#" onclick="navigator.clipboard.writeText('${code}'); this.style.backgroundColor='#059669'; this.innerHTML='✓ Copied!'; setTimeout(() => { this.style.backgroundColor='#f97316'; this.innerHTML='📋 Copy Code'; }, 2000); return false;" style="display:inline-block;background-color:#f97316;color:#ffffff;padding:10px 20px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600;transition:background-color 0.2s;">
+      📋 Copy Code
+    </a>
+  </div>
+  
+  <p style="margin:0 0 24px;font-size:12px;color:#9ca3af;text-align:center;">Click the button above or type the code manually</p>
   <!-- Expiry -->
   <p style="margin:0 0 24px;font-size:13px;color:#6b7280;text-align:center;">
     This code expires in <strong style="color:#111827;">${expiryMinutes} minutes</strong>
@@ -243,7 +253,7 @@ export class OtpService {
 </td></tr>
 <!-- Footer -->
 <tr><td style="padding:20px 32px;border-top:1px solid #f3f4f6;text-align:center;">
-  <p style="margin:0 0 4px;font-size:11px;color:#9ca3af;">SmartDuka &mdash; Smart POS for Kenyan businesses</p>
+  <p style="margin:0 0 4px;font-size:11px;color:#9ca3af;">SmartDuka &mdash; Smart POS for businesses everywhere</p>
   <p style="margin:0;font-size:11px;color:#d1d5db;">&copy; ${year} SmartDuka. All rights reserved.</p>
 </td></tr>
 </table>
@@ -294,7 +304,7 @@ export class OtpService {
     });
     await otp.save();
 
-    // Send OTP via email
+    // Send OTP via email (single provider to avoid duplicates)
     const emailResult = await this.emailService.sendEmail({
       to: normalizedEmail,
       subject: `Your SmartDuka Login Verification Code: ${code}`,
@@ -303,6 +313,8 @@ export class OtpService {
       category: 'authentication',
       templateName: 'otp_login_verification',
       templateVariables: { code, userName, expiryMinutes: this.OTP_EXPIRY_MINUTES },
+      useSingleProvider: true,
+      preferredProvider: 'resend', // Use Resend for OTP emails
     });
 
     if (!emailResult.success) {
@@ -354,7 +366,15 @@ export class OtpService {
   <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 8px;">
   <tr>${digitBoxes}</tr>
   </table>
-  <p style="margin:0 0 24px;font-size:12px;color:#9ca3af;text-align:center;">Copy or type this code into the verification field</p>
+  
+  <!-- Copy Button -->
+  <div style="text-align:center;margin:0 auto 16px;">
+    <a href="#" onclick="navigator.clipboard.writeText('${code}'); this.style.backgroundColor='#059669'; this.innerHTML='✓ Copied!'; setTimeout(() => { this.style.backgroundColor='#f97316'; this.innerHTML='📋 Copy Code'; }, 2000); return false;" style="display:inline-block;background-color:#f97316;color:#ffffff;padding:10px 20px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600;transition:background-color 0.2s;">
+      📋 Copy Code
+    </a>
+  </div>
+  
+  <p style="margin:0 0 24px;font-size:12px;color:#9ca3af;text-align:center;">Click the button above or type the code manually</p>
   <!-- Expiry -->
   <p style="margin:0 0 24px;font-size:13px;color:#6b7280;text-align:center;">
     This code expires in <strong style="color:#111827;">${expiryMinutes} minutes</strong>
@@ -371,7 +391,7 @@ export class OtpService {
 </td></tr>
 <!-- Footer -->
 <tr><td style="padding:20px 32px;border-top:1px solid #f3f4f6;text-align:center;">
-  <p style="margin:0 0 4px;font-size:11px;color:#9ca3af;">SmartDuka &mdash; Smart POS for Kenyan businesses</p>
+  <p style="margin:0 0 4px;font-size:11px;color:#9ca3af;">SmartDuka &mdash; Smart POS for businesses everywhere</p>
   <p style="margin:0;font-size:11px;color:#d1d5db;">&copy; ${year} SmartDuka. All rights reserved.</p>
 </td></tr>
 </table>
@@ -499,7 +519,7 @@ export class OtpService {
 </td></tr>
 <!-- Footer -->
 <tr><td style="padding:20px 32px;border-top:1px solid #f3f4f6;text-align:center;">
-  <p style="margin:0 0 4px;font-size:11px;color:#9ca3af;">SmartDuka &mdash; Smart POS for Kenyan businesses</p>
+  <p style="margin:0 0 4px;font-size:11px;color:#9ca3af;">SmartDuka &mdash; Smart POS for businesses everywhere</p>
   <p style="margin:0;font-size:11px;color:#d1d5db;">&copy; ${year} SmartDuka. All rights reserved.</p>
 </td></tr>
 </table>

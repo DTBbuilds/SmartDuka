@@ -86,7 +86,7 @@ When evaluating POS pricing, consider:
 
 ## Why SmartDuka?
 
-SmartDuka is designed specifically for Kenyan retailers with:
+SmartDuka is designed for modern retailers with:
 
 - Native M-Pesa integration with STK push
 - Full offline capability

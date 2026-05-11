@@ -226,7 +226,7 @@ export default function EditProductPage() {
       });
 
       if (res.ok) {
-        router.push("/admin");
+        router.push("/admin/products");
       } else {
         const errText = await res.text();
         const errorData = errText ? JSON.parse(errText) : {};

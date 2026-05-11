@@ -4,7 +4,7 @@ import { SuperAdminGuard } from '@/components/super-admin-guard';
 import { SuperAdminMobileNav } from '@/components/super-admin-mobile-nav';
 import { useAuth } from '@/lib/auth-context';
 import { useRouter } from 'next/navigation';
-import { LayoutDashboard, ShoppingBag, MessageSquare, LogOut, Menu, Crown, Mail, Settings, Activity, Send, X } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, MessageSquare, LogOut, Menu, Crown, Mail, Settings, Activity, Send, X, Shield } from 'lucide-react';
 import { useState } from 'react';
 
 export default function SuperAdminLayout({
@@ -91,6 +91,13 @@ export default function SuperAdminLayout({
               href="/super-admin/payments"
               open={sidebarOpen}
               onClick={() => router.push('/super-admin/payments')}
+            />
+            <NavItem
+              icon={<Shield className="h-5 w-5" />}
+              label="Trusted Devices"
+              href="/super-admin/devices"
+              open={sidebarOpen}
+              onClick={() => router.push('/super-admin/devices')}
             />
             <NavItem
               icon={<Settings className="h-5 w-5" />}

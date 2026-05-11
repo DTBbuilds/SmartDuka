@@ -63,6 +63,7 @@ export class EmailLog {
     enum: [
       'welcome',
       'verification',
+      'authentication',
       'password_reset',
       'subscription',
       'payment',

@@ -341,7 +341,7 @@ export default function MpesaFeaturePage() {
             Start Accepting M-Pesa Today
           </h2>
           <p className="text-xl text-green-100 mb-8">
-            Join thousands of Kenyan businesses already using SmartDuka for M-Pesa payments.
+            Join thousands of businesses already using SmartDuka for M-Pesa payments.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link 

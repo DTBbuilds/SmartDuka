@@ -23,11 +23,11 @@ import {
   Boxes,
   Receipt,
   FlaskConical,
-  Inbox,
   Target,
   Building2,
   ArrowLeftRight,
   Activity,
+  HeadphonesIcon,
 } from 'lucide-react';
 import { Button } from '@smartduka/ui';
 import { useAuth } from '@/lib/auth-context';
@@ -105,7 +105,7 @@ const adminNavSections: NavSection[] = [
 
 // Bottom navigation items
 const bottomNavItems: NavItem[] = [
-  { name: 'Inbox', href: '/inbox', icon: Inbox },
+  { name: 'Support', href: '/inbox', icon: HeadphonesIcon },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];
 
@@ -285,7 +285,7 @@ export function AdminSidebar() {
           {bottomNavItems.map((item) => {
             const Icon = item.icon;
             const active = isActive(item.href);
-            const isInbox = item.name === 'Inbox';
+            const isInbox = item.name === 'Support';
             const badgeCount = isInbox ? inboxUnreadCount : 0;
             return (
               <Link

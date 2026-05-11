@@ -8,7 +8,7 @@ import { config } from "@/lib/config";
 import { CartLoader } from '@/components/ui/cart-loader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Tabs, TabsContent, TabsList, TabsTrigger, Input, Label, Button, Textarea, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@smartduka/ui";
 import { Switch } from "@/components/ui/switch";
-import { Store, User, Lock, Settings as SettingsIcon, ShieldAlert, CreditCard, Crown, TrendingUp, Users, Package, Receipt, AlertCircle, Check, Clock, X, Phone, Smartphone, ChevronRight, ChevronLeft, Menu, FileText, Calendar, CreditCard as CardIcon, CheckCircle2, XCircle, ArrowRight, Info, Shield, Zap, Eye, Download, RefreshCw, ExternalLink, Copy, Banknote, Loader2 } from "lucide-react";
+import { Store, User, Lock, Settings as SettingsIcon, ShieldAlert, CreditCard, Crown, TrendingUp, Users, Package, Receipt, AlertCircle, Check, Clock, X, Phone, Smartphone, ChevronRight, ChevronLeft, Menu, FileText, Calendar, CreditCard as CardIcon, CheckCircle2, XCircle, ArrowRight, Info, Shield, Zap, Eye, Download, RefreshCw, ExternalLink, Copy, Banknote, Loader2, Keyboard } from "lucide-react";
 import { TableSkeleton } from "@/components/shared/loading-skeleton";
 import { useSubscription, useSubscriptionPlans, useBillingHistory, type BillingCycle, type SubscriptionPlan } from "@/hooks/use-subscription";
 import { MpesaSettings } from "@/components/settings/mpesa-settings";
@@ -18,6 +18,9 @@ import { StripePaymentForm } from "@/components/stripe-payment-form";
 import { useStripePayment } from "@/hooks/use-stripe-payment";
 import { Portal } from "@/components/portal";
 import { CURRENCY_OPTIONS } from "@/lib/currency";
+import { ProfileSettings } from "@/components/settings/profile-settings";
+import { SecuritySettings } from "@/components/settings/security-settings";
+import { KeyboardShortcutsPanel } from "@/components/settings/keyboard-shortcuts-panel";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -45,6 +48,7 @@ export default function SettingsPage() {
     { id: 'subscription', label: 'Plan', icon: Crown, description: 'Free plan details' },
     { id: 'profile', label: 'Profile', icon: User, description: 'Personal information' },
     { id: 'security', label: 'Security', icon: Lock, description: 'Password & access' },
+    { id: 'shortcuts', label: 'Shortcuts', icon: Keyboard, description: 'Keyboard shortcuts' },
   ];
   
   // Role-based access control - only admin can access settings
@@ -610,166 +614,39 @@ export default function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="profile">
-          <Card>
-            <CardHeader>
-              <CardTitle>Profile Information</CardTitle>
-              <CardDescription>Update your personal information</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Full Name</Label>
-                <Input
-                  id="name"
-                  value={profileData.name}
-                  onChange={(e) => setProfileData({ ...profileData, name: e.target.value })}
-                  placeholder="John Doe"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={profileData.email}
-                  disabled
-                  className="bg-muted"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Email cannot be changed. Contact support if needed.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="phone">Phone Number</Label>
-                <Input
-                  id="phone"
-                  type="tel"
-                  value={profileData.phone}
-                  onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
-                  placeholder="+254 712 345 678"
-                />
-              </div>
-
-              <div className="pt-4">
-                <Button onClick={saveProfile} disabled={isSaving}>
-                  {isSaving ? "Saving..." : "Save Profile"}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          <ProfileSettings
+            initialData={{
+              name: profileData.name,
+              email: profileData.email,
+              phone: profileData.phone,
+              role: user?.role,
+              shopName: shop?.name,
+            }}
+            onSave={async (formData) => {
+              const name = formData.get('name') as string;
+              const phone = formData.get('phone') as string;
+              setProfileData(prev => ({ ...prev, name, phone }));
+              await saveProfile();
+            }}
+            isSaving={isSaving}
+          />
         </TabsContent>
 
         <TabsContent value="security">
-          <Card>
-            <CardHeader>
-              <CardTitle>Change Password</CardTitle>
-              <CardDescription>Update your password to keep your account secure</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {passwordOtpStep === 'form' ? (
-                <>
-                  <div className="space-y-2">
-                    <Label htmlFor="currentPassword">Current Password</Label>
-                    <Input
-                      id="currentPassword"
-                      type="password"
-                      value={passwordData.currentPassword}
-                      onChange={(e) =>
-                        setPasswordData({ ...passwordData, currentPassword: e.target.value })
-                      }
-                      placeholder="••••••••"
-                    />
-                  </div>
+          <SecuritySettings
+            userEmail={user?.email || ''}
+            onPasswordChange={async ({ currentPassword, newPassword, otpCode }) => {
+              setPasswordData({ currentPassword, newPassword, confirmPassword: newPassword });
+              setOtpCode(otpCode);
+              await changePassword();
+            }}
+            onRequestOtp={requestPasswordChangeOtp}
+            isLoading={isSaving}
+          />
+        </TabsContent>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="newPassword">New Password</Label>
-                    <Input
-                      id="newPassword"
-                      type="password"
-                      value={passwordData.newPassword}
-                      onChange={(e) =>
-                        setPasswordData({ ...passwordData, newPassword: e.target.value })
-                      }
-                      placeholder="••••••••"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Password must be at least 6 characters long
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="confirmPassword">Confirm New Password</Label>
-                    <Input
-                      id="confirmPassword"
-                      type="password"
-                      value={passwordData.confirmPassword}
-                      onChange={(e) =>
-                        setPasswordData({ ...passwordData, confirmPassword: e.target.value })
-                      }
-                      placeholder="••••••••"
-                    />
-                  </div>
-
-                  <div className="pt-4">
-                    <Button onClick={requestPasswordChangeOtp} disabled={otpSending}>
-                      {otpSending ? "Sending code..." : "Change Password"}
-                    </Button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="bg-blue-50 dark:bg-blue-950/20 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
-                    <p className="text-sm text-blue-800 dark:text-blue-300">
-                      A 6-digit verification code has been sent to <strong>{user?.email}</strong>. Enter it below to confirm your password change.
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="otpCode">Verification Code</Label>
-                    <Input
-                      id="otpCode"
-                      type="text"
-                      inputMode="numeric"
-                      maxLength={6}
-                      value={otpCode}
-                      onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                      placeholder="000000"
-                      className="text-center text-2xl tracking-[0.5em] font-mono"
-                    />
-                  </div>
-
-                  <div className="flex items-center gap-3 pt-2">
-                    <Button onClick={changePassword} disabled={isSaving || otpCode.length !== 6}>
-                      {isSaving ? "Changing..." : "Verify & Change Password"}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setPasswordOtpStep('form');
-                        setOtpCode("");
-                        setMessage(null);
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-
-                  <div className="pt-2">
-                    <button
-                      type="button"
-                      className="text-sm text-primary hover:underline disabled:opacity-50 disabled:no-underline"
-                      disabled={otpCooldown > 0 || otpSending}
-                      onClick={requestPasswordChangeOtp}
-                    >
-                      {otpCooldown > 0 ? `Resend code in ${otpCooldown}s` : "Resend verification code"}
-                    </button>
-                  </div>
-                </>
-              )}
-            </CardContent>
-          </Card>
+        <TabsContent value="shortcuts">
+          <KeyboardShortcutsPanel />
         </TabsContent>
       </Tabs>
     </div>

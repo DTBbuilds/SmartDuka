@@ -22,7 +22,7 @@ import {
   Boxes,
   Receipt,
   FlaskConical,
-  Inbox,
+  HeadphonesIcon,
   Target,
   Building2,
   ArrowLeftRight,
@@ -110,7 +110,7 @@ const mobileNavSections: NavSection[] = [
 
 // Bottom navigation items (Subscription removed - now in Settings)
 const bottomNavItems: NavItem[] = [
-  { name: 'Inbox', href: '/inbox', icon: Inbox },
+  { name: 'Support', href: '/inbox', icon: HeadphonesIcon },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];
 
@@ -225,7 +225,7 @@ export function AdminMobileNav() {
               className="relative flex h-10 w-10 items-center justify-center rounded-full hover:bg-accent transition-colors"
               aria-label={`Inbox${inboxUnreadCount > 0 ? ` - ${inboxUnreadCount} unread` : ''}`}
             >
-              <Inbox className="h-5 w-5 text-muted-foreground" />
+              <HeadphonesIcon className="h-5 w-5 text-muted-foreground" />
               {inboxUnreadCount > 0 && (
                 <span className="absolute -top-0.5 -right-0.5 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold px-1 shadow-sm">
                   {inboxUnreadCount > 99 ? '99+' : inboxUnreadCount}
@@ -280,12 +280,12 @@ export function AdminMobileNav() {
                 />
               ))}
 
-              {/* Bottom Nav Items (Inbox, Subscription, Settings) */}
+              {/* Bottom Nav Items (Support, Settings) */}
               <div className="mt-4 pt-4 border-t border-border space-y-1">
                 {bottomNavItems.map((item) => {
                   const Icon = item.icon;
                   const active = isActive(item.href);
-                  const isInbox = item.name === 'Inbox';
+                  const isInbox = item.name === 'Support';
                   const badgeCount = isInbox ? inboxUnreadCount : 0;
                   return (
                     <Link

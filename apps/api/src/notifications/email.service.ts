@@ -28,6 +28,9 @@ export interface EmailOptions {
   templateName?: string;
   templateVariables?: Record<string, any>;
   triggeredBy?: string;
+  // Use single provider for critical emails (like OTP) to avoid duplicates
+  useSingleProvider?: boolean;
+  preferredProvider?: 'smtp' | 'resend';
 }
 
 export interface TemplateEmailOptions {
@@ -244,23 +247,48 @@ export class EmailService {
       this.logger.warn(`Failed to create email log: ${logError.message}`);
     }
 
-    // ===== PARALLEL MODE: Both SMTP and Resend fire simultaneously =====
-    // At least one must succeed for the email to be considered delivered.
+    // ===== EMAIL SENDING STRATEGY =====
+    // For OTP emails: Use single provider to avoid duplicates
+    // For other emails: Use parallel mode (SMTP + Resend) for reliability
     // SMTP sends from Gmail (smartdukainfo@gmail.com) - works in dev, may be blocked on Render.
     // Resend sends from verified domain (noreply@smartduka.org) - always works via HTTP API.
 
     const sendPromises: Array<Promise<{ provider: 'smtp' | 'resend'; success: boolean; messageId?: string; error?: string; from?: string }>> = [];
+    const useSingleProvider = options.useSingleProvider || options.category === 'authentication';
 
-    // SMTP attempt
-    if (this.transporter) {
-      const smtpPromise = this.sendViaSmtp(toAddress, options, smtpFrom, replyTo);
-      sendPromises.push(smtpPromise);
-    }
+    if (useSingleProvider) {
+      // Use single provider for OTP/auth emails to avoid duplicates
+      const preferredProvider = options.preferredProvider || 'resend'; // Prefer Resend for reliability
+      
+      if (preferredProvider === 'resend' && this.resend) {
+        const resendPromise = this.sendViaResend(toArray, options, resendFrom, replyTo);
+        sendPromises.push(resendPromise);
+      } else if (preferredProvider === 'smtp' && this.transporter) {
+        const smtpPromise = this.sendViaSmtp(toAddress, options, smtpFrom, replyTo);
+        sendPromises.push(smtpPromise);
+      } else {
+        // Fallback to available provider
+        if (this.resend) {
+          const resendPromise = this.sendViaResend(toArray, options, resendFrom, replyTo);
+          sendPromises.push(resendPromise);
+        } else if (this.transporter) {
+          const smtpPromise = this.sendViaSmtp(toAddress, options, smtpFrom, replyTo);
+          sendPromises.push(smtpPromise);
+        }
+      }
+    } else {
+      // Parallel mode for other emails
+      // SMTP attempt
+      if (this.transporter) {
+        const smtpPromise = this.sendViaSmtp(toAddress, options, smtpFrom, replyTo);
+        sendPromises.push(smtpPromise);
+      }
 
-    // Resend attempt
-    if (this.resend) {
-      const resendPromise = this.sendViaResend(toArray, options, resendFrom, replyTo);
-      sendPromises.push(resendPromise);
+      // Resend attempt
+      if (this.resend) {
+        const resendPromise = this.sendViaResend(toArray, options, resendFrom, replyTo);
+        sendPromises.push(resendPromise);
+      }
     }
 
     // No providers configured

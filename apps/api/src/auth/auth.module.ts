@@ -8,6 +8,7 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { TokenService } from './token.service';
 import { OtpService } from './services/otp.service';
+import { DeviceFingerprintService } from './services/device-fingerprint.service';
 import { UsersModule } from '../users/users.module';
 import { ShopsModule } from '../shops/shops.module';
 import { ActivityModule } from '../activity/activity.module';
@@ -23,6 +24,8 @@ import { RefreshToken, RefreshTokenSchema } from './schemas/refresh-token.schema
 import { PasswordResetToken, PasswordResetTokenSchema } from './schemas/password-reset-token.schema';
 import { Session, SessionSchema } from './schemas/session.schema';
 import { Otp, OtpSchema } from './schemas/otp.schema';
+import { LoginHistory, LoginHistorySchema } from './schemas/login-history.schema';
+import { DeviceFingerprint, DeviceFingerprintSchema } from './schemas/device-fingerprint.schema';
 import { CookieService } from './services/cookie.service';
 import { CsrfService } from './services/csrf.service';
 import { LoginAttemptService } from './services/login-attempt.service';
@@ -65,6 +68,14 @@ import { JwtCookieAuthGuard } from './guards/jwt-cookie-auth.guard';
         name: Otp.name,
         schema: OtpSchema,
       },
+      {
+        name: LoginHistory.name,
+        schema: LoginHistorySchema,
+      },
+      {
+        name: DeviceFingerprint.name,
+        schema: DeviceFingerprintSchema,
+      },
     ]),
     JwtModule.registerAsync({
       inject: [ConfigService],
@@ -78,6 +89,7 @@ import { JwtCookieAuthGuard } from './guards/jwt-cookie-auth.guard';
     AuthService,
     TokenService,
     OtpService,
+    DeviceFingerprintService,
     CookieService,
     CsrfService,
     LoginAttemptService,
@@ -93,6 +105,7 @@ import { JwtCookieAuthGuard } from './guards/jwt-cookie-auth.guard';
     AuthService,
     TokenService,
     OtpService,
+    DeviceFingerprintService,
     CookieService,
     CsrfService,
     LoginAttemptService,

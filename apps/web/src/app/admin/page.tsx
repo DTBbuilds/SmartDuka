@@ -99,6 +99,11 @@ function AdminDashboardContent() {
     isEnabled: boolean;
     message: string;
   } | null>(null);
+  const [stripeStatus, setStripeStatus] = useState<{
+    isConfigured: boolean;
+    isEnabled: boolean;
+    message: string;
+  } | null>(null);
 
   useEffect(() => {
     loadData();
@@ -120,12 +125,13 @@ function AdminDashboardContent() {
 
       console.log('[Dashboard] Loading data for branch:', currentBranch?.name || 'All', currentBranch?._id);
 
-      const [productsRes, categoriesRes, lowStockRes, salesStatsRes, mpesaStatusRes] = await Promise.all([
+      const [productsRes, categoriesRes, lowStockRes, salesStatsRes, mpesaStatusRes, stripeStatusRes] = await Promise.all([
         fetch(withBranch(`${base}/inventory/products?limit=200`), { headers }),
         fetch(`${base}/inventory/categories`, { headers }),
         fetch(withBranch(`${base}/inventory/stock/low-stock`), { headers }),
         fetch(withBranch(`${base}/sales/stats`), { headers }),
         fetch(`${base}/payments/mpesa/config/status`, { headers }),
+        fetch(`${base}/payments/stripe/config/status`, { headers }),
       ]);
 
       if (productsRes.ok) {
@@ -158,6 +164,12 @@ function AdminDashboardContent() {
         const text = await mpesaStatusRes.text();
         const data = text ? JSON.parse(text) : null;
         setMpesaStatus(data);
+      }
+
+      if (stripeStatusRes.ok) {
+        const text = await stripeStatusRes.text();
+        const data = text ? JSON.parse(text) : null;
+        setStripeStatus(data);
       }
     } catch (err: any) {
       console.error('Error loading data:', err);
@@ -243,14 +255,16 @@ function AdminDashboardContent() {
         )}
 
         {/* Warnings Section - Collapsible */}
-        {((mpesaStatus && !mpesaStatus.isConfigured) || lowStockProducts.length > 0) && (
+        {(((mpesaStatus && !mpesaStatus.isConfigured && shop?.currency === 'KES') || 
+           (stripeStatus && !stripeStatus.isConfigured && shop?.currency !== 'KES') || 
+           lowStockProducts.length > 0) && (
           <div className="mb-6">
             {/* Collapsed View - Show only icons */}
             {warningsCollapsed ? (
               <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-xl border border-border">
                 <div className="flex items-center gap-2 flex-1">
                   <span className="text-xs text-muted-foreground font-medium">Alerts:</span>
-                  {mpesaStatus && !mpesaStatus.isConfigured && (
+                  {mpesaStatus && !mpesaStatus.isConfigured && shop?.currency === 'KES' && (
                     <button
                       onClick={() => router.push('/settings?tab=mpesa')}
                       className="p-2 rounded-lg bg-orange-500/20 hover:bg-orange-500/30 transition-colors group relative"
@@ -258,6 +272,16 @@ function AdminDashboardContent() {
                     >
                       <Smartphone className="h-4 w-4 text-orange-600" />
                       <span className="absolute -top-1 -right-1 w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
+                    </button>
+                  )}
+                  {stripeStatus && !stripeStatus.isConfigured && shop?.currency !== 'KES' && (
+                    <button
+                      onClick={() => router.push('/settings?tab=stripe')}
+                      className="p-2 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 transition-colors group relative"
+                      title="Card Payments Setup Required"
+                    >
+                      <CreditCard className="h-4 w-4 text-purple-600" />
+                      <span className="absolute -top-1 -right-1 w-2 h-2 bg-purple-500 rounded-full animate-pulse" />
                     </button>
                   )}
                   {lowStockProducts.length > 0 && (
@@ -299,8 +323,8 @@ function AdminDashboardContent() {
                   </Button>
                 </div>
 
-                {/* M-Pesa Configuration Alert */}
-                {mpesaStatus && !mpesaStatus.isConfigured && (
+                {/* M-Pesa Configuration Alert - Only for KES */}
+                {mpesaStatus && !mpesaStatus.isConfigured && shop?.currency === 'KES' && (
                   <Card className="border-orange-500/40 bg-orange-500/10">
                     <CardHeader className="pb-3">
                       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -322,6 +346,38 @@ function AdminDashboardContent() {
                           size="sm"
                           className="border-orange-500/40 text-orange-700 hover:bg-orange-500/10"
                           onClick={() => router.push('/settings?tab=mpesa')}
+                        >
+                          <Settings className="h-4 w-4 mr-2" />
+                          Configure Now
+                        </Button>
+                      </div>
+                    </CardHeader>
+                  </Card>
+                )}
+
+                {/* Card Payments Alert - For non-KES currencies */}
+                {stripeStatus && !stripeStatus.isConfigured && shop?.currency !== 'KES' && (
+                  <Card className="border-purple-500/40 bg-purple-500/10">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center justify-between flex-wrap gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 rounded-lg bg-purple-500/20">
+                            <CreditCard className="h-5 w-5 text-purple-600" />
+                          </div>
+                          <div>
+                            <CardTitle className="text-purple-700 dark:text-purple-400 text-lg">
+                              Card Payments Setup Required
+                            </CardTitle>
+                            <CardDescription className="text-purple-600/80">
+                              Configure Stripe to accept credit/debit card payments in {shop?.currency}
+                            </CardDescription>
+                          </div>
+                        </div>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          className="border-purple-500/40 text-purple-700 hover:bg-purple-500/10"
+                          onClick={() => router.push('/settings?tab=stripe')}
                         >
                           <Settings className="h-4 w-4 mr-2" />
                           Configure Now
@@ -379,7 +435,7 @@ function AdminDashboardContent() {
               </div>
             )}
           </div>
-        )}
+        ))}
 
         {/* Stats Cards */}
         <div className="mb-6 grid grid-cols-2 md:grid-cols-4 gap-4">

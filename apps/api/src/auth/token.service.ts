@@ -406,10 +406,18 @@ export class TokenService {
    * Get session by ID with user info
    */
   async getSessionById(sessionId: string): Promise<SessionDocument | null> {
-    return this.sessionModel.findOne({
-      sessionId,
-      isActive: true,
-    });
+    // sessionId here is the random `sessionId` field (hex string), not Mongo _id
+    return this.sessionModel.findOne({ sessionId, isActive: true }).exec();
+  }
+
+  async getAllActiveSessions(): Promise<SessionDocument[]> {
+    return this.sessionModel
+      .find({
+        isActive: true,
+        expiresAt: { $gt: new Date() },
+      })
+      .sort({ lastActivityAt: -1 })
+      .exec();
   }
 
   /**

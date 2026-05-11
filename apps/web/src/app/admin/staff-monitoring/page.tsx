@@ -250,10 +250,24 @@ export default function StaffMonitoringPage() {
     return icons[action] || <Activity className="h-4 w-4 text-gray-600" />;
   };
 
-  const formatActionLabel = (action: string): string => {
+  const formatActionLabel = (action: string, details?: any): string => {
+    // Specific labels based on details
+    if (action === 'status_change' && details?.status) {
+      const statusLabels: Record<string, string> = {
+        online: 'Came Online',
+        idle: 'Went Idle',
+        offline: 'Went Offline',
+        away: 'Went Away',
+      };
+      return statusLabels[details.status] || `Status: ${details.status}`;
+    }
+    if (action === 'checkout' && details?.amount) {
+      return `Completed Sale (${formatCurrency(details.amount)})`;
+    }
     const labels: Record<string, string> = {
       login: 'Logged In',
       login_pin: 'Logged In (PIN)',
+      login_google: 'Logged In (Google)',
       logout: 'Logged Out',
       checkout: 'Completed Sale',
       status_change: 'Status Changed',
@@ -261,6 +275,12 @@ export default function StaffMonitoringPage() {
       shift_end: 'Ended Shift',
       transaction_void: 'Voided Transaction',
       transaction_refund: 'Processed Refund',
+      product_view: 'Viewed Product',
+      inventory_view: 'Viewed Inventory',
+      product_edit: 'Edited Product',
+      product_delete: 'Deleted Product',
+      stock_update: 'Updated Stock',
+      heartbeat: 'Active',
     };
     return labels[action] || action.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
   };
@@ -466,7 +486,7 @@ export default function StaffMonitoringPage() {
                             {getActivityIcon(activity.action)}
                           </div>
                           <div>
-                            <p className="font-medium text-sm">{formatActionLabel(activity.action)}</p>
+                            <p className="font-medium text-sm">{formatActionLabel(activity.action, activity.details)}</p>
                             <p className="text-xs text-muted-foreground">{activity.userName}</p>
                           </div>
                         </div>
@@ -547,7 +567,7 @@ export default function StaffMonitoringPage() {
                             <div className="flex flex-wrap gap-2">
                               {cashierActivities.slice(0, 3).map((a) => (
                                 <Badge key={a._id} variant="outline" className="text-xs">
-                                  {formatActionLabel(a.action)} • {formatTime(a.timestamp)}
+                                  {formatActionLabel(a.action, (a as any).details)} • {formatTime(a.timestamp)}
                                 </Badge>
                               ))}
                             </div>
@@ -590,7 +610,7 @@ export default function StaffMonitoringPage() {
                           {getActivityIcon(activity.action)}
                         </div>
                         <div>
-                          <p className="font-medium">{formatActionLabel(activity.action)}</p>
+                          <p className="font-medium">{formatActionLabel(activity.action, activity.details)}</p>
                           <div className="flex items-center gap-2 text-sm text-muted-foreground">
                             <span>{activity.userName}</span>
                             <Badge variant="outline" className="text-xs capitalize">

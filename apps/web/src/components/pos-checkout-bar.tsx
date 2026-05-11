@@ -1,8 +1,9 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Button } from '@smartduka/ui';
-import { Pause, X, Percent, Plus, ShoppingCart, Receipt, QrCode } from 'lucide-react';
+import { Pause, X, Percent, Plus, ShoppingCart, Receipt, QrCode, Trash2, Tag, ScanLine, History } from 'lucide-react';
+import { cn } from '@smartduka/ui';
 
 interface POSCheckoutBarProps {
   cartItemsCount: number;
@@ -33,6 +34,14 @@ export function POSCheckoutBar({
   onOpenReceiptsHistory,
   formatCurrency = (v) => `KSh ${v.toLocaleString()}`,
 }: POSCheckoutBarProps) {
+  const [pressedButton, setPressedButton] = useState<string | null>(null);
+
+  const handleButtonPress = (buttonId: string, callback: () => void) => {
+    setPressedButton(buttonId);
+    setTimeout(() => setPressedButton(null), 150);
+    callback();
+  };
+
   return (
     <>
       {/* Desktop: Full bottom bar */}
@@ -43,52 +52,68 @@ export function POSCheckoutBar({
             <Button
               variant="secondary"
               size="sm"
-              onClick={onHoldSale}
+              onClick={() => handleButtonPress('hold', onHoldSale)}
               disabled={cartItemsCount === 0}
-              className="gap-1.5 h-9"
-              title="Hold current sale"
+              className={cn(
+                "gap-1.5 h-9 transition-all duration-150 hover:scale-105 active:scale-95",
+                pressedButton === 'hold' && "scale-95 bg-yellow-100"
+              )}
+              title="Hold current sale (F3)"
               aria-label="Hold current sale"
             >
               <Pause className="h-3.5 w-3.5" />
               <span>Hold</span>
+              <kbd className="hidden xl:inline-block ml-1 px-1.5 py-0.5 text-[10px] bg-background rounded border">F3</kbd>
             </Button>
 
             <Button
               variant="secondary"
               size="sm"
-              onClick={onClearCart}
+              onClick={() => handleButtonPress('clear', onClearCart)}
               disabled={cartItemsCount === 0}
-              className="gap-1.5 h-9"
-              title="Clear cart"
+              className={cn(
+                "gap-1.5 h-9 transition-all duration-150 hover:scale-105 active:scale-95 hover:bg-red-50 hover:text-red-600 hover:border-red-200",
+                pressedButton === 'clear' && "scale-95 bg-red-100"
+              )}
+              title="Clear cart (F4)"
               aria-label="Clear cart"
             >
-              <X className="h-3.5 w-3.5" />
+              <Trash2 className="h-3.5 w-3.5" />
               <span>Clear</span>
+              <kbd className="hidden xl:inline-block ml-1 px-1.5 py-0.5 text-[10px] bg-background rounded border">F4</kbd>
             </Button>
 
             <Button
               variant="secondary"
               size="sm"
-              onClick={onApplyDiscount}
+              onClick={() => handleButtonPress('discount', onApplyDiscount)}
               disabled={cartItemsCount === 0}
-              className="gap-1.5 h-9"
-              title="Apply discount"
+              className={cn(
+                "gap-1.5 h-9 transition-all duration-150 hover:scale-105 active:scale-95 hover:bg-green-50 hover:text-green-600 hover:border-green-200",
+                pressedButton === 'discount' && "scale-95 bg-green-100"
+              )}
+              title="Apply discount (F7)"
               aria-label="Apply discount"
             >
-              <Percent className="h-3.5 w-3.5" />
+              <Tag className="h-3.5 w-3.5" />
               <span>Discount</span>
+              <kbd className="hidden xl:inline-block ml-1 px-1.5 py-0.5 text-[10px] bg-background rounded border">F7</kbd>
             </Button>
 
             <Button
               variant="secondary"
               size="sm"
-              onClick={onOpenScanner}
-              className="gap-1.5 h-9"
-              title="Open barcode scanner"
+              onClick={() => handleButtonPress('scanner', onOpenScanner)}
+              className={cn(
+                "gap-1.5 h-9 transition-all duration-150 hover:scale-105 active:scale-95 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200",
+                pressedButton === 'scanner' && "scale-95 bg-blue-100"
+              )}
+              title="Open barcode scanner (F5)"
               aria-label="Open barcode scanner"
             >
-              <QrCode className="h-3.5 w-3.5" />
-              <span>Scanner</span>
+              <ScanLine className="h-3.5 w-3.5" />
+              <span>Scan</span>
+              <kbd className="hidden xl:inline-block ml-1 px-1.5 py-0.5 text-[10px] bg-background rounded border">F5</kbd>
             </Button>
           </div>
 
@@ -97,15 +122,19 @@ export function POSCheckoutBar({
             <Button
               variant="outline"
               size="sm"
-              onClick={onOpenReceiptsHistory}
-              className="gap-1.5 h-9 relative"
-              title="View receipts history"
+              onClick={() => handleButtonPress('receipts', onOpenReceiptsHistory)}
+              className={cn(
+                "gap-1.5 h-9 relative transition-all duration-150 hover:scale-105 active:scale-95",
+                pressedButton === 'receipts' && "scale-95"
+              )}
+              title="View receipts history (F8)"
               aria-label={`View receipts history, ${receiptsCount} receipts`}
             >
-              <Receipt className="h-3.5 w-3.5" />
-              <span>Receipts</span>
+              <History className="h-3.5 w-3.5" />
+              <span>History</span>
+              <kbd className="hidden xl:inline-block ml-1 px-1.5 py-0.5 text-[10px] bg-background rounded border">F8</kbd>
               {receiptsCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 h-5 w-5 flex items-center justify-center text-[10px] font-bold bg-primary text-primary-foreground rounded-full">
+                <span className="absolute -top-1.5 -right-1.5 h-5 w-5 flex items-center justify-center text-[10px] font-bold bg-primary text-primary-foreground rounded-full animate-in zoom-in">
                   {receiptsCount > 99 ? '99+' : receiptsCount}
                 </span>
               )}
@@ -113,10 +142,13 @@ export function POSCheckoutBar({
 
             <Button
               size="lg"
-              onClick={onCheckout}
+              onClick={() => handleButtonPress('checkout', onCheckout)}
               disabled={isCheckingOut || cartItemsCount === 0}
-              className="gap-2 px-6 h-11"
-              title="Complete checkout (Ctrl+Enter)"
+              className={cn(
+                "gap-2 px-6 h-11 transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl",
+                pressedButton === 'checkout' && "scale-95"
+              )}
+              title="Complete checkout (F2)"
               aria-label={`Checkout ${cartItemsCount} items for ${formatCurrency(cartTotal)}`}
             >
               <ShoppingCart className="h-4 w-4" />
@@ -124,6 +156,7 @@ export function POSCheckoutBar({
               {cartItemsCount > 0 && !isCheckingOut && (
                 <span className="font-bold">{formatCurrency(cartTotal)}</span>
               )}
+              <kbd className="hidden xl:inline-block ml-2 px-1.5 py-0.5 text-xs bg-primary-foreground/20 rounded">F2</kbd>
             </Button>
           </div>
         </div>
@@ -131,24 +164,32 @@ export function POSCheckoutBar({
 
       {/* Mobile: Floating action buttons - cleaner, minimal */}
       <div className="lg:hidden fixed bottom-4 right-4 left-4 z-40 flex items-center gap-2">
-        {/* Scanner Button */}
+        {/* Scanner Button - Enhanced with ripple effect */}
         <button
-          onClick={onOpenScanner}
-          className="w-12 h-12 rounded-full bg-slate-800 dark:bg-slate-700 text-white shadow-lg flex items-center justify-center active:scale-95 transition-transform"
+          onClick={() => handleButtonPress('mobile-scanner', onOpenScanner)}
+          className={cn(
+            "w-14 h-14 rounded-full bg-gradient-to-br from-slate-700 to-slate-800 text-white shadow-lg flex items-center justify-center transition-all duration-200",
+            "hover:scale-110 hover:shadow-xl active:scale-95",
+            pressedButton === 'mobile-scanner' && "scale-90"
+          )}
           title="Open scanner"
         >
-          <QrCode className="h-5 w-5" />
+          <ScanLine className="h-6 w-6" />
         </button>
 
         {/* Receipts Button */}
         <button
-          onClick={onOpenReceiptsHistory}
-          className="w-12 h-12 rounded-full bg-slate-600 dark:bg-slate-600 text-white shadow-lg flex items-center justify-center active:scale-95 transition-transform relative"
+          onClick={() => handleButtonPress('mobile-receipts', onOpenReceiptsHistory)}
+          className={cn(
+            "w-14 h-14 rounded-full bg-gradient-to-br from-slate-500 to-slate-600 text-white shadow-lg flex items-center justify-center transition-all duration-200 relative",
+            "hover:scale-110 hover:shadow-xl active:scale-95",
+            pressedButton === 'mobile-receipts' && "scale-90"
+          )}
           title="View receipts"
         >
-          <Receipt className="h-5 w-5" />
+          <History className="h-6 w-6" />
           {receiptsCount > 0 && (
-            <span className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center text-[10px] font-bold bg-primary text-primary-foreground rounded-full">
+            <span className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center text-[10px] font-bold bg-primary text-primary-foreground rounded-full animate-bounce">
               {receiptsCount > 9 ? '9+' : receiptsCount}
             </span>
           )}
@@ -157,28 +198,32 @@ export function POSCheckoutBar({
         {/* Spacer */}
         <div className="flex-1" />
 
-        {/* Main Checkout Button - Large, prominent */}
+        {/* Main Checkout Button - Large, prominent with animation */}
         {cartItemsCount > 0 && (
           <button
-            onClick={onCheckout}
+            onClick={() => handleButtonPress('mobile-checkout', onCheckout)}
             disabled={isCheckingOut}
-            className={`h-14 px-6 rounded-full shadow-xl flex items-center gap-3 active:scale-95 transition-all ${
+            className={cn(
+              "h-16 px-8 rounded-full shadow-2xl flex items-center gap-3 transition-all duration-300",
+              "hover:scale-105 hover:shadow-primary/25",
               isCheckingOut 
-                ? 'bg-slate-400 cursor-not-allowed' 
-                : 'bg-primary hover:bg-primary/90'
-            } text-primary-foreground`}
+                ? 'bg-slate-400 cursor-not-allowed scale-95' 
+                : 'bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary',
+              pressedButton === 'mobile-checkout' && "scale-90",
+              "text-primary-foreground"
+            )}
           >
             <div className="relative">
-              <ShoppingCart className="h-5 w-5" />
-              <span className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center text-[10px] font-bold bg-white text-primary rounded-full">
+              <ShoppingCart className="h-6 w-6" />
+              <span className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center text-[10px] font-bold bg-white text-primary rounded-full shadow-sm">
                 {cartItemsCount}
               </span>
             </div>
             <div className="flex flex-col items-start">
-              <span className="text-xs opacity-80">
-                {isCheckingOut ? 'Processing...' : 'Checkout'}
+              <span className="text-xs opacity-90 font-medium">
+                {isCheckingOut ? 'Processing...' : 'Tap to Pay'}
               </span>
-              <span className="font-bold text-sm">
+              <span className="font-bold text-lg">
                 {formatCurrency(cartTotal)}
               </span>
             </div>

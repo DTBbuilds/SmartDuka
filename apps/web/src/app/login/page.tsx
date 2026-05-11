@@ -60,6 +60,29 @@ export default function LoginPage() {
     }
   }, [isAuthenticated, user, authLoading, router, searchParams]);
 
+  // Handle Google OAuth OTP redirect: /login?otp=true&data=<encoded-json>
+  useEffect(() => {
+    const otpFlag = searchParams.get('otp');
+    const dataParam = searchParams.get('data');
+    if (otpFlag === 'true' && dataParam) {
+      try {
+        const parsed = JSON.parse(decodeURIComponent(dataParam));
+        if (parsed?.email) {
+          setOtpEmail(parsed.email);
+          setOtpUserName(parsed.userName || '');
+          setOtpShopName(parsed.shopName || '');
+          setOtpCode(['', '', '', '', '', '']);
+          setOtpError('');
+          setShowOtpVerification(true);
+          setOtpResendCooldown(60);
+          setTimeout(() => otpInputRefs.current[0]?.focus(), 100);
+        }
+      } catch (err) {
+        console.error('Failed to parse OTP data from URL:', err);
+      }
+    }
+  }, []); // run once on mount
+
   useEffect(() => {
     fetchShops();
     // Check if Google OAuth is configured
@@ -449,22 +472,54 @@ export default function LoginPage() {
                 {/* OTP Input */}
                 <div className="flex justify-center gap-2" onPaste={handleOtpPaste}>
                   {otpCode.map((digit, index) => (
-                    <input
-                      key={index}
-                      ref={el => { otpInputRefs.current[index] = el; }}
-                      type="text"
-                      inputMode="numeric"
-                      maxLength={1}
-                      value={digit}
-                      onChange={e => handleOtpChange(index, e.target.value)}
-                      onKeyDown={e => handleOtpKeyDown(index, e)}
-                      className={`w-12 h-14 text-center text-2xl font-bold rounded-lg border-2 bg-background transition-all focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary ${
-                        otpError ? 'border-destructive' : 'border-border'
-                      }`}
-                      disabled={otpLoading}
-                      autoFocus={index === 0}
-                    />
+                    <div key={index} className="relative">
+                      <input
+                        ref={el => { otpInputRefs.current[index] = el; }}
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={1}
+                        value={digit}
+                        onChange={e => handleOtpChange(index, e.target.value)}
+                        onKeyDown={e => handleOtpKeyDown(index, e)}
+                        className={`w-14 h-16 text-center text-2xl font-bold rounded-xl border-2 bg-background transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary focus:scale-105 ${
+                          digit ? 'border-primary bg-primary/5 shadow-sm' : 'border-border hover:border-primary/50'
+                        } ${otpError ? 'border-destructive animate-pulse' : ''} ${
+                          otpLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-text'
+                        }`}
+                        disabled={otpLoading}
+                        autoFocus={index === 0}
+                        placeholder="-"
+                      />
+                      {digit && (
+                        <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+                          <div className="w-2 h-2 bg-primary rounded-full animate-ping opacity-75"></div>
+                        </div>
+                      )}
+                    </div>
                   ))}
+                </div>
+                
+                {/* Quick Paste Button */}
+                <div className="flex justify-center">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      navigator.clipboard.readText().then(text => {
+                        const pastedData = text.replace(/\D/g, '').slice(0, 6);
+                        if (pastedData.length === 6) {
+                          const newOtp = pastedData.split('');
+                          setOtpCode(newOtp);
+                          otpInputRefs.current[5]?.focus();
+                        }
+                      }).catch(() => {
+                        // Clipboard access denied
+                      });
+                    }}
+                    className="text-xs"
+                  >
+                    📋 Paste from Clipboard
+                  </Button>
                 </div>
 
                 {/* OTP Error */}

@@ -23,10 +23,19 @@ import { SystemConfigService } from './services/system-config.service';
 import { SuperAdminCommunicationsService } from './services/super-admin-communications.service';
 import { SuperAdminCommunicationsController } from './super-admin-communications.controller';
 import { SuperAdminPaymentsController } from './super-admin-payments.controller';
+import { LoginHistoryController } from './login-history.controller';
+import { LoginHistoryService } from './services/login-history.service';
+import { ActivityMonitorController } from './activity-monitor.controller';
+import { ActivityMonitorService } from './services/activity-monitor.service';
+import { SuperAdminDevicesController } from './super-admin-devices.controller';
+import { ActivityGateway } from './gateway/activity.gateway';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { LoginHistory, LoginHistorySchema } from '../auth/schemas/login-history.schema';
 import { PaymentsModule } from '../payments/payments.module';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 import { EventsModule } from '../events/events.module';
+import { AuthModule } from '../auth/auth.module';
+import { JwtModule } from '@nestjs/jwt';
 
 @Module({
   imports: [
@@ -43,11 +52,14 @@ import { EventsModule } from '../events/events.module';
       { name: SystemConfig.name, schema: SystemConfigSchema },
       { name: Invoice.name, schema: InvoiceSchema },
       { name: PaymentAttempt.name, schema: PaymentAttemptSchema },
+      { name: LoginHistory.name, schema: LoginHistorySchema },
     ]),
     NotificationsModule,
     PaymentsModule,
     SubscriptionsModule,
     EventsModule,
+    AuthModule,
+    JwtModule.register({}),
   ],
   providers: [
     SuperAdminService,
@@ -57,8 +69,11 @@ import { EventsModule } from '../events/events.module';
     SystemManagementService,
     SystemConfigService,
     SuperAdminCommunicationsService,
+    LoginHistoryService,
+    ActivityMonitorService,
+    ActivityGateway,
   ],
-  controllers: [SuperAdminController, SystemManagementController, SuperAdminCommunicationsController, SuperAdminPaymentsController],
+  controllers: [SuperAdminController, SystemManagementController, SuperAdminCommunicationsController, SuperAdminPaymentsController, LoginHistoryController, ActivityMonitorController, SuperAdminDevicesController],
   exports: [
     SuperAdminService,
     ShopAuditLogService,

@@ -10,8 +10,8 @@ import {
 } from 'lucide-react';
 
 export const metadata: Metadata = {
-  title: 'SmartDuka Blog - POS Tips, Retail Insights & Business Guides for Kenya',
-  description: 'Expert guides on POS systems, inventory management, retail business tips, and M-Pesa integration for Kenyan businesses. Learn how to grow your retail business.',
+  title: 'SmartDuka Blog - POS Tips, Retail Insights & Business Guides',
+  description: 'Expert guides on POS systems, inventory management, retail business tips, and payment integrations. Learn how to grow your retail business.',
   keywords: [
     'POS blog Kenya',
     'retail business tips',
@@ -58,7 +58,7 @@ const blogPosts = [
   },
   {
     slug: 'inventory-management-best-practices',
-    title: '10 Inventory Management Best Practices for Kenyan Retailers',
+    title: '10 Inventory Management Best Practices for Retailers',
     excerpt: 'Learn proven strategies to reduce stockouts, minimize waste, and optimize your inventory levels for maximum profitability.',
     category: 'Inventory',
     author: 'SmartDuka Team',
@@ -80,7 +80,7 @@ const blogPosts = [
   },
   {
     slug: 'employee-management-retail-tips',
-    title: 'Managing Retail Employees: A Guide for Kenyan Shop Owners',
+    title: 'Managing Retail Employees: A Guide for Shop Owners',
     excerpt: 'Tips for hiring, training, and retaining great cashiers and staff. Plus, how to use technology to improve productivity.',
     category: 'Management',
     author: 'SmartDuka Team',

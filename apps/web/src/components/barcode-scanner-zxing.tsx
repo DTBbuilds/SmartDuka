@@ -37,12 +37,31 @@ function detectPlatform() {
 
 /** Check camera prerequisites WITHOUT calling getUserMedia */
 function checkCameraPrereqs(): { ok: boolean; error?: string } {
-  if (typeof window !== "undefined" && !window.isSecureContext) {
+  // Check if we're in a secure context (HTTPS or localhost)
+  const isLocalhost = typeof window !== "undefined" && 
+    (window.location.hostname === "localhost" || 
+     window.location.hostname === "127.0.0.1" || 
+     window.location.hostname === "[::1]");
+  
+  const isSecure = typeof window !== "undefined" && (window.isSecureContext || isLocalhost);
+  const protocol = typeof window !== "undefined" ? window.location.protocol : "unknown";
+  
+  if (!isSecure && protocol !== "https:") {
     return { ok: false, error: "INSECURE_CONTEXT: Camera requires HTTPS. Please access via https:// or localhost." };
   }
-  if (!navigator.mediaDevices?.getUserMedia) {
+  
+  // Check for camera API support with legacy fallback
+  const hasModernAPI = !!navigator.mediaDevices?.getUserMedia;
+  const hasLegacyAPI = !!(
+    (navigator as any).getUserMedia ||
+    (navigator as any).webkitGetUserMedia ||
+    (navigator as any).mozGetUserMedia
+  );
+  
+  if (!hasModernAPI && !hasLegacyAPI) {
     return { ok: false, error: "MEDIA_DEVICES_UNAVAILABLE: Camera API not available. Use a modern browser (Chrome, Firefox, Safari, Edge)." };
   }
+  
   return { ok: true };
 }
 
@@ -74,11 +93,11 @@ function getUserFriendlyError(details: { name: string; message: string }): strin
     return "Camera API not available. Use a modern browser (Chrome, Firefox, Safari, Edge).";
   }
   if (details.name === "NotAllowedError" || details.name === "PermissionDeniedError") {
-    return "Camera permission denied. Enable camera in your browser's site settings, then reload the page and try again.";
+    return "Camera access blocked. Click the lock/info icon in your browser's address bar, enable Camera permission, then reload this page.";
   }
-  if (details.name === "NotFoundError") return "No camera found. Use hardware scanner or manual entry.";
+  if (details.name === "NotFoundError") return "No camera detected on this device. Connect a camera or use manual entry.";
   if (details.name === "NotReadableError" || details.name === "TrackStartError") {
-    return "Camera is in use by another app. Close other apps and try again.";
+    return "Camera is busy. Close other apps/tabs using the camera (Zoom, Teams, etc.), then try again.";
   }
   if (details.name === "OverconstrainedError") return "Camera constraints not satisfied. Try switching cameras.";
   if (details.name === "AbortError") return "Camera initialization canceled. Please try again.";
@@ -376,10 +395,22 @@ export function BarcodeScannerZXing({
       }
 
       // ── STEP 2: Attach stream to video element ─────────────────────
-      if (!videoRef.current) {
+      // Wait for video element to be ready (with timeout)
+      let videoReady = false;
+      for (let attempts = 0; attempts < 10; attempts++) {
+        if (videoRef.current) {
+          videoReady = true;
+          break;
+        }
+        // Wait 50ms between attempts
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      
+      if (!videoReady || !videoRef.current) {
         stream.getTracks().forEach(t => t.stop());
         streamRef.current = null;
-        throw new Error("Video element not available");
+        console.error("[Scanner] Video element not available after retries");
+        throw new Error("Video element not ready. Please close and reopen the scanner.");
       }
 
       videoRef.current.srcObject = stream;

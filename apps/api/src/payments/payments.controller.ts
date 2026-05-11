@@ -1,4 +1,4 @@
-import { Body, Controller, Post, Get, Query, UseGuards, Res, Param } from '@nestjs/common';
+import { Body, Controller, Post, Get, Query, UseGuards, Res, Param, Inject } from '@nestjs/common';
 import type { Response } from 'express';
 import { PaymentsService } from './payments.service';
 import { PaymentTransactionService } from './services/payment-transaction.service';
@@ -8,12 +8,14 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
+import { StripeService } from '../stripe/stripe.service';
 
 @Controller('payments')
 export class PaymentsController {
   constructor(
     private readonly paymentsService: PaymentsService,
     private readonly paymentTransactionService: PaymentTransactionService,
+    private readonly stripeService: StripeService,
   ) {}
 
   // M-Pesa endpoints
@@ -35,6 +37,16 @@ export class PaymentsController {
   @Post('callback')
   async handleMpesaCallback(@Body() payload: any) {
     return this.paymentsService.handleCallback(payload);
+  }
+
+  // Stripe configuration endpoint
+  @UseGuards(JwtAuthGuard)
+  @Get('stripe/config/status')
+  async getStripeConfigStatus() {
+    return {
+      isConfigured: this.stripeService.isStripeConfigured(),
+      publishableKey: this.stripeService.getPublishableKey(),
+    };
   }
 
   // Payment transaction management endpoints

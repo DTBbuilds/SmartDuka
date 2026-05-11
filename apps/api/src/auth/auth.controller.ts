@@ -115,6 +115,19 @@ export class AuthController {
     const userAgent = req.get('user-agent');
     const result = await this.authService.loginWithPinAndTokens(body.pin, body.shopId, ipAddress, userAgent);
     
+    // If email verification is required, return OTP requirement (no tokens)
+    if (result.requiresEmailVerification) {
+      return {
+        requiresEmailVerification: true,
+        email: result.email,
+        userName: result.userName,
+        shopName: result.shopName,
+        user: null,
+        shop: null,
+        tokens: null,
+      };
+    }
+    
     if (result.tokens) {
       this.cookieService.setAuthCookies(
         res,
@@ -319,9 +332,20 @@ export class AuthController {
           return;
         }
         
-        // Existing user with valid role - pass tokens via URL for cross-origin support
-        if (result.tokens) {
-          const tokenParam = `token=${encodeURIComponent(result.tokens.accessToken)}&csrf=${encodeURIComponent(result.tokens.csrfToken)}&refresh=${encodeURIComponent(result.tokens.refreshToken)}`;
+        // Existing user with valid role - check if OTP verification is required
+        if (result.requiresEmailVerification) {
+          // Redirect to OTP verification page with user info
+          const otpData = encodeURIComponent(JSON.stringify({
+            email: result.email,
+            userName: result.userName,
+            shopName: result.shopName,
+            isGoogleLogin: true,
+          }));
+          res.redirect(`${frontendUrl}/login?otp=true&data=${otpData}`);
+        } else if (result.tokens) {
+          // Pass tokens via URL for cross-origin support
+          const tokens = result.tokens as any;
+          const tokenParam = `token=${encodeURIComponent(tokens.accessToken)}&csrf=${encodeURIComponent(tokens.csrfToken)}&refresh=${encodeURIComponent(tokens.refreshToken)}`;
           res.redirect(`${frontendUrl}/auth/callback?success=true&${tokenParam}`);
         } else {
           res.redirect(`${frontendUrl}/login?error=${encodeURIComponent('Failed to generate authentication tokens')}`);
