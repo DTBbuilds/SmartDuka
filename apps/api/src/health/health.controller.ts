@@ -21,6 +21,12 @@ export class HealthController {
   ) {}
 
   /**
+   * Lightweight ping endpoint — used by the frontend to check connectivity.
+   * Exposed at /ping (via PingController) to avoid ad-blocker false positives
+   * on /health URLs.
+   */
+
+  /**
    * Main health check endpoint
    * Returns overall system health status
    */

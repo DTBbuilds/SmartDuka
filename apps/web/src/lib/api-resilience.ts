@@ -129,7 +129,7 @@ class ApiResilience {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-      const response = await fetch(`${config.apiBaseUrl}/health`, {
+      const response = await fetch(`${config.apiBaseUrl}/ping`, {
         method: 'GET',
         signal: controller.signal,
         cache: 'no-store',
@@ -180,7 +180,7 @@ class ApiResilience {
         const timeoutId = setTimeout(() => controller.abort(), 10000);
 
         const startTime = Date.now();
-        const response = await fetch(`${config.apiBaseUrl}/health`, {
+        const response = await fetch(`${config.apiBaseUrl}/ping`, {
           method: 'GET',
           signal: controller.signal,
           cache: 'no-store',

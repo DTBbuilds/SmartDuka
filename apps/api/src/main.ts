@@ -90,7 +90,8 @@ async function bootstrap() {
       // Health endpoints
       'health', 
       'health/ready', 
-      'health/live', 
+      'health/live',
+      'ping', 
       'api/docs',
       // M-Pesa callback must be accessible without prefix (external webhook)
       'payments/mpesa/callback',

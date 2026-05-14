@@ -60,7 +60,7 @@ class ConnectionMonitor {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), this.TIMEOUT_MS);
 
-      const response = await fetch(`${config.apiBaseUrl}/health`, {
+      const response = await fetch(`${config.apiBaseUrl}/ping`, {
         method: 'GET',
         signal: controller.signal,
         cache: 'no-store',

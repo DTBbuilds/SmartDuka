@@ -82,7 +82,7 @@ class AppInitializer {
       const timeoutId = setTimeout(() => controller.abort(), 12000);
 
       try {
-        const response = await fetch(`${config.apiBaseUrl}/health`, {
+        const response = await fetch(`${config.apiBaseUrl}/ping`, {
           method: 'GET',
           signal: controller.signal,
           cache: 'no-store',
