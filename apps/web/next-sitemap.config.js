@@ -3,6 +3,7 @@ module.exports = {
   siteUrl: process.env.SITE_URL || 'https://www.smartduka.org',
   generateRobotsTxt: false,
   generateIndexSitemap: false,
+  autoLastmod: false,
   outDir: 'public',
   
   // Exclude ALL authenticated/private/app routes from sitemap
@@ -57,6 +58,9 @@ module.exports = {
     '/api',
     '/api/*',
     '/_next/*',
+    '/icon',
+    '/apple-icon',
+    '/robots.txt',
     '/404',
     '/500',
   ],
