@@ -107,6 +107,19 @@ describe('MpesaReconciliationService integrity', () => {
     expect(darajaService.queryStkStatus).not.toHaveBeenCalled();
   });
 
+  it('leaves a transaction pending when the STK query reports DS timeout (unknown outcome is not released)', async () => {
+    const tx = makePendingTransaction();
+    transactionModel.findById.mockResolvedValue(tx);
+    darajaService.queryStkStatus.mockResolvedValue({ status: 'failed', resultCode: 1037, resultDesc: 'Request timeout' });
+
+    const result = await service.reconcileTransaction(tx._id.toString());
+
+    expect(result.success).toBe(false);
+    expect(tx.status).toBe(MpesaTransactionStatus.PENDING);
+    expect(transactionModel.findOneAndUpdate).not.toHaveBeenCalled();
+    expect(paymentTransactionService.createTransaction).not.toHaveBeenCalled();
+  });
+
   it('marks a pending transaction failed for a non-timeout failure result', async () => {
     const tx = makePendingTransaction();
     transactionModel.findById.mockResolvedValue(tx);

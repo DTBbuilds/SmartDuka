@@ -1,13 +1,15 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { Types } from 'mongoose';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { TransactionControlsService } from './transaction-controls.service';
+import { TransactionControlsController } from './transaction-controls.controller';
 import { Order } from './schemas/order.schema';
 import { InventoryService } from '../inventory/inventory.service';
 
 describe('TransactionControlsService inventory consistency', () => {
   let service: TransactionControlsService;
+  let controller: TransactionControlsController;
   let orderModel: any;
   let inventoryService: any;
 
@@ -54,6 +56,7 @@ describe('TransactionControlsService inventory consistency', () => {
     }).compile();
 
     service = module.get<TransactionControlsService>(TransactionControlsService);
+    controller = new TransactionControlsController(service);
   });
 
   describe('voidTransaction', () => {
@@ -103,6 +106,22 @@ describe('TransactionControlsService inventory consistency', () => {
 
       expect(inventoryService.updateStock).not.toHaveBeenCalled();
     });
+
+    it('cannot void another shop\'s order (tenant isolation - no restoration, no state change)', async () => {
+      orderModel.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.voidTransaction(ORDER_ID, '507f1f77bcf86cd799439099', 'Cross-shop attempt', CASHIER_ID, false),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(orderModel.findOne).toHaveBeenCalledWith({
+        _id: expect.any(Types.ObjectId),
+        shopId: expect.any(Types.ObjectId),
+      });
+      expect(orderModel.findByIdAndUpdate).not.toHaveBeenCalled();
+      expect(inventoryService.updateStock).not.toHaveBeenCalled();
+      expect(inventoryService.createStockAdjustment).not.toHaveBeenCalled();
+    });
   });
 
   describe('processRefund', () => {
@@ -132,6 +151,35 @@ describe('TransactionControlsService inventory consistency', () => {
       await service.processRefund(ORDER_ID, SHOP_ID, 50, 'Partial return', CASHIER_ID, false);
 
       expect(inventoryService.updateStock).not.toHaveBeenCalled();
+    });
+    it('does not restore stock for a partial refund (order stays completed)', async () => {
+      const order = makeOrder({ status: 'completed' });
+      orderModel.findOne.mockResolvedValue(order);
+      orderModel.findByIdAndUpdate.mockResolvedValue({ ...order, refundAmount: 50 });
+
+      await service.processRefund(ORDER_ID, SHOP_ID, 50, 'Partial return', CASHIER_ID, false);
+
+      expect(inventoryService.updateStock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('wired route contract (POST /transactions/void)', () => {
+    it('passes the authenticated shop and cashier context to the release service with approval required', async () => {
+      const voidSpy = jest.spyOn(service, 'voidTransaction').mockResolvedValue({} as any);
+
+      await controller.voidTransaction(
+        { orderId: ORDER_ID, voidReason: 'Customer abandoned M-Pesa payment' },
+        { shopId: SHOP_ID, sub: CASHIER_ID },
+      );
+
+      expect(voidSpy).toHaveBeenCalledWith(
+        ORDER_ID,
+        SHOP_ID,
+        'Customer abandoned M-Pesa payment',
+        CASHIER_ID,
+        true,
+      );
+      voidSpy.mockRestore();
     });
   });
 });

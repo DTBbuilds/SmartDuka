@@ -7,6 +7,8 @@ import { Receipt, ReceiptSchema } from './schemas/receipt.schema';
 import { Invoice, InvoiceSchema } from './schemas/invoice.schema';
 import { ReceiptService } from './services/receipt.service';
 import { InvoiceService } from './services/invoice.service';
+import { TransactionControlsService } from './transaction-controls.service';
+import { TransactionControlsController } from './transaction-controls.controller';
 import { InventoryModule } from '../inventory/inventory.module';
 import { ActivityModule } from '../activity/activity.module';
 import { PaymentsModule } from '../payments/payments.module';
@@ -30,8 +32,8 @@ import { CustomersModule } from '../customers/customers.module';
     forwardRef(() => LoyaltyModule),
     forwardRef(() => CustomersModule),
   ],
-  providers: [SalesService, ReceiptService, InvoiceService],
-  controllers: [SalesController],
+  providers: [SalesService, ReceiptService, InvoiceService, TransactionControlsService],
+  controllers: [SalesController, TransactionControlsController],
   exports: [SalesService, ReceiptService, InvoiceService],
 })
 export class SalesModule {}
