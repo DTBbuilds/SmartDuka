@@ -34,6 +34,9 @@ export interface PendingOrder {
     customerName?: string;
     cashierId?: string;
     cashierName?: string;
+    /** Stable per-logical-checkout id; reused across offline replays so the
+     * server deduplicates replayed submissions to one canonical sale. */
+    idempotencyKey?: string;
   };
 }
 

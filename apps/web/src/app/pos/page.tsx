@@ -979,12 +979,32 @@ function POSContent() {
     allowAlphanumeric: true,
   });
 
+  // Stable idempotency key for the current logical checkout. Generated once
+  // per checkout attempt and reused across retries/offline replay so the
+  // server deduplicates duplicate submissions to one canonical sale.
+  const checkoutIdempotencyKeyRef = useRef<string | null>(null);
+  const ensureCheckoutIdempotencyKey = useCallback(() => {
+    if (!checkoutIdempotencyKeyRef.current) {
+      checkoutIdempotencyKeyRef.current =
+        typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+          ? crypto.randomUUID()
+          : `chk-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+    }
+    return checkoutIdempotencyKeyRef.current;
+  }, []);
+  const clearCheckoutIdempotencyKey = useCallback(() => {
+    checkoutIdempotencyKeyRef.current = null;
+  }, []);
+
   // New checkout flow: clicking checkout opens payment method selection
   const handleCheckout = async () => {
     if (cartItems.length === 0) {
       toast({ type: 'info', title: 'Cart is empty', message: 'Add items before checkout' });
       return;
     }
+
+    // A new logical checkout begins - allocate its idempotency key
+    ensureCheckoutIdempotencyKey();
 
     // Show payment method modal - user selects payment method after clicking checkout
     setShowPaymentMethodModal(true);
@@ -1042,11 +1062,12 @@ function POSContent() {
           cashierId,
           cashierName,
           shiftId: currentShift?._id,
+          idempotencyKey: checkoutIdempotencyKeyRef.current || undefined,
           // Business-type-specific order fields
           ...(orderType !== 'standard' && { orderType }),
           ...(tableNumber && { tableNumber }),
         };
-        
+
         const res = await fetch(`${config.apiUrl}/sales/checkout`, {
           method: "POST",
           headers: {
@@ -1055,7 +1076,7 @@ function POSContent() {
           },
           body: JSON.stringify(payload),
         });
-        
+
         const responseText = await res.text();
         let order;
         try {
@@ -1063,7 +1084,7 @@ function POSContent() {
         } catch {
           order = {};
         }
-        
+
         if (!res.ok) {
           throw new Error(order?.message ?? `Failed to create order (${res.status})`);
         }
@@ -1174,6 +1195,7 @@ function POSContent() {
       setPendingOrderId(null);
       setMpesaPhoneNumber('');
       setFeedbackType(null);
+      clearCheckoutIdempotencyKey();
     }, 800);
   };
 
@@ -1182,6 +1204,7 @@ function POSContent() {
     setShowMpesaFlow(false);
     setPendingOrderId(null);
     setMpesaPhoneNumber('');
+    clearCheckoutIdempotencyKey();
     toast({ type: 'info', title: 'Payment cancelled', message: 'M-Pesa payment was cancelled' });
   };
 
@@ -1236,6 +1259,7 @@ function POSContent() {
         cashierId,
         cashierName,
         shiftId: currentShift?._id,
+        idempotencyKey: checkoutIdempotencyKeyRef.current || undefined,
         // Business-type-specific order fields
         ...(orderType !== 'standard' && { orderType }),
         ...(tableNumber && { tableNumber }),
@@ -1359,11 +1383,14 @@ function POSContent() {
         setAmountTendered(0);
         setCheckoutStep(0);
         setFeedbackType(null);
+        clearCheckoutIdempotencyKey();
         refreshPendingCount();
       }, 800);
     } catch (err: any) {
       if (typeof window !== "undefined" && shopId) {
-        // Save offline with shopId for multi-tenant isolation
+        // Save offline with shopId for multi-tenant isolation.
+        // The idempotency key travels with the queued payload so replays of
+        // this same logical checkout deduplicate server-side.
         await addPendingOrder(shopId, {
           createdAt: Date.now(),
           payload: {
@@ -1386,6 +1413,7 @@ function POSContent() {
             customerName: customerName || undefined,
             cashierId,
             cashierName,
+            idempotencyKey: checkoutIdempotencyKeyRef.current || undefined,
           },
         });
         setCheckoutMessage("Checkout saved offline. It will sync automatically later.");
