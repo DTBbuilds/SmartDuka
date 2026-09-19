@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken, getConnectionToken } from '@nestjs/mongoose';
+import { Types } from 'mongoose';
 import { SalesService } from './sales.service';
 import { Order } from './schemas/order.schema';
 import { InventoryService } from '../inventory/inventory.service';
@@ -10,7 +11,7 @@ import { ShopSettingsService } from '../shop-settings/shop-settings.service';
 import { TransactionService } from '../common/services/transaction.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { CustomersService } from '../customers/customers.service';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 
 describe('SalesService', () => {
   let service: SalesService;
@@ -292,6 +293,166 @@ describe('SalesService', () => {
       expect(cacheService.deletePattern).toHaveBeenCalledWith(
         `shop:${mockShopId}:orders:*`
       );
+    });
+  });
+
+  describe('checkout idempotency (duplicate submission protection)', () => {
+    const IDEMPOTENCY_KEY = 'chk-2026-abc123xyz';
+    const cashCheckoutWithKey = {
+      items: [{ productId: 'prod1', name: 'Test Product', quantity: 2, unitPrice: 100 }],
+      payments: [{ method: 'cash', amount: 232 }],
+      idempotencyKey: IDEMPOTENCY_KEY,
+    };
+
+    function canonicalOrder(overrides: Record<string, any> = {}) {
+      return {
+        _id: '507f1f77bcf86cd799439099',
+        shopId: mockShopId,
+        orderNumber: 'STK-2026-CANON01',
+        idempotencyKey: IDEMPOTENCY_KEY,
+        items: [{ productId: 'prod1', name: 'Test Product', quantity: 2, unitPrice: 100, lineTotal: 200 }],
+        total: 232,
+        status: 'completed',
+        paymentStatus: 'paid',
+        ...overrides,
+      };
+    }
+
+    it('processes a first checkout with an idempotency key normally and persists the key', async () => {
+      orderModel.findOne = jest.fn().mockResolvedValue(null);
+
+      const result = await service.checkout(mockShopId, mockUserId, mockBranchId, cashCheckoutWithKey);
+
+      expect(orderModel.findOne).toHaveBeenCalledWith({
+        shopId: expect.anything(),
+        idempotencyKey: IDEMPOTENCY_KEY,
+      });
+      expect(orderModel.__createdDoc().idempotencyKey).toBe(IDEMPOTENCY_KEY);
+      expect(inventoryService.updateStock).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns the canonical original sale for an identical replay without decrementing stock again', async () => {
+      const canonical = {
+        _id: '507f1f77bcf86cd799439099',
+        shopId: mockShopId,
+        orderNumber: 'STK-2026-CANON1',
+        idempotencyKey: IDEMPOTENCY_KEY,
+        items: [{ productId: 'prod1', name: 'Test Product', quantity: 2, unitPrice: 100, lineTotal: 200 }],
+        total: 232,
+        status: 'completed',
+        paymentStatus: 'paid',
+      };
+      orderModel.findOne = jest.fn().mockResolvedValue(canonical);
+
+      const result = await service.checkout(mockShopId, mockUserId, mockBranchId, cashCheckoutWithKey);
+
+      expect(result).toBe(canonical);
+      expect(inventoryService.updateStock).not.toHaveBeenCalled();
+      expect(paymentTransactionService.createTransaction).not.toHaveBeenCalled();
+    });
+
+    it('recovers the canonical sale when a concurrent duplicate loses the uniqueness race', async () => {
+      const canonical = canonicalOrder();
+
+      // Two concurrent requests both observe absence, then race on insert.
+      orderModel.findOne = jest.fn()
+        .mockResolvedValueOnce(null) // pre-check request A
+        .mockResolvedValueOnce(null) // pre-check request B
+        .mockResolvedValueOnce(canonical); // duplicate-key recovery for request B
+
+      let saveCalls = 0;
+      orderModel.mockImplementation((doc: any) => {
+        saveCalls += 1;
+        const isLosingRequest = saveCalls === 2;
+        return {
+          ...mockOrder,
+          ...doc,
+          _id: canonical._id,
+          save: isLosingRequest
+            ? jest.fn().mockRejectedValue(Object.assign(new Error('E11000 duplicate key'), { code: 11000 }))
+            : jest.fn().mockResolvedValue({ ...mockOrder, ...doc, _id: canonical._id }),
+        };
+      });
+
+      const settled = await Promise.allSettled([
+        service.checkout(mockShopId, mockUserId, mockBranchId, { ...cashCheckoutWithKey }),
+        service.checkout(mockShopId, mockUserId, mockBranchId, { ...cashCheckoutWithKey }),
+      ]);
+
+      expect(settled.every((r) => r.status === 'fulfilled')).toBe(true);
+      const [first, second] = settled.map((r) => (r as PromiseFulfilledResult<any>).value);
+      // Both requests resolve to the same canonical sale
+      expect(first._id).toBe(second._id);
+      expect(second).toBe(canonical);
+      expect(inventoryService.updateStock).toHaveBeenCalledTimes(1);
+    });
+
+    it('rejects reuse of an idempotency key with a different cart (payload mismatch)', async () => {
+      orderModel.findOne = jest.fn().mockResolvedValue({
+        _id: '507f1f77bcf86cd799439099',
+        shopId: mockShopId,
+        orderNumber: 'STK-2026-CANON1',
+        idempotencyKey: IDEMPOTENCY_KEY,
+        items: [{ productId: 'prod1', name: 'Test Product', quantity: 1, unitPrice: 100, lineTotal: 100 }],
+        total: 116,
+        status: 'completed',
+        paymentStatus: 'paid',
+      });
+
+      await expect(
+        service.checkout(mockShopId, mockUserId, mockBranchId, {
+          items: [{ productId: 'prod1', name: 'Test Product', quantity: 5, unitPrice: 100 }],
+          payments: [{ method: 'cash', amount: 580 }],
+          idempotencyKey: IDEMPOTENCY_KEY,
+        }),
+      ).rejects.toThrow(ConflictException);
+
+      expect(inventoryService.updateStock).not.toHaveBeenCalled();
+    });
+
+    it('does not collide when different shops use the same idempotency key', async () => {
+      orderModel.findOne = jest.fn()
+        .mockResolvedValueOnce(null) // shop A lookup
+        .mockResolvedValueOnce(null); // shop B lookup (scoped by shopId)
+
+      await service.checkout(mockShopId, mockUserId, mockBranchId, cashCheckoutWithKey);
+      await service.checkout('507f1f77bcf86cd799439099', mockUserId, mockBranchId, {
+        ...cashCheckoutWithKey,
+      });
+
+      const lookups = (orderModel.findOne as jest.Mock).mock.calls;
+      expect(lookups[0][0].shopId).toEqual(expect.anything());
+      expect(lookups[1][0].shopId).toEqual(expect.any(Types.ObjectId));
+      // Both shops created their own sale
+      expect(inventoryService.updateStock).toHaveBeenCalledTimes(2);
+    });
+
+    it('keeps checkout working without an idempotency key (legacy clients)', async () => {
+      await service.checkout(mockShopId, mockUserId, mockBranchId, mockCheckoutDto);
+
+      expect(orderModel.findOne).not.toHaveBeenCalledWith(
+        expect.objectContaining({ idempotencyKey: expect.anything() }),
+      );
+      expect(inventoryService.updateStock).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not start a second M-Pesa payment chain for a duplicate logical checkout', async () => {
+      const canonicalPending = canonicalOrder({ status: 'pending', paymentStatus: 'unpaid', orderNumber: 'STK-2026-MPESA1' });
+      orderModel.findOne = jest.fn().mockResolvedValue(canonicalPending);
+
+      await service.checkout(mockShopId, mockUserId, mockBranchId, {
+        items: [{ productId: 'prod1', name: 'Test Product', quantity: 2, unitPrice: 100 }],
+        payments: [{ method: 'mpesa', amount: 232, status: 'pending' }],
+        status: 'pending',
+        idempotencyKey: IDEMPOTENCY_KEY,
+      });
+
+      // The canonical order is returned; no second sale, no second payment record
+      expect(orderModel.findOne).toHaveBeenCalledWith({
+        shopId: expect.any(Types.ObjectId),
+        idempotencyKey: IDEMPOTENCY_KEY,
+      });
+      expect(paymentTransactionService.createTransaction).not.toHaveBeenCalled();
     });
   });
 
