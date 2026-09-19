@@ -3,6 +3,12 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Order, OrderDocument } from './schemas/order.schema';
 import { InventoryService } from '../inventory/inventory.service';
+import {
+  InventoryClaim,
+  InventoryClaimDocument,
+  InventoryClaimItemState,
+  InventoryClaimState,
+} from '../inventory/schemas/inventory-claim.schema';
 
 @Injectable()
 export class TransactionControlsService {
@@ -10,17 +16,137 @@ export class TransactionControlsService {
 
   constructor(
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
+    @InjectModel(InventoryClaim.name)
+    private readonly inventoryClaimModel: Model<InventoryClaimDocument>,
     private readonly inventoryService: InventoryService,
   ) {}
 
   /**
    * Restore the inventory reserved by an order when the order leaves the
-   * completed/pending lifecycle via void or full refund. Restoration is a
-   * compensating mutation recorded in the stock-adjustment audit trail, and
-   * runs only after the terminal order-state claim succeeds so it can never
-   * run twice for the same order.
+   * completed/pending lifecycle via void or full refund.
+   *
+   * Claim-aware (SDV2-005): when a durable claim record exists, the release
+   * is tracked per item on the claim (RELEASING -> per-item RESTORED ->
+   * RELEASED) so a crash mid-release is resumable by reconciliation without
+   * double-restoring. Orders without a claim record (historical) use the
+   * legacy direct restoration path.
    */
   private async restoreOrderInventory(
+    order: OrderDocument,
+    restoredBy: string,
+    auditReason: 'void' | 'refund',
+  ): Promise<void> {
+    const claim = await this.inventoryClaimModel
+      .findOne({
+        shopId: order.shopId,
+        orderId: order._id,
+      })
+      .exec();
+
+    if (!claim) {
+      await this.restoreOrderInventoryLegacy(order, restoredBy, auditReason);
+      return;
+    }
+
+    // Exactly-once: a released claim is terminal - nothing remains to restore.
+    if (claim.state === InventoryClaimState.RELEASED) {
+      return;
+    }
+
+    await this.inventoryClaimModel
+      .updateOne(
+        {
+          _id: claim._id,
+          state: {
+            $in: [
+              InventoryClaimState.CLAIMING,
+              InventoryClaimState.CLAIMED,
+              InventoryClaimState.COMMITTED,
+            ],
+          },
+        },
+        { $set: { state: InventoryClaimState.RELEASING } },
+      )
+      .exec();
+
+    for (const item of claim.items) {
+      if (item.state === InventoryClaimItemState.RESTORING) {
+        this.logger.error(
+          `Claim ${claim._id} item ${item.productId} stuck in restoring state - manual review required`,
+        );
+        continue;
+      }
+      if (item.state !== InventoryClaimItemState.CLAIMED) continue;
+
+      try {
+        // Atomic per-item work claim: only a transition from CLAIMED wins,
+        // so a crashed or concurrent release can never restore twice.
+        const workClaim = await this.inventoryClaimModel
+          .updateOne(
+            {
+              _id: claim._id,
+              items: {
+                $elemMatch: { productId: item.productId, state: InventoryClaimItemState.CLAIMED },
+              },
+            },
+            { $set: { 'items.$.state': InventoryClaimItemState.RESTORING } },
+          )
+          .exec();
+        if (!workClaim.modifiedCount) continue;
+
+        await this.inventoryService.updateStock(
+          order.shopId.toString(),
+          item.productId,
+          item.quantity,
+        );
+        await this.inventoryService.createStockAdjustment(
+          order.shopId.toString(),
+          item.productId,
+          item.quantity,
+          auditReason,
+          restoredBy,
+          `Order ${order.orderNumber} - ${item.name} x${item.quantity}`,
+        );
+        await this.inventoryClaimModel
+          .updateOne(
+            {
+              _id: claim._id,
+              items: {
+                $elemMatch: { productId: item.productId, state: InventoryClaimItemState.RESTORING },
+              },
+            },
+            { $set: { 'items.$.state': InventoryClaimItemState.RESTORED } },
+          )
+          .exec();
+      } catch (itemError: any) {
+        this.logger.error(
+          `Failed to restore claim ${claim._id} item ${item.productId}: ${itemError?.message}`,
+        );
+      }
+    }
+
+    const fresh = await this.inventoryClaimModel.findById(claim._id).exec();
+    if (
+      fresh &&
+      fresh.items.every(
+        (item) =>
+          item.state === InventoryClaimItemState.RESTORED ||
+          item.state === InventoryClaimItemState.PENDING,
+      )
+    ) {
+      await this.inventoryClaimModel
+        .updateOne(
+          { _id: fresh._id, state: InventoryClaimState.RELEASING },
+          { $set: { state: InventoryClaimState.RELEASED } },
+        )
+        .exec();
+    }
+  }
+
+  /**
+   * Legacy restoration for orders created before durable claims existed.
+   */
+  private async restoreOrderInventoryLegacy(
     order: OrderDocument,
     restoredBy: string,
     auditReason: 'void' | 'refund',

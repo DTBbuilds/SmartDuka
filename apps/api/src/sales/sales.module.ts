@@ -3,6 +3,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { SalesService } from './sales.service';
 import { SalesController } from './sales.controller';
 import { Order, OrderSchema } from './schemas/order.schema';
+import { InventoryClaim, InventoryClaimSchema } from '../inventory/schemas/inventory-claim.schema';
 import { Receipt, ReceiptSchema } from './schemas/receipt.schema';
 import { Invoice, InvoiceSchema } from './schemas/invoice.schema';
 import { ReceiptService } from './services/receipt.service';
@@ -23,6 +24,7 @@ import { CustomersModule } from '../customers/customers.module';
       { name: Order.name, schema: OrderSchema },
       { name: Receipt.name, schema: ReceiptSchema },
       { name: Invoice.name, schema: InvoiceSchema },
+      { name: InventoryClaim.name, schema: InventoryClaimSchema },
     ]),
     InventoryModule,
     ActivityModule,

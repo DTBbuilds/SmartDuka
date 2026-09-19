@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { InventoryService } from './inventory.service';
 import { InventoryController } from './inventory.controller';
+import { InventoryReconciliationService } from './inventory-reconciliation.service';
 import { CategorySuggestionService } from './services/category-suggestion.service';
 import { ExpiryTrackingService } from './services/expiry-tracking.service';
 import { ExpiryTrackingController } from './controllers/expiry-tracking.controller';
@@ -9,6 +10,7 @@ import { Product, ProductSchema } from './schemas/product.schema';
 import { Category, CategorySchema } from './schemas/category.schema';
 import { StockAdjustment, StockAdjustmentSchema } from './schemas/stock-adjustment.schema';
 import { StockReconciliation, StockReconciliationSchema } from './schemas/stock-reconciliation.schema';
+import { InventoryClaim, InventoryClaimSchema } from './schemas/inventory-claim.schema';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 import { Order, OrderSchema } from '../sales/schemas/order.schema';
 import { CloudinaryModule } from '../cloudinary/cloudinary.module';
@@ -20,13 +22,24 @@ import { CloudinaryModule } from '../cloudinary/cloudinary.module';
       { name: Category.name, schema: CategorySchema },
       { name: StockAdjustment.name, schema: StockAdjustmentSchema },
       { name: StockReconciliation.name, schema: StockReconciliationSchema },
+      { name: InventoryClaim.name, schema: InventoryClaimSchema },
       { name: Order.name, schema: OrderSchema },
     ]),
     forwardRef(() => SubscriptionsModule),
     CloudinaryModule,
   ],
-  providers: [InventoryService, CategorySuggestionService, ExpiryTrackingService],
+  providers: [
+    InventoryService,
+    CategorySuggestionService,
+    ExpiryTrackingService,
+    InventoryReconciliationService,
+  ],
   controllers: [InventoryController, ExpiryTrackingController],
-  exports: [InventoryService, CategorySuggestionService, ExpiryTrackingService],
+  exports: [
+    InventoryService,
+    CategorySuggestionService,
+    ExpiryTrackingService,
+    InventoryReconciliationService,
+  ],
 })
 export class InventoryModule {}

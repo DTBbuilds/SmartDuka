@@ -3,6 +3,12 @@ import { InjectModel, InjectConnection } from '@nestjs/mongoose';
 import { Model, Types, ClientSession, Connection } from 'mongoose';
 import { nanoid } from 'nanoid';
 import { Order, OrderDocument } from './schemas/order.schema';
+import {
+  InventoryClaim,
+  InventoryClaimDocument,
+  InventoryClaimItemState,
+  InventoryClaimState,
+} from '../inventory/schemas/inventory-claim.schema';
 import { CheckoutDto } from './dto/checkout.dto';
 import { InventoryService } from '../inventory/inventory.service';
 import { ActivityService } from '../activity/activity.service';
@@ -23,6 +29,8 @@ export class SalesService {
 
   constructor(
     @InjectModel(Order.name) private readonly orderModel: Model<OrderDocument>,
+    @InjectModel(InventoryClaim.name)
+    private readonly inventoryClaimModel: Model<InventoryClaimDocument>,
     @InjectConnection() private readonly connection: Connection,
     private readonly inventoryService: InventoryService,
     private readonly activityService: ActivityService,
@@ -158,14 +166,35 @@ export class SalesService {
     // Apply loyalty discount to total
     const finalTotal = Math.max(0, total - loyaltyDiscount);
 
-    // STEP 4.5: ATOMIC INVENTORY CLAIM
+    // STEP 4.5: ATOMIC INVENTORY CLAIM (with durable crash-recovery record)
     // Each claim is a conditional atomic update (stock >= requested, scoped by
     // shopId) - concurrent checkouts can never both consume the same units.
-    // A failed logical checkout must leave zero lasting reservations, so any
-    // claim failure compensates every claim made by this checkout.
-    const claimedItems: Array<{ productId: string; name: string; quantity: number }> = [];
+    // The durable claim document makes the reservation attributable and
+    // recoverable at every crash boundary (SDV2-005).
+    let claimDoc: InventoryClaimDocument | null = null;
+    // In-process evidence of which stock decrements provably succeeded. The
+    // durable per-item flags cover crash recovery; this set covers the
+    // narrower updateStock-succeeded-but-mark-write-failed window.
+    const provenClaims = new Set<string>();
     try {
-      for (const item of dto.items) {
+      claimDoc = await this.inventoryClaimModel.create({
+        shopId: new Types.ObjectId(shopId),
+        branchId: branchId ? new Types.ObjectId(branchId) : undefined,
+        orderNumber,
+        idempotencyKey: dto.idempotencyKey,
+        claimedBy: new Types.ObjectId(userId),
+        state: InventoryClaimState.CLAIMING,
+        items: dto.items.map((item) => ({
+          productId: item.productId,
+          name: item.name,
+          quantity: item.quantity,
+          state: InventoryClaimItemState.PENDING,
+        })),
+      });
+
+      for (let index = 0; index < dto.items.length; index += 1) {
+        const item = dto.items[index];
+
         const claimed = await this.inventoryService.updateStock(
           shopId,
           item.productId,
@@ -177,8 +206,27 @@ export class SalesService {
             `Insufficient stock for ${item.name} (requested ${item.quantity})`,
           );
         }
+        provenClaims.add(item.productId);
 
-        claimedItems.push(item);
+        // Durable per-item progress: crash-safe compensation resume evidence.
+        // The state guard keeps this write bound to this checkout's own
+        // lifecycle - if reconciliation took ownership of the claim, the
+        // update loses and checkout aborts instead of drifting.
+        const itemMark = await this.inventoryClaimModel
+          .updateOne(
+            {
+              _id: claimDoc._id,
+              state: InventoryClaimState.CLAIMING,
+              'items.productId': item.productId,
+            },
+            { $set: { 'items.$.state': InventoryClaimItemState.CLAIMED } },
+          )
+          .exec();
+        if (!itemMark.modifiedCount) {
+          throw new InternalServerErrorException(
+            'Inventory claim ownership was lost during checkout - aborting',
+          );
+        }
 
         // Log stock adjustment for audit trail
         await this.inventoryService.createStockAdjustment(
@@ -190,8 +238,25 @@ export class SalesService {
           `Order ${orderNumber} - ${item.name} x${item.quantity}` // notes
         );
       }
+
+      const claimedMark = await this.inventoryClaimModel
+        .updateOne(
+          { _id: claimDoc._id, state: InventoryClaimState.CLAIMING },
+          { $set: { state: InventoryClaimState.CLAIMED } },
+        )
+        .exec();
+      if (!claimedMark.modifiedCount) {
+        throw new InternalServerErrorException(
+          'Inventory claim ownership was lost during checkout - aborting',
+        );
+      }
     } catch (claimError: any) {
-      await this.releaseClaimedInventory(shopId, userId, claimedItems, orderNumber);
+      // The durable claim record is the single authoritative compensation
+      // path: it restores only items durably marked CLAIMED, resumably.
+      if (claimDoc) {
+        await this.markClaimReleasing(claimDoc._id.toString());
+        await this.releaseClaimRecord(claimDoc._id.toString(), shopId, userId, provenClaims);
+      }
       if (claimError instanceof BadRequestException) {
         throw claimError;
       }
@@ -235,11 +300,49 @@ export class SalesService {
       });
 
       await order.save();
+
+      // The reservation is now a legitimate committed sale: close the durable
+      // claim so reconciliation never treats it as an orphan.
+      if (claimDoc) {
+        const commitMark = await this.inventoryClaimModel
+          .updateOne(
+            { _id: claimDoc._id, state: InventoryClaimState.CLAIMED },
+            {
+              $set: {
+                state: InventoryClaimState.COMMITTED,
+                orderId: order._id,
+              },
+            },
+          )
+          .exec();
+
+        if (!commitMark.modifiedCount) {
+          // Reconciliation took ownership of the claim and released the
+          // reservation while the order was being persisted. The order must
+          // not survive without its reservation - void it deterministically.
+          await this.orderModel.updateOne(
+            { _id: order._id, status: { $ne: 'void' } },
+            {
+              $set: {
+                status: 'void',
+                voidReason:
+                  'Checkout aborted: inventory reservation released during order persistence',
+              },
+            },
+          );
+          throw new InternalServerErrorException(
+            'Inventory claim ownership was lost during order persistence',
+          );
+        }
+      }
     } catch (error: any) {
       // Release this checkout's inventory claims: on genuine failure they
       // would be orphaned; on a lost duplicate-key race the canonical winner
       // already holds the reservation, so the loser must not hold a second.
-      await this.releaseClaimedInventory(shopId, userId, claimedItems, orderNumber);
+      if (claimDoc) {
+        await this.markClaimReleasing(claimDoc._id.toString());
+        await this.releaseClaimRecord(claimDoc._id.toString(), shopId, userId, provenClaims);
+      }
 
       // Concurrent duplicate: both requests passed the pre-check and raced on
       // the tenant-scoped unique index. Recover the canonical original instead
@@ -411,34 +514,122 @@ export class SalesService {
   }
 
   /**
-   * Release inventory claims made by a checkout that did not complete.
-   * Compensation is the rollback mechanism for the atomic claim phase: it
-   * runs when order persistence fails or a concurrent duplicate loses the
-   * uniqueness race, so a failed logical checkout leaves zero lasting
-   * reservations. Every release is recorded in the audit trail.
+   * Mark the durable claim record as releasing (compensation started).
+   * Crash-safe: if the process dies here, reconciliation sees RELEASING and
+   * resumes per-item restoration.
    */
-  private async releaseClaimedInventory(
+  private async markClaimReleasing(claimId: string): Promise<void> {
+    try {
+      // Only regress in-flight claims; COMMITTED/RELEASED are terminal and
+      // must never move backwards.
+      await this.inventoryClaimModel
+        .updateOne(
+          {
+            _id: new Types.ObjectId(claimId),
+            state: { $in: [InventoryClaimState.CLAIMING, InventoryClaimState.CLAIMED] },
+          },
+          { $set: { state: InventoryClaimState.RELEASING } },
+        )
+        .exec();
+    } catch (error: any) {
+      this.logger.error(`Failed to mark claim ${claimId} releasing: ${error?.message}`);
+    }
+  }
+
+  /**
+   * Release a durable claim record: restore items durably marked CLAIMED,
+   * exactly once per item. Per-item restoration work is claimed with an
+   * atomic conditional update (CLAIMED -> RESTORING -> RESTORED) so a crash
+   * or a concurrent reconciliation worker can never restore the same item
+   * twice. RESTORING is the deliberate ambiguity marker: if the process dies
+   * between the marker and the stock mutation, manual review is required.
+   */
+  private async releaseClaimRecord(
+    claimId: string,
     shopId: string,
     userId: string,
-    claimed: Array<{ productId: string; name: string; quantity: number }>,
-    orderNumber: string,
+    provenClaims?: Set<string>,
   ): Promise<void> {
-    for (const item of claimed) {
-      try {
-        await this.inventoryService.updateStock(shopId, item.productId, item.quantity);
-        await this.inventoryService.createStockAdjustment(
-          shopId,
-          item.productId,
-          item.quantity,
-          'correction',
-          userId,
-          `Checkout rollback for order ${orderNumber} - ${item.name} x${item.quantity}`,
-        );
-      } catch (error: any) {
-        this.logger.error(
-          `Failed to compensate inventory claim for order ${orderNumber}, product ${item.productId}: ${error?.message}`,
-        );
+    try {
+      const claim = await this.inventoryClaimModel
+        .findOne({ _id: new Types.ObjectId(claimId), shopId: new Types.ObjectId(shopId) })
+        .exec();
+      if (!claim) return;
+
+      for (const item of claim.items) {
+        if (item.state === InventoryClaimItemState.RESTORING) {
+          // Ambiguous: the stock mutation cannot be proven either way.
+          this.logger.error(
+            `Claim ${claimId} item ${item.productId} stuck in restoring state - manual review required`,
+          );
+          continue;
+        }
+        // Eligible for restore: durably CLAIMED, or still PENDING but with
+        // in-process proof the decrement landed (mark-write failure window).
+        const eligible =
+          item.state === InventoryClaimItemState.CLAIMED ||
+          (item.state === InventoryClaimItemState.PENDING && provenClaims?.has(item.productId));
+        if (!eligible) continue;
+
+        try {
+          const workClaim = await this.inventoryClaimModel
+            .updateOne(
+              {
+                _id: claim._id,
+                items: {
+                  $elemMatch: { productId: item.productId, state: item.state },
+                },
+              },
+              { $set: { 'items.$.state': InventoryClaimItemState.RESTORING } },
+            )
+            .exec();
+          if (!workClaim.modifiedCount) continue; // another worker took this item
+
+          await this.inventoryService.updateStock(shopId, item.productId, item.quantity);
+          await this.inventoryService.createStockAdjustment(
+            shopId,
+            item.productId,
+            item.quantity,
+            'correction',
+            userId,
+            `Checkout rollback for order ${claim.orderNumber} - ${item.name} x${item.quantity}`,
+          );
+          await this.inventoryClaimModel
+            .updateOne(
+              {
+                _id: claim._id,
+                items: {
+                  $elemMatch: { productId: item.productId, state: InventoryClaimItemState.RESTORING },
+                },
+              },
+              { $set: { 'items.$.state': InventoryClaimItemState.RESTORED } },
+            )
+            .exec();
+        } catch (itemError: any) {
+          this.logger.error(
+            `Failed to release claim ${claimId} item ${item.productId}: ${itemError?.message}`,
+          );
+        }
       }
+
+      const fresh = await this.inventoryClaimModel.findById(claimId).exec();
+      if (
+        fresh &&
+        fresh.items.every(
+          (item) =>
+            item.state === InventoryClaimItemState.RESTORED ||
+            item.state === InventoryClaimItemState.PENDING,
+        )
+      ) {
+        await this.inventoryClaimModel
+          .updateOne(
+            { _id: fresh._id, state: InventoryClaimState.RELEASING },
+            { $set: { state: InventoryClaimState.RELEASED } },
+          )
+          .exec();
+      }
+    } catch (error: any) {
+      this.logger.error(`Failed to release claim record ${claimId}: ${error?.message}`);
     }
   }
 
