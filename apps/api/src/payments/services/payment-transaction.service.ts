@@ -56,6 +56,16 @@ export class PaymentTransactionService {
 
   async createTransaction(dto: CreatePaymentTransactionDto): Promise<PaymentTransactionDocument> {
     try {
+      // Idempotency: the same M-Pesa transaction must never produce two
+      // payment records (duplicate callbacks / callback + reconciliation race)
+      if (dto.mpesaTransactionId) {
+        const existing = await this.paymentTransactionModel
+          .findOne({ mpesaTransactionId: dto.mpesaTransactionId })
+          .exec();
+        if (existing) {
+          return existing;
+        }
+      }
       const transaction = new this.paymentTransactionModel({
         shopId: new Types.ObjectId(dto.shopId),
         orderId: new Types.ObjectId(dto.orderId),

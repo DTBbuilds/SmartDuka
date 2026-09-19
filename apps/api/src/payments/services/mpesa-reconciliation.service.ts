@@ -208,16 +208,14 @@ export class MpesaReconciliationService {
       // Handle based on result code (lowercase property from DarajaService)
       if (result.resultCode === 0) {
         // Payment successful
-        await this.markTransactionCompleted(transaction, result);
-        return true;
+        return await this.markTransactionCompleted(transaction, result);
       } else if (result.resultCode === 1037) {
         // DS Timeout - transaction still processing, leave as pending
         this.logger.debug(`Transaction ${transaction._id} still processing (DS timeout)`);
         return false;
       } else if (result.resultCode !== undefined) {
         // Payment failed
-        await this.markTransactionFailed(transaction, result);
-        return true;
+        return await this.markTransactionFailed(transaction, result);
       }
 
       return false;
@@ -232,46 +230,60 @@ export class MpesaReconciliationService {
 
   /**
    * Mark transaction as completed and create payment record
+   * Uses an atomic conditional update so a concurrent callback/reconciliation
+   * pass can never double-process the same transaction.
    */
   private async markTransactionCompleted(
     transaction: MpesaTransactionDocument,
     result: any,
-  ): Promise<void> {
-    transaction.previousStatus = transaction.status;
-    transaction.status = MpesaTransactionStatus.COMPLETED;
-    transaction.mpesaResultCode = parseInt(result.ResultCode);
-    transaction.mpesaResultDesc = result.ResultDesc || 'Success';
-    transaction.completedAt = new Date();
+  ): Promise<boolean> {
+    const receipt = result.mpesaReceiptNumber ?? result.MpesaReceiptNumber;
 
-    // Try to extract receipt number from result
-    if (result.MpesaReceiptNumber) {
-      transaction.mpesaReceiptNumber = result.MpesaReceiptNumber;
+    const updated = await this.transactionModel.findOneAndUpdate(
+      { _id: transaction._id, status: MpesaTransactionStatus.PENDING },
+      {
+        $set: {
+          previousStatus: transaction.status,
+          status: MpesaTransactionStatus.COMPLETED,
+          mpesaResultCode: result.resultCode,
+          mpesaResultDesc: result.resultDesc || 'Success',
+          completedAt: new Date(),
+          recoveredViaQuery: true,
+          ...(receipt ? { mpesaReceiptNumber: receipt } : {}),
+        },
+      },
+      { new: true },
+    );
+
+    if (!updated) {
+      this.logger.log(
+        `Transaction ${transaction._id} no longer pending - skipping completion`,
+      );
+      return false;
     }
-
-    await transaction.save();
 
     this.logger.log(
       `Reconciled transaction ${transaction._id} as COMPLETED`,
     );
 
     // Create payment transaction record if we have receipt number
-    if (transaction.mpesaReceiptNumber) {
+    if (updated.mpesaReceiptNumber) {
       try {
         await this.paymentTransactionService.createTransaction({
-          shopId: transaction.shopId.toString(),
-          orderId: transaction.orderId.toString(),
-          orderNumber: transaction.orderNumber,
-          cashierId: transaction.cashierId.toString(),
-          cashierName: transaction.cashierName,
-          branchId: transaction.branchId?.toString(),
+          shopId: updated.shopId.toString(),
+          orderId: updated.orderId.toString(),
+          orderNumber: updated.orderNumber,
+          cashierId: updated.cashierId.toString(),
+          cashierName: updated.cashierName,
+          branchId: updated.branchId?.toString(),
           paymentMethod: 'mpesa',
-          amount: transaction.amount,
+          amount: updated.amount,
           status: 'completed',
-          customerName: transaction.customerName,
-          customerPhone: transaction.phoneNumber,
-          mpesaReceiptNumber: transaction.mpesaReceiptNumber,
-          mpesaTransactionId: transaction.checkoutRequestId,
-          referenceNumber: transaction.mpesaReceiptNumber,
+          customerName: updated.customerName,
+          customerPhone: updated.phoneNumber,
+          mpesaReceiptNumber: updated.mpesaReceiptNumber,
+          mpesaTransactionId: updated.checkoutRequestId,
+          referenceNumber: updated.mpesaReceiptNumber,
           notes: 'Reconciled via STK query',
         });
       } catch (error: any) {
@@ -280,26 +292,44 @@ export class MpesaReconciliationService {
         );
       }
     }
+
+    return true;
   }
 
   /**
    * Mark transaction as failed
+   * Atomic conditional update - never flips a transaction out of a terminal state.
    */
   private async markTransactionFailed(
     transaction: MpesaTransactionDocument,
     result: any,
-  ): Promise<void> {
-    transaction.previousStatus = transaction.status;
-    transaction.status = MpesaTransactionStatus.FAILED;
-    transaction.mpesaResultCode = parseInt(result.ResultCode);
-    transaction.mpesaResultDesc = result.ResultDesc || 'Payment failed';
-    transaction.lastError = this.getErrorMessage(parseInt(result.ResultCode));
+  ): Promise<boolean> {
+    const updated = await this.transactionModel.findOneAndUpdate(
+      { _id: transaction._id, status: MpesaTransactionStatus.PENDING },
+      {
+        $set: {
+          previousStatus: transaction.status,
+          status: MpesaTransactionStatus.FAILED,
+          mpesaResultCode: result.resultCode,
+          mpesaResultDesc: result.resultDesc || 'Payment failed',
+          lastError: this.getErrorMessage(result.resultCode),
+        },
+      },
+      { new: true },
+    );
 
-    await transaction.save();
+    if (!updated) {
+      this.logger.log(
+        `Transaction ${transaction._id} no longer pending - skipping failure update`,
+      );
+      return false;
+    }
 
     this.logger.log(
-      `Reconciled transaction ${transaction._id} as FAILED: ${transaction.lastError}`,
+      `Reconciled transaction ${transaction._id} as FAILED: ${updated.lastError}`,
     );
+
+    return true;
   }
 
   /**

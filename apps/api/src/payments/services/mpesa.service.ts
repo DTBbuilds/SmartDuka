@@ -298,7 +298,12 @@ export class MpesaService {
   async processCallback(
     payload: MpesaCallbackDto,
   ): Promise<{ ResultCode: number; ResultDesc: string }> {
-    const { stkCallback } = payload.Body;
+    const stkCallback = payload?.Body?.stkCallback;
+    if (!stkCallback?.CheckoutRequestID || typeof stkCallback.ResultCode !== 'number') {
+      this.logger.warn('Malformed M-Pesa callback ignored');
+      return { ResultCode: 0, ResultDesc: 'Callback received' };
+    }
+
     const {
       CheckoutRequestID,
       MerchantRequestID,
@@ -326,7 +331,20 @@ export class MpesaService {
       return { ResultCode: 0, ResultDesc: 'Callback received' };
     }
 
-    // STEP 2: Check if already processed (idempotent callback handling)
+    // STEP 2: Correlation guard - a callback that does not belong to this
+    // transaction must never mutate it
+    if (
+      transaction.merchantRequestId &&
+      MerchantRequestID &&
+      transaction.merchantRequestId !== MerchantRequestID
+    ) {
+      this.logger.warn(
+        `MerchantRequestID mismatch for transaction ${transaction._id}: expected ${transaction.merchantRequestId}, received ${MerchantRequestID}`,
+      );
+      return { ResultCode: 0, ResultDesc: 'Callback rejected' };
+    }
+
+    // STEP 3: Terminal-state guard (sequential duplicate delivery)
     if (
       transaction.status === MpesaTransactionStatus.COMPLETED ||
       transaction.status === MpesaTransactionStatus.FAILED
@@ -337,43 +355,110 @@ export class MpesaService {
       return { ResultCode: 0, ResultDesc: 'Already processed' };
     }
 
-    // STEP 3: Store callback payload and calculate timing metrics
-    transaction.callbackPayload = payload;
-    transaction.callbackReceivedAt = callbackReceivedAt;
-    transaction.callbackReceived = true;
-    transaction.mpesaResultCode = ResultCode;
-    transaction.mpesaResultDesc = ResultDesc;
-
-    // Calculate timing metrics
+    // Timing metrics
+    const timingUpdates: Record<string, any> = {};
     if (transaction.stkPushSentAt) {
-      transaction.responseTimeMs = callbackReceivedAt.getTime() - transaction.stkPushSentAt.getTime();
-      
+      timingUpdates.responseTimeMs =
+        callbackReceivedAt.getTime() - transaction.stkPushSentAt.getTime();
       // Estimate user input time (response time minus ~5s for M-Pesa processing)
-      const estimatedProcessingTime = 5000; // 5 seconds for M-Pesa internal processing
-      transaction.userInputTimeMs = Math.max(0, transaction.responseTimeMs - estimatedProcessingTime);
+      timingUpdates.userInputTimeMs = Math.max(0, timingUpdates.responseTimeMs - 5000);
     }
-
     if (transaction.createdAt) {
-      transaction.totalTimeMs = callbackReceivedAt.getTime() - transaction.createdAt.getTime();
+      timingUpdates.totalTimeMs = callbackReceivedAt.getTime() - transaction.createdAt.getTime();
     }
 
-    // STEP 4: Process based on result code
+    const callbackAudit = {
+      callbackPayload: payload,
+      callbackReceivedAt,
+      callbackReceived: true,
+      mpesaResultCode: ResultCode,
+      mpesaResultDesc: ResultDesc,
+      ...timingUpdates,
+    };
+
+    // Mutable-state filter shared by every transition below: only one
+    // concurrent callback may move a transaction out of created/pending
+    const mutableStatusFilter = {
+      _id: transaction._id,
+      status: { $in: [MpesaTransactionStatus.CREATED, MpesaTransactionStatus.PENDING] },
+    };
+
     if (ResultCode === 0) {
-      // SUCCESS
       const metadata = parseCallbackMetadata(CallbackMetadata?.Item);
 
-      transaction.previousStatus = transaction.status;
-      transaction.status = MpesaTransactionStatus.COMPLETED;
-      transaction.mpesaReceiptNumber = metadata.mpesaReceiptNumber;
-      transaction.completedAt = callbackReceivedAt;
+      // INVARIANT: a wrong-amount callback must not silently produce paid state
+      if (metadata.amount !== undefined && metadata.amount !== transaction.amount) {
+        await this.mpesaTransactionModel.findOneAndUpdate(
+          mutableStatusFilter,
+          {
+            $set: {
+              ...callbackAudit,
+              previousStatus: transaction.status,
+              status: MpesaTransactionStatus.FAILED,
+              lastError: `Amount mismatch: expected ${transaction.amount}, received ${metadata.amount}`,
+              errorCategory: 'amount_mismatch',
+            },
+          },
+        );
+        this.logger.warn(
+          `Amount mismatch for transaction ${transaction._id}: expected ${transaction.amount}, received ${metadata.amount}`,
+        );
+        return { ResultCode: 0, ResultDesc: 'Callback processed successfully' };
+      }
 
-      await transaction.save();
+      // INVARIANT: one M-Pesa receipt must never create two successful outcomes
+      if (metadata.mpesaReceiptNumber) {
+        const duplicateReceipt = await this.mpesaTransactionModel.findOne({
+          mpesaReceiptNumber: metadata.mpesaReceiptNumber,
+          _id: { $ne: transaction._id },
+        });
+        if (duplicateReceipt) {
+          await this.mpesaTransactionModel.findOneAndUpdate(
+            mutableStatusFilter,
+            {
+              $set: {
+                ...callbackAudit,
+                previousStatus: transaction.status,
+                status: MpesaTransactionStatus.FAILED,
+                lastError: `Receipt ${metadata.mpesaReceiptNumber} already used by transaction ${duplicateReceipt._id}`,
+                errorCategory: 'duplicate_receipt',
+              },
+            },
+          );
+          this.logger.warn(
+            `Duplicate receipt ${metadata.mpesaReceiptNumber} for transaction ${transaction._id} (already on ${duplicateReceipt._id})`,
+          );
+          return { ResultCode: 0, ResultDesc: 'Callback processed successfully' };
+        }
+      }
 
-      this.logger.log(
-        `M-Pesa payment successful for transaction ${transaction._id}, receipt: ${metadata.mpesaReceiptNumber}, responseTime: ${transaction.responseTimeMs}ms`,
+      // ATOMIC CLAIM: only the first processor may complete this transaction
+      const claimed = await this.mpesaTransactionModel.findOneAndUpdate(
+        mutableStatusFilter,
+        {
+          $set: {
+            ...callbackAudit,
+            previousStatus: transaction.status,
+            status: MpesaTransactionStatus.COMPLETED,
+            mpesaReceiptNumber: metadata.mpesaReceiptNumber,
+            completedAt: callbackReceivedAt,
+          },
+        },
+        { new: true },
       );
 
-      // STEP 5: Create payment transaction record
+      if (!claimed) {
+        this.logger.log(
+          `Transaction ${transaction._id} was processed concurrently - ignoring duplicate callback`,
+        );
+        return { ResultCode: 0, ResultDesc: 'Already processed' };
+      }
+
+      this.logger.log(
+        `M-Pesa payment successful for transaction ${transaction._id}, receipt: ${metadata.mpesaReceiptNumber}, responseTime: ${claimed.responseTimeMs}ms`,
+      );
+
+      // STEP 5: Create payment transaction record (idempotent via mpesaTransactionId)
       try {
         await this.paymentTransactionService.createTransaction({
           shopId: transaction.shopId.toString(),
@@ -406,18 +491,29 @@ export class MpesaService {
       // TODO: Emit WebSocket event for real-time UI update
     } else {
       // FAILURE - Categorize the error
-      transaction.previousStatus = transaction.status;
-      transaction.status = MpesaTransactionStatus.FAILED;
-      transaction.lastError = getMpesaErrorMessage(ResultCode);
-      
-      // Categorize error for analytics
-      const errorCategory = this.categorizeError(ResultCode);
-      transaction.errorCategory = errorCategory;
+      const claimed = await this.mpesaTransactionModel.findOneAndUpdate(
+        mutableStatusFilter,
+        {
+          $set: {
+            ...callbackAudit,
+            previousStatus: transaction.status,
+            status: MpesaTransactionStatus.FAILED,
+            lastError: getMpesaErrorMessage(ResultCode),
+            errorCategory: this.categorizeError(ResultCode),
+          },
+        },
+        { new: true },
+      );
 
-      await transaction.save();
+      if (!claimed) {
+        this.logger.log(
+          `Transaction ${transaction._id} was processed concurrently - ignoring duplicate callback`,
+        );
+        return { ResultCode: 0, ResultDesc: 'Already processed' };
+      }
 
       this.logger.warn(
-        `M-Pesa payment failed for transaction ${transaction._id}: ${ResultDesc} (category: ${errorCategory})`,
+        `M-Pesa payment failed for transaction ${transaction._id}: ${ResultDesc} (category: ${claimed.errorCategory})`,
       );
     }
 

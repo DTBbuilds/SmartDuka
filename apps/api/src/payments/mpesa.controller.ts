@@ -142,6 +142,8 @@ export class MpesaController {
       orderId: dto.orderId,
       orderNumber: orderNumber,
       description: dto.transactionDesc,
+      cashierId: user.sub,
+      cashierName: user.name || user.email || 'Cashier',
     });
 
     // Map multi-tenant response to standard response format
@@ -447,6 +449,8 @@ export class MpesaController {
       orderId: dto.orderId,
       orderNumber: dto.orderNumber,
       description: dto.description,
+      cashierId: user.sub,
+      cashierName: user.name || user.email || 'Cashier',
     });
   }
 

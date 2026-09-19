@@ -1062,15 +1062,18 @@ export class SubscriptionMpesaService implements OnModuleInit {
       if (ResultCode === 0) {
         // Payment successful
         const metadata = stkCallback.CallbackMetadata?.Item || [];
-        const getMetaValue = (name: string) => 
+        const getMetaValue = (name: string) =>
           metadata.find((m: any) => m.Name === name)?.Value;
 
         const mpesaReceiptNumber = getMetaValue('MpesaReceiptNumber');
         const amount = getMetaValue('Amount');
         const transactionDate = getMetaValue('TransactionDate');
 
-        await this.invoiceModel.updateOne(
-          { _id: invoice._id },
+        // ATOMIC CLAIM: only the first delivery of a successful callback may
+        // mark the invoice paid. Duplicate/retried callbacks must never
+        // re-run subscription activation or resend notifications.
+        const updatedInvoice = await this.invoiceModel.findOneAndUpdate(
+          { _id: invoice._id, status: { $ne: 'paid' } },
           {
             $set: {
               status: 'paid',
@@ -1088,7 +1091,15 @@ export class SubscriptionMpesaService implements OnModuleInit {
               },
             },
           },
+          { new: true },
         );
+
+        if (!updatedInvoice) {
+          this.logger.log(
+            `Invoice ${invoice.invoiceNumber} already paid - ignoring duplicate callback`,
+          );
+          return;
+        }
 
         // Activate subscription after successful payment
         await this.activateSubscriptionAfterPayment(invoice.shopId.toString(), invoice._id.toString());
@@ -1122,9 +1133,9 @@ export class SubscriptionMpesaService implements OnModuleInit {
 
         this.logger.log(`Payment successful for invoice ${invoice.invoiceNumber}: ${mpesaReceiptNumber}`);
       } else {
-        // Payment failed
-        await this.invoiceModel.updateOne(
-          { _id: invoice._id },
+        // Payment failed - never overwrite an invoice that is already paid
+        await this.invoiceModel.findOneAndUpdate(
+          { _id: invoice._id, status: { $ne: 'paid' } },
           {
             $set: {
               'paymentAttempt.failed': true,

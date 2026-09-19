@@ -3,8 +3,12 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { ConfigService } from '@nestjs/config';
 import { Shop, ShopDocument } from '../../shops/schemas/shop.schema';
-import { MpesaTransaction, MpesaTransactionDocument } from '../schemas/mpesa-transaction.schema';
+import { MpesaTransaction, MpesaTransactionDocument, MpesaTransactionStatus } from '../schemas/mpesa-transaction.schema';
 import { MpesaEncryptionService } from './mpesa-encryption.service';
+import { generateIdempotencyKey } from '../dto/mpesa.dto';
+
+// Transaction expiry time in milliseconds (5 minutes) - matches MpesaService
+const TRANSACTION_EXPIRY_MS = 5 * 60 * 1000;
 
 /**
  * Multi-Tenant M-Pesa Service
@@ -266,6 +270,8 @@ export class MpesaMultiTenantService {
     orderId: string;
     orderNumber: string;
     description?: string;
+    cashierId?: string;
+    cashierName?: string;
   }): Promise<{
     success: boolean;
     checkoutRequestId?: string;
@@ -305,6 +311,39 @@ export class MpesaMultiTenantService {
     // Build account reference using shop's prefix or order number
     const accountReference = `${config.accountPrefix || ''}${orderNumber}`.slice(0, 12);
 
+    // Create the transaction record BEFORE sending the STK push so a Daraja
+    // acceptance can never be lost to a local persistence failure.
+    let transaction: MpesaTransactionDocument;
+    try {
+      transaction = new this.transactionModel({
+        shopId: new Types.ObjectId(shopId),
+        orderId: new Types.ObjectId(orderId),
+        orderNumber,
+        idempotencyKey: generateIdempotencyKey(shopId, orderId),
+        amount,
+        phoneNumber: formattedPhone,
+        accountReference,
+        transactionDesc: description || `Payment for ${orderNumber}`,
+        status: MpesaTransactionStatus.CREATED,
+        expiresAt: new Date(Date.now() + TRANSACTION_EXPIRY_MS),
+        cashierId: params.cashierId ? new Types.ObjectId(params.cashierId) : undefined,
+        cashierName: params.cashierName || 'Unknown',
+      });
+      await transaction.save();
+    } catch (error: any) {
+      if (error?.code === 11000) {
+        return {
+          success: false,
+          error: 'A payment request is already in progress for this order.',
+        };
+      }
+      this.logger.error(`Failed to persist M-Pesa transaction for order ${orderNumber}: ${error?.message}`);
+      return {
+        success: false,
+        error: 'Failed to create payment request. Please try again.',
+      };
+    }
+
     try {
       // Get access token
       const accessToken = await this.getAccessToken(config.consumerKey, config.consumerSecret);
@@ -338,19 +377,11 @@ export class MpesaMultiTenantService {
       const data = await response.json();
 
       if (data.ResponseCode === '0') {
-        // Create transaction record
-        const transaction = new this.transactionModel({
-          shopId: new Types.ObjectId(shopId),
-          orderId: new Types.ObjectId(orderId),
-          checkoutRequestId: data.CheckoutRequestID,
-          merchantRequestId: data.MerchantRequestID,
-          amount,
-          phoneNumber: formattedPhone,
-          accountReference,
-          status: 'PENDING',
-          shortCode: config.shortCode,
-          isShopSpecific: true, // All configs are now shop-specific
-        });
+        transaction.previousStatus = transaction.status;
+        transaction.checkoutRequestId = data.CheckoutRequestID;
+        transaction.merchantRequestId = data.MerchantRequestID;
+        transaction.status = MpesaTransactionStatus.PENDING;
+        transaction.stkPushSentAt = new Date();
         await transaction.save();
 
         return {
@@ -363,6 +394,11 @@ export class MpesaMultiTenantService {
         };
       } else {
         this.logger.error(`STK Push failed: ${JSON.stringify(data)}`);
+        transaction.previousStatus = transaction.status;
+        transaction.status = MpesaTransactionStatus.FAILED;
+        transaction.lastError = data.ResponseDescription || data.errorMessage || 'STK Push failed';
+        await transaction.save();
+
         return {
           success: false,
           responseCode: data.ResponseCode,
@@ -372,6 +408,11 @@ export class MpesaMultiTenantService {
       }
     } catch (error: any) {
       this.logger.error(`STK Push error: ${error.message}`);
+      transaction.previousStatus = transaction.status;
+      transaction.status = MpesaTransactionStatus.FAILED;
+      transaction.lastError = error.message;
+      await transaction.save().catch(() => undefined);
+
       return {
         success: false,
         error: error.message || 'Failed to initiate payment',
@@ -411,15 +452,25 @@ export class MpesaMultiTenantService {
 
       const data = await response.json();
 
-      // Update transaction status
+      // Update transaction status - only transactions still in created/pending
+      // may transition, so a status query can never flip a terminal state
+      // (e.g. COMPLETED -> FAILED after a late query).
       if (data.ResultCode !== undefined) {
-        const status = data.ResultCode === '0' ? 'COMPLETED' : 'FAILED';
+        const status =
+          data.ResultCode === '0' || data.ResultCode === 0
+            ? MpesaTransactionStatus.COMPLETED
+            : MpesaTransactionStatus.FAILED;
         await this.transactionModel.findOneAndUpdate(
-          { checkoutRequestId },
-          { 
-            status,
-            resultCode: data.ResultCode,
-            resultDesc: data.ResultDesc,
+          {
+            checkoutRequestId,
+            status: { $in: [MpesaTransactionStatus.CREATED, MpesaTransactionStatus.PENDING] },
+          },
+          {
+            $set: {
+              status,
+              mpesaResultCode: Number(data.ResultCode),
+              mpesaResultDesc: data.ResultDesc,
+            },
           },
         );
       }
@@ -445,8 +496,8 @@ export class MpesaMultiTenantService {
    */
   async handleCallback(callbackData: any): Promise<{ success: boolean; shopId?: string }> {
     try {
-      const stkCallback = callbackData.Body?.stkCallback;
-      if (!stkCallback) {
+      const stkCallback = callbackData?.Body?.stkCallback;
+      if (!stkCallback?.CheckoutRequestID || typeof stkCallback.ResultCode !== 'number') {
         this.logger.error('Invalid callback format');
         return { success: false };
       }
@@ -457,10 +508,20 @@ export class MpesaMultiTenantService {
 
       // Find the transaction
       const transaction = await this.transactionModel.findOne({ checkoutRequestId }).exec();
-      
+
       if (!transaction) {
         this.logger.error(`Transaction not found for CheckoutRequestID: ${checkoutRequestId}`);
         return { success: false };
+      }
+
+      // Terminal-state guard: repeated delivery of the same callback must be
+      // a safe no-op
+      if (
+        transaction.status === MpesaTransactionStatus.COMPLETED ||
+        transaction.status === MpesaTransactionStatus.FAILED
+      ) {
+        this.logger.log(`Transaction for ${checkoutRequestId} already processed (${transaction.status})`);
+        return { success: true, shopId: transaction.shopId.toString() };
       }
 
       // Extract callback metadata
@@ -484,20 +545,35 @@ export class MpesaMultiTenantService {
         }
       }
 
-      // Update transaction
-      const status = resultCode === 0 ? 'COMPLETED' : 'FAILED';
-      await this.transactionModel.findByIdAndUpdate(transaction._id, {
-        status,
-        resultCode: resultCode.toString(),
-        resultDesc,
-        mpesaReceiptNumber,
-        completedAt: resultCode === 0 ? new Date() : undefined,
-      });
+      // Atomic conditional update: only a transaction still in created/pending
+      // may transition, so concurrent duplicate callbacks cannot double-apply.
+      const status = resultCode === 0 ? MpesaTransactionStatus.COMPLETED : MpesaTransactionStatus.FAILED;
+      const updated = await this.transactionModel.findOneAndUpdate(
+        {
+          _id: transaction._id,
+          status: { $in: [MpesaTransactionStatus.CREATED, MpesaTransactionStatus.PENDING] },
+        },
+        {
+          $set: {
+            status,
+            mpesaResultCode: resultCode,
+            mpesaResultDesc: resultDesc,
+            mpesaReceiptNumber,
+            ...(resultCode === 0 ? { completedAt: new Date() } : {}),
+          },
+        },
+        { new: true },
+      );
+
+      if (!updated) {
+        this.logger.log(`Callback for ${checkoutRequestId} processed concurrently - ignoring duplicate`);
+        return { success: true, shopId: transaction.shopId.toString() };
+      }
 
       this.logger.log(`Callback processed for ${checkoutRequestId}: ${status}`);
 
-      return { 
-        success: true, 
+      return {
+        success: true,
         shopId: transaction.shopId.toString(),
       };
     } catch (error: any) {
