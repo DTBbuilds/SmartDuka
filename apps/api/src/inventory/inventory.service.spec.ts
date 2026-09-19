@@ -3,7 +3,10 @@ import { getModelToken } from '@nestjs/mongoose';
 import { InventoryService } from './inventory.service';
 import { Product } from './schemas/product.schema';
 import { Category } from './schemas/category.schema';
-import { Adjustment as StockAdjustment } from '../stock/adjustment.schema';
+import { StockAdjustment } from './schemas/stock-adjustment.schema';
+import { StockReconciliation } from './schemas/stock-reconciliation.schema';
+import { Order } from '../sales/schemas/order.schema';
+import { CategorySuggestionService } from './services/category-suggestion.service';
 import { SubscriptionGuardService } from '../subscriptions/subscription-guard.service';
 import { CacheService } from '../common/services/cache.service';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
@@ -35,22 +38,25 @@ describe('InventoryService', () => {
   };
 
   beforeEach(async () => {
-    // Create mock product model
-    const mockProductModel = {
-      find: jest.fn().mockReturnThis(),
-      findOne: jest.fn().mockReturnThis(),
-      findById: jest.fn().mockReturnThis(),
-      findOneAndUpdate: jest.fn().mockReturnThis(),
-      countDocuments: jest.fn().mockResolvedValue(10),
-      updateOne: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
-      deleteOne: jest.fn().mockResolvedValue({ deletedCount: 1 }),
-      sort: jest.fn().mockReturnThis(),
-      skip: jest.fn().mockReturnThis(),
-      limit: jest.fn().mockReturnThis(),
-      lean: jest.fn().mockReturnThis(),
-      exec: jest.fn().mockResolvedValue([mockProduct]),
-      create: jest.fn().mockResolvedValue(mockProduct),
-    };
+    // Create mock product model (constructible: service uses `new this.productModel()`)
+    const mockProductModel: any = jest.fn().mockImplementation(() => ({
+      ...mockProduct,
+      save: jest.fn().mockResolvedValue(mockProduct),
+    }));
+    mockProductModel.find = jest.fn().mockReturnThis();
+    mockProductModel.findOne = jest.fn().mockReturnThis();
+    mockProductModel.findById = jest.fn().mockReturnThis();
+    mockProductModel.findByIdAndUpdate = jest.fn().mockResolvedValue(mockProduct);
+    mockProductModel.findOneAndUpdate = jest.fn().mockReturnThis();
+    mockProductModel.countDocuments = jest.fn().mockResolvedValue(10);
+    mockProductModel.updateOne = jest.fn().mockResolvedValue({ modifiedCount: 1 });
+    mockProductModel.deleteOne = jest.fn().mockResolvedValue({ deletedCount: 1 });
+    mockProductModel.sort = jest.fn().mockReturnThis();
+    mockProductModel.skip = jest.fn().mockReturnThis();
+    mockProductModel.limit = jest.fn().mockReturnThis();
+    mockProductModel.lean = jest.fn().mockReturnThis();
+    mockProductModel.exec = jest.fn().mockResolvedValue([mockProduct]);
+    mockProductModel.create = jest.fn().mockResolvedValue(mockProduct);
 
     const mockCategoryModel = {
       find: jest.fn().mockReturnThis(),
@@ -61,13 +67,14 @@ describe('InventoryService', () => {
       create: jest.fn().mockResolvedValue({ _id: 'cat1', name: 'Test Category' }),
     };
 
-    const mockStockAdjustmentModel = {
-      create: jest.fn().mockResolvedValue({}),
-      find: jest.fn().mockReturnThis(),
-      sort: jest.fn().mockReturnThis(),
-      limit: jest.fn().mockReturnThis(),
-      exec: jest.fn().mockResolvedValue([]),
-    };
+    const mockStockAdjustmentModel: any = jest.fn().mockImplementation(() => ({
+      save: jest.fn().mockResolvedValue({}),
+    }));
+    mockStockAdjustmentModel.create = jest.fn().mockResolvedValue({});
+    mockStockAdjustmentModel.find = jest.fn().mockReturnThis();
+    mockStockAdjustmentModel.sort = jest.fn().mockReturnThis();
+    mockStockAdjustmentModel.limit = jest.fn().mockReturnThis();
+    mockStockAdjustmentModel.exec = jest.fn().mockResolvedValue([]);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -83,6 +90,27 @@ describe('InventoryService', () => {
         {
           provide: getModelToken(StockAdjustment.name),
           useValue: mockStockAdjustmentModel,
+        },
+        {
+          provide: getModelToken(StockReconciliation.name),
+          useValue: {
+            find: jest.fn().mockReturnThis(),
+            create: jest.fn().mockResolvedValue({}),
+            exec: jest.fn().mockResolvedValue([]),
+          },
+        },
+        {
+          provide: getModelToken(Order.name),
+          useValue: {
+            find: jest.fn().mockReturnThis(),
+            exec: jest.fn().mockResolvedValue([]),
+          },
+        },
+        {
+          provide: CategorySuggestionService,
+          useValue: {
+            suggestCategory: jest.fn().mockResolvedValue(null),
+          },
         },
         {
           provide: SubscriptionGuardService,
@@ -164,9 +192,7 @@ describe('InventoryService', () => {
     });
 
     it('should throw NotFoundException for non-existent product', async () => {
-      productModel.findOne.mockReturnValue({
-        exec: jest.fn().mockResolvedValue(null),
-      });
+      productModel.findOne.mockResolvedValue(null);
 
       await expect(
         service.deleteProduct(mockShopId, mockProductId)
@@ -274,7 +300,7 @@ describe('InventoryService', () => {
 
       expect(productModel.findOne).toHaveBeenCalledWith(
         expect.objectContaining({
-          sku: 'TEST-001',
+          sku: { $regex: '^TEST-001$', $options: 'i' },
         })
       );
       expect(result).toBeDefined();
@@ -326,7 +352,7 @@ describe('InventoryService', () => {
         'Test adjustment'
       );
 
-      expect(stockAdjustmentModel.create).toHaveBeenCalledWith(
+      expect(stockAdjustmentModel).toHaveBeenCalledWith(
         expect.objectContaining({
           shopId: expect.any(Types.ObjectId),
           productId: expect.any(Types.ObjectId),

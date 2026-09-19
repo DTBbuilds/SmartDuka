@@ -78,7 +78,7 @@ describe('BarcodeService', () => {
   describe('scanBarcode', () => {
     it('should scan and return product', async () => {
       const barcode = '5901234123457';
-      const shopId = 'shop123';
+      const shopId = '507f1f77bcf86cd799439011';
       const mockProduct = {
         _id: 'prod123',
         name: 'Test Product',
@@ -96,7 +96,7 @@ describe('BarcodeService', () => {
 
     it('should throw error for invalid barcode', async () => {
       const barcode = 'invalid';
-      const shopId = 'shop123';
+      const shopId = '507f1f77bcf86cd799439011';
 
       await expect(service.scanBarcode(barcode, shopId)).rejects.toThrow(
         BadRequestException,
@@ -105,7 +105,7 @@ describe('BarcodeService', () => {
 
     it('should throw error for product not found', async () => {
       const barcode = '5901234123457';
-      const shopId = 'shop123';
+      const shopId = '507f1f77bcf86cd799439011';
 
       mockProductModel.exec.mockResolvedValue(null);
 
@@ -118,9 +118,10 @@ describe('BarcodeService', () => {
   describe('generateBarcode', () => {
     it('should generate barcode for product', async () => {
       const productId = 'prod123';
-      const shopId = 'shop123';
+      const shopId = '507f1f77bcf86cd799439011';
       const mockProduct = {
         _id: productId,
+        shopId,
         barcode: null,
         save: jest.fn().mockResolvedValue(true),
       };
@@ -141,7 +142,7 @@ describe('BarcodeService', () => {
 
     it('should throw error for product not found', async () => {
       const productId = 'prod123';
-      const shopId = 'shop123';
+      const shopId = '507f1f77bcf86cd799439011';
 
       mockProductModel.findById.mockReturnValue({
         exec: jest.fn().mockResolvedValue(null),
@@ -155,10 +156,10 @@ describe('BarcodeService', () => {
 
   describe('bulkImportBarcodes', () => {
     it('should import barcodes successfully', async () => {
-      const shopId = 'shop123';
+      const shopId = '507f1f77bcf86cd799439011';
       const barcodes = [
         { barcode: '5901234123457', productId: 'prod1' },
-        { barcode: '5901234123458', productId: 'prod2' },
+        { barcode: '5901234123464', productId: 'prod2' },
       ];
 
       const mockProduct1 = {
@@ -194,7 +195,7 @@ describe('BarcodeService', () => {
     });
 
     it('should handle invalid barcodes', async () => {
-      const shopId = 'shop123';
+      const shopId = '507f1f77bcf86cd799439011';
       const barcodes = [
         { barcode: 'invalid', productId: 'prod1' },
       ];

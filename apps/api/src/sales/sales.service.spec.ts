@@ -8,6 +8,8 @@ import { PaymentTransactionService } from '../payments/services/payment-transact
 import { CacheService } from '../common/services/cache.service';
 import { ShopSettingsService } from '../shop-settings/shop-settings.service';
 import { TransactionService } from '../common/services/transaction.service';
+import { LoyaltyService } from '../loyalty/loyalty.service';
+import { CustomersService } from '../customers/customers.service';
 import { BadRequestException } from '@nestjs/common';
 
 describe('SalesService', () => {
@@ -118,6 +120,19 @@ describe('SalesService', () => {
             checkTransactionSupport: jest.fn().mockResolvedValue(false),
           },
         },
+        {
+          provide: LoyaltyService,
+          useValue: {
+            awardPoints: jest.fn().mockResolvedValue(undefined),
+            getLoyaltyAccount: jest.fn().mockResolvedValue(null),
+          },
+        },
+        {
+          provide: CustomersService,
+          useValue: {
+            findById: jest.fn().mockResolvedValue(null),
+          },
+        },
       ],
     }).compile();
 
@@ -211,12 +226,14 @@ describe('SalesService', () => {
     it('should log checkout activity', async () => {
       await service.checkout(mockShopId, mockUserId, mockBranchId, mockCheckoutDto);
 
-      expect(activityService.logActivity).toHaveBeenCalledWith(
-        mockShopId,
-        mockUserId,
-        expect.any(String),
-        'cashier',
-        'checkout',
+      expect(activityService.logActivity).toHaveBeenCalled();
+      const [logShopId, logUserId, , logRole, logAction, logDetails] =
+        activityService.logActivity.mock.calls[0];
+      expect(logShopId).toBe(mockShopId);
+      expect(logUserId).toBe(mockUserId);
+      expect(logRole).toBe('cashier');
+      expect(logAction).toBe('checkout');
+      expect(logDetails).toEqual(
         expect.objectContaining({
           total: expect.any(Number),
           itemCount: 1,
