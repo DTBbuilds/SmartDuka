@@ -1030,7 +1030,7 @@ function RegisterShopContent() {
 
                 {/* Shop Name - Required */}
                 <div className="group">
-                  <Label htmlFor="shop-name" className="flex items-center gap-1">
+                                      <Label htmlFor="shop-name" className="flex items-center gap-1">
                     Shop Name
                     <span className="text-red-500">*</span>
                   </Label>

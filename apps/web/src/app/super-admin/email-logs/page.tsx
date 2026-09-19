@@ -53,7 +53,7 @@ function EmailLogsContent() {
 
   const loadLogs = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('smartduka:token');
       const params = new URLSearchParams({
         limit: '100',
         ...(statusFilter !== 'all' && { status: statusFilter }),
@@ -75,7 +75,7 @@ function EmailLogsContent() {
 
   const loadStats = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('smartduka:token');
       const res = await fetch('/api/admin/emails/stats', {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -88,7 +88,7 @@ function EmailLogsContent() {
 
   const loadTemplates = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('smartduka:token');
       const res = await fetch('/api/admin/emails/templates', {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -103,7 +103,7 @@ function EmailLogsContent() {
   const retryEmail = async (id: string) => {
     setRetrying(id);
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('smartduka:token');
       const res = await fetch(`/api/admin/emails/logs/${id}/retry`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
@@ -122,7 +122,7 @@ function EmailLogsContent() {
   const deleteLog = async (id: string) => {
     if (!confirm('Are you sure you want to delete this email log?')) return;
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('smartduka:token');
       const res = await fetch(`/api/admin/emails/logs/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
@@ -138,7 +138,7 @@ function EmailLogsContent() {
 
   const exportLogs = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('smartduka:token');
       const res = await fetch('/api/admin/emails/export/csv', {
         headers: { Authorization: `Bearer ${token}` },
       });

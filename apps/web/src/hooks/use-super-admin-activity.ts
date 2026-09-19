@@ -85,7 +85,7 @@ export function useSuperAdminActivity() {
 
   const connect = useCallback(() => {
     try {
-      const token = localStorage.getItem('smartduka_access');
+      const token = localStorage.getItem('smartduka:token');
       if (!token) {
         setError('No authentication token found');
         return;

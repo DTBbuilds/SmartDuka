@@ -56,7 +56,7 @@ function EmailSettingsContent() {
 
   const loadConfig = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('smartduka:token');
       const res = await fetch('/api/admin/emails/config/status', {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -73,7 +73,7 @@ function EmailSettingsContent() {
     setTesting(true);
     setTestResult(null);
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('smartduka:token');
       const res = await fetch('/api/admin/emails/config/test-connection', {
         method: 'POST',
         headers: {
