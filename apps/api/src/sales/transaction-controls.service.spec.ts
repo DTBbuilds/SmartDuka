@@ -6,11 +6,17 @@ import { TransactionControlsService } from './transaction-controls.service';
 import { TransactionControlsController } from './transaction-controls.controller';
 import { Order } from './schemas/order.schema';
 import { InventoryService } from '../inventory/inventory.service';
+import {
+  InventoryClaim,
+  InventoryClaimItemState,
+  InventoryClaimState,
+} from '../inventory/schemas/inventory-claim.schema';
 
 describe('TransactionControlsService inventory consistency', () => {
   let service: TransactionControlsService;
   let controller: TransactionControlsController;
   let orderModel: any;
+  let inventoryClaimModel: any;
   let inventoryService: any;
 
   const SHOP_ID = '507f1f77bcf86cd799439011';
@@ -48,10 +54,18 @@ describe('TransactionControlsService inventory consistency', () => {
       createStockAdjustment: jest.fn().mockResolvedValue({}),
     };
 
+    // Durable-claim simulation (SDV2-005): no claim by default -> legacy path.
+    inventoryClaimModel = {
+      findOne: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue(null) }),
+      findById: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue(null) }),
+      updateOne: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue({ modifiedCount: 1 }) }),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TransactionControlsService,
         { provide: getModelToken(Order.name), useValue: orderModel },
+        { provide: getModelToken(InventoryClaim.name), useValue: inventoryClaimModel },
         { provide: InventoryService, useValue: inventoryService },
       ],
     }).compile();

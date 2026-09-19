@@ -3,6 +3,11 @@ import { getModelToken, getConnectionToken } from '@nestjs/mongoose';
 import { Types } from 'mongoose';
 import { SalesService } from './sales.service';
 import { Order } from './schemas/order.schema';
+import {
+  InventoryClaim,
+  InventoryClaimItemState,
+  InventoryClaimState,
+} from '../inventory/schemas/inventory-claim.schema';
 import { InventoryService } from '../inventory/inventory.service';
 import { ActivityService } from '../activity/activity.service';
 import { PaymentTransactionService } from '../payments/services/payment-transaction.service';
@@ -16,6 +21,7 @@ import { BadRequestException, ConflictException, InternalServerErrorException } 
 describe('SalesService', () => {
   let service: SalesService;
   let orderModel: any;
+  let inventoryClaimModel: any;
   let inventoryService: any;
   let activityService: any;
   let paymentTransactionService: any;
@@ -52,7 +58,7 @@ describe('SalesService', () => {
   beforeEach(async () => {
     // Create mock implementations
     let createdOrderDoc: any;
-    const mockOrderModel = jest.fn().mockImplementation((doc: any) => {
+    const mockOrderModel: any = jest.fn().mockImplementation((doc: any) => {
       createdOrderDoc = doc;
       return {
         ...mockOrder,
@@ -60,7 +66,7 @@ describe('SalesService', () => {
         save: jest.fn().mockResolvedValue({ ...mockOrder, ...doc, _id: mockOrder._id }),
       };
     });
-    (mockOrderModel as any).__createdDoc = () => createdOrderDoc;
+    mockOrderModel.__createdDoc = () => createdOrderDoc;
     mockOrderModel.find = jest.fn().mockReturnThis();
     mockOrderModel.findOne = jest.fn().mockReturnThis();
     mockOrderModel.countDocuments = jest.fn().mockResolvedValue(10);
@@ -68,6 +74,61 @@ describe('SalesService', () => {
     mockOrderModel.skip = jest.fn().mockReturnThis();
     mockOrderModel.limit = jest.fn().mockReturnThis();
     mockOrderModel.exec = jest.fn().mockResolvedValue([mockOrder]);
+    mockOrderModel.updateOne = jest.fn().mockResolvedValue({ modifiedCount: 1 });
+
+    // In-memory durable-claim simulation (SDV2-005): tracks per-claim,
+    // per-item state transitions so compensation/resume behavior is
+    // exercised deterministically instead of being stubbed away.
+    const claimStore = new Map<string, any>();
+    const matchState = (current: string, cond: any): boolean => {
+      if (cond === undefined) return true;
+      if (typeof cond === 'string') return current === cond;
+      if (cond.$in) return cond.$in.includes(current);
+      if (cond.$ne) return current !== cond.$ne;
+      return true;
+    };
+    const execable = (result: any) => ({ exec: jest.fn().mockResolvedValue(result) });
+    inventoryClaimModel = {
+      create: jest.fn().mockImplementation((doc: any) => {
+        const record = { _id: new Types.ObjectId(), ...doc };
+        claimStore.set(record._id.toString(), record);
+        return Promise.resolve(record);
+      }),
+      updateOne: jest.fn().mockImplementation((filter: any, update: any) => {
+        const record = claimStore.get(filter?._id?.toString?.() ?? '');
+        if (!record) return execable({ modifiedCount: 0 });
+        const set = update?.$set ?? {};
+        if (set['items.$.state'] !== undefined) {
+          const productId = filter['items.productId'] ?? filter.items?.$elemMatch?.productId;
+          const itemCond = filter.items?.$elemMatch?.state;
+          const item = record.items.find((i: any) => i.productId === productId);
+          if (!item || !matchState(record.state, filter.state)) {
+            return execable({ modifiedCount: 0 });
+          }
+          if (itemCond !== undefined && !matchState(item.state, itemCond)) {
+            return execable({ modifiedCount: 0 });
+          }
+          item.state = set['items.$.state'];
+          return execable({ modifiedCount: 1 });
+        }
+        if (set.state !== undefined) {
+          if (!matchState(record.state, filter.state)) {
+            return execable({ modifiedCount: 0 });
+          }
+          record.state = set.state;
+          if (set.orderId !== undefined) record.orderId = set.orderId;
+          return execable({ modifiedCount: 1 });
+        }
+        return execable({ modifiedCount: 0 });
+      }),
+      findOne: jest.fn().mockImplementation((filter: any) =>
+        execable(filter?._id ? (claimStore.get(filter._id.toString()) ?? null) : null),
+      ),
+      findById: jest.fn().mockImplementation((id: any) =>
+        execable(claimStore.get(id?.toString?.() ?? '') ?? null),
+      ),
+    };
+    inventoryClaimModel.__claims = claimStore;
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -75,6 +136,10 @@ describe('SalesService', () => {
         {
           provide: getModelToken(Order.name),
           useValue: mockOrderModel,
+        },
+        {
+          provide: getModelToken(InventoryClaim.name),
+          useValue: inventoryClaimModel,
         },
         {
           provide: getConnectionToken(),
@@ -145,6 +210,7 @@ describe('SalesService', () => {
 
     service = module.get<SalesService>(SalesService);
     orderModel = module.get(getModelToken(Order.name));
+    inventoryClaimModel = module.get(getModelToken(InventoryClaim.name));
     inventoryService = module.get(InventoryService);
     activityService = module.get(ActivityService);
     paymentTransactionService = module.get(PaymentTransactionService);
@@ -647,6 +713,136 @@ describe('SalesService', () => {
 
       expect(result.isValid).toBe(false);
       expect(result.errors).toContain('Product "Missing Product" not found');
+    });
+  });
+
+  describe('durable claim crash recovery (SDV2-005)', () => {
+    const twoItemDto = {
+      items: [
+        { productId: 'prodA', name: 'Product A', quantity: 2, unitPrice: 100 },
+        { productId: 'prodB', name: 'Product B', quantity: 1, unitPrice: 50 },
+      ],
+      payments: [{ method: 'cash', amount: 289 }],
+    };
+
+    it('creates the durable claim record before the first stock claim', async () => {
+      await service.checkout(mockShopId, mockUserId, mockBranchId, mockCheckoutDto);
+
+      const createOrder = (inventoryClaimModel.create as jest.Mock).mock.invocationCallOrder[0];
+      const firstClaimOrder = (inventoryService.updateStock as jest.Mock).mock.invocationCallOrder[0];
+      expect(createOrder).toBeLessThan(firstClaimOrder);
+    });
+
+    it('persists CLAIMING -> per-item CLAIMED -> CLAIMED -> COMMITTED lifecycle', async () => {
+      await service.checkout(mockShopId, mockUserId, mockBranchId, twoItemDto);
+
+      const claims: Map<string, any> = inventoryClaimModel.__claims;
+      const record = [...claims.values()][0];
+
+      expect(record.state).toBe(InventoryClaimState.COMMITTED);
+      expect(record.orderId).toBeDefined();
+      expect(record.items.every((i: any) => i.state === InventoryClaimItemState.CLAIMED)).toBe(true);
+      // Per-item durable progress was persisted after each stock claim
+      expect(inventoryClaimModel.updateOne).toHaveBeenCalledWith(
+        expect.objectContaining({
+          state: InventoryClaimState.CLAIMING,
+          'items.productId': 'prodA',
+        }),
+        { $set: { 'items.$.state': InventoryClaimItemState.CLAIMED } },
+      );
+    });
+
+    it('releases claimed items exactly once when order persistence fails (no double restore)', async () => {
+      orderModel.mockImplementation((doc: any) => ({
+        ...mockOrder,
+        ...doc,
+        save: jest.fn().mockRejectedValue(new Error('write conflict')),
+      }));
+
+      await expect(
+        service.checkout(mockShopId, mockUserId, mockBranchId, twoItemDto),
+      ).rejects.toThrow(InternalServerErrorException);
+
+      // Each claimed item restored exactly once - no duplicate compensation.
+      const restores = (inventoryService.updateStock as jest.Mock).mock.calls.filter(
+        (call: any[]) => call[2] > 0,
+      );
+      expect(restores).toHaveLength(2);
+      expect(restores).toEqual(
+        expect.arrayContaining([
+          [mockShopId, 'prodA', 2],
+          [mockShopId, 'prodB', 1],
+        ]),
+      );
+
+      const claims: Map<string, any> = inventoryClaimModel.__claims;
+      const record = [...claims.values()][0];
+      expect(record.state).toBe(InventoryClaimState.RELEASED);
+      expect(record.items.every((i: any) => i.state === InventoryClaimItemState.RESTORED)).toBe(true);
+    });
+
+    it('never restores an item that was never claimed (mid-cart failure)', async () => {
+      inventoryService.updateStock.mockImplementation((_shopId: string, productId: string) =>
+        productId === 'prodA' ? Promise.resolve({ stock: 8 }) : Promise.resolve(null),
+      );
+
+      await expect(
+        service.checkout(mockShopId, mockUserId, mockBranchId, twoItemDto),
+      ).rejects.toThrow(BadRequestException);
+
+      // prodB stayed PENDING in the claim record - it must NOT be restored.
+      expect(inventoryService.updateStock).toHaveBeenCalledWith(mockShopId, 'prodA', 2);
+      expect(inventoryService.updateStock).not.toHaveBeenCalledWith(mockShopId, 'prodB', 1);
+
+      const claims: Map<string, any> = inventoryClaimModel.__claims;
+      const record = [...claims.values()][0];
+      // prodB stayed PENDING (never claimed, never restored); the claim still
+      // finalizes because every item is resolved.
+      expect(record.state).toBe(InventoryClaimState.RELEASED);
+      expect(record.items.find((i: any) => i.productId === 'prodB').state).toBe(
+        InventoryClaimItemState.PENDING,
+      );
+    });
+
+    it('a repeated release pass restores nothing further (release is idempotent)', async () => {
+      orderModel.mockImplementation((doc: any) => ({
+        ...mockOrder,
+        ...doc,
+        save: jest.fn().mockRejectedValue(new Error('write conflict')),
+      }));
+
+      await expect(
+        service.checkout(mockShopId, mockUserId, mockBranchId, twoItemDto),
+      ).rejects.toThrow(InternalServerErrorException);
+
+      const claims: Map<string, any> = inventoryClaimModel.__claims;
+      const record = [...claims.values()][0];
+      (inventoryService.updateStock as jest.Mock).mockClear();
+      (inventoryService.createStockAdjustment as jest.Mock).mockClear();
+
+      // Reconciliation resume: every item already RESTORED -> zero mutation.
+      await (service as any).markClaimReleasing(record._id.toString());
+      await (service as any).releaseClaimRecord(record._id.toString(), mockShopId, mockUserId);
+
+      expect(inventoryService.updateStock).not.toHaveBeenCalled();
+      expect(inventoryService.createStockAdjustment).not.toHaveBeenCalled();
+    });
+
+    it('aborts checkout deterministically if claim ownership is lost mid-claim', async () => {
+      // Simulate reconciliation winning the claim while checkout is in flight:
+      // the guarded per-item write loses (modifiedCount 0).
+      inventoryClaimModel.updateOne.mockImplementation(() => ({
+        exec: jest.fn().mockResolvedValue({ modifiedCount: 0 }),
+      }));
+
+      await expect(
+        service.checkout(mockShopId, mockUserId, mockBranchId, mockCheckoutDto),
+      ).rejects.toThrow(InternalServerErrorException);
+
+      // The stock claim happened, but no order and no payment survive.
+      expect(inventoryService.updateStock).toHaveBeenCalledWith(mockShopId, 'prod1', -2);
+      expect(paymentTransactionService.createTransaction).not.toHaveBeenCalled();
+      expect(activityService.logActivity).not.toHaveBeenCalled();
     });
   });
 });
