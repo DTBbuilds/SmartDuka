@@ -37,7 +37,7 @@ export class ActivityService {
         branchId: branchId ? new Types.ObjectId(branchId) : undefined,
         userId: new Types.ObjectId(userId),
         userName,
-        userRole: userRole as 'admin' | 'cashier' | 'branch_admin' | 'branch_manager',
+        userRole: userRole,
         action,
         details: details || {},
         ipAddress,

@@ -152,7 +152,7 @@ export class SubscriptionMpesaService implements OnModuleInit {
           }
 
           this.shortCode = dbConfig.config.shortCode || '174379';
-          this.environment = dbConfig.environment as 'sandbox' | 'production';
+          this.environment = dbConfig.environment;
           this.callbackUrl = dbConfig.config.callbackUrl || this.configService.get('MPESA_CALLBACK_URL', '');
           this.configSource = 'database';
 
@@ -168,7 +168,7 @@ export class SubscriptionMpesaService implements OnModuleInit {
         this.consumerSecret = this.configService.get('MPESA_CONSUMER_SECRET', '');
         this.passKey = this.configService.get('MPESA_PASSKEY', '');
         this.shortCode = this.configService.get('MPESA_SHORTCODE', '174379');
-        this.environment = this.configService.get('MPESA_ENV', 'sandbox') as 'sandbox' | 'production';
+        this.environment = this.configService.get('MPESA_ENV', 'sandbox');
         this.callbackUrl = this.configService.get('MPESA_CALLBACK_URL', '');
         this.configSource = 'environment';
         
@@ -183,7 +183,7 @@ export class SubscriptionMpesaService implements OnModuleInit {
       this.consumerSecret = this.configService.get('MPESA_CONSUMER_SECRET', '');
       this.passKey = this.configService.get('MPESA_PASSKEY', '');
       this.shortCode = this.configService.get('MPESA_SHORTCODE', '174379');
-      this.environment = this.configService.get('MPESA_ENV', 'sandbox') as 'sandbox' | 'production';
+      this.environment = this.configService.get('MPESA_ENV', 'sandbox');
       this.callbackUrl = this.configService.get('MPESA_CALLBACK_URL', '');
       this.configSource = 'environment';
     }

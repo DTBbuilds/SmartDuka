@@ -900,7 +900,7 @@ export class InventoryService implements OnModuleInit {
         if (s.name) supplierNameToId.set(String(s.name).toLowerCase().trim(), s._id);
       });
     } catch (err) {
-      this.logger.warn(`Could not preload suppliers for import: ${(err as any)?.message}`);
+      this.logger.warn(`Could not preload suppliers for import: ${(err)?.message}`);
     }
 
     // Step 2: Collect all unique category names and suggest categories
@@ -1331,7 +1331,7 @@ export class InventoryService implements OnModuleInit {
             .toArray();
           suppliers.forEach((s: any) => supplierMap.set(s._id.toString(), s.name));
         } catch (err) {
-          this.logger.warn(`Could not resolve supplier names for export: ${(err as any)?.message}`);
+          this.logger.warn(`Could not resolve supplier names for export: ${(err)?.message}`);
         }
       }
 

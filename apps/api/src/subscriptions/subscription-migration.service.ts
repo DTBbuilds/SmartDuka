@@ -179,7 +179,7 @@ export class SubscriptionMigrationService implements OnModuleInit {
               SubscriptionStatus.ACTIVE,
               SubscriptionStatus.TRIAL,
               SubscriptionStatus.PAST_DUE,
-            ].includes(subscription.status as SubscriptionStatus),
+            ].includes(subscription.status),
           },
         },
       );

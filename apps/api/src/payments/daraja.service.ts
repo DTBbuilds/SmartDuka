@@ -66,7 +66,7 @@ export class DarajaService {
       consumerSecret: this.configService.get('MPESA_CONSUMER_SECRET', ''),
       shortCode: this.configService.get('MPESA_SHORTCODE', '174379'),
       passKey: this.configService.get('MPESA_PASSKEY', ''),
-      environment: this.configService.get('MPESA_ENV', 'sandbox') as 'sandbox' | 'production',
+      environment: this.configService.get('MPESA_ENV', 'sandbox'),
     };
 
     this.client = axios.create({

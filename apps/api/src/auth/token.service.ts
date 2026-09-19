@@ -246,11 +246,11 @@ export class TokenService {
     });
 
     // Update old token with replacement reference
-    storedToken.replacedByToken = newStoredRefreshToken._id as Types.ObjectId;
+    storedToken.replacedByToken = newStoredRefreshToken._id;
     await storedToken.save();
 
     // Update session
-    session.refreshTokenId = newStoredRefreshToken._id as Types.ObjectId;
+    session.refreshTokenId = newStoredRefreshToken._id;
     session.lastActivityAt = new Date();
     await session.save();
 

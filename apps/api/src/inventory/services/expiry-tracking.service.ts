@@ -68,7 +68,7 @@ export class ExpiryTrackingService {
     }).lean();
 
     const expiringProducts: ExpiringProduct[] = [];
-    let stats: ExpiryStats = {
+    const stats: ExpiryStats = {
       total: 0,
       expired: 0,
       critical: 0,

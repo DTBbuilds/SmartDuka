@@ -189,7 +189,7 @@ export class PaymentTransactionService {
       };
 
       transactions.forEach((t) => {
-        const method = t.paymentMethod as keyof typeof byMethod;
+        const method = t.paymentMethod;
         if (byMethod[method]) {
           byMethod[method].count += 1;
           byMethod[method].amount += t.amount || 0;
@@ -471,7 +471,7 @@ export class PaymentTransactionService {
         id: t._id.toString(),
         amount: t.amount || 0,
         method: t.paymentMethod || 'cash',
-        status: t.status as 'completed' | 'pending' | 'failed',
+        status: t.status,
         reference: t.referenceNumber || `TXN-${t._id.toString().slice(-8).toUpperCase()}`,
         timestamp: t.createdAt,
         orderNumber: t.orderNumber,

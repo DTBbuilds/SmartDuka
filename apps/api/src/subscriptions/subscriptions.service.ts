@@ -527,7 +527,7 @@ export class SubscriptionsService {
       throw new NotFoundException('Shop ID is required to fetch subscription');
     }
     
-    let subscription = await this.subscriptionModel.findOne({
+    const subscription = await this.subscriptionModel.findOne({
       shopId: new Types.ObjectId(shopId),
     });
 
@@ -911,7 +911,7 @@ export class SubscriptionsService {
     // For daily plans, ALWAYS use the exact daily price (no proration)
     // For other plans, use full price (proration was confusing users)
     let finalAmount: number;
-    let isProrated = false;
+    const isProrated = false;
     
     if (billingCycle === BillingCycle.DAILY) {
       // Daily plan: exact daily price, no proration

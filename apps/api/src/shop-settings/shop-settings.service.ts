@@ -84,7 +84,7 @@ export class ShopSettingsService {
     const shopAddress = addressParts.join(', ');
 
     // Get existing settings or create new
-    let settings = await this.model.findOne({ shopId });
+    const settings = await this.model.findOne({ shopId });
     
     const receiptDefaults = {
       shopName: shop.name,

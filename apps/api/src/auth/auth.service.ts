@@ -159,6 +159,7 @@ export class AuthService {
     });
 
     // Send welcome email - fire and forget (don't block registration)
+    // eslint-disable-next-line no-constant-condition
     if (this.systemEventManager && false) { // FREE_MODE: Welcome emails disabled - system is free
       // Use setImmediate to defer email sending to next tick - doesn't block response
       const eventManager = this.systemEventManager!;

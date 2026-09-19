@@ -36,11 +36,11 @@ async function auditPayments() {
   const app = await NestFactory.createApplicationContext(AppModule);
   
   // Get models
-  const invoiceModel = app.get('SubscriptionInvoiceModel') as Model<any>;
-  const paymentAttemptModel = app.get('PaymentAttemptModel') as Model<any>;
-  const shopModel = app.get('ShopModel') as Model<any>;
-  const userModel = app.get('UserModel') as Model<any>;
-  const subscriptionModel = app.get('SubscriptionModel') as Model<any>;
+  const invoiceModel = app.get('SubscriptionInvoiceModel');
+  const paymentAttemptModel = app.get('PaymentAttemptModel');
+  const shopModel = app.get('ShopModel');
+  const userModel = app.get('UserModel');
+  const subscriptionModel = app.get('SubscriptionModel');
 
   const result: AuditResult = {
     totalInvoices: 0,
@@ -142,12 +142,12 @@ async function auditPayments() {
     if (pendingVerificationInvoices.length > 0) {
       console.log('STEP 4: Pending Verification Invoices (awaiting super admin action):');
       for (const inv of pendingVerificationInvoices) {
-        const shop = await shopModel.findById(inv.shopId).lean() as any;
-        const user = await userModel.findOne({ shopId: inv.shopId, role: 'admin' }).lean() as any;
+        const shop = await shopModel.findById(inv.shopId).lean();
+        const user = await userModel.findOne({ shopId: inv.shopId, role: 'admin' }).lean();
         
         console.log(`  Invoice: ${inv.invoiceNumber}`);
         console.log(`    Shop: ${shop?.name || 'Unknown'}`);
-        console.log(`    Email: ${(user as any)?.email || 'Unknown'}`);
+        console.log(`    Email: ${(user)?.email || 'Unknown'}`);
         console.log(`    Amount: KES ${inv.totalAmount}`);
         console.log(`    Receipt: ${inv.mpesaReceiptNumber || inv.manualPayment?.receiptNumber || 'N/A'}`);
         console.log(`    Submitted: ${inv.manualPayment?.submittedAt || inv.createdAt}`);
@@ -162,9 +162,9 @@ async function auditPayments() {
     
     for (const inv of invoicesNeedingAttempts) {
       try {
-        const shop = await shopModel.findById(inv.shopId).lean() as any;
-        const user = await userModel.findOne({ shopId: inv.shopId, role: 'admin' }).lean() as any;
-        const subscription = await subscriptionModel.findById(inv.subscriptionId).lean() as any;
+        const shop = await shopModel.findById(inv.shopId).lean();
+        const user = await userModel.findOne({ shopId: inv.shopId, role: 'admin' }).lean();
+        const subscription = await subscriptionModel.findById(inv.subscriptionId).lean();
 
         // Determine status based on invoice status
         let attemptStatus = 'pending_approval';
@@ -181,14 +181,14 @@ async function auditPayments() {
         const paymentAttempt = {
           shopId: inv.shopId,
           shopName: shop?.name,
-          userEmail: (user as any)?.email,
+          userEmail: (user)?.email,
           method: 'mpesa_manual',
           type: attemptType,
           status: attemptStatus,
           amount: inv.totalAmount,
           currency: 'KES',
-          planCode: (subscription as any)?.planCode,
-          billingCycle: (subscription as any)?.billingCycle,
+          planCode: (subscription)?.planCode,
+          billingCycle: (subscription)?.billingCycle,
           invoiceId: String(inv._id),
           invoiceNumber: inv.invoiceNumber,
           mpesaReceiptNumber: inv.mpesaReceiptNumber || inv.manualPayment?.receiptNumber,

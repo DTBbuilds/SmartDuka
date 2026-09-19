@@ -303,7 +303,7 @@ export class PurchasesService {
           if (p?.sku) skuByProductId.set(p._id.toString(), p.sku);
         });
       } catch (err) {
-        this.logger.warn(`Could not resolve product SKUs for PO export: ${(err as any)?.message}`);
+        this.logger.warn(`Could not resolve product SKUs for PO export: ${(err)?.message}`);
       }
     }
 
@@ -460,7 +460,7 @@ export class PurchasesService {
         return;
       }
 
-      let product =
+      const product =
         (productSku && productBySku.get(productSku.toLowerCase())) ||
         (productName && productByName.get(productName.toLowerCase()));
       if (!product) {

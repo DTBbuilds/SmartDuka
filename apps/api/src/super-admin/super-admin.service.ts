@@ -1092,7 +1092,7 @@ export class SuperAdminService {
     if (!shop || !admin?.email) return false;
 
     let template: any;
-    let vars: Record<string, any> = {
+    const vars: Record<string, any> = {
       shopName: shop.name,
       userName: admin.name || admin.email,
       planName: plan?.name || subscription.planCode,

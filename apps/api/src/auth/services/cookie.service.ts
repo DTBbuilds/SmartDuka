@@ -118,7 +118,7 @@ export class CookieService {
     res.clearCookie(CookieService.ACCESS_TOKEN_COOKIE, clearOptions);
     res.clearCookie(CookieService.REFRESH_TOKEN_COOKIE, {
       ...clearOptions,
-      sameSite: (this.isCrossOrigin ? 'none' : 'lax') as 'none' | 'lax',
+      sameSite: (this.isCrossOrigin ? 'none' : 'lax'),
       path: this.isProduction ? '/api/v1/auth' : '/',
     });
     res.clearCookie(CookieService.CSRF_TOKEN_COOKIE, {

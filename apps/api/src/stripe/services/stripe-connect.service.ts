@@ -267,7 +267,7 @@ export class StripeConnectService {
       body: params.toString(),
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     });
-    const data = (await response.json()) as any;
+    const data = (await response.json());
     if (!response.ok) {
       const msg = data?.error_description || data?.error || `HTTP ${response.status}`;
       throw new Error(msg);

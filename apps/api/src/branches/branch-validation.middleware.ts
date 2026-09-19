@@ -52,7 +52,7 @@ export class BranchValidationMiddleware implements NestMiddleware {
       }
 
       // Branch admin has access to assigned branches
-      if (userRole === 'branch_admin' && userBranches.includes(branchId as string)) {
+      if (userRole === 'branch_admin' && userBranches.includes(branchId)) {
         return next();
       }
 

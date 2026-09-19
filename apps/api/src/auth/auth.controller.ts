@@ -344,7 +344,7 @@ export class AuthController {
           res.redirect(`${frontendUrl}/login?otp=true&data=${otpData}`);
         } else if (result.tokens) {
           // Pass tokens via URL for cross-origin support
-          const tokens = result.tokens as any;
+          const tokens = result.tokens;
           const tokenParam = `token=${encodeURIComponent(tokens.accessToken)}&csrf=${encodeURIComponent(tokens.csrfToken)}&refresh=${encodeURIComponent(tokens.refreshToken)}`;
           res.redirect(`${frontendUrl}/auth/callback?success=true&${tokenParam}`);
         } else {
