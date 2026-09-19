@@ -11,7 +11,7 @@ import { ShopSettingsService } from '../shop-settings/shop-settings.service';
 import { TransactionService } from '../common/services/transaction.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { CustomersService } from '../customers/customers.service';
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException, InternalServerErrorException } from '@nestjs/common';
 
 describe('SalesService', () => {
   let service: SalesService;
@@ -296,6 +296,160 @@ describe('SalesService', () => {
     });
   });
 
+  describe('atomic inventory reservation (SDV2-004)', () => {
+    function multiItemDto(quantities: Array<{ productId: string; name: string; quantity: number }>) {
+      return {
+        items: quantities.map((q) => ({ ...q, unitPrice: 100 })),
+        payments: [{ method: 'cash', amount: 232 }],
+      };
+    }
+
+    it('fails deterministically and compensates when a later cart item cannot claim stock', async () => {
+      // Product A claims fine; product B has no stock left at claim time.
+      inventoryService.updateStock.mockImplementation((_shopId: string, productId: string) =>
+        productId === 'prodA'
+          ? Promise.resolve({ stock: 8 })
+          : Promise.resolve(null), // lost the atomic claim for prodB
+      );
+
+      await expect(
+        service.checkout(mockShopId, mockUserId, mockBranchId, {
+          items: [
+            { productId: 'prodA', name: 'Product A', quantity: 2, unitPrice: 100 },
+            { productId: 'prodB', name: 'Product B', quantity: 1, unitPrice: 50 },
+          ],
+          payments: [{ method: 'cash', amount: 289 }],
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      // Compensation: product A's claim is released exactly once
+      expect(inventoryService.updateStock).toHaveBeenCalledWith(mockShopId, 'prodA', 2);
+      // No sale survives a failed logical checkout
+      expect(paymentTransactionService.createTransaction).not.toHaveBeenCalled();
+      expect(activityService.logActivity).not.toHaveBeenCalled();
+    });
+
+    it('compensates all claims when order persistence fails after a successful claim phase', async () => {
+      orderModel.mockImplementation((doc: any) => ({
+        ...mockOrder,
+        ...doc,
+        save: jest.fn().mockRejectedValue(new Error('write conflict')),
+      }));
+
+      await expect(
+        service.checkout(mockShopId, mockUserId, mockBranchId, {
+          items: [
+            { productId: 'prodA', name: 'Product A', quantity: 2, unitPrice: 100 },
+            { productId: 'prodB', name: 'Product B', quantity: 1, unitPrice: 50 },
+          ],
+          payments: [{ method: 'cash', amount: 289 }],
+        }),
+      ).rejects.toThrow(InternalServerErrorException);
+
+      expect(inventoryService.updateStock).toHaveBeenCalledWith(mockShopId, 'prodA', 2);
+      expect(inventoryService.updateStock).toHaveBeenCalledWith(mockShopId, 'prodB', 1);
+      expect(inventoryService.updateStock).toHaveBeenCalledWith(mockShopId, 'prodA', -2);
+      expect(inventoryService.updateStock).toHaveBeenCalledWith(mockShopId, 'prodB', -1);
+    });
+
+    it('two different-key checkouts competing for the last unit: exactly one succeeds', async () => {
+      // Neither idempotency pre-check finds an existing sale
+      orderModel.findOne = jest.fn().mockResolvedValue(null);
+      // The atomic claim decides the winner: first claim wins, second is null.
+      let claims = 0;
+      inventoryService.updateStock.mockImplementation(() => {
+        claims += 1;
+        return claims === 1 ? Promise.resolve({ stock: 0 }) : Promise.resolve(null);
+      });
+
+      const results = await Promise.allSettled([
+        service.checkout(mockShopId, mockUserId, mockBranchId, {
+          items: [{ productId: 'prod1', name: 'Test Product', quantity: 1, unitPrice: 100 }],
+          payments: [{ method: 'cash', amount: 116 }],
+          idempotencyKey: 'chk-buyer-A',
+        }),
+        service.checkout(mockShopId, mockUserId, mockBranchId, {
+          items: [{ productId: 'prod1', name: 'Test Product', quantity: 1, unitPrice: 100 }],
+          payments: [{ method: 'cash', amount: 116 }],
+          idempotencyKey: 'chk-buyer-B',
+        }),
+      ]);
+
+      const fulfilled = results.filter((r) => r.status === 'fulfilled');
+      const rejected = results.filter((r) => r.status === 'rejected');
+      expect(fulfilled).toHaveLength(1);
+      expect(rejected).toHaveLength(1);
+      // Exactly one inventory claim survived
+      expect(inventoryService.createStockAdjustment).toHaveBeenCalledTimes(1);
+    });
+
+    it('never decrements stock twice for an offline replay of the same logical checkout', async () => {
+      const canonical = {
+        _id: '507f1f77bcf86cd799439099',
+        shopId: mockShopId,
+        orderNumber: 'STK-2026-CANON01',
+        idempotencyKey: 'chk-offline-1',
+        items: [{ productId: 'prod1', name: 'Test Product', quantity: 2, unitPrice: 100, lineTotal: 200 }],
+        total: 232,
+        status: 'completed',
+        paymentStatus: 'paid',
+      };
+      orderModel.findOne = jest.fn().mockResolvedValue(canonical);
+
+      await service.checkout(mockShopId, mockUserId, mockBranchId, {
+        items: [{ productId: 'prod1', name: 'Test Product', quantity: 2, unitPrice: 100 }],
+        payments: [{ method: 'cash', amount: 232 }],
+        idempotencyKey: 'chk-offline-1',
+      });
+
+      expect(inventoryService.updateStock).not.toHaveBeenCalled();
+    });
+
+    it('keeps inventory claims tenant-scoped (shop filter present on every claim)', async () => {
+      await service.checkout(mockShopId, mockUserId, mockBranchId, mockCheckoutDto);
+
+      // The atomic claim filter is enforced inside updateStock (SDV2-002);
+      // checkout must pass the caller's shopId, never another shop's.
+      expect(inventoryService.updateStock.mock.calls.every(
+        (call: any[]) => call[0] === mockShopId,
+      )).toBe(true);
+    });
+
+    it('high contention: only claims within available stock succeed, losers fail without side effects', async () => {
+      // Neither idempotency pre-check finds an existing sale
+      orderModel.findOne = jest.fn().mockResolvedValue(null);
+      const STOCK = 5;
+      let claims = 0;
+      inventoryService.updateStock.mockImplementation(() => {
+        // Simulates the atomic conditional claim: succeeds while stock remains
+        claims += 1;
+        return claims <= STOCK ? Promise.resolve({ stock: STOCK - claims }) : Promise.resolve(null);
+      });
+
+      const attempts = Array.from({ length: 20 }, (_, i) =>
+        service.checkout(mockShopId, mockUserId, mockBranchId, {
+          items: [{ productId: 'prod1', name: 'Test Product', quantity: 1, unitPrice: 100 }],
+          payments: [{ method: 'cash', amount: 116 }],
+          idempotencyKey: `chk-buyer-${i}`,
+        }),
+      );
+
+      const settled = await Promise.allSettled(attempts);
+      const fulfilled = settled.filter((r) => r.status === 'fulfilled');
+      const rejected = settled.filter((r) => r.status === 'rejected');
+
+      expect(fulfilled).toHaveLength(STOCK);
+      expect(rejected).toHaveLength(20 - STOCK);
+      // Exactly STOCK successful claims were audited
+      const saleAdjustments = inventoryService.createStockAdjustment.mock.calls.filter(
+        (call: any[]) => call[3] === 'sale',
+      );
+      expect(saleAdjustments).toHaveLength(STOCK);
+      // Single-item losers never held a claim, so nothing needed compensation
+      expect(inventoryService.updateStock).toHaveBeenCalledWith(mockShopId, 'prod1', -1);
+    });
+  });
+
   describe('checkout idempotency (duplicate submission protection)', () => {
     const IDEMPOTENCY_KEY = 'chk-2026-abc123xyz';
     const cashCheckoutWithKey = {
@@ -384,7 +538,10 @@ describe('SalesService', () => {
       // Both requests resolve to the same canonical sale
       expect(first._id).toBe(second._id);
       expect(second).toBe(canonical);
-      expect(inventoryService.updateStock).toHaveBeenCalledTimes(1);
+      // Net inventory effect is exactly one claim: the loser's claim is
+      // compensated (+2) after losing the uniqueness race.
+      expect(inventoryService.updateStock).toHaveBeenCalledWith(mockShopId, 'prod1', -2);
+      expect(inventoryService.updateStock).toHaveBeenCalledWith(mockShopId, 'prod1', 2);
     });
 
     it('rejects reuse of an idempotency key with a different cart (payload mismatch)', async () => {

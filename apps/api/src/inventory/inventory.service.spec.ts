@@ -3,7 +3,7 @@ import { getModelToken } from '@nestjs/mongoose';
 import { InventoryService } from './inventory.service';
 import { Product } from './schemas/product.schema';
 import { Category } from './schemas/category.schema';
-import { StockAdjustment } from './schemas/stock-adjustment.schema';
+import { StockAdjustment, StockAdjustmentSchema } from './schemas/stock-adjustment.schema';
 import { StockReconciliation } from './schemas/stock-reconciliation.schema';
 import { Order } from '../sales/schemas/order.schema';
 import { CategorySuggestionService } from './services/category-suggestion.service';
@@ -404,6 +404,17 @@ describe('InventoryService', () => {
       const result = await service.getLowStockProducts(mockShopId, 10);
 
       expect(result).toHaveLength(1);
+    });
+  });
+
+  describe('stock adjustment audit reasons (SDV2-004)', () => {
+    it('accepts void and refund reasons so reservation-release audits pass schema validation', () => {
+      const reasonPath: any = StockAdjustmentSchema.path('reason');
+      const enumValues: string[] = reasonPath.enumValues.filter(Boolean);
+      expect(enumValues).toContain('void');
+      expect(enumValues).toContain('refund');
+      expect(enumValues).toContain('sale');
+      expect(enumValues).toContain('correction');
     });
   });
 });

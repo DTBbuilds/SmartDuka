@@ -35,6 +35,7 @@ describe('TransactionControlsService inventory consistency', () => {
   beforeEach(async () => {
     orderModel = {
       findOne: jest.fn(),
+      findOneAndUpdate: jest.fn(),
       findByIdAndUpdate: jest.fn(),
       find: jest.fn().mockReturnThis(),
       sort: jest.fn().mockReturnThis(),
@@ -63,9 +64,16 @@ describe('TransactionControlsService inventory consistency', () => {
     it('restores stock for a voided pending order (reservation release) with an audit trail', async () => {
       const order = makeOrder();
       orderModel.findOne.mockResolvedValue(order);
-      orderModel.findByIdAndUpdate.mockResolvedValue({ ...order, status: 'void' });
+      orderModel.findOneAndUpdate.mockResolvedValue({ ...order, status: 'void' });
 
       await service.voidTransaction(ORDER_ID, SHOP_ID, 'Customer abandoned M-Pesa payment', CASHIER_ID, false);
+
+      // The release is gated by an atomic terminal-state claim
+      expect(orderModel.findOneAndUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ status: { $ne: 'void' } }),
+        expect.anything(),
+        expect.anything(),
+      );
 
       expect(inventoryService.updateStock).toHaveBeenCalledWith(SHOP_ID, 'prod1', 2);
       expect(inventoryService.createStockAdjustment).toHaveBeenCalledWith(
@@ -83,7 +91,7 @@ describe('TransactionControlsService inventory consistency', () => {
       orderModel.findOne
         .mockResolvedValueOnce(order)
         .mockResolvedValueOnce({ ...order, status: 'void' });
-      orderModel.findByIdAndUpdate.mockResolvedValue({ ...order, status: 'void' });
+      orderModel.findOneAndUpdate.mockResolvedValue({ ...order, status: 'void' });
 
       await service.voidTransaction(ORDER_ID, SHOP_ID, 'First void', CASHIER_ID, false);
 
@@ -98,13 +106,27 @@ describe('TransactionControlsService inventory consistency', () => {
     it('does not restore stock when the void update loses a race (claim-based exactly-once)', async () => {
       const order = makeOrder();
       orderModel.findOne.mockResolvedValue(order);
-      orderModel.findByIdAndUpdate.mockResolvedValue(null);
+      orderModel.findOneAndUpdate.mockResolvedValue(null); // lost the claim race
 
       await expect(
         service.voidTransaction(ORDER_ID, SHOP_ID, 'Void', CASHIER_ID, false),
-      ).rejects.toThrow();
+      ).rejects.toThrow(BadRequestException);
 
       expect(inventoryService.updateStock).not.toHaveBeenCalled();
+    });
+
+    it('gates the release on an atomic terminal-state claim (status $ne void in the update filter)', async () => {
+      const order = makeOrder();
+      orderModel.findOne.mockResolvedValue(order);
+      orderModel.findOneAndUpdate.mockResolvedValue({ ...order, status: 'void' });
+
+      await service.voidTransaction(ORDER_ID, SHOP_ID, 'Concurrent void', CASHIER_ID, false);
+
+      expect(orderModel.findOneAndUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ status: { $ne: 'void' } }),
+        expect.anything(),
+        expect.anything(),
+      );
     });
 
     it('cannot void another shop\'s order (tenant isolation - no restoration, no state change)', async () => {
@@ -118,7 +140,7 @@ describe('TransactionControlsService inventory consistency', () => {
         _id: expect.any(Types.ObjectId),
         shopId: expect.any(Types.ObjectId),
       });
-      expect(orderModel.findByIdAndUpdate).not.toHaveBeenCalled();
+      expect(orderModel.findOneAndUpdate).not.toHaveBeenCalled();
       expect(inventoryService.updateStock).not.toHaveBeenCalled();
       expect(inventoryService.createStockAdjustment).not.toHaveBeenCalled();
     });
@@ -128,7 +150,7 @@ describe('TransactionControlsService inventory consistency', () => {
     it('restores stock when a full refund voids the order', async () => {
       const order = makeOrder({ status: 'completed', total: 200 });
       orderModel.findOne.mockResolvedValue(order);
-      orderModel.findByIdAndUpdate.mockResolvedValue({ ...order, status: 'void' });
+      orderModel.findOneAndUpdate.mockResolvedValue({ ...order, status: 'void' });
 
       await service.processRefund(ORDER_ID, SHOP_ID, 200, 'Returned all items', CASHIER_ID, false);
 
@@ -146,7 +168,7 @@ describe('TransactionControlsService inventory consistency', () => {
     it('does not restore stock for a partial refund (order stays completed)', async () => {
       const order = makeOrder({ status: 'completed' });
       orderModel.findOne.mockResolvedValue(order);
-      orderModel.findByIdAndUpdate.mockResolvedValue({ ...order, refundAmount: 50 });
+      orderModel.findOneAndUpdate.mockResolvedValue({ ...order, refundAmount: 50 });
 
       await service.processRefund(ORDER_ID, SHOP_ID, 50, 'Partial return', CASHIER_ID, false);
 
@@ -155,7 +177,7 @@ describe('TransactionControlsService inventory consistency', () => {
     it('does not restore stock for a partial refund (order stays completed)', async () => {
       const order = makeOrder({ status: 'completed' });
       orderModel.findOne.mockResolvedValue(order);
-      orderModel.findByIdAndUpdate.mockResolvedValue({ ...order, refundAmount: 50 });
+      orderModel.findOneAndUpdate.mockResolvedValue({ ...order, refundAmount: 50 });
 
       await service.processRefund(ORDER_ID, SHOP_ID, 50, 'Partial return', CASHIER_ID, false);
 
