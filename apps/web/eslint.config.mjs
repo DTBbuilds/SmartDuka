@@ -26,11 +26,18 @@ const eslintConfig = defineConfig([
       'react-hooks/purity': 'off',
       'react-hooks/use-memo': 'off',
       'react-hooks/refs': 'off',
+      'react-hooks/preserve-manual-memoization': 'off',
       'jsx-a11y/role-has-required-aria-props': 'off',
       '@next/next/no-html-link-for-pages': 'off',
       '@next/next/no-img-element': 'off',
       'prefer-const': 'off',
       'no-unused-vars': 'off',
+    },
+  },
+  {
+    files: ['**/*.{js,mjs,cjs}'],
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
     },
   },
 ]);

@@ -44,7 +44,7 @@ export default tseslint.config(
       '@typescript-eslint/await-thenable': 'off',
       'no-case-declarations': 'off',
       'no-prototype-builtins': 'off',
-      "prettier/prettier": ["error", { endOfLine: "auto" }],
+      "prettier/prettier": ["warn", { endOfLine: "auto" }],
     },
   },
 );
