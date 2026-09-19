@@ -1,8 +1,9 @@
-import { Injectable, BadRequestException, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, BadRequestException, InternalServerErrorException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { PaymentTransaction, PaymentTransactionDocument } from '../schemas/payment-transaction.schema';
 import { MpesaTransaction, MpesaTransactionDocument } from '../schemas/mpesa-transaction.schema';
+import { Order, OrderDocument } from '../../sales/schemas/order.schema';
 
 export interface CreatePaymentTransactionDto {
   shopId: string;
@@ -47,11 +48,15 @@ export interface PaymentStatsDto {
 
 @Injectable()
 export class PaymentTransactionService {
+  private readonly logger = new Logger(PaymentTransactionService.name);
+
   constructor(
     @InjectModel(PaymentTransaction.name)
     private readonly paymentTransactionModel: Model<PaymentTransactionDocument>,
     @InjectModel(MpesaTransaction.name)
     private readonly mpesaTransactionModel: Model<MpesaTransactionDocument>,
+    @InjectModel(Order.name)
+    private readonly orderModel: Model<OrderDocument>,
   ) {}
 
   async createTransaction(dto: CreatePaymentTransactionDto): Promise<PaymentTransactionDocument> {
@@ -90,10 +95,69 @@ export class PaymentTransactionService {
         completedAt: dto.status === 'completed' ? new Date() : undefined,
       });
 
-      return await transaction.save();
+      return await transaction.save().then(async (saved) => {
+        await this.syncOrderOnConfirmedPayment(dto);
+        return saved;
+      });
     } catch (error: any) {
       throw new InternalServerErrorException(
         `Failed to create payment transaction: ${error?.message || 'Unknown error'}`,
+      );
+    }
+  }
+
+  /**
+   * Synchronize the owning order when a payment is confirmed.
+   *
+   * Checkout creates M-Pesa orders as `pending` with the stock already
+   * decremented (the order is the inventory reservation). Without this sync a
+   * confirmed M-Pesa payment would leave the sale permanently pending with a
+   * stale payment status. Cash/POS orders are created completed and are never
+   * touched (status guard). Sync failure is logged, never thrown - recording
+   * the payment must not fail because the order update did.
+   */
+  private async syncOrderOnConfirmedPayment(dto: CreatePaymentTransactionDto): Promise<void> {
+    if (dto.status !== 'completed') return;
+
+    try {
+      const order = await this.orderModel
+        .findOne({ _id: new Types.ObjectId(dto.orderId) })
+        .exec();
+
+      if (!order || order.status !== 'pending') return;
+
+      const alreadyConfirmed = (order.payments ?? [])
+        .filter((p) => p.status === 'completed')
+        .reduce((sum, p) => sum + (p.amount || 0), 0);
+      const confirmedTotal = alreadyConfirmed + (dto.amount || 0);
+      const paymentStatus =
+        confirmedTotal >= order.total ? 'paid' : confirmedTotal > 0 ? 'partial' : 'unpaid';
+
+      await this.orderModel.updateOne(
+        { _id: order._id, status: 'pending' },
+        {
+          $set: {
+            ...(paymentStatus === 'paid' ? { status: 'completed' } : {}),
+            paymentStatus,
+            ...(dto.paymentMethod === 'mpesa'
+              ? {
+                  'payments.$[p].status': 'completed',
+                  ...(dto.mpesaReceiptNumber
+                    ? { 'payments.$[p].mpesaReceiptNumber': dto.mpesaReceiptNumber }
+                    : {}),
+                }
+              : {}),
+          },
+        },
+        { arrayFilters: [{ 'p.method': 'mpesa', 'p.status': 'pending' }] },
+      );
+
+      this.logger.log(
+        `Order ${dto.orderNumber} synchronized after confirmed ${dto.paymentMethod} payment (paymentStatus: ${paymentStatus})`,
+      );
+    } catch (error: any) {
+      this.logger.error(
+        `Failed to synchronize order ${dto.orderNumber} after confirmed payment: ${error?.message}`,
       );
     }
   }

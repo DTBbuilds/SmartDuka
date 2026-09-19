@@ -20,6 +20,7 @@ import { PaymentConfig, PaymentConfigSchema } from './schemas/payment-config.sch
 import { VerificationLog, VerificationLogSchema } from './schemas/verification-log.schema';
 import { ConfigAuditLog, ConfigAuditLogSchema } from './schemas/config-audit-log.schema';
 import { Shop, ShopSchema } from '../shops/schemas/shop.schema';
+import { Order, OrderSchema } from '../sales/schemas/order.schema';
 import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
@@ -33,6 +34,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
       { name: VerificationLog.name, schema: VerificationLogSchema },
       { name: ConfigAuditLog.name, schema: ConfigAuditLogSchema },
       { name: Shop.name, schema: ShopSchema },
+      { name: Order.name, schema: OrderSchema },
     ]),
   ],
   providers: [

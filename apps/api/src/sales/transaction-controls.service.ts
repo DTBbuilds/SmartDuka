@@ -1,13 +1,52 @@
-import { Injectable, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Order, OrderDocument } from './schemas/order.schema';
+import { InventoryService } from '../inventory/inventory.service';
 
 @Injectable()
 export class TransactionControlsService {
+  private readonly logger = new Logger(TransactionControlsService.name);
+
   constructor(
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
+    private readonly inventoryService: InventoryService,
   ) {}
+
+  /**
+   * Restore the inventory reserved by an order when the order leaves the
+   * completed/pending lifecycle via void or full refund. Restoration is a
+   * compensating mutation recorded in the stock-adjustment audit trail, and
+   * runs only after the terminal order-state claim succeeds so it can never
+   * run twice for the same order.
+   */
+  private async restoreOrderInventory(
+    order: OrderDocument,
+    restoredBy: string,
+    auditReason: 'void' | 'refund',
+  ): Promise<void> {
+    for (const item of order.items ?? []) {
+      try {
+        await this.inventoryService.updateStock(
+          order.shopId.toString(),
+          item.productId,
+          item.quantity,
+        );
+        await this.inventoryService.createStockAdjustment(
+          order.shopId.toString(),
+          item.productId,
+          item.quantity,
+          auditReason,
+          restoredBy,
+          `Order ${order.orderNumber} - ${item.name} x${item.quantity}`,
+        );
+      } catch (error: any) {
+        this.logger.error(
+          `Failed to restore stock for order ${order.orderNumber}, product ${item.productId}: ${error?.message}`,
+        );
+      }
+    }
+  }
 
   async voidTransaction(
     orderId: string,
@@ -53,6 +92,10 @@ export class TransactionControlsService {
     if (!updated) {
       throw new NotFoundException('Order not found after update');
     }
+
+    // Voiding releases the inventory the order reserved (pending M-Pesa
+    // orders hold stock from checkout; completed sales return their goods).
+    await this.restoreOrderInventory(updated, cashierId, 'void');
 
     return updated;
   }
@@ -158,6 +201,12 @@ export class TransactionControlsService {
 
     if (!updated) {
       throw new NotFoundException('Order not found after update');
+    }
+
+    // A full refund voids the order - the goods return to stock. Partial
+    // refunds keep the order completed and do not restore stock.
+    if (updated.status === 'void') {
+      await this.restoreOrderInventory(updated, cashierId, 'refund');
     }
 
     return updated;

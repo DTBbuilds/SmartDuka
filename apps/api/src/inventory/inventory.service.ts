@@ -759,40 +759,21 @@ export class InventoryService implements OnModuleInit {
   }
 
   async updateStock(shopId: string, productId: string, quantityChange: number): Promise<ProductDocument | null> {
-    // For stock reduction, ensure we don't go below 0
+    // Reductions are bounded atomically in the update filter so two concurrent
+    // checkouts can never both consume the same units, stock can never go
+    // negative, and insufficient stock returns null (a traceable failure for
+    // the caller) instead of being silently clamped to zero.
+    const filter: any = {
+      _id: new Types.ObjectId(productId),
+      shopId: new Types.ObjectId(shopId),
+    };
     if (quantityChange < 0) {
-      // First check current stock
-      const product = await this.productModel.findOne({
-        _id: new Types.ObjectId(productId),
-        shopId: new Types.ObjectId(shopId),
-      }).exec();
-      
-      if (!product) {
-        return null;
-      }
-      
-      const currentStock = product.stock || 0;
-      const newStock = currentStock + quantityChange; // quantityChange is negative
-      
-      // Prevent negative stock - set to 0 if would go negative
-      if (newStock < 0) {
-        this.logger.warn(
-          `Stock reduction would result in negative stock for product ${productId}. ` +
-          `Current: ${currentStock}, Requested change: ${quantityChange}. Setting to 0.`
-        );
-        return this.productModel
-          .findOneAndUpdate(
-            { _id: new Types.ObjectId(productId), shopId: new Types.ObjectId(shopId) },
-            { $set: { stock: 0 } },
-            { new: true }
-          )
-          .exec();
-      }
+      filter.stock = { $gte: -quantityChange };
     }
-    
+
     return this.productModel
       .findOneAndUpdate(
-        { _id: new Types.ObjectId(productId), shopId: new Types.ObjectId(shopId) },
+        filter,
         { $inc: { stock: quantityChange } },
         { new: true }
       )

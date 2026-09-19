@@ -92,8 +92,13 @@ export class SalesService {
     const tax = Math.round(subtotal * taxRate * 100) / 100; // Proper rounding
     const total = subtotal + tax;
 
-    const paymentsTotal = (dto.payments ?? []).reduce((sum, p) => sum + p.amount, 0);
-    const paymentStatus = paymentsTotal >= total ? 'paid' : paymentsTotal > 0 ? 'partial' : 'unpaid';
+    // Only confirmed (non-pending, non-failed) payments count toward the
+    // order's payment status. A pending M-Pesa STK push is not yet money.
+    const confirmedPaymentsTotal = (dto.payments ?? [])
+      .filter((p) => p.status !== 'pending' && p.status !== 'failed')
+      .reduce((sum, p) => sum + p.amount, 0);
+    const paymentStatus =
+      confirmedPaymentsTotal >= total ? 'paid' : confirmedPaymentsTotal > 0 ? 'partial' : 'unpaid';
 
     const orderNumber = `STK-${new Date().getFullYear()}-${nanoid(6).toUpperCase()}`;
 
