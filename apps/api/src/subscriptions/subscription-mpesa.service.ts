@@ -193,7 +193,7 @@ export class SubscriptionMpesaService implements OnModuleInit {
     this.logger.log(`  - Config Source: ${this.configSource.toUpperCase()}`);
     this.logger.log(`  - Environment: ${this.environment}`);
     this.logger.log(`  - ShortCode: ${this.shortCode}`);
-    this.logger.log(`  - Consumer Key: ${this.consumerKey ? this.consumerKey.substring(0, 10) + '...' : 'NOT SET'}`);
+    this.logger.log(`  - Consumer Key Configured: ${this.consumerKey ? 'yes' : 'no'}`);
     this.logger.log(`  - Callback URL: ${this.callbackUrl || 'NOT SET'}`);
     
     if (!this.consumerKey || !this.consumerSecret) {

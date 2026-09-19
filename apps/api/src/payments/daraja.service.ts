@@ -111,7 +111,10 @@ export class DarajaService {
       this.logger.error('Error message:', error?.message);
       this.logger.error('Response data:', JSON.stringify(error?.response?.data));
       this.logger.error('Response status:', error?.response?.status);
-      this.logger.error('Consumer Key (first 10 chars):', this.config.consumerKey?.substring(0, 10));
+      this.logger.error(
+        'Credentials configured:',
+        Boolean(this.config.consumerKey && this.config.consumerSecret),
+      );
       throw new Error('Failed to authenticate with M-Pesa');
     }
   }
