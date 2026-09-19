@@ -83,14 +83,21 @@ export class TransactionControlsService {
       updateData.voidApprovedAt = new Date();
     }
 
-    const updated = await this.orderModel.findByIdAndUpdate(
-      orderId,
+    // Atomic terminal-state claim: only a transition from a non-void state
+    // wins, so concurrent void attempts can never restore stock twice.
+    const updated = await this.orderModel.findOneAndUpdate(
+      {
+        _id: new Types.ObjectId(orderId),
+        shopId: new Types.ObjectId(shopId),
+        status: { $ne: 'void' },
+      },
       updateData,
       { new: true },
     );
 
     if (!updated) {
-      throw new NotFoundException('Order not found after update');
+      // Lost a concurrent void race (the pre-read confirmed existence)
+      throw new BadRequestException('Order is already voided');
     }
 
     // Voiding releases the inventory the order reserved (pending M-Pesa
@@ -193,14 +200,20 @@ export class TransactionControlsService {
       updateData.refundApprovedAt = new Date();
     }
 
-    const updated = await this.orderModel.findByIdAndUpdate(
-      orderId,
+    // Atomic claim: only a refund from a non-void state wins, so concurrent
+    // refund attempts can never restore stock twice.
+    const updated = await this.orderModel.findOneAndUpdate(
+      {
+        _id: new Types.ObjectId(orderId),
+        shopId: new Types.ObjectId(shopId),
+        status: { $ne: 'void' },
+      },
       updateData,
       { new: true },
     );
 
     if (!updated) {
-      throw new NotFoundException('Order not found after update');
+      throw new BadRequestException('Order is already voided');
     }
 
     // A full refund voids the order - the goods return to stock. Partial

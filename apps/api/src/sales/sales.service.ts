@@ -158,6 +158,48 @@ export class SalesService {
     // Apply loyalty discount to total
     const finalTotal = Math.max(0, total - loyaltyDiscount);
 
+    // STEP 4.5: ATOMIC INVENTORY CLAIM
+    // Each claim is a conditional atomic update (stock >= requested, scoped by
+    // shopId) - concurrent checkouts can never both consume the same units.
+    // A failed logical checkout must leave zero lasting reservations, so any
+    // claim failure compensates every claim made by this checkout.
+    const claimedItems: Array<{ productId: string; name: string; quantity: number }> = [];
+    try {
+      for (const item of dto.items) {
+        const claimed = await this.inventoryService.updateStock(
+          shopId,
+          item.productId,
+          -item.quantity, // Negative = claim/reduction
+        );
+
+        if (!claimed) {
+          throw new BadRequestException(
+            `Insufficient stock for ${item.name} (requested ${item.quantity})`,
+          );
+        }
+
+        claimedItems.push(item);
+
+        // Log stock adjustment for audit trail
+        await this.inventoryService.createStockAdjustment(
+          shopId,
+          item.productId,
+          -item.quantity,
+          'sale', // reason
+          userId,
+          `Order ${orderNumber} - ${item.name} x${item.quantity}` // notes
+        );
+      }
+    } catch (claimError: any) {
+      await this.releaseClaimedInventory(shopId, userId, claimedItems, orderNumber);
+      if (claimError instanceof BadRequestException) {
+        throw claimError;
+      }
+      throw new InternalServerErrorException(
+        `Failed to reserve inventory for checkout: ${claimError?.message || 'Unknown error'}`,
+      );
+    }
+
     let order: OrderDocument;
     try {
       order = new this.orderModel({
@@ -194,6 +236,11 @@ export class SalesService {
 
       await order.save();
     } catch (error: any) {
+      // Release this checkout's inventory claims: on genuine failure they
+      // would be orphaned; on a lost duplicate-key race the canonical winner
+      // already holds the reservation, so the loser must not hold a second.
+      await this.releaseClaimedInventory(shopId, userId, claimedItems, orderNumber);
+
       // Concurrent duplicate: both requests passed the pre-check and raced on
       // the tenant-scoped unique index. Recover the canonical original instead
       // of surfacing an uncontrolled failure.
@@ -271,57 +318,10 @@ export class SalesService {
       console.error(`Failed to log checkout activity for order ${order.orderNumber}:`, error);
     }
 
-    // STEP 5: REDUCE INVENTORY FOR EACH ITEM
-    // If any item fails, we have the order ID for manual reconciliation
-    const stockReductionErrors: string[] = [];
-
-    for (const item of dto.items) {
-      try {
-        // Reduce product stock (atomic operation with shopId filter)
-        const updatedProduct = await this.inventoryService.updateStock(
-          shopId,
-          item.productId,
-          -item.quantity // Negative = reduction
-        );
-
-        if (!updatedProduct) {
-          stockReductionErrors.push(
-            `Product ${item.productId} not found in shop ${shopId}`
-          );
-          continue;
-        }
-
-        // Log stock adjustment for audit trail
-        await this.inventoryService.createStockAdjustment(
-          shopId,
-          item.productId,
-          -item.quantity,
-          'sale', // reason
-          userId,
-          `Order ${orderNumber} - ${item.name} x${item.quantity}` // notes
-        );
-      } catch (error: any) {
-        stockReductionErrors.push(
-          `Failed to reduce stock for ${item.name}: ${error?.message || 'Unknown error'}`
-        );
-      }
-    }
-
-    // STEP 6: HANDLE PARTIAL FAILURES
-    if (stockReductionErrors.length > 0) {
-      // Log errors but don't fail - order is created, inventory will be manually reconciled
-      console.error(
-        `Stock reduction errors for order ${orderNumber}:`,
-        stockReductionErrors
-      );
-      
-      // Update order with warning
-      order.notes = (order.notes || '') + 
-        `\n⚠️ INVENTORY SYNC WARNING: ${stockReductionErrors.join('; ')}`;
-      await order.save();
-    }
-
-    // STEP 7: RECORD PAYMENT TRANSACTIONS FOR ANALYTICS
+    // STEP 5: RECORD PAYMENT TRANSACTIONS FOR ANALYTICS
+    // Inventory was already claimed atomically in STEP 4.5 (before order
+    // persistence), so there is no post-order stock mutation phase left that
+    // could partially fail.
     // Only record completed payments - M-Pesa/Stripe pending payments are tracked separately
     if (dto.payments && dto.payments.length > 0) {
       for (const payment of dto.payments) {
@@ -407,6 +407,38 @@ export class SalesService {
       throw new ConflictException(
         'This idempotency key was already used for a different checkout. Use a new key for a new checkout.',
       );
+    }
+  }
+
+  /**
+   * Release inventory claims made by a checkout that did not complete.
+   * Compensation is the rollback mechanism for the atomic claim phase: it
+   * runs when order persistence fails or a concurrent duplicate loses the
+   * uniqueness race, so a failed logical checkout leaves zero lasting
+   * reservations. Every release is recorded in the audit trail.
+   */
+  private async releaseClaimedInventory(
+    shopId: string,
+    userId: string,
+    claimed: Array<{ productId: string; name: string; quantity: number }>,
+    orderNumber: string,
+  ): Promise<void> {
+    for (const item of claimed) {
+      try {
+        await this.inventoryService.updateStock(shopId, item.productId, item.quantity);
+        await this.inventoryService.createStockAdjustment(
+          shopId,
+          item.productId,
+          item.quantity,
+          'correction',
+          userId,
+          `Checkout rollback for order ${orderNumber} - ${item.name} x${item.quantity}`,
+        );
+      } catch (error: any) {
+        this.logger.error(
+          `Failed to compensate inventory claim for order ${orderNumber}, product ${item.productId}: ${error?.message}`,
+        );
+      }
     }
   }
 
