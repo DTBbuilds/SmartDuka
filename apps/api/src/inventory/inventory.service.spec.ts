@@ -261,6 +261,39 @@ describe('InventoryService', () => {
 
       expect(result.stock).toBe(40);
     });
+
+    it('bounds reduction atomically in the update filter so concurrent checkouts cannot oversell', async () => {
+      productModel.findOneAndUpdate.mockReturnValue({
+        exec: jest.fn().mockResolvedValue({ ...mockProduct, stock: 40 }),
+      });
+
+      await service.updateStock(mockShopId, mockProductId, -10);
+
+      expect(productModel.findOne).not.toHaveBeenCalled();
+      expect(productModel.findOneAndUpdate).toHaveBeenCalledWith(
+        {
+          _id: expect.any(Types.ObjectId),
+          shopId: expect.any(Types.ObjectId),
+          stock: { $gte: 10 },
+        },
+        { $inc: { stock: -10 } },
+        { new: true },
+      );
+    });
+
+    it('returns null instead of clamping when stock is insufficient (no silent stock loss)', async () => {
+      productModel.findOneAndUpdate.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(null),
+      });
+
+      const result = await service.updateStock(mockShopId, mockProductId, -10);
+
+      expect(result).toBeNull();
+      // The guard must live in the atomic update filter, not a read-check-write
+      expect(productModel.findOne).not.toHaveBeenCalled();
+      const [filter] = productModel.findOneAndUpdate.mock.calls[0];
+      expect(filter.stock).toEqual({ $gte: 10 });
+    });
   });
 
   describe('findByBarcode', () => {

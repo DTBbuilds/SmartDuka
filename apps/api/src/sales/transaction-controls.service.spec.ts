@@ -1,0 +1,137 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { getModelToken } from '@nestjs/mongoose';
+import { Types } from 'mongoose';
+import { BadRequestException } from '@nestjs/common';
+import { TransactionControlsService } from './transaction-controls.service';
+import { Order } from './schemas/order.schema';
+import { InventoryService } from '../inventory/inventory.service';
+
+describe('TransactionControlsService inventory consistency', () => {
+  let service: TransactionControlsService;
+  let orderModel: any;
+  let inventoryService: any;
+
+  const SHOP_ID = '507f1f77bcf86cd799439011';
+  const ORDER_ID = '507f1f77bcf86cd799439014';
+  const CASHIER_ID = '507f1f77bcf86cd799439012';
+
+  function makeOrder(overrides: Record<string, any> = {}) {
+    return {
+      _id: new Types.ObjectId(ORDER_ID),
+      shopId: new Types.ObjectId(SHOP_ID),
+      orderNumber: 'STK-2026-ABC123',
+      status: 'pending',
+      paymentStatus: 'unpaid',
+      items: [
+        { productId: 'prod1', name: 'Test Product', quantity: 2, unitPrice: 100, lineTotal: 200 },
+      ],
+      total: 232,
+      ...overrides,
+    };
+  }
+
+  beforeEach(async () => {
+    orderModel = {
+      findOne: jest.fn(),
+      findByIdAndUpdate: jest.fn(),
+      find: jest.fn().mockReturnThis(),
+      sort: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue([]),
+      aggregate: jest.fn().mockResolvedValue([]),
+    };
+    inventoryService = {
+      updateStock: jest.fn().mockResolvedValue({ stock: 12 }),
+      createStockAdjustment: jest.fn().mockResolvedValue({}),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        TransactionControlsService,
+        { provide: getModelToken(Order.name), useValue: orderModel },
+        { provide: InventoryService, useValue: inventoryService },
+      ],
+    }).compile();
+
+    service = module.get<TransactionControlsService>(TransactionControlsService);
+  });
+
+  describe('voidTransaction', () => {
+    it('restores stock for a voided pending order (reservation release) with an audit trail', async () => {
+      const order = makeOrder();
+      orderModel.findOne.mockResolvedValue(order);
+      orderModel.findByIdAndUpdate.mockResolvedValue({ ...order, status: 'void' });
+
+      await service.voidTransaction(ORDER_ID, SHOP_ID, 'Customer abandoned M-Pesa payment', CASHIER_ID, false);
+
+      expect(inventoryService.updateStock).toHaveBeenCalledWith(SHOP_ID, 'prod1', 2);
+      expect(inventoryService.createStockAdjustment).toHaveBeenCalledWith(
+        SHOP_ID,
+        'prod1',
+        2,
+        'void',
+        CASHIER_ID,
+        expect.stringContaining('STK-2026-ABC123'),
+      );
+    });
+
+    it('restores stock exactly once - a second void is rejected without touching stock', async () => {
+      const order = makeOrder();
+      orderModel.findOne
+        .mockResolvedValueOnce(order)
+        .mockResolvedValueOnce({ ...order, status: 'void' });
+      orderModel.findByIdAndUpdate.mockResolvedValue({ ...order, status: 'void' });
+
+      await service.voidTransaction(ORDER_ID, SHOP_ID, 'First void', CASHIER_ID, false);
+
+      await expect(
+        service.voidTransaction(ORDER_ID, SHOP_ID, 'Second void', CASHIER_ID, false),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(inventoryService.updateStock).toHaveBeenCalledTimes(1);
+      expect(inventoryService.createStockAdjustment).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not restore stock when the void update loses a race (claim-based exactly-once)', async () => {
+      const order = makeOrder();
+      orderModel.findOne.mockResolvedValue(order);
+      orderModel.findByIdAndUpdate.mockResolvedValue(null);
+
+      await expect(
+        service.voidTransaction(ORDER_ID, SHOP_ID, 'Void', CASHIER_ID, false),
+      ).rejects.toThrow();
+
+      expect(inventoryService.updateStock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('processRefund', () => {
+    it('restores stock when a full refund voids the order', async () => {
+      const order = makeOrder({ status: 'completed', total: 200 });
+      orderModel.findOne.mockResolvedValue(order);
+      orderModel.findByIdAndUpdate.mockResolvedValue({ ...order, status: 'void' });
+
+      await service.processRefund(ORDER_ID, SHOP_ID, 200, 'Returned all items', CASHIER_ID, false);
+
+      expect(inventoryService.updateStock).toHaveBeenCalledWith(SHOP_ID, 'prod1', 2);
+      expect(inventoryService.createStockAdjustment).toHaveBeenCalledWith(
+        SHOP_ID,
+        'prod1',
+        2,
+        'refund',
+        CASHIER_ID,
+        expect.any(String),
+      );
+    });
+
+    it('does not restore stock for a partial refund (order stays completed)', async () => {
+      const order = makeOrder({ status: 'completed' });
+      orderModel.findOne.mockResolvedValue(order);
+      orderModel.findByIdAndUpdate.mockResolvedValue({ ...order, refundAmount: 50 });
+
+      await service.processRefund(ORDER_ID, SHOP_ID, 50, 'Partial return', CASHIER_ID, false);
+
+      expect(inventoryService.updateStock).not.toHaveBeenCalled();
+    });
+  });
+});

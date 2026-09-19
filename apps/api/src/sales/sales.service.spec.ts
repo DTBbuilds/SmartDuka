@@ -50,10 +50,16 @@ describe('SalesService', () => {
 
   beforeEach(async () => {
     // Create mock implementations
-    const mockOrderModel = jest.fn().mockImplementation(() => ({
-      ...mockOrder,
-      save: jest.fn().mockResolvedValue(mockOrder),
-    }));
+    let createdOrderDoc: any;
+    const mockOrderModel = jest.fn().mockImplementation((doc: any) => {
+      createdOrderDoc = doc;
+      return {
+        ...mockOrder,
+        ...doc,
+        save: jest.fn().mockResolvedValue({ ...mockOrder, ...doc, _id: mockOrder._id }),
+      };
+    });
+    (mockOrderModel as any).__createdDoc = () => createdOrderDoc;
     mockOrderModel.find = jest.fn().mockReturnThis();
     mockOrderModel.findOne = jest.fn().mockReturnThis();
     mockOrderModel.countDocuments = jest.fn().mockResolvedValue(10);
@@ -245,6 +251,39 @@ describe('SalesService', () => {
       await service.checkout(mockShopId, mockUserId, mockBranchId, mockCheckoutDto);
 
       expect(paymentTransactionService.createTransaction).toHaveBeenCalled();
+    });
+
+    it('marks a pending M-Pesa payment as unpaid on the order (pending payments are not confirmed money)', async () => {
+      await service.checkout(mockShopId, mockUserId, mockBranchId, {
+        items: [{ productId: 'prod1', name: 'Test Product', quantity: 2, unitPrice: 100 }],
+        payments: [{ method: 'mpesa', amount: 232, status: 'pending' }],
+        status: 'pending',
+      });
+
+      const createdDoc = orderModel.__createdDoc();
+      expect(createdDoc.paymentStatus).toBe('unpaid');
+    });
+
+    it('keeps immediate cash checkout marked paid (existing POS behavior)', async () => {
+      await service.checkout(mockShopId, mockUserId, mockBranchId, mockCheckoutDto);
+
+      const createdDoc = orderModel.__createdDoc();
+      expect(createdDoc.paymentStatus).toBe('paid');
+      expect(createdDoc.status).toBe('completed');
+    });
+
+    it('marks a split checkout with a confirmed cash part and pending M-Pesa part as partial', async () => {
+      await service.checkout(mockShopId, mockUserId, mockBranchId, {
+        items: [{ productId: 'prod1', name: 'Test Product', quantity: 2, unitPrice: 100 }],
+        payments: [
+          { method: 'cash', amount: 100, status: 'completed' },
+          { method: 'mpesa', amount: 132, status: 'pending' },
+        ],
+        status: 'pending',
+      });
+
+      const createdDoc = orderModel.__createdDoc();
+      expect(createdDoc.paymentStatus).toBe('partial');
     });
 
     it('should invalidate cache after checkout', async () => {
