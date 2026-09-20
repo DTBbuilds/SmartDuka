@@ -60,6 +60,7 @@ describe('InventoryReconciliationService crash recovery (SDV2-005)', () => {
       createStockAdjustment: jest.fn().mockResolvedValue({}),
       hasClaimMutation: jest.fn().mockResolvedValue(false),
       clearClaimMutation: jest.fn().mockResolvedValue(undefined),
+      clearClaimMutations: jest.fn().mockResolvedValue(undefined),
       findProductsWithClaimMutations: jest.fn().mockResolvedValue([]),
     };
 
@@ -556,6 +557,101 @@ describe('InventoryReconciliationService crash recovery (SDV2-005)', () => {
 
       expect(result.resolved).toBe(0);
       expect(inventoryService.updateStock).not.toHaveBeenCalled();
+    });
+
+    it('finalizes a proven operator restore (restore receipt + resolving resolution)', async () => {
+      // SDV2-006: crash after updateStock(+qty) but before the claim-side
+      // finalize. The restore receipt proves the mutation landed.
+      const claim = makeClaim({
+        state: InventoryClaimState.RELEASING,
+        items: [
+          {
+            productId: 'prodA',
+            name: 'Product A',
+            quantity: 2,
+            mutationId: 'mut-A1',
+            state: InventoryClaimItemState.RESTORING,
+            resolution: { status: 'resolving', action: 'restore_stock', mutationId: 'restore-x' },
+          },
+        ],
+      });
+      inventoryService.findProductsWithClaimMutations.mockResolvedValue([
+        productWithMarker({
+          mutationId: 'restore-x',
+          claimId: claim._id,
+          quantity: 2,
+          kind: 'restore',
+          createdAt: new Date(),
+        }),
+      ]);
+      claimModel.findOne.mockReturnValue(execable(claim));
+
+      const result = await service.sweepClaimMutations();
+
+      expect(result.resolved).toBe(1);
+      // Proven restore: finalize without mutating stock again
+      expect(inventoryService.updateStock).not.toHaveBeenCalled();
+      expect(inventoryService.clearClaimMutations).toHaveBeenCalledWith(
+        SHOP_ID,
+        expect.any(String),
+        ['restore-x', 'mut-A1'],
+      );
+    });
+
+    it('never touches a decrement receipt owned by an in-progress operator resolution', async () => {
+      inventoryService.findProductsWithClaimMutations.mockResolvedValue([
+        productWithMarker({
+          mutationId: 'mut-X',
+          claimId: new Types.ObjectId(),
+          quantity: 3,
+          createdAt: new Date(),
+          resolution: { status: 'resolving', action: 'restore_stock' },
+        }),
+      ]);
+      claimModel.findOne.mockReturnValue(execable(null));
+
+      const result = await service.sweepClaimMutations();
+
+      expect(inventoryService.updateStock).not.toHaveBeenCalled();
+      expect(inventoryService.clearClaimMutation).not.toHaveBeenCalled();
+      expect(result.ambiguous).toBe(1);
+    });
+
+    it('pulls receipts whose operator resolution already completed', async () => {
+      inventoryService.findProductsWithClaimMutations.mockResolvedValue([
+        productWithMarker({
+          mutationId: 'mut-X',
+          claimId: new Types.ObjectId(),
+          quantity: 3,
+          createdAt: new Date(),
+          resolution: { status: 'resolved', action: 'accept_current_stock' },
+        }),
+      ]);
+      claimModel.findOne.mockReturnValue(execable(null));
+
+      const result = await service.sweepClaimMutations();
+
+      expect(result.cleared).toBe(1);
+      expect(inventoryService.clearClaimMutation).toHaveBeenCalledWith(
+        SHOP_ID,
+        expect.any(String),
+        'mut-X',
+      );
+      expect(inventoryService.updateStock).not.toHaveBeenCalled();
+    });
+
+    it('a manually RESOLVED claim is never picked up for recovery again', async () => {
+      const resolved = makeClaim({ state: InventoryClaimState.RESOLVED });
+      claimModel.find.mockReturnValue(queryable([])); // RESOLVED not in discovery set
+
+      const result = await service.recoverIncompleteClaims();
+
+      expect(result.repaired).toBe(0);
+      expect(inventoryService.updateStock).not.toHaveBeenCalled();
+      // Discovery query only targets non-terminal recovery states
+      const query = claimModel.find.mock.calls[0][0];
+      expect(query.state.$in).not.toContain(InventoryClaimState.RESOLVED);
+      expect(resolved.state).toBe(InventoryClaimState.RESOLVED);
     });
   });
 });

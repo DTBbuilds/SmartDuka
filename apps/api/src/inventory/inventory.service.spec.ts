@@ -313,20 +313,26 @@ describe('InventoryService', () => {
       expect(update.$push.claimMutations.claimId).toBeInstanceOf(Types.ObjectId);
     });
 
-    it('does not write a mutation receipt for non-claim reductions or positive changes', async () => {
+    it('writes no receipt without a mutationRef, and a restore receipt for operator restorations', async () => {
       productModel.findOneAndUpdate.mockReturnValue({
         exec: jest.fn().mockResolvedValue({ ...mockProduct, stock: 40 }),
       });
 
       await service.updateStock(mockShopId, mockProductId, -10);
       await service.updateStock(mockShopId, mockProductId, 10, {
-        mutationId: 'mut-2',
-        claimId: '507f1f77bcf86cd799439099',
+        mutationId: 'restore-2',
+        kind: 'restore',
       });
 
       const calls = productModel.findOneAndUpdate.mock.calls;
       expect(calls[0][1].$push).toBeUndefined();
-      expect(calls[1][1].$push).toBeUndefined();
+      // Positive mutation WITH a ref = durable restore receipt (SDV2-006)
+      expect(calls[1][1].$push.claimMutations.kind).toBe('restore');
+      expect(calls[1][1].$push.claimMutations.mutationId).toBe('restore-2');
+      // Idempotency: a duplicate mutationId is rejected by the filter
+      expect(calls[1][0]['claimMutations.mutationId']).toEqual({
+        $ne: 'restore-2',
+      });
     });
   });
 
