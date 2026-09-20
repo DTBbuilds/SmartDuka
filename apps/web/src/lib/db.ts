@@ -34,6 +34,7 @@ export interface PendingOrder {
     customerName?: string;
     cashierId?: string;
     cashierName?: string;
+    idempotencyKey?: string;
   };
 }
 

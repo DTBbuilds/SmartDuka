@@ -54,7 +54,10 @@ export class OrderItem {
   specialInstructions?: string;
 
   // Kitchen status tracking
-  @Prop({ enum: ['pending', 'preparing', 'ready', 'served'], default: 'pending' })
+  @Prop({
+    enum: ['pending', 'preparing', 'ready', 'served'],
+    default: 'pending',
+  })
   kitchenStatus?: string;
 
   // Prescription reference (pharmacy)
@@ -75,7 +78,10 @@ export class PaymentRecord {
   @Prop()
   reference?: string;
 
-  @Prop({ enum: ['pending', 'completed', 'failed', 'reversed'], default: 'pending' })
+  @Prop({
+    enum: ['pending', 'completed', 'failed', 'reversed'],
+    default: 'pending',
+  })
   status?: string;
 
   @Prop()
@@ -104,6 +110,13 @@ export class Order {
 
   @Prop({ required: true, unique: true, index: true })
   orderNumber: string;
+
+  /**
+   * Stable client-generated key for one logical checkout. Optional for
+   * historical records (sparse index excludes them).
+   */
+  @Prop({ required: false })
+  idempotencyKey?: string;
 
   @Prop({ type: [OrderItemSchema], default: [] })
   items: OrderItem[];
@@ -201,7 +214,10 @@ export class Order {
   // --- Business-type-specific order fields ---
 
   // Restaurant: order type
-  @Prop({ enum: ['standard', 'dine_in', 'takeaway', 'delivery'], default: 'standard' })
+  @Prop({
+    enum: ['standard', 'dine_in', 'takeaway', 'delivery'],
+    default: 'standard',
+  })
   orderType?: string;
 
   // Restaurant: table number
@@ -217,7 +233,17 @@ export class Order {
   tipAmount?: number;
 
   // Restaurant: kitchen status
-  @Prop({ enum: ['new', 'sent_to_kitchen', 'preparing', 'ready', 'served', 'completed'], default: 'new' })
+  @Prop({
+    enum: [
+      'new',
+      'sent_to_kitchen',
+      'preparing',
+      'ready',
+      'served',
+      'completed',
+    ],
+    default: 'new',
+  })
   kitchenStatus?: string;
 
   // Delivery info
@@ -250,6 +276,12 @@ export const OrderSchema = SchemaFactory.createForClass(Order);
 
 // Create indexes for multi-tenant queries
 OrderSchema.index({ shopId: 1, createdAt: -1 });
+// Tenant-scoped checkout idempotency: one logical checkout per shop per key.
+// Sparse so historical orders without the key remain valid.
+OrderSchema.index(
+  { shopId: 1, idempotencyKey: 1 },
+  { unique: true, sparse: true },
+);
 OrderSchema.index({ shopId: 1, branchId: 1, createdAt: -1 });
 OrderSchema.index({ shopId: 1, userId: 1 });
 OrderSchema.index({ shopId: 1, status: 1 });

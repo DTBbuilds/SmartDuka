@@ -1,6 +1,7 @@
 import {
   Injectable,
   BadRequestException,
+  ConflictException,
   InternalServerErrorException,
   Logger,
   Inject,
@@ -74,6 +75,26 @@ export class SalesService {
     // STEP 1: VALIDATE INPUT
     if (!dto.items || dto.items.length === 0) {
       throw new BadRequestException('Cart must contain at least one item');
+    }
+
+    // STEP 1.5: DUPLICATE-SUBMISSION PROTECTION (tenant-scoped idempotency)
+    // The same logical checkout (same shop + same client key) must resolve to
+    // one canonical sale regardless of retries, double-clicks, offline replay,
+    // or concurrent identical submissions. The canonical order is the record
+    // of what the server calculated when the first request committed; retries
+    // return it unchanged even if prices or tax have since changed.
+    if (dto.idempotencyKey) {
+      const existing = await this.findOrderByIdempotencyKey(
+        shopId,
+        dto.idempotencyKey,
+      );
+      if (existing) {
+        this.assertSameLogicalCheckout(existing, dto);
+        this.logger.log(
+          `Duplicate checkout detected for key ${dto.idempotencyKey} - returning canonical order ${existing.orderNumber}`,
+        );
+        return existing;
+      }
     }
 
     // STEP 2: LOAD AUTHORITATIVE PRODUCT DATA (tenant-scoped via JWT shop)
@@ -265,6 +286,7 @@ export class SalesService {
         branchId: branchId ? new Types.ObjectId(branchId) : undefined,
         userId: new Types.ObjectId(userId),
         orderNumber,
+        idempotencyKey: dto.idempotencyKey,
         shiftId: shiftObjectId,
         items: authoritativeItems,
         subtotal,
@@ -288,6 +310,23 @@ export class SalesService {
 
       await order.save();
     } catch (error: any) {
+      // Concurrent duplicate: both requests passed the pre-check and raced on
+      // the tenant-scoped unique index. Recover the canonical original instead
+      // of surfacing an uncontrolled failure. No stock has been mutated by the
+      // loser at this point (stock reduction happens after order creation).
+      if (error?.code === 11000 && dto.idempotencyKey) {
+        const canonical = await this.findOrderByIdempotencyKey(
+          shopId,
+          dto.idempotencyKey,
+        );
+        if (canonical) {
+          this.assertSameLogicalCheckout(canonical, dto);
+          this.logger.log(
+            `Concurrent duplicate checkout resolved for key ${dto.idempotencyKey} - returning canonical order ${canonical.orderNumber}`,
+          );
+          return canonical;
+        }
+      }
       throw new InternalServerErrorException(
         `Failed to create order: ${error?.message || 'Unknown error'}`,
       );
@@ -458,6 +497,58 @@ export class SalesService {
     this.cacheService.deletePattern(`shop:${shopId}:orders:*`);
 
     return order;
+  }
+
+  /**
+   * DUPLICATE-SUBMISSION PROTECTION HELPERS
+   */
+
+  private async findOrderByIdempotencyKey(
+    shopId: string,
+    idempotencyKey: string,
+  ): Promise<OrderDocument | null> {
+    return this.orderModel.findOne({
+      shopId: new Types.ObjectId(shopId),
+      idempotencyKey,
+    });
+  }
+
+  /**
+   * The same key must never be reused for a different logical transaction.
+   * The persisted sale is the comparison evidence. Only legitimate client
+   * intent is compared: product IDs + quantities (order-normalized) and the
+   * customer. Server-authoritative fields (unit price, tax, actor, status,
+   * payment evidence) are deliberately excluded — a retry that merely changes
+   * ignored client values is still the same logical checkout and must resolve
+   * to the canonical original, not conflict.
+   */
+  private assertSameLogicalCheckout(
+    existing: OrderDocument,
+    dto: CheckoutDto,
+  ): void {
+    const intentFingerprint = (
+      items: Array<{ productId: string; quantity: number }>,
+    ) =>
+      [...(items ?? [])]
+        .map((item) => `${item.productId}|${item.quantity}`)
+        .sort()
+        .join(';');
+
+    const existingCustomerId = existing.customerId
+      ? existing.customerId.toString()
+      : undefined;
+    const sameCustomer =
+      (existingCustomerId ?? null) === (dto.customerId ?? null);
+
+    if (
+      (existing.items?.length ?? 0) !== (dto.items?.length ?? -1) ||
+      intentFingerprint(existing.items) !== intentFingerprint(dto.items) ||
+      !sameCustomer
+    ) {
+      throw new ConflictException(
+        'This idempotency key was already used for a different checkout. Use a new key for a new checkout.',
+      );
+    }
   }
 
   /**

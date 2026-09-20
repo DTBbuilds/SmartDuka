@@ -197,6 +197,23 @@ function POSContent() {
   const lastProcessedTimeRef = useRef<number>(0);
   const BARCODE_DEBOUNCE_MS = 1500; // Prevent same barcode within 1.5 seconds
 
+  // Checkout idempotency: one stable key per logical checkout. Generated when
+  // a checkout attempt starts and reused unchanged across retries, offline
+  // queueing, and reconnect replay; cleared only after the checkout resolves.
+  const checkoutIdempotencyKeyRef = useRef<string | null>(null);
+  const getCheckoutIdempotencyKey = useCallback(() => {
+    if (!checkoutIdempotencyKeyRef.current) {
+      checkoutIdempotencyKeyRef.current =
+        typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+          ? crypto.randomUUID()
+          : `chk-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+    }
+    return checkoutIdempotencyKeyRef.current;
+  }, []);
+  const clearCheckoutIdempotencyKey = useCallback(() => {
+    checkoutIdempotencyKeyRef.current = null;
+  }, []);
+
   const { user, shop, token, logout } = useAuth();
   const formatCurrency = useCallback((value: number) => formatMoney(value, shop?.currency), [shop?.currency]);
   const { currentBranch } = useBranch();
@@ -1042,11 +1059,12 @@ function POSContent() {
           cashierId,
           cashierName,
           shiftId: currentShift?._id,
+          idempotencyKey: getCheckoutIdempotencyKey(),
           // Business-type-specific order fields
           ...(orderType !== 'standard' && { orderType }),
           ...(tableNumber && { tableNumber }),
         };
-        
+
         const res = await fetch(`${config.apiUrl}/sales/checkout`, {
           method: "POST",
           headers: {
@@ -1174,6 +1192,7 @@ function POSContent() {
       setPendingOrderId(null);
       setMpesaPhoneNumber('');
       setFeedbackType(null);
+      clearCheckoutIdempotencyKey();
     }, 800);
   };
 
@@ -1182,6 +1201,7 @@ function POSContent() {
     setShowMpesaFlow(false);
     setPendingOrderId(null);
     setMpesaPhoneNumber('');
+    clearCheckoutIdempotencyKey();
     toast({ type: 'info', title: 'Payment cancelled', message: 'M-Pesa payment was cancelled' });
   };
 
@@ -1236,6 +1256,7 @@ function POSContent() {
         cashierId,
         cashierName,
         shiftId: currentShift?._id,
+        idempotencyKey: getCheckoutIdempotencyKey(),
         // Business-type-specific order fields
         ...(orderType !== 'standard' && { orderType }),
         ...(tableNumber && { tableNumber }),
@@ -1359,11 +1380,14 @@ function POSContent() {
         setAmountTendered(0);
         setCheckoutStep(0);
         setFeedbackType(null);
+        clearCheckoutIdempotencyKey();
         refreshPendingCount();
       }, 800);
     } catch (err: any) {
       if (typeof window !== "undefined" && shopId) {
-        // Save offline with shopId for multi-tenant isolation
+        // Save offline with shopId for multi-tenant isolation.
+        // The payload carries the SAME idempotency key so the offline replay
+        // cannot create a second sale for this logical checkout.
         await addPendingOrder(shopId, {
           createdAt: Date.now(),
           payload: {
@@ -1386,6 +1410,7 @@ function POSContent() {
             customerName: customerName || undefined,
             cashierId,
             cashierName,
+            idempotencyKey: getCheckoutIdempotencyKey(),
           },
         });
         setCheckoutMessage("Checkout saved offline. It will sync automatically later.");

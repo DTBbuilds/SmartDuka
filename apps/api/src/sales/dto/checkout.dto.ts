@@ -7,6 +7,8 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Length,
+  Matches,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -89,6 +91,19 @@ export class CheckoutPaymentDto {
 }
 
 export class CheckoutDto {
+  /**
+   * Stable client-generated key for one logical checkout. Reused unchanged on
+   * retry, reconnect, double-submit, or offline replay; a new key starts a new
+   * logical checkout. Opaque to the server.
+   */
+  @IsOptional()
+  @IsString()
+  @Length(8, 128)
+  @Matches(/^[A-Za-z0-9_\-:.]+$/, {
+    message: 'idempotencyKey must be 8-128 characters of [A-Za-z0-9_-:]',
+  })
+  idempotencyKey?: string;
+
   @IsArray()
   @ArrayMinSize(1)
   @ValidateNested({ each: true })
