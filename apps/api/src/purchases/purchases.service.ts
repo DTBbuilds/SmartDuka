@@ -139,7 +139,7 @@ export class PurchasesService {
             shopId,
             item.productId.toString(),
             item.quantity,
-            'purchase_received', // reason
+            'purchase', // reason
             userId || 'system',
             `Purchase Order ${currentPurchase.purchaseNumber} - ${item.productName} x${item.quantity}` // notes
           );

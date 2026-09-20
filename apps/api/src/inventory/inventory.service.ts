@@ -1567,13 +1567,6 @@ export class InventoryService implements OnModuleInit {
       notes,
     });
 
-    // Update product stock
-    await this.productModel.findByIdAndUpdate(
-      productId,
-      { $inc: { stock: quantityChange } },
-      { new: true },
-    );
-
     return adjustment.save();
   }
 
@@ -1653,8 +1646,14 @@ export class InventoryService implements OnModuleInit {
       notes,
     });
 
-    // If variance exists, create adjustment
+    // If variance exists, apply the physical correction then record it
     if (variance !== 0) {
+      const updated = await this.updateStock(shopId, productId, variance);
+      if (!updated) {
+        throw new BadRequestException(
+          'Failed to apply stock reconciliation variance',
+        );
+      }
       await this.createStockAdjustment(
         shopId,
         productId,
@@ -1949,7 +1948,7 @@ export class InventoryService implements OnModuleInit {
         shopId,
         productId,
         initialStock,
-        'branch_import',
+        'other',
         addedBy,
         `Product added to branch ${branchId} with initial stock: ${initialStock}`,
       );
