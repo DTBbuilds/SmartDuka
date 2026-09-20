@@ -1,8 +1,22 @@
-import { Injectable, BadRequestException, InternalServerErrorException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { PaymentTransaction, PaymentTransactionDocument } from '../schemas/payment-transaction.schema';
-import { MpesaTransaction, MpesaTransactionDocument } from '../schemas/mpesa-transaction.schema';
+import {
+  PaymentTransaction,
+  PaymentTransactionDocument,
+} from '../schemas/payment-transaction.schema';
+import {
+  MpesaTransaction,
+  MpesaTransactionDocument,
+} from '../schemas/mpesa-transaction.schema';
+import { Order, OrderDocument } from '../../sales/schemas/order.schema';
+import { LoyaltyService } from '../../loyalty/loyalty.service';
+import { CustomersService } from '../../customers/customers.service';
 
 export interface CreatePaymentTransactionDto {
   shopId: string;
@@ -11,7 +25,15 @@ export interface CreatePaymentTransactionDto {
   cashierId: string;
   cashierName: string;
   branchId?: string;
-  paymentMethod: 'cash' | 'card' | 'mpesa' | 'send_money' | 'qr' | 'stripe' | 'bank' | 'other';
+  paymentMethod:
+    | 'cash'
+    | 'card'
+    | 'mpesa'
+    | 'send_money'
+    | 'qr'
+    | 'stripe'
+    | 'bank'
+    | 'other';
   amount: number;
   status?: 'completed' | 'pending' | 'failed';
   customerName?: string;
@@ -47,15 +69,35 @@ export interface PaymentStatsDto {
 
 @Injectable()
 export class PaymentTransactionService {
+  private readonly logger = new Logger(PaymentTransactionService.name);
+
   constructor(
     @InjectModel(PaymentTransaction.name)
     private readonly paymentTransactionModel: Model<PaymentTransactionDocument>,
     @InjectModel(MpesaTransaction.name)
     private readonly mpesaTransactionModel: Model<MpesaTransactionDocument>,
+    @InjectModel(Order.name)
+    private readonly orderModel: Model<OrderDocument>,
+    private readonly loyaltyService: LoyaltyService,
+    private readonly customersService: CustomersService,
   ) {}
 
-  async createTransaction(dto: CreatePaymentTransactionDto): Promise<PaymentTransactionDocument> {
+  async createTransaction(
+    dto: CreatePaymentTransactionDto,
+  ): Promise<PaymentTransactionDocument> {
     try {
+      // Idempotency: the same provider transaction (same CheckoutRequestID)
+      // must never produce two payment records, no matter how many times the
+      // callback or a status query reports it.
+      if (dto.mpesaTransactionId) {
+        const existing = await this.paymentTransactionModel
+          .findOne({ mpesaTransactionId: dto.mpesaTransactionId })
+          .exec();
+        if (existing) {
+          return existing;
+        }
+      }
+
       const transaction = new this.paymentTransactionModel({
         shopId: new Types.ObjectId(dto.shopId),
         orderId: new Types.ObjectId(dto.orderId),
@@ -80,10 +122,149 @@ export class PaymentTransactionService {
         completedAt: dto.status === 'completed' ? new Date() : undefined,
       });
 
-      return await transaction.save();
+      const saved = await transaction.save();
+      await this.syncOrderOnConfirmedPayment(dto);
+      return saved;
     } catch (error: any) {
+      // Lost the uniqueness race against a concurrent callback/status-query
+      // reporting the same provider transaction: the winner already recorded
+      // the payment and performed the order convergence. Return the canonical
+      // row instead of surfacing an uncontrolled failure.
+      if (error?.code === 11000 && dto.mpesaTransactionId) {
+        const winner = await this.paymentTransactionModel
+          .findOne({ mpesaTransactionId: dto.mpesaTransactionId })
+          .exec();
+        if (winner) return winner;
+      }
       throw new InternalServerErrorException(
         `Failed to create payment transaction: ${error?.message || 'Unknown error'}`,
+      );
+    }
+  }
+
+  /**
+   * CONVERGENCE PRIMITIVE — synchronize the owning order when a payment is
+   * provider-confirmed. Shared by every confirmation path (live callback,
+   * Daraja status query, reconciliation) so there is exactly one convergence
+   * semantics.
+   *
+   * Checkout creates M-Pesa orders as `pending`/`unpaid` with stock already
+   * decremented (P0-3 server-authoritative rules) and defers loyalty earn and
+   * customer purchase stats until the payment is confirmed. This function:
+   *   - is tenant-scoped (order must belong to the transaction's shop);
+   *   - is monotonic: only a `pending` order may transition, never a
+   *     completed/void/refunded one (a late callback cannot reopen a voided
+   *     sale — it is logged for manual reconciliation instead);
+   *   - recalculates payment state from ALL confirmed tender, never from a
+   *     single transaction;
+   *   - claims the transition atomically (`status: 'pending'` in the update
+   *     filter + modifiedCount check), so exactly one concurrent worker
+   *     performs the once-only completion side effects (loyalty earn, customer
+   *     stats) — duplicate callbacks and callback/query races converge on the
+   *     same order with zero duplicated side effects;
+   *   - never mutates inventory and never changes Order.total.
+   * Sync failure is logged, never thrown — recording the payment must not
+   * fail because the order update did.
+   */
+  private async syncOrderOnConfirmedPayment(
+    dto: CreatePaymentTransactionDto,
+  ): Promise<void> {
+    if (dto.status !== 'completed') return;
+
+    try {
+      const order = await this.orderModel
+        .findOne({
+          _id: new Types.ObjectId(dto.orderId),
+          shopId: new Types.ObjectId(dto.shopId),
+        })
+        .exec();
+
+      if (!order) {
+        this.logger.warn(
+          `Confirmed ${dto.paymentMethod} payment references unknown order ${dto.orderNumber} (shop ${dto.shopId})`,
+        );
+        return;
+      }
+
+      if (order.status === 'void') {
+        this.logger.warn(
+          `Provider-confirmed payment received for VOIDED order ${dto.orderNumber} - payment recorded financially, order state requires manual reconciliation`,
+        );
+        return;
+      }
+
+      if (order.status !== 'pending') return;
+
+      const alreadyConfirmed = (order.payments ?? [])
+        .filter((p) => p.status === 'completed')
+        .reduce((sum, p) => sum + (p.amount || 0), 0);
+      const confirmedTotal = alreadyConfirmed + (dto.amount || 0);
+      const paymentStatus =
+        confirmedTotal >= order.total
+          ? 'paid'
+          : confirmedTotal > 0
+            ? 'partial'
+            : 'unpaid';
+
+      const result = await this.orderModel.updateOne(
+        { _id: order._id, shopId: order.shopId, status: 'pending' },
+        {
+          $set: {
+            paymentStatus,
+            ...(paymentStatus === 'paid' ? { status: 'completed' } : {}),
+            ...(dto.paymentMethod === 'mpesa'
+              ? {
+                  'payments.$[p].status': 'completed',
+                  ...(dto.mpesaReceiptNumber
+                    ? {
+                        'payments.$[p].mpesaReceiptNumber':
+                          dto.mpesaReceiptNumber,
+                      }
+                    : {}),
+                }
+              : {}),
+          },
+        },
+        { arrayFilters: [{ 'p.method': 'mpesa', 'p.status': 'pending' }] },
+      );
+
+      if (
+        result.modifiedCount > 0 &&
+        paymentStatus === 'paid' &&
+        order.customerId
+      ) {
+        // Exactly-once completion side effects: the atomic claim above means
+        // only one worker can transition the order to paid/completed.
+        try {
+          await this.loyaltyService.earnPoints(
+            dto.shopId,
+            order.customerId.toString(),
+            order.total,
+            `Purchase: Order #${order.orderNumber}`,
+          );
+        } catch (error: any) {
+          this.logger.error(
+            `Failed to award loyalty points for order ${order.orderNumber}: ${error?.message}`,
+          );
+        }
+        try {
+          await this.customersService.updatePurchaseStats(
+            order.customerId.toString(),
+            order.total,
+          );
+        } catch (error: any) {
+          this.logger.error(
+            `Failed to update customer purchase stats for order ${order.orderNumber}: ${error?.message}`,
+          );
+        }
+      }
+
+      this.logger.log(
+        `Order ${dto.orderNumber} synchronized after confirmed ${dto.paymentMethod} payment (paymentStatus: ${paymentStatus})`,
+      );
+    } catch (error: any) {
+      this.logger.error(
+        `Failed to synchronize order ${dto.orderNumber} after confirmed payment: ${error?.message}`,
       );
     }
   }
@@ -146,7 +327,10 @@ export class PaymentTransactionService {
     }
   }
 
-  async getStats(shopId: string, filters?: { from?: string; to?: string; branchId?: string }): Promise<PaymentStatsDto> {
+  async getStats(
+    shopId: string,
+    filters?: { from?: string; to?: string; branchId?: string },
+  ): Promise<PaymentStatsDto> {
     try {
       const query: any = { shopId: new Types.ObjectId(shopId) };
 
@@ -166,15 +350,27 @@ export class PaymentTransactionService {
       }
 
       // Get all transactions for stats
-      const transactions = await this.paymentTransactionModel.find(query).exec();
+      const transactions = await this.paymentTransactionModel
+        .find(query)
+        .exec();
 
       // Calculate stats
       const totalTransactions = transactions.length;
-      const totalAmount = transactions.reduce((sum, t) => sum + (t.amount || 0), 0);
-      const averageTransaction = totalTransactions > 0 ? totalAmount / totalTransactions : 0;
-      const completedCount = transactions.filter((t) => t.status === 'completed').length;
-      const pendingCount = transactions.filter((t) => t.status === 'pending').length;
-      const failedCount = transactions.filter((t) => t.status === 'failed').length;
+      const totalAmount = transactions.reduce(
+        (sum, t) => sum + (t.amount || 0),
+        0,
+      );
+      const averageTransaction =
+        totalTransactions > 0 ? totalAmount / totalTransactions : 0;
+      const completedCount = transactions.filter(
+        (t) => t.status === 'completed',
+      ).length;
+      const pendingCount = transactions.filter(
+        (t) => t.status === 'pending',
+      ).length;
+      const failedCount = transactions.filter(
+        (t) => t.status === 'failed',
+      ).length;
 
       // Group by payment method
       const byMethod = {
@@ -189,7 +385,7 @@ export class PaymentTransactionService {
       };
 
       transactions.forEach((t) => {
-        const method = t.paymentMethod as keyof typeof byMethod;
+        const method = t.paymentMethod;
         if (byMethod[method]) {
           byMethod[method].count += 1;
           byMethod[method].amount += t.amount || 0;
@@ -284,7 +480,9 @@ export class PaymentTransactionService {
     }
   }
 
-  async getTransactionsByOrderId(orderId: string): Promise<PaymentTransactionDocument[]> {
+  async getTransactionsByOrderId(
+    orderId: string,
+  ): Promise<PaymentTransactionDocument[]> {
     try {
       return await this.paymentTransactionModel
         .find({ orderId: new Types.ObjectId(orderId) })
@@ -307,15 +505,23 @@ export class PaymentTransactionService {
         .exec();
 
       const totalTransactions = transactions.length;
-      const totalAmount = transactions.reduce((sum, t) => sum + (t.amount || 0), 0);
-      const completedCount = transactions.filter((t) => t.status === 'completed').length;
+      const totalAmount = transactions.reduce(
+        (sum, t) => sum + (t.amount || 0),
+        0,
+      );
+      const completedCount = transactions.filter(
+        (t) => t.status === 'completed',
+      ).length;
 
       return {
         cashierId,
         totalTransactions,
         totalAmount,
         completedCount,
-        averageTransaction: totalTransactions > 0 ? Math.round(totalAmount / totalTransactions) : 0,
+        averageTransaction:
+          totalTransactions > 0
+            ? Math.round(totalAmount / totalTransactions)
+            : 0,
       };
     } catch (error: any) {
       throw new InternalServerErrorException(
@@ -324,12 +530,11 @@ export class PaymentTransactionService {
     }
   }
 
-  async getPaymentsAnalytics(
-    shopId: string,
-    branchId?: string,
-  ): Promise<any> {
+  async getPaymentsAnalytics(shopId: string, branchId?: string): Promise<any> {
     if (!shopId) {
-      throw new BadRequestException('Shop ID is required for payment analytics');
+      throw new BadRequestException(
+        'Shop ID is required for payment analytics',
+      );
     }
 
     const now = new Date();
@@ -354,64 +559,84 @@ export class PaymentTransactionService {
       .sort({ createdAt: -1 })
       .exec();
 
-    const todayTransactions = monthTransactions.filter(t => {
+    const todayTransactions = monthTransactions.filter((t) => {
       if (!t.createdAt) return false;
       return new Date(t.createdAt).getTime() >= today.getTime();
     });
-    const weekTransactions = monthTransactions.filter(t => {
+    const weekTransactions = monthTransactions.filter((t) => {
       if (!t.createdAt) return false;
       return new Date(t.createdAt).getTime() >= weekAgo.getTime();
     });
 
     // Calculate totals
     const todayTotal = todayTransactions
-      .filter(t => t.status === 'completed')
+      .filter((t) => t.status === 'completed')
       .reduce((sum, t) => sum + (t.amount || 0), 0);
     const weekTotal = weekTransactions
-      .filter(t => t.status === 'completed')
+      .filter((t) => t.status === 'completed')
       .reduce((sum, t) => sum + (t.amount || 0), 0);
     const monthTotal = monthTransactions
-      .filter(t => t.status === 'completed')
+      .filter((t) => t.status === 'completed')
       .reduce((sum, t) => sum + (t.amount || 0), 0);
 
     // Success rate
-    const completedCount = monthTransactions.filter(t => t.status === 'completed').length;
-    const failedCount = monthTransactions.filter(t => t.status === 'failed').length;
-    const successRate = monthTransactions.length > 0 
-      ? Math.round((completedCount / monthTransactions.length) * 1000) / 10 
-      : 100;
+    const completedCount = monthTransactions.filter(
+      (t) => t.status === 'completed',
+    ).length;
+    const failedCount = monthTransactions.filter(
+      (t) => t.status === 'failed',
+    ).length;
+    const successRate =
+      monthTransactions.length > 0
+        ? Math.round((completedCount / monthTransactions.length) * 1000) / 10
+        : 100;
 
     // Average transaction value
-    const averageTransactionValue = completedCount > 0 
-      ? Math.round(monthTotal / completedCount) 
-      : 0;
+    const averageTransactionValue =
+      completedCount > 0 ? Math.round(monthTotal / completedCount) : 0;
 
     // Method breakdown - use TODAY's transactions for consistency with summary stats
     const methodMap = new Map<string, { count: number; total: number }>();
-    todayTransactions.filter(t => t.status === 'completed').forEach(t => {
-      const method = t.paymentMethod || 'cash';
-      const existing = methodMap.get(method) || { count: 0, total: 0 };
-      existing.count += 1;
-      existing.total += t.amount || 0;
-      methodMap.set(method, existing);
-    });
+    todayTransactions
+      .filter((t) => t.status === 'completed')
+      .forEach((t) => {
+        const method = t.paymentMethod || 'cash';
+        const existing = methodMap.get(method) || { count: 0, total: 0 };
+        existing.count += 1;
+        existing.total += t.amount || 0;
+        methodMap.set(method, existing);
+      });
 
-    const todayCompletedCount = todayTransactions.filter(t => t.status === 'completed').length;
-    const methodBreakdown = Array.from(methodMap.entries()).map(([method, data]) => ({
-      method: method === 'mpesa' ? 'M-Pesa' : method.charAt(0).toUpperCase() + method.slice(1),
-      count: data.count,
-      total: data.total,
-      percentage: todayCompletedCount > 0 ? Math.round((data.count / todayCompletedCount) * 1000) / 10 : 0,
-    }));
+    const todayCompletedCount = todayTransactions.filter(
+      (t) => t.status === 'completed',
+    ).length;
+    const methodBreakdown = Array.from(methodMap.entries()).map(
+      ([method, data]) => ({
+        method:
+          method === 'mpesa'
+            ? 'M-Pesa'
+            : method.charAt(0).toUpperCase() + method.slice(1),
+        count: data.count,
+        total: data.total,
+        percentage:
+          todayCompletedCount > 0
+            ? Math.round((data.count / todayCompletedCount) * 1000) / 10
+            : 0,
+      }),
+    );
 
     // Daily trend for last 14 days
     const dailyTrend = Array.from({ length: 14 }, (_, i) => {
       const date = new Date(today.getTime() - (13 - i) * 24 * 60 * 60 * 1000);
       const nextDate = new Date(date.getTime() + 24 * 60 * 60 * 1000);
-      const dayTransactions = monthTransactions.filter(t => {
+      const dayTransactions = monthTransactions.filter((t) => {
         if (!t.createdAt) return false;
         const txTime = new Date(t.createdAt).getTime();
-        return txTime >= date.getTime() && txTime < nextDate.getTime() && t.status === 'completed';
+        return (
+          txTime >= date.getTime() &&
+          txTime < nextDate.getTime() &&
+          t.status === 'completed'
+        );
       });
       return {
         date: date.toISOString().split('T')[0],
@@ -436,28 +661,36 @@ export class PaymentTransactionService {
       .exec();
 
     // Map M-Pesa status to display status
-    const mapMpesaStatus = (status: string): 'completed' | 'pending' | 'failed' => {
+    const mapMpesaStatus = (
+      status: string,
+    ): 'completed' | 'pending' | 'failed' => {
       switch (status) {
-        case 'completed': return 'completed';
-        case 'pending': return 'pending';
+        case 'completed':
+          return 'completed';
+        case 'pending':
+          return 'pending';
         case 'failed':
         case 'expired':
         case 'cancelled':
           return 'failed';
-        default: return 'pending';
+        default:
+          return 'pending';
       }
     };
 
     // Combine payment transactions with M-Pesa transactions for recent list
     // This ensures we show failed M-Pesa attempts, not just successful payments
-    const mpesaRecentTransactions = mpesaTransactions.slice(0, 10).map(t => ({
+    const mpesaRecentTransactions = mpesaTransactions.slice(0, 10).map((t) => ({
       id: t._id.toString(),
       amount: t.amount || 0,
       method: 'mpesa',
       status: mapMpesaStatus(t.status),
-      reference: t.mpesaReceiptNumber || `TXN-${t._id.toString().slice(-8).toUpperCase()}`,
+      reference:
+        t.mpesaReceiptNumber ||
+        `TXN-${t._id.toString().slice(-8).toUpperCase()}`,
       timestamp: t.createdAt,
-      orderNumber: t.orderNumber || `STK-${t._id.toString().slice(-8).toUpperCase()}`,
+      orderNumber:
+        t.orderNumber || `STK-${t._id.toString().slice(-8).toUpperCase()}`,
       mpesaStatus: t.status, // Include actual M-Pesa status for debugging
       errorCategory: t.errorCategory,
       lastError: t.lastError,
@@ -465,28 +698,36 @@ export class PaymentTransactionService {
 
     // Get non-M-Pesa recent transactions
     const nonMpesaRecentTransactions = monthTransactions
-      .filter(t => t.paymentMethod !== 'mpesa')
+      .filter((t) => t.paymentMethod !== 'mpesa')
       .slice(0, 10)
-      .map(t => ({
+      .map((t) => ({
         id: t._id.toString(),
         amount: t.amount || 0,
         method: t.paymentMethod || 'cash',
-        status: t.status as 'completed' | 'pending' | 'failed',
-        reference: t.referenceNumber || `TXN-${t._id.toString().slice(-8).toUpperCase()}`,
+        status: t.status,
+        reference:
+          t.referenceNumber ||
+          `TXN-${t._id.toString().slice(-8).toUpperCase()}`,
         timestamp: t.createdAt,
         orderNumber: t.orderNumber,
       }));
 
     // Merge and sort by timestamp
-    const recentTransactions = [...mpesaRecentTransactions, ...nonMpesaRecentTransactions]
-      .sort((a, b) => new Date(b.timestamp!).getTime() - new Date(a.timestamp!).getTime())
+    const recentTransactions = [
+      ...mpesaRecentTransactions,
+      ...nonMpesaRecentTransactions,
+    ]
+      .sort(
+        (a, b) =>
+          new Date(b.timestamp!).getTime() - new Date(a.timestamp!).getTime(),
+      )
       .slice(0, 10);
 
     // Failed transactions - include M-Pesa failures
     const mpesaFailedTransactions = mpesaTransactions
-      .filter(t => t.status === 'failed' || t.status === 'expired')
+      .filter((t) => t.status === 'failed' || t.status === 'expired')
       .slice(0, 5)
-      .map(t => ({
+      .map((t) => ({
         id: t._id.toString(),
         amount: t.amount || 0,
         method: 'mpesa',
@@ -496,9 +737,9 @@ export class PaymentTransactionService {
       }));
 
     const paymentFailedTransactions = monthTransactions
-      .filter(t => t.status === 'failed')
+      .filter((t) => t.status === 'failed')
       .slice(0, 5)
-      .map(t => ({
+      .map((t) => ({
         id: t._id.toString(),
         amount: t.amount || 0,
         method: t.paymentMethod || 'cash',
@@ -506,26 +747,46 @@ export class PaymentTransactionService {
         timestamp: t.createdAt,
       }));
 
-    const failedTransactions = [...mpesaFailedTransactions, ...paymentFailedTransactions]
-      .sort((a, b) => new Date(b.timestamp!).getTime() - new Date(a.timestamp!).getTime())
+    const failedTransactions = [
+      ...mpesaFailedTransactions,
+      ...paymentFailedTransactions,
+    ]
+      .sort(
+        (a, b) =>
+          new Date(b.timestamp!).getTime() - new Date(a.timestamp!).getTime(),
+      )
       .slice(0, 10);
 
     // Branch breakdown (for shop-level analytics showing per-branch stats) - use TODAY's data
-    const branchMap = new Map<string, { count: number; total: number; branchId: string }>();
-    todayTransactions.filter(t => t.status === 'completed').forEach(t => {
-      const bId = t.branchId?.toString() || 'main';
-      const existing = branchMap.get(bId) || { count: 0, total: 0, branchId: bId };
-      existing.count += 1;
-      existing.total += t.amount || 0;
-      branchMap.set(bId, existing);
-    });
+    const branchMap = new Map<
+      string,
+      { count: number; total: number; branchId: string }
+    >();
+    todayTransactions
+      .filter((t) => t.status === 'completed')
+      .forEach((t) => {
+        const bId = t.branchId?.toString() || 'main';
+        const existing = branchMap.get(bId) || {
+          count: 0,
+          total: 0,
+          branchId: bId,
+        };
+        existing.count += 1;
+        existing.total += t.amount || 0;
+        branchMap.set(bId, existing);
+      });
 
-    const branchBreakdown = Array.from(branchMap.entries()).map(([bId, data]) => ({
-      branchId: bId,
-      count: data.count,
-      total: data.total,
-      percentage: todayCompletedCount > 0 ? Math.round((data.count / todayCompletedCount) * 1000) / 10 : 0,
-    }));
+    const branchBreakdown = Array.from(branchMap.entries()).map(
+      ([bId, data]) => ({
+        branchId: bId,
+        count: data.count,
+        total: data.total,
+        percentage:
+          todayCompletedCount > 0
+            ? Math.round((data.count / todayCompletedCount) * 1000) / 10
+            : 0,
+      }),
+    );
 
     return {
       // Identifiers for multi-tenant clarity
@@ -556,7 +817,10 @@ export class PaymentTransactionService {
   /**
    * Get payment analytics for a specific branch
    */
-  async getBranchPaymentsAnalytics(shopId: string, branchId: string): Promise<any> {
+  async getBranchPaymentsAnalytics(
+    shopId: string,
+    branchId: string,
+  ): Promise<any> {
     if (!shopId || !branchId) {
       throw new BadRequestException('Shop ID and Branch ID are required');
     }
@@ -605,23 +869,35 @@ export class PaymentTransactionService {
       },
     ];
 
-    const branchStats = await this.paymentTransactionModel.aggregate(pipeline).exec();
+    const branchStats = await this.paymentTransactionModel
+      .aggregate(pipeline)
+      .exec();
 
     // Calculate shop-wide totals
-    const shopTotal = branchStats.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
-    const shopTransactions = branchStats.reduce((sum, b) => sum + (b.transactionCount || 0), 0);
+    const shopTotal = branchStats.reduce(
+      (sum, b) => sum + (b.totalAmount || 0),
+      0,
+    );
+    const shopTransactions = branchStats.reduce(
+      (sum, b) => sum + (b.transactionCount || 0),
+      0,
+    );
 
     return {
       shopId,
       shopTotal,
       shopTransactions,
-      shopAvgTransaction: shopTransactions > 0 ? Math.round(shopTotal / shopTransactions) : 0,
-      branchStats: branchStats.map(b => ({
+      shopAvgTransaction:
+        shopTransactions > 0 ? Math.round(shopTotal / shopTransactions) : 0,
+      branchStats: branchStats.map((b) => ({
         branchId: b.branchId?.toString() || 'main',
         totalAmount: b.totalAmount,
         transactionCount: b.transactionCount,
         avgTransaction: b.avgTransaction,
-        percentageOfTotal: shopTotal > 0 ? Math.round((b.totalAmount / shopTotal) * 1000) / 10 : 0,
+        percentageOfTotal:
+          shopTotal > 0
+            ? Math.round((b.totalAmount / shopTotal) * 1000) / 10
+            : 0,
       })),
     };
   }

@@ -14,18 +14,38 @@ import { MpesaTransactionManagerService } from './services/mpesa-transaction-man
 import { MpesaController } from './mpesa.controller';
 import { PaymentConfigController } from './payment-config.controller';
 import { PaymentReadinessController } from './payment-readiness.controller';
-import { PaymentTransaction, PaymentTransactionSchema } from './schemas/payment-transaction.schema';
-import { MpesaTransaction, MpesaTransactionSchema } from './schemas/mpesa-transaction.schema';
-import { PaymentConfig, PaymentConfigSchema } from './schemas/payment-config.schema';
-import { VerificationLog, VerificationLogSchema } from './schemas/verification-log.schema';
-import { ConfigAuditLog, ConfigAuditLogSchema } from './schemas/config-audit-log.schema';
+import {
+  PaymentTransaction,
+  PaymentTransactionSchema,
+} from './schemas/payment-transaction.schema';
+import {
+  MpesaTransaction,
+  MpesaTransactionSchema,
+} from './schemas/mpesa-transaction.schema';
+import {
+  PaymentConfig,
+  PaymentConfigSchema,
+} from './schemas/payment-config.schema';
+import {
+  VerificationLog,
+  VerificationLogSchema,
+} from './schemas/verification-log.schema';
+import {
+  ConfigAuditLog,
+  ConfigAuditLogSchema,
+} from './schemas/config-audit-log.schema';
 import { Shop, ShopSchema } from '../shops/schemas/shop.schema';
+import { Order, OrderSchema } from '../sales/schemas/order.schema';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { LoyaltyModule } from '../loyalty/loyalty.module';
+import { CustomersModule } from '../customers/customers.module';
 
 @Module({
   imports: [
     ConfigModule,
     NotificationsModule,
+    LoyaltyModule,
+    CustomersModule,
     MongooseModule.forFeature([
       { name: PaymentTransaction.name, schema: PaymentTransactionSchema },
       { name: MpesaTransaction.name, schema: MpesaTransactionSchema },
@@ -33,6 +53,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
       { name: VerificationLog.name, schema: VerificationLogSchema },
       { name: ConfigAuditLog.name, schema: ConfigAuditLogSchema },
       { name: Shop.name, schema: ShopSchema },
+      { name: Order.name, schema: OrderSchema },
     ]),
   ],
   providers: [
@@ -46,7 +67,12 @@ import { NotificationsModule } from '../notifications/notifications.module';
     PaymentConfigService,
     MpesaTransactionManagerService,
   ],
-  controllers: [PaymentsController, MpesaController, PaymentConfigController, PaymentReadinessController],
+  controllers: [
+    PaymentsController,
+    MpesaController,
+    PaymentConfigController,
+    PaymentReadinessController,
+  ],
   exports: [
     PaymentsService,
     DarajaService,

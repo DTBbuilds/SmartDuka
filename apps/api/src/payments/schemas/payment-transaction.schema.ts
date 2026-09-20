@@ -23,13 +23,38 @@ export class PaymentTransaction {
   @Prop({ required: false, type: Types.ObjectId, ref: 'Branch' })
   branchId?: Types.ObjectId;
 
-  @Prop({ required: true, enum: ['cash', 'card', 'mpesa', 'send_money', 'qr', 'stripe', 'bank', 'other'], default: 'cash' })
-  paymentMethod: 'cash' | 'card' | 'mpesa' | 'send_money' | 'qr' | 'stripe' | 'bank' | 'other';
+  @Prop({
+    required: true,
+    enum: [
+      'cash',
+      'card',
+      'mpesa',
+      'send_money',
+      'qr',
+      'stripe',
+      'bank',
+      'other',
+    ],
+    default: 'cash',
+  })
+  paymentMethod:
+    | 'cash'
+    | 'card'
+    | 'mpesa'
+    | 'send_money'
+    | 'qr'
+    | 'stripe'
+    | 'bank'
+    | 'other';
 
   @Prop({ required: true })
   amount: number;
 
-  @Prop({ required: true, enum: ['completed', 'pending', 'failed'], default: 'completed' })
+  @Prop({
+    required: true,
+    enum: ['completed', 'pending', 'failed'],
+    default: 'completed',
+  })
   status: 'completed' | 'pending' | 'failed';
 
   @Prop({ required: false })
@@ -98,10 +123,20 @@ export class PaymentTransaction {
   updatedAt?: Date;
 }
 
-export const PaymentTransactionSchema = SchemaFactory.createForClass(PaymentTransaction);
+export const PaymentTransactionSchema =
+  SchemaFactory.createForClass(PaymentTransaction);
 
 // Create indexes for efficient queries
 PaymentTransactionSchema.index({ shopId: 1, createdAt: -1 });
+// Provider-transaction uniqueness: the same M-Pesa CheckoutRequestID must
+// never produce two payment records under concurrent callback/query delivery.
+// Sparse so historical rows without the field remain valid; MongoDB 4.2+
+// index builds are non-blocking, so a failed build (pre-existing duplicates)
+// degrades to the application pre-read rather than blocking startup.
+PaymentTransactionSchema.index(
+  { mpesaTransactionId: 1 },
+  { unique: true, sparse: true },
+);
 PaymentTransactionSchema.index({ shopId: 1, cashierId: 1 });
 PaymentTransactionSchema.index({ shopId: 1, paymentMethod: 1 });
 PaymentTransactionSchema.index({ shopId: 1, status: 1 });
@@ -110,4 +145,9 @@ PaymentTransactionSchema.index({ orderId: 1 });
 PaymentTransactionSchema.index({ createdAt: -1 });
 // Compound index for branch-level analytics (multi-tenant)
 PaymentTransactionSchema.index({ shopId: 1, branchId: 1, createdAt: -1 });
-PaymentTransactionSchema.index({ shopId: 1, branchId: 1, status: 1, createdAt: -1 });
+PaymentTransactionSchema.index({
+  shopId: 1,
+  branchId: 1,
+  status: 1,
+  createdAt: -1,
+});

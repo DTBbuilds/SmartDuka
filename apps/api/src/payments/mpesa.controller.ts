@@ -13,7 +13,10 @@ import {
 } from '@nestjs/common';
 import { MpesaService } from './services/mpesa.service';
 import { MpesaMultiTenantService } from './services/mpesa-multi-tenant.service';
-import { MpesaTransactionManagerService, MPESA_TIMING } from './services/mpesa-transaction-manager.service';
+import {
+  MpesaTransactionManagerService,
+  MPESA_TIMING,
+} from './services/mpesa-transaction-manager.service';
 import { MpesaReconciliationService } from './services/mpesa-reconciliation.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -31,12 +34,12 @@ import { UpdateMpesaConfigDto } from './dto/mpesa-config.dto';
 
 /**
  * M-Pesa Payment Controller
- * 
+ *
  * MULTI-TENANT ARCHITECTURE:
  * ==========================
  * SmartDuka is a multi-tenant POS system. Each shop MUST configure their own
  * M-Pesa credentials (Paybill/Till number) before accepting mobile payments.
- * 
+ *
  * Payment Types:
  * 1. SHOP PAYMENTS (this controller):
  *    - Customer pays shop for products/services
@@ -44,18 +47,18 @@ import { UpdateMpesaConfigDto } from './dto/mpesa-config.dto';
  *    - Shop must configure: shortCode, consumerKey, consumerSecret, passkey
  *    - Credentials must be verified before accepting payments
  *    - NO FALLBACK to system credentials (security requirement)
- * 
+ *
  * 2. SUBSCRIPTION PAYMENTS (SubscriptionMpesaService):
  *    - Shop pays SmartDuka for subscription
  *    - Uses SMARTDUKA'S SYSTEM credentials
  *    - Handled by /subscriptions/payments/* endpoints
- * 
+ *
  * Configuration Flow:
  * 1. Shop admin goes to Settings → Payments → M-Pesa
  * 2. Enters their Paybill/Till credentials from Safaricom
  * 3. Clicks "Verify Credentials" to test with Daraja API
  * 4. Once verified, M-Pesa payments are enabled for the shop
- * 
+ *
  * Security:
  * - All credentials are encrypted at rest using AES-256-GCM
  * - Each shop's credentials are isolated from other shops
@@ -77,7 +80,7 @@ export class MpesaController {
    *
    * MULTI-TENANT: Each shop MUST configure their own M-Pesa credentials.
    * System/platform credentials are NOT shared with shops.
-   * 
+   *
    * Sends an STK push to the customer's phone for payment.
    * Implements idempotency - duplicate requests return existing transaction.
    *
@@ -97,44 +100,55 @@ export class MpesaController {
     );
 
     // MULTI-TENANT CHECK: Verify shop has configured their own M-Pesa credentials
-    const mpesaStatus = await this.mpesaMultiTenantService.getMpesaConfigStatus(user.shopId);
-    
+    const mpesaStatus = await this.mpesaMultiTenantService.getMpesaConfigStatus(
+      user.shopId,
+    );
+
     if (!mpesaStatus.isConfigured) {
-      this.logger.warn(`Shop ${user.shopId} attempted M-Pesa payment without configuration`);
+      this.logger.warn(
+        `Shop ${user.shopId} attempted M-Pesa payment without configuration`,
+      );
       return {
         success: false,
         transactionId: '',
         status: 'FAILED' as any,
-        message: 'M-Pesa is not configured for your shop. Please go to Settings → Payments → M-Pesa to configure your Paybill/Till number before accepting mobile payments.',
+        message:
+          'M-Pesa is not configured for your shop. Please go to Settings → Payments → M-Pesa to configure your Paybill/Till number before accepting mobile payments.',
         errorCode: 'MPESA_NOT_CONFIGURED',
       };
     }
 
     if (!mpesaStatus.isEnabled) {
-      this.logger.warn(`Shop ${user.shopId} attempted M-Pesa payment but it's disabled`);
+      this.logger.warn(
+        `Shop ${user.shopId} attempted M-Pesa payment but it's disabled`,
+      );
       return {
         success: false,
         transactionId: '',
         status: 'FAILED' as any,
-        message: 'M-Pesa payments are disabled for your shop. Please enable M-Pesa in Settings → Payments to accept mobile payments.',
+        message:
+          'M-Pesa payments are disabled for your shop. Please enable M-Pesa in Settings → Payments to accept mobile payments.',
         errorCode: 'MPESA_DISABLED',
       };
     }
 
     if (!mpesaStatus.isVerified) {
-      this.logger.warn(`Shop ${user.shopId} attempted M-Pesa payment with unverified credentials`);
+      this.logger.warn(
+        `Shop ${user.shopId} attempted M-Pesa payment with unverified credentials`,
+      );
       return {
         success: false,
         transactionId: '',
         status: 'FAILED' as any,
-        message: 'Your M-Pesa credentials have not been verified. Please verify your credentials in Settings → Payments → M-Pesa before accepting payments.',
+        message:
+          'Your M-Pesa credentials have not been verified. Please verify your credentials in Settings → Payments → M-Pesa before accepting payments.',
         errorCode: 'MPESA_NOT_VERIFIED',
       };
     }
 
     // Use multi-tenant service with shop-specific credentials
     const orderNumber = `ORD-${dto.orderId.slice(-8).toUpperCase()}`;
-    
+
     const result = await this.mpesaMultiTenantService.initiateSTKPush({
       shopId: user.shopId,
       phoneNumber: dto.phoneNumber,
@@ -142,6 +156,8 @@ export class MpesaController {
       orderId: dto.orderId,
       orderNumber: orderNumber,
       description: dto.transactionDesc,
+      cashierId: user.sub,
+      cashierName: (user as any).name || user.email || 'Cashier',
     });
 
     // Map multi-tenant response to standard response format
@@ -232,16 +248,25 @@ export class MpesaController {
     this.logger.log(`Retrying M-Pesa payment ${id} by user ${user.sub}`);
 
     // MULTI-TENANT CHECK: Verify shop has configured their own M-Pesa credentials
-    const mpesaStatus = await this.mpesaMultiTenantService.getMpesaConfigStatus(user.shopId);
-    
-    if (!mpesaStatus.isConfigured || !mpesaStatus.isEnabled || !mpesaStatus.isVerified) {
+    const mpesaStatus = await this.mpesaMultiTenantService.getMpesaConfigStatus(
+      user.shopId,
+    );
+
+    if (
+      !mpesaStatus.isConfigured ||
+      !mpesaStatus.isEnabled ||
+      !mpesaStatus.isVerified
+    ) {
       return {
         success: false,
         transactionId: id,
         status: 'FAILED' as any,
         message: mpesaStatus.message,
-        errorCode: !mpesaStatus.isConfigured ? 'MPESA_NOT_CONFIGURED' : 
-                   !mpesaStatus.isEnabled ? 'MPESA_DISABLED' : 'MPESA_NOT_VERIFIED',
+        errorCode: !mpesaStatus.isConfigured
+          ? 'MPESA_NOT_CONFIGURED'
+          : !mpesaStatus.isEnabled
+            ? 'MPESA_DISABLED'
+            : 'MPESA_NOT_VERIFIED',
       };
     }
 
@@ -333,7 +358,7 @@ export class MpesaController {
 
   /**
    * GET SHOP M-PESA CONFIGURATION STATUS
-   * 
+   *
    * Returns the current M-Pesa configuration status for the shop.
    * Used to show reminders and status in the admin dashboard.
    */
@@ -345,7 +370,7 @@ export class MpesaController {
 
   /**
    * GET SHOP M-PESA CONFIGURATION
-   * 
+   *
    * Returns the current M-Pesa configuration for the shop.
    * Sensitive fields (keys, secrets) are masked.
    */
@@ -353,8 +378,10 @@ export class MpesaController {
   @Roles('admin')
   @Get('config')
   async getMpesaConfig(@CurrentUser() user: JwtPayload) {
-    const config = await this.mpesaMultiTenantService.getShopMpesaConfig(user.shopId);
-    
+    const config = await this.mpesaMultiTenantService.getShopMpesaConfig(
+      user.shopId,
+    );
+
     // Mask sensitive fields
     return {
       type: config.type,
@@ -363,15 +390,21 @@ export class MpesaController {
       callbackUrl: config.callbackUrl,
       isConfigured: config.isConfigured,
       isVerified: config.isVerified,
-      hasCredentials: !!(config.consumerKey && config.consumerSecret && config.passkey),
+      hasCredentials: !!(
+        config.consumerKey &&
+        config.consumerSecret &&
+        config.passkey
+      ),
       // Don't expose actual keys
-      consumerKey: config.consumerKey ? '****' + config.consumerKey.slice(-4) : null,
+      consumerKey: config.consumerKey
+        ? '****' + config.consumerKey.slice(-4)
+        : null,
     };
   }
 
   /**
    * UPDATE SHOP M-PESA CONFIGURATION
-   * 
+   *
    * Allows shop admin to configure their own M-Pesa credentials.
    * This enables each shop to use their own Paybill/Till number.
    */
@@ -383,9 +416,12 @@ export class MpesaController {
     @Body() dto: UpdateMpesaConfigDto,
   ) {
     this.logger.log(`Updating M-Pesa config for shop ${user.shopId}`);
-    
-    const updated = await this.mpesaMultiTenantService.updateShopMpesaConfig(user.shopId, dto);
-    
+
+    const updated = await this.mpesaMultiTenantService.updateShopMpesaConfig(
+      user.shopId,
+      dto,
+    );
+
     return {
       success: true,
       message: 'M-Pesa configuration updated. Please verify credentials.',
@@ -400,7 +436,7 @@ export class MpesaController {
 
   /**
    * VERIFY SHOP M-PESA CREDENTIALS
-   * 
+   *
    * Tests the shop's M-Pesa credentials by attempting to get an access token.
    * This confirms the credentials are valid before enabling payments.
    */
@@ -410,7 +446,7 @@ export class MpesaController {
   @HttpCode(HttpStatus.OK)
   async verifyMpesaCredentials(@CurrentUser() user: JwtPayload) {
     this.logger.log(`Verifying M-Pesa credentials for shop ${user.shopId}`);
-    
+
     return this.mpesaMultiTenantService.verifyShopMpesaCredentials(user.shopId);
   }
 
@@ -424,22 +460,40 @@ export class MpesaController {
   @HttpCode(HttpStatus.OK)
   async initiatePaymentV2(
     @CurrentUser() user: JwtPayload,
-    @Body() dto: { phoneNumber: string; amount: number; orderId: string; orderNumber: string; description?: string },
+    @Body()
+    dto: {
+      phoneNumber: string;
+      amount: number;
+      orderId: string;
+      orderNumber: string;
+      description?: string;
+    },
   ) {
-    this.logger.warn(`[DEPRECATED] initiate-v2 called by shop ${user.shopId} - use /initiate instead`);
-    
+    this.logger.warn(
+      `[DEPRECATED] initiate-v2 called by shop ${user.shopId} - use /initiate instead`,
+    );
+
     // Redirect to main initiate endpoint logic
-    const mpesaStatus = await this.mpesaMultiTenantService.getMpesaConfigStatus(user.shopId);
-    
-    if (!mpesaStatus.isConfigured || !mpesaStatus.isEnabled || !mpesaStatus.isVerified) {
+    const mpesaStatus = await this.mpesaMultiTenantService.getMpesaConfigStatus(
+      user.shopId,
+    );
+
+    if (
+      !mpesaStatus.isConfigured ||
+      !mpesaStatus.isEnabled ||
+      !mpesaStatus.isVerified
+    ) {
       return {
         success: false,
         error: mpesaStatus.message,
-        errorCode: !mpesaStatus.isConfigured ? 'MPESA_NOT_CONFIGURED' : 
-                   !mpesaStatus.isEnabled ? 'MPESA_DISABLED' : 'MPESA_NOT_VERIFIED',
+        errorCode: !mpesaStatus.isConfigured
+          ? 'MPESA_NOT_CONFIGURED'
+          : !mpesaStatus.isEnabled
+            ? 'MPESA_DISABLED'
+            : 'MPESA_NOT_VERIFIED',
       };
     }
-    
+
     return this.mpesaMultiTenantService.initiateSTKPush({
       shopId: user.shopId,
       phoneNumber: dto.phoneNumber,
@@ -452,16 +506,16 @@ export class MpesaController {
 
   /**
    * MULTI-TENANT CALLBACK
-   * 
+   *
    * Handles callbacks for all shops. Routes to correct shop based on transaction.
    */
   @Post('callback-v2')
   @HttpCode(HttpStatus.OK)
   async handleCallbackV2(@Body() payload: any) {
     this.logger.log('Received multi-tenant M-Pesa callback');
-    
+
     const result = await this.mpesaMultiTenantService.handleCallback(payload);
-    
+
     return { ResultCode: 0, ResultDesc: 'Callback processed' };
   }
 
@@ -471,7 +525,7 @@ export class MpesaController {
 
   /**
    * GET FAILED TRANSACTIONS
-   * 
+   *
    * Returns all failed M-Pesa transactions for the shop.
    * Useful for admin dashboard and troubleshooting.
    */
@@ -503,7 +557,7 @@ export class MpesaController {
 
   /**
    * GET TRANSACTION STATISTICS
-   * 
+   *
    * Returns M-Pesa transaction statistics for the shop.
    * Includes success rate, total amounts, and status breakdown.
    */
@@ -524,7 +578,7 @@ export class MpesaController {
 
   /**
    * MANUAL RECONCILIATION
-   * 
+   *
    * Manually triggers reconciliation for a specific transaction.
    * Queries M-Pesa for the actual status and updates local record.
    */
@@ -536,21 +590,29 @@ export class MpesaController {
     @CurrentUser() user: JwtPayload,
     @Param('id') id: string,
   ) {
-    this.logger.log(`Manual reconciliation for transaction ${id} by ${user.email}`);
-    
+    this.logger.log(
+      `Manual reconciliation for transaction ${id} by ${user.email}`,
+    );
+
     // First verify the transaction belongs to this shop
-    const status = await this.mpesaService.getTransactionStatus(user.shopId, id);
-    
+    const status = await this.mpesaService.getTransactionStatus(
+      user.shopId,
+      id,
+    );
+
     if (!status) {
       return { success: false, message: 'Transaction not found' };
     }
 
     // Query M-Pesa for actual status
     const result = await this.mpesaService.queryMpesaStatus(user.shopId, id);
-    
+
     // Get updated status
-    const updatedStatus = await this.mpesaService.getTransactionStatus(user.shopId, id);
-    
+    const updatedStatus = await this.mpesaService.getTransactionStatus(
+      user.shopId,
+      id,
+    );
+
     return {
       success: true,
       previousStatus: status.status,
@@ -562,7 +624,7 @@ export class MpesaController {
 
   /**
    * GET EXPIRED TRANSACTIONS
-   * 
+   *
    * Returns all expired M-Pesa transactions for the shop.
    * These are transactions that timed out without a response.
    */
@@ -592,7 +654,7 @@ export class MpesaController {
 
   /**
    * GET REAL-TIME TRANSACTION STATE
-   * 
+   *
    * Returns detailed transaction state with timing information
    * for real-time UI updates.
    */
@@ -602,7 +664,8 @@ export class MpesaController {
     @Param('id') transactionId: string,
     @CurrentUser() user: JwtPayload,
   ) {
-    const state = await this.transactionManager.getTransactionState(transactionId);
+    const state =
+      await this.transactionManager.getTransactionState(transactionId);
     return {
       success: true,
       data: state,
@@ -611,7 +674,7 @@ export class MpesaController {
 
   /**
    * START POLLING FOR TRANSACTION
-   * 
+   *
    * Starts real-time polling for a transaction.
    * Use with SSE or WebSocket for real-time updates.
    */
@@ -650,7 +713,7 @@ export class MpesaController {
 
   /**
    * QUERY M-PESA STATUS WITH STATE
-   * 
+   *
    * Queries M-Pesa directly for transaction status and returns full state.
    * Useful when callback is delayed or missed.
    */
@@ -686,7 +749,7 @@ export class MpesaController {
 
   /**
    * MANUAL RECONCILIATION VIA SERVICE
-   * 
+   *
    * Manually reconcile a specific transaction using the reconciliation service.
    */
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -697,13 +760,14 @@ export class MpesaController {
     @Param('id') transactionId: string,
     @CurrentUser() user: JwtPayload,
   ) {
-    const result = await this.reconciliationService.reconcileTransaction(transactionId);
+    const result =
+      await this.reconciliationService.reconcileTransaction(transactionId);
     return result;
   }
 
   /**
    * GET TRANSACTION METRICS
-   * 
+   *
    * Returns aggregated transaction metrics for monitoring.
    */
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -730,7 +794,9 @@ export class MpesaController {
   @Roles('admin')
   @Get('reconciliation/stats')
   async getReconciliationStats(@CurrentUser() user: JwtPayload) {
-    const stats = await this.reconciliationService.getReconciliationStats(user.shopId);
+    const stats = await this.reconciliationService.getReconciliationStats(
+      user.shopId,
+    );
     return {
       success: true,
       data: stats,
@@ -739,7 +805,7 @@ export class MpesaController {
 
   /**
    * GET M-PESA TIMING CONFIGURATION
-   * 
+   *
    * Returns the timing configuration for M-Pesa transactions.
    * Useful for frontend to display accurate progress indicators.
    */
@@ -761,13 +827,15 @@ export class MpesaController {
 
   /**
    * GET ERROR INFO FOR RESULT CODE
-   * 
+   *
    * Returns detailed error information for an M-Pesa result code.
    */
   @UseGuards(JwtAuthGuard)
   @Get('error-info/:resultCode')
   getErrorInfo(@Param('resultCode') resultCode: string) {
-    const errorInfo = this.transactionManager.getErrorInfo(parseInt(resultCode, 10));
+    const errorInfo = this.transactionManager.getErrorInfo(
+      parseInt(resultCode, 10),
+    );
     return {
       success: true,
       data: errorInfo,

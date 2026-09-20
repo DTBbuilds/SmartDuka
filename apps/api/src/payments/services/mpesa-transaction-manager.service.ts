@@ -16,6 +16,7 @@ import {
   MpesaResultCode,
 } from '../schemas/mpesa-transaction.schema';
 import { DarajaService } from '../daraja.service';
+import { PaymentTransactionService } from './payment-transaction.service';
 
 /**
  * M-Pesa Transaction Timing Configuration
@@ -24,31 +25,31 @@ import { DarajaService } from '../daraja.service';
 export const MPESA_TIMING = {
   // STK Push prompt appears on phone within 1-5 seconds
   STK_PROMPT_TIMEOUT_MS: 10_000, // 10 seconds to show prompt
-  
+
   // User has up to 60 seconds to enter PIN after prompt appears
   USER_INPUT_TIMEOUT_MS: 60_000, // 60 seconds for PIN entry
-  
+
   // Total transaction timeout (prompt + PIN entry + processing)
   TRANSACTION_TIMEOUT_MS: 120_000, // 2 minutes total
-  
+
   // Grace period after timeout before marking as expired
   GRACE_PERIOD_MS: 30_000, // 30 seconds grace
-  
+
   // Minimum time to wait before first status query
   MIN_QUERY_DELAY_MS: 5_000, // 5 seconds
-  
+
   // Interval between status queries during polling
   POLL_INTERVAL_MS: 3_000, // 3 seconds
-  
+
   // Maximum number of status queries per transaction
   MAX_POLL_ATTEMPTS: 20,
-  
+
   // Delay between retry attempts (base for exponential backoff)
   RETRY_BASE_DELAY_MS: 2_000, // 2 seconds
-  
+
   // Maximum retry delay
   RETRY_MAX_DELAY_MS: 30_000, // 30 seconds
-  
+
   // Callback expected within this time after STK push
   CALLBACK_EXPECTED_MS: 90_000, // 90 seconds
 };
@@ -57,13 +58,13 @@ export const MPESA_TIMING = {
  * Transaction Error Categories
  */
 export enum MpesaErrorCategory {
-  USER_ACTION = 'user_action',       // User cancelled, wrong PIN
+  USER_ACTION = 'user_action', // User cancelled, wrong PIN
   INSUFFICIENT_FUNDS = 'insufficient_funds',
   LIMIT_EXCEEDED = 'limit_exceeded',
-  INVALID_INPUT = 'invalid_input',   // Invalid phone, amount
-  SYSTEM_ERROR = 'system_error',     // M-Pesa system issues
-  NETWORK_ERROR = 'network_error',   // Connectivity issues
-  TIMEOUT = 'timeout',               // Transaction timed out
+  INVALID_INPUT = 'invalid_input', // Invalid phone, amount
+  SYSTEM_ERROR = 'system_error', // M-Pesa system issues
+  NETWORK_ERROR = 'network_error', // Connectivity issues
+  TIMEOUT = 'timeout', // Transaction timed out
   UNKNOWN = 'unknown',
 }
 
@@ -86,7 +87,14 @@ export interface MpesaErrorInfo {
 export interface TransactionState {
   transactionId: string;
   status: MpesaTransactionStatus;
-  phase: 'initiating' | 'waiting_prompt' | 'waiting_pin' | 'processing' | 'completed' | 'failed' | 'expired';
+  phase:
+    | 'initiating'
+    | 'waiting_prompt'
+    | 'waiting_pin'
+    | 'processing'
+    | 'completed'
+    | 'failed'
+    | 'expired';
   progress: number; // 0-100
   timeElapsed: number; // seconds
   timeRemaining: number; // seconds
@@ -98,7 +106,7 @@ export interface TransactionState {
 
 /**
  * M-Pesa Transaction Manager Service
- * 
+ *
  * Provides robust transaction lifecycle management with:
  * - Accurate timing and timeout handling
  * - Real-time status polling
@@ -109,10 +117,10 @@ export interface TransactionState {
 @Injectable()
 export class MpesaTransactionManagerService {
   private readonly logger = new Logger(MpesaTransactionManagerService.name);
-  
+
   // Active polling sessions
   private readonly activePollers = new Map<string, NodeJS.Timeout>();
-  
+
   // Transaction state cache for quick access
   private readonly stateCache = new Map<string, TransactionState>();
 
@@ -124,6 +132,7 @@ export class MpesaTransactionManagerService {
     private readonly transactionModel: Model<MpesaTransactionDocument>,
     private readonly darajaService: DarajaService,
     private readonly configService: ConfigService,
+    private readonly paymentTransactionService: PaymentTransactionService,
   ) {}
 
   /**
@@ -179,7 +188,8 @@ export class MpesaTransactionManagerService {
       [MpesaResultCode.DS_TIMEOUT]: {
         category: MpesaErrorCategory.TIMEOUT,
         message: 'Request timed out',
-        userMessage: 'The payment request timed out. You may not have entered your PIN in time.',
+        userMessage:
+          'The payment request timed out. You may not have entered your PIN in time.',
         isRetryable: true,
         suggestedAction: 'Try again and enter your M-Pesa PIN promptly',
         waitBeforeRetry: 5000,
@@ -222,7 +232,7 @@ export class MpesaTransactionManagerService {
    */
   async getTransactionState(transactionId: string): Promise<TransactionState> {
     const transaction = await this.transactionModel.findById(transactionId);
-    
+
     if (!transaction) {
       throw new NotFoundException('Transaction not found');
     }
@@ -231,10 +241,10 @@ export class MpesaTransactionManagerService {
     const createdAt = transaction.createdAt?.getTime() || now;
     const stkSentAt = transaction.stkPushSentAt?.getTime() || createdAt;
     const expiresAt = transaction.expiresAt.getTime();
-    
+
     const timeElapsed = Math.floor((now - createdAt) / 1000);
     const timeRemaining = Math.max(0, Math.floor((expiresAt - now) / 1000));
-    
+
     let phase: TransactionState['phase'];
     let progress: number;
     let message: string;
@@ -245,43 +255,59 @@ export class MpesaTransactionManagerService {
         progress = 10;
         message = 'Initiating payment request...';
         break;
-        
+
       case MpesaTransactionStatus.PENDING:
         const timeSinceStk = now - stkSentAt;
-        
+
         if (timeSinceStk < MPESA_TIMING.STK_PROMPT_TIMEOUT_MS) {
           phase = 'waiting_prompt';
-          progress = 20 + Math.floor((timeSinceStk / MPESA_TIMING.STK_PROMPT_TIMEOUT_MS) * 10);
+          progress =
+            20 +
+            Math.floor(
+              (timeSinceStk / MPESA_TIMING.STK_PROMPT_TIMEOUT_MS) * 10,
+            );
           message = 'Check your phone for the M-Pesa prompt...';
         } else if (timeSinceStk < MPESA_TIMING.USER_INPUT_TIMEOUT_MS) {
           phase = 'waiting_pin';
-          progress = 30 + Math.floor(((timeSinceStk - MPESA_TIMING.STK_PROMPT_TIMEOUT_MS) / MPESA_TIMING.USER_INPUT_TIMEOUT_MS) * 40);
+          progress =
+            30 +
+            Math.floor(
+              ((timeSinceStk - MPESA_TIMING.STK_PROMPT_TIMEOUT_MS) /
+                MPESA_TIMING.USER_INPUT_TIMEOUT_MS) *
+                40,
+            );
           message = 'Enter your M-Pesa PIN to complete payment';
         } else {
           phase = 'processing';
-          progress = 70 + Math.floor(((timeSinceStk - MPESA_TIMING.USER_INPUT_TIMEOUT_MS) / MPESA_TIMING.GRACE_PERIOD_MS) * 20);
+          progress =
+            70 +
+            Math.floor(
+              ((timeSinceStk - MPESA_TIMING.USER_INPUT_TIMEOUT_MS) /
+                MPESA_TIMING.GRACE_PERIOD_MS) *
+                20,
+            );
           message = 'Processing your payment...';
         }
         break;
-        
+
       case MpesaTransactionStatus.COMPLETED:
         phase = 'completed';
         progress = 100;
         message = `Payment successful! Receipt: ${transaction.mpesaReceiptNumber}`;
         break;
-        
+
       case MpesaTransactionStatus.FAILED:
         phase = 'failed';
         progress = 0;
         message = transaction.lastError || 'Payment failed';
         break;
-        
+
       case MpesaTransactionStatus.EXPIRED:
         phase = 'expired';
         progress = 0;
         message = 'Payment request expired';
         break;
-        
+
       default:
         phase = 'processing';
         progress = 50;
@@ -296,13 +322,20 @@ export class MpesaTransactionManagerService {
       timeElapsed,
       timeRemaining,
       message,
-      canCancel: [MpesaTransactionStatus.CREATED, MpesaTransactionStatus.PENDING].includes(transaction.status),
-      canRetry: transaction.status === MpesaTransactionStatus.FAILED && 
-                transaction.retryCount < transaction.maxRetries,
+      canCancel: [
+        MpesaTransactionStatus.CREATED,
+        MpesaTransactionStatus.PENDING,
+      ].includes(transaction.status),
+      canRetry:
+        transaction.status === MpesaTransactionStatus.FAILED &&
+        transaction.retryCount < transaction.maxRetries,
     };
 
     // Add error info if failed
-    if (transaction.status === MpesaTransactionStatus.FAILED && transaction.mpesaResultCode) {
+    if (
+      transaction.status === MpesaTransactionStatus.FAILED &&
+      transaction.mpesaResultCode
+    ) {
       state.error = this.getErrorInfo(transaction.mpesaResultCode);
     }
 
@@ -325,10 +358,10 @@ export class MpesaTransactionManagerService {
     this.logger.debug(`Starting polling for transaction ${transactionId}`);
 
     let pollCount = 0;
-    
+
     const poll = async () => {
       pollCount++;
-      
+
       if (pollCount > MPESA_TIMING.MAX_POLL_ATTEMPTS) {
         this.stopPolling(transactionId);
         return;
@@ -336,7 +369,7 @@ export class MpesaTransactionManagerService {
 
       try {
         const state = await this.getTransactionState(transactionId);
-        
+
         // Emit state update event
         this.events.emit('mpesa.transaction.state', {
           transactionId,
@@ -346,7 +379,7 @@ export class MpesaTransactionManagerService {
         // Stop polling if terminal state reached
         if (['completed', 'failed', 'expired'].includes(state.phase)) {
           this.stopPolling(transactionId);
-          
+
           // Emit final event
           this.events.emit(`mpesa.transaction.${state.phase}`, {
             transactionId,
@@ -359,9 +392,10 @@ export class MpesaTransactionManagerService {
         if (state.phase === 'processing' && pollCount > 5) {
           await this.queryMpesaStatus(transactionId);
         }
-
       } catch (error: any) {
-        this.logger.error(`Polling error for ${transactionId}: ${error.message}`);
+        this.logger.error(
+          `Polling error for ${transactionId}: ${error.message}`,
+        );
       }
     };
 
@@ -390,7 +424,7 @@ export class MpesaTransactionManagerService {
    */
   async queryMpesaStatus(transactionId: string): Promise<TransactionState> {
     const transaction = await this.transactionModel.findById(transactionId);
-    
+
     if (!transaction) {
       throw new NotFoundException('Transaction not found');
     }
@@ -410,7 +444,9 @@ export class MpesaTransactionManagerService {
         transaction.merchantRequestId || '',
       );
 
-      this.logger.debug(`STK query result for ${transactionId}: ${JSON.stringify(result)}`);
+      this.logger.debug(
+        `STK query result for ${transactionId}: ${JSON.stringify(result)}`,
+      );
 
       if (result.resultCode === 0) {
         // Success
@@ -421,22 +457,49 @@ export class MpesaTransactionManagerService {
         transaction.completedAt = new Date();
         await transaction.save();
 
+        // CONVERGENCE: a Daraja status-query confirmation is trusted provider
+        // truth just like a callback. Record the payment (idempotent on
+        // CheckoutRequestID) so the canonical order converges even when the
+        // live callback never arrives.
+        if (transaction.checkoutRequestId && transaction.cashierId) {
+          try {
+            await this.paymentTransactionService.createTransaction({
+              shopId: transaction.shopId.toString(),
+              orderId: transaction.orderId.toString(),
+              orderNumber: transaction.orderNumber,
+              cashierId: transaction.cashierId.toString(),
+              cashierName: transaction.cashierName ?? 'Unknown',
+              branchId: transaction.branchId?.toString(),
+              paymentMethod: 'mpesa',
+              amount: transaction.amount,
+              status: 'completed',
+              customerName: transaction.customerName,
+              customerPhone: transaction.phoneNumber,
+              mpesaTransactionId: transaction.checkoutRequestId,
+            });
+          } catch (error: any) {
+            this.logger.error(
+              `Failed to record convergence payment for ${transaction.orderNumber}: ${error?.message}`,
+            );
+          }
+        }
+
         this.events.emit('mpesa.transaction.completed', {
           transactionId,
           receipt: transaction.mpesaReceiptNumber,
         });
-
       } else if (result.resultCode === MpesaResultCode.DS_TIMEOUT) {
         // Still processing - don't change status
         this.logger.debug(`Transaction ${transactionId} still processing`);
-        
       } else if (result.resultCode !== undefined) {
         // Failed
         transaction.previousStatus = transaction.status;
         transaction.status = MpesaTransactionStatus.FAILED;
         transaction.mpesaResultCode = result.resultCode;
         transaction.mpesaResultDesc = result.resultDesc;
-        transaction.lastError = this.getErrorInfo(result.resultCode).userMessage;
+        transaction.lastError = this.getErrorInfo(
+          result.resultCode,
+        ).userMessage;
         await transaction.save();
 
         this.events.emit('mpesa.transaction.failed', {
@@ -444,9 +507,10 @@ export class MpesaTransactionManagerService {
           error: this.getErrorInfo(result.resultCode),
         });
       }
-
     } catch (error: any) {
-      this.logger.warn(`STK query failed for ${transactionId}: ${error.message}`);
+      this.logger.warn(
+        `STK query failed for ${transactionId}: ${error.message}`,
+      );
       // Don't change status on query failure
     }
 
@@ -470,13 +534,16 @@ export class MpesaTransactionManagerService {
     waitTime?: number;
   }> {
     const transaction = await this.transactionModel.findById(transactionId);
-    
+
     if (!transaction) {
       return { canRetry: false, reason: 'Transaction not found' };
     }
 
     if (transaction.status !== MpesaTransactionStatus.FAILED) {
-      return { canRetry: false, reason: `Transaction is ${transaction.status}` };
+      return {
+        canRetry: false,
+        reason: `Transaction is ${transaction.status}`,
+      };
     }
 
     if (transaction.retryCount >= transaction.maxRetries) {
@@ -486,13 +553,14 @@ export class MpesaTransactionManagerService {
     // Check if we need to wait before retry
     if (transaction.mpesaResultCode) {
       const errorInfo = this.getErrorInfo(transaction.mpesaResultCode);
-      
+
       if (!errorInfo.isRetryable) {
         return { canRetry: false, reason: errorInfo.suggestedAction };
       }
 
       if (errorInfo.waitBeforeRetry && transaction.lastRetryAt) {
-        const timeSinceLastRetry = Date.now() - transaction.lastRetryAt.getTime();
+        const timeSinceLastRetry =
+          Date.now() - transaction.lastRetryAt.getTime();
         if (timeSinceLastRetry < errorInfo.waitBeforeRetry) {
           return {
             canRetry: true,
@@ -523,7 +591,7 @@ export class MpesaTransactionManagerService {
    */
   async handleTimeout(transactionId: string): Promise<void> {
     const transaction = await this.transactionModel.findById(transactionId);
-    
+
     if (!transaction) return;
 
     // Only timeout pending transactions
@@ -576,10 +644,12 @@ export class MpesaTransactionManagerService {
    */
   @Cron(CronExpression.EVERY_30_SECONDS)
   async processTimeouts(): Promise<void> {
-    const expiredTransactions = await this.transactionModel.find({
-      status: MpesaTransactionStatus.PENDING,
-      expiresAt: { $lt: new Date() },
-    }).limit(50);
+    const expiredTransactions = await this.transactionModel
+      .find({
+        status: MpesaTransactionStatus.PENDING,
+        expiresAt: { $lt: new Date() },
+      })
+      .limit(50);
 
     for (const transaction of expiredTransactions) {
       await this.handleTimeout(transaction._id.toString());
@@ -589,7 +659,10 @@ export class MpesaTransactionManagerService {
   /**
    * Get transaction statistics for monitoring
    */
-  async getTransactionMetrics(shopId: string, hours = 24): Promise<{
+  async getTransactionMetrics(
+    shopId: string,
+    hours = 24,
+  ): Promise<{
     total: number;
     completed: number;
     failed: number;
@@ -694,11 +767,15 @@ export class MpesaTransactionManagerService {
 
     const completedOrFailed = metrics.completed + metrics.failed;
     if (completedOrFailed > 0) {
-      metrics.successRate = Math.round((metrics.completed / completedOrFailed) * 100);
+      metrics.successRate = Math.round(
+        (metrics.completed / completedOrFailed) * 100,
+      );
     }
 
     if (completionTimes.length > 0) {
-      metrics.averageCompletionTime = Math.round(completionTimes[0].avgTime / 1000);
+      metrics.averageCompletionTime = Math.round(
+        completionTimes[0].avgTime / 1000,
+      );
     }
 
     for (const reason of failureReasons) {
@@ -711,7 +788,7 @@ export class MpesaTransactionManagerService {
 
   /**
    * Subscribe to transaction events
-   * 
+   *
    * Events:
    * - mpesa.transaction.state: Emitted on every state update
    * - mpesa.transaction.completed: Emitted when transaction completes
