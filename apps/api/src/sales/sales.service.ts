@@ -188,17 +188,23 @@ export class SalesService {
           productId: item.productId,
           name: item.name,
           quantity: item.quantity,
+          mutationId: nanoid(),
           state: InventoryClaimItemState.PENDING,
         })),
       });
 
       for (let index = 0; index < dto.items.length; index += 1) {
         const item = dto.items[index];
+        const mutationId = claimDoc.items[index]?.mutationId;
 
+        // The decrement and its durable mutation receipt land in the same
+        // atomic product-document update. After a crash the receipt proves
+        // whether this decrement happened, closing the PENDING ambiguity.
         const claimed = await this.inventoryService.updateStock(
           shopId,
           item.productId,
           -item.quantity, // Negative = claim/reduction
+          mutationId ? { mutationId, claimId: claimDoc._id.toString() } : undefined,
         );
 
         if (!claimed) {
@@ -226,6 +232,19 @@ export class SalesService {
           throw new InternalServerErrorException(
             'Inventory claim ownership was lost during checkout - aborting',
           );
+        }
+
+        // The item is durably CLAIMED: the mutation receipt has served its
+        // purpose and is pulled (residue from a crash here is swept by
+        // reconciliation, never by guessing).
+        if (mutationId) {
+          try {
+            await this.inventoryService.clearClaimMutation(shopId, item.productId, mutationId);
+          } catch (pullError: any) {
+            this.logger.warn(
+              `Failed to clear mutation receipt ${mutationId} for ${item.productId}: ${pullError?.message}`,
+            );
+          }
         }
 
         // Log stock adjustment for audit trail
@@ -605,6 +624,17 @@ export class SalesService {
               { $set: { 'items.$.state': InventoryClaimItemState.RESTORED } },
             )
             .exec();
+          if (item.mutationId) {
+            try {
+              await this.inventoryService.clearClaimMutation(
+                shopId,
+                item.productId,
+                item.mutationId,
+              );
+            } catch {
+              // Receipt residue is swept by reconciliation; never blocks release.
+            }
+          }
         } catch (itemError: any) {
           this.logger.error(
             `Failed to release claim ${claimId} item ${item.productId}: ${itemError?.message}`,

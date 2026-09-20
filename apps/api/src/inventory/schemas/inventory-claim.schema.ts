@@ -41,6 +41,15 @@ export class InventoryClaimItem {
   @Prop({ required: true })
   name: string;
 
+  /**
+   * Unique durable mutation identity for this item's stock decrement. The
+   * decrement and its receipt are written atomically on the product
+   * document (claimMutations), so recovery can prove whether the decrement
+   * landed even if the crash hit before the CLAIMED flag.
+   */
+  @Prop({ required: false })
+  mutationId?: string;
+
   @Prop({ required: true, min: 1 })
   quantity: number;
 

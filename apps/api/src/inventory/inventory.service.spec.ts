@@ -294,6 +294,40 @@ describe('InventoryService', () => {
       const [filter] = productModel.findOneAndUpdate.mock.calls[0];
       expect(filter.stock).toEqual({ $gte: 10 });
     });
+
+    it('writes the durable mutation receipt in the SAME atomic update as the decrement', async () => {
+      productModel.findOneAndUpdate.mockReturnValue({
+        exec: jest.fn().mockResolvedValue({ ...mockProduct, stock: 40 }),
+      });
+
+      await service.updateStock(mockShopId, mockProductId, -10, {
+        mutationId: 'mut-1',
+        claimId: '507f1f77bcf86cd799439099',
+      });
+
+      const [, update] = productModel.findOneAndUpdate.mock.calls[0];
+      // One document, one atomic write: the receipt proves the decrement.
+      expect(update.$inc).toEqual({ stock: -10 });
+      expect(update.$push.claimMutations.mutationId).toBe('mut-1');
+      expect(update.$push.claimMutations.quantity).toBe(10);
+      expect(update.$push.claimMutations.claimId).toBeInstanceOf(Types.ObjectId);
+    });
+
+    it('does not write a mutation receipt for non-claim reductions or positive changes', async () => {
+      productModel.findOneAndUpdate.mockReturnValue({
+        exec: jest.fn().mockResolvedValue({ ...mockProduct, stock: 40 }),
+      });
+
+      await service.updateStock(mockShopId, mockProductId, -10);
+      await service.updateStock(mockShopId, mockProductId, 10, {
+        mutationId: 'mut-2',
+        claimId: '507f1f77bcf86cd799439099',
+      });
+
+      const calls = productModel.findOneAndUpdate.mock.calls;
+      expect(calls[0][1].$push).toBeUndefined();
+      expect(calls[1][1].$push).toBeUndefined();
+    });
   });
 
   describe('findByBarcode', () => {

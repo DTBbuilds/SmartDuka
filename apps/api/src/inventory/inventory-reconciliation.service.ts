@@ -294,23 +294,27 @@ export class InventoryReconciliationService {
         continue;
       }
       if (item.state === InventoryClaimItemState.PENDING) {
-        // Never auto-restore: the stock decrement cannot be proven. A crash
-        // in the updateStock -> mark window can leave a decrement attributed
-        // to a PENDING item; that leak is visible in the 'sale' audit gap
-        // and stocktake, and it can never cause an oversell.
-        this.logger.warn(
-          `Claim ${claim._id} item ${item.productId} is pending - not restored (claim flag never persisted)`,
-        );
+        // The durable mutation receipt is written atomically with the stock
+        // decrement, so it decides definitively: present = decrement proven
+        // (restore it), absent = decrement never landed (resolved, skip).
+        const decrementProven =
+          !!item.mutationId &&
+          (await this.inventoryService.hasClaimMutation(
+            claim.shopId.toString(),
+            item.productId,
+            item.mutationId,
+          ));
+        if (!decrementProven) continue;
+      } else if (item.state !== InventoryClaimItemState.CLAIMED) {
         continue;
       }
-      if (item.state !== InventoryClaimItemState.CLAIMED) continue;
 
       // Atomic per-item work claim
       const workClaim = await this.claimModel
         .updateOne(
           {
             _id: claim._id,
-            items: { $elemMatch: { productId: item.productId, state: InventoryClaimItemState.CLAIMED } },
+            items: { $elemMatch: { productId: item.productId, state: item.state } },
           },
           { $set: { 'items.$.state': InventoryClaimItemState.RESTORING } },
         )
@@ -343,6 +347,17 @@ export class InventoryReconciliationService {
           { $set: { 'items.$.state': InventoryClaimItemState.RESTORED } },
         )
         .exec();
+      if (item.mutationId) {
+        try {
+          await this.inventoryService.clearClaimMutation(
+            claim.shopId.toString(),
+            item.productId,
+            item.mutationId,
+          );
+        } catch {
+          // Receipt residue is swept on the next pass; never blocks release.
+        }
+      }
       restoredAny = true;
     }
 
@@ -370,6 +385,139 @@ export class InventoryReconciliationService {
   }
 
   /**
+   * Sweep durable mutation receipts left on product documents. Every
+   * receipt is a proven decrement; each is resolved against its claim:
+   *
+   *   item CLAIMED/RESTORED          -> residue, pull the receipt
+   *   item PENDING (non-committed)   -> proven decrement, restore + pull
+   *   item PENDING + COMMITTED claim -> contradictory, ambiguous
+   *   item RESTORING / missing claim -> ambiguous, never guessed
+   *
+   * This also closes the pathological edge where a decrement lands after
+   * its claim already finalized (a >grace-window checkout): the receipt
+   * still proves the decrement and the stock is restored.
+   */
+  async sweepClaimMutations(shopId?: string): Promise<{
+    resolved: number;
+    cleared: number;
+    ambiguous: number;
+    errors: number;
+  }> {
+    const result = { resolved: 0, cleared: 0, ambiguous: 0, errors: 0 };
+    const products = await this.inventoryService.findProductsWithClaimMutations(shopId);
+
+    for (const product of products) {
+      for (const marker of product.claimMutations ?? []) {
+        try {
+          const claim = await this.claimModel
+            .findOne({ _id: marker.claimId, shopId: product.shopId })
+            .exec();
+          const item = claim?.items.find((i) => i.mutationId === marker.mutationId);
+
+          if (!claim || !item) {
+            this.logger.error(
+              `Mutation receipt ${marker.mutationId} on product ${product._id} has no matching claim item - manual review required`,
+            );
+            result.ambiguous += 1;
+            continue;
+          }
+          if (this.isInFlight(claim)) continue; // live checkout owns it
+
+          if (
+            item.state === InventoryClaimItemState.CLAIMED ||
+            item.state === InventoryClaimItemState.RESTORED
+          ) {
+            // Item resolved durably; the receipt is residue - pull it.
+            await this.inventoryService.clearClaimMutation(
+              product.shopId.toString(),
+              product._id.toString(),
+              marker.mutationId,
+            );
+            result.cleared += 1;
+            continue;
+          }
+
+          if (item.state === InventoryClaimItemState.RESTORING) {
+            this.logger.error(
+              `Mutation receipt ${marker.mutationId} item ${item.productId} stuck in restoring state - manual review required`,
+            );
+            result.ambiguous += 1;
+            continue;
+          }
+
+          if (item.state === InventoryClaimItemState.PENDING) {
+            if (claim.state === InventoryClaimState.COMMITTED) {
+              this.logger.error(
+                `Committed claim ${claim._id} has pending item ${item.productId} with a proven decrement - manual review required`,
+              );
+              result.ambiguous += 1;
+              continue;
+            }
+
+            // Proven decrement on an unresolved claim: restore exactly once.
+            const workClaim = await this.claimModel
+              .updateOne(
+                {
+                  _id: claim._id,
+                  items: {
+                    $elemMatch: {
+                      productId: item.productId,
+                      state: InventoryClaimItemState.PENDING,
+                    },
+                  },
+                },
+                { $set: { 'items.$.state': InventoryClaimItemState.RESTORING } },
+              )
+              .exec();
+            if (!workClaim.modifiedCount) continue; // another worker took it
+
+            await this.inventoryService.updateStock(
+              product.shopId.toString(),
+              item.productId,
+              item.quantity,
+            );
+            await this.inventoryService.createStockAdjustment(
+              product.shopId.toString(),
+              item.productId,
+              item.quantity,
+              'correction',
+              claim.claimedBy.toString(),
+              `Recovered decrement for order ${claim.orderNumber} - ${item.name} x${item.quantity}`,
+            );
+            await this.claimModel
+              .updateOne(
+                {
+                  _id: claim._id,
+                  items: {
+                    $elemMatch: {
+                      productId: item.productId,
+                      state: InventoryClaimItemState.RESTORING,
+                    },
+                  },
+                },
+                { $set: { 'items.$.state': InventoryClaimItemState.RESTORED } },
+              )
+              .exec();
+            await this.inventoryService.clearClaimMutation(
+              product.shopId.toString(),
+              product._id.toString(),
+              marker.mutationId,
+            );
+            result.resolved += 1;
+          }
+        } catch (error: any) {
+          this.logger.error(
+            `Failed to resolve mutation receipt ${marker.mutationId}: ${error?.message}`,
+          );
+          result.errors += 1;
+        }
+      }
+    }
+
+    return result;
+  }
+
+  /**
    * Scheduled reconciliation pass (guarded by INVENTORY_RECONCILIATION_ENABLED).
    */
   @Cron(CronExpression.EVERY_10_MINUTES)
@@ -390,6 +538,22 @@ export class InventoryReconciliationService {
       }
     } catch (error: any) {
       this.logger.error(`Inventory reconciliation run failed: ${error?.message}`);
+    }
+
+    try {
+      const sweep = await this.sweepClaimMutations();
+      if (
+        sweep.resolved > 0 ||
+        sweep.cleared > 0 ||
+        sweep.ambiguous > 0 ||
+        sweep.errors > 0
+      ) {
+        this.logger.log(
+          `Mutation receipt sweep: resolved=${sweep.resolved} cleared=${sweep.cleared} ambiguous=${sweep.ambiguous} errors=${sweep.errors}`,
+        );
+      }
+    } catch (error: any) {
+      this.logger.error(`Mutation receipt sweep failed: ${error?.message}`);
     }
   }
 }

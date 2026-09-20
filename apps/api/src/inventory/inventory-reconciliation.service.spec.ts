@@ -37,8 +37,8 @@ describe('InventoryReconciliationService crash recovery (SDV2-005)', () => {
       claimedBy: new Types.ObjectId(),
       createdAt: new Date(Date.now() - 600000), // past the recovery grace window
       items: [
-        { productId: 'prodA', name: 'Product A', quantity: 2, state: InventoryClaimItemState.CLAIMED },
-        { productId: 'prodB', name: 'Product B', quantity: 1, state: InventoryClaimItemState.CLAIMED },
+        { productId: 'prodA', name: 'Product A', quantity: 2, mutationId: 'mut-A1', state: InventoryClaimItemState.CLAIMED },
+        { productId: 'prodB', name: 'Product B', quantity: 1, mutationId: 'mut-B1', state: InventoryClaimItemState.CLAIMED },
       ],
       ...overrides,
     };
@@ -58,6 +58,9 @@ describe('InventoryReconciliationService crash recovery (SDV2-005)', () => {
     inventoryService = {
       updateStock: jest.fn().mockResolvedValue({ stock: 10 }),
       createStockAdjustment: jest.fn().mockResolvedValue({}),
+      hasClaimMutation: jest.fn().mockResolvedValue(false),
+      clearClaimMutation: jest.fn().mockResolvedValue(undefined),
+      findProductsWithClaimMutations: jest.fn().mockResolvedValue([]),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -352,6 +355,65 @@ describe('InventoryReconciliationService crash recovery (SDV2-005)', () => {
       expect(inventoryService.updateStock).not.toHaveBeenCalledWith(SHOP_ID, 'prodA', 2);
     });
 
+    it('restores a PENDING item whose decrement is proven by the durable mutation receipt', async () => {
+      // Crash after updateStock(-qty) but before the CLAIMED flag: the
+      // receipt on the product document proves the decrement landed.
+      const claim = makeClaim({
+        items: [
+          { productId: 'prodA', name: 'Product A', quantity: 2, mutationId: 'mut-A1', state: InventoryClaimItemState.PENDING },
+          { productId: 'prodB', name: 'Product B', quantity: 1, mutationId: 'mut-B1', state: InventoryClaimItemState.CLAIMED },
+        ],
+      });
+      claimModel.find.mockReturnValue(queryable([claim]));
+      claimModel.findOneAndUpdate.mockReturnValue(
+        execable({ ...claim, state: InventoryClaimState.RELEASING }),
+      );
+      inventoryService.hasClaimMutation.mockImplementation(
+        (_shop: string, _productId: string, mutationId: string) =>
+          Promise.resolve(mutationId === 'mut-A1'),
+      );
+      claimModel.findById.mockReturnValue(
+        execable({
+          ...claim,
+          items: claim.items.map((i: any) => ({ ...i, state: InventoryClaimItemState.RESTORED })),
+        }),
+      );
+
+      const result = await service.recoverIncompleteClaims();
+
+      expect(result.repaired).toBe(1);
+      // Both the proven PENDING decrement and the CLAIMED item restored once.
+      expect(inventoryService.updateStock).toHaveBeenCalledWith(SHOP_ID, 'prodA', 2);
+      expect(inventoryService.updateStock).toHaveBeenCalledWith(SHOP_ID, 'prodB', 1);
+      expect(inventoryService.updateStock).toHaveBeenCalledTimes(2);
+      // Receipts pulled after restoration
+      expect(inventoryService.clearClaimMutation).toHaveBeenCalledWith(SHOP_ID, 'prodA', 'mut-A1');
+      expect(inventoryService.clearClaimMutation).toHaveBeenCalledWith(SHOP_ID, 'prodB', 'mut-B1');
+    });
+
+    it('does NOT restore a PENDING item when the mutation receipt is absent (decrement never landed)', async () => {
+      const claim = makeClaim({
+        items: [
+          { productId: 'prodA', name: 'Product A', quantity: 2, mutationId: 'mut-A1', state: InventoryClaimItemState.PENDING },
+          { productId: 'prodB', name: 'Product B', quantity: 1, mutationId: 'mut-B1', state: InventoryClaimItemState.PENDING },
+        ],
+      });
+      claimModel.find.mockReturnValue(queryable([claim]));
+      claimModel.findOneAndUpdate.mockReturnValue(
+        execable({ ...claim, state: InventoryClaimState.RELEASING }),
+      );
+      inventoryService.hasClaimMutation.mockResolvedValue(false);
+      claimModel.findById.mockReturnValue(execable(claim));
+
+      const result = await service.recoverIncompleteClaims();
+
+      // No durable proof of any decrement -> zero stock mutation, zero
+      // phantom restores. Items stay PENDING and the claim resolves.
+      expect(result.repaired).toBe(0);
+      expect(inventoryService.updateStock).not.toHaveBeenCalled();
+      expect(inventoryService.createStockAdjustment).not.toHaveBeenCalled();
+    });
+
     it('keeps recovery tenant-scoped (shop filter on discovery and mutations)', async () => {
       const claim = makeClaim();
       claimModel.find.mockReturnValue(queryable([claim]));
@@ -378,6 +440,122 @@ describe('InventoryReconciliationService crash recovery (SDV2-005)', () => {
           (call: any[]) => call[0] === SHOP_ID,
         ),
       ).toBe(true);
+    });
+  });
+
+  describe('mutation receipt sweep (crash-boundary closeout)', () => {
+    const productWithMarker = (marker: any) => ({
+      _id: new Types.ObjectId(),
+      shopId: new Types.ObjectId(SHOP_ID),
+      claimMutations: [marker],
+    });
+
+    it('restores a proven decrement on a released claim (late-landing write edge)', async () => {
+      const claim = makeClaim({
+        state: InventoryClaimState.RELEASED,
+        items: [
+          { productId: 'prodA', name: 'Product A', quantity: 2, mutationId: 'mut-A1', state: InventoryClaimItemState.PENDING },
+        ],
+      });
+      inventoryService.findProductsWithClaimMutations.mockResolvedValue([
+        productWithMarker({ mutationId: 'mut-A1', claimId: claim._id, quantity: 2, createdAt: new Date() }),
+      ]);
+      claimModel.findOne.mockReturnValue(execable(claim));
+
+      const result = await service.sweepClaimMutations();
+
+      expect(result.resolved).toBe(1);
+      expect(inventoryService.updateStock).toHaveBeenCalledWith(SHOP_ID, 'prodA', 2);
+      expect(inventoryService.clearClaimMutation).toHaveBeenCalledWith(SHOP_ID, expect.any(String), 'mut-A1');
+    });
+
+    it('pulls residue receipts on already-resolved items without touching stock', async () => {
+      const claim = makeClaim({
+        state: InventoryClaimState.COMMITTED,
+        items: [
+          { productId: 'prodA', name: 'Product A', quantity: 2, mutationId: 'mut-A1', state: InventoryClaimItemState.CLAIMED },
+        ],
+      });
+      inventoryService.findProductsWithClaimMutations.mockResolvedValue([
+        productWithMarker({ mutationId: 'mut-A1', claimId: claim._id, quantity: 2, createdAt: new Date() }),
+      ]);
+      claimModel.findOne.mockReturnValue(execable(claim));
+
+      const result = await service.sweepClaimMutations();
+
+      expect(result.cleared).toBe(1);
+      expect(inventoryService.updateStock).not.toHaveBeenCalled();
+      expect(inventoryService.clearClaimMutation).toHaveBeenCalledTimes(1);
+    });
+
+    it('classifies a proven decrement on a COMMITTED claim as ambiguous (never guesses)', async () => {
+      const claim = makeClaim({
+        state: InventoryClaimState.COMMITTED,
+        items: [
+          { productId: 'prodA', name: 'Product A', quantity: 2, mutationId: 'mut-A1', state: InventoryClaimItemState.PENDING },
+        ],
+      });
+      inventoryService.findProductsWithClaimMutations.mockResolvedValue([
+        productWithMarker({ mutationId: 'mut-A1', claimId: claim._id, quantity: 2, createdAt: new Date() }),
+      ]);
+      claimModel.findOne.mockReturnValue(execable(claim));
+
+      const result = await service.sweepClaimMutations();
+
+      expect(result.ambiguous).toBe(1);
+      expect(inventoryService.updateStock).not.toHaveBeenCalled();
+    });
+
+    it('classifies a receipt with no matching claim as ambiguous', async () => {
+      inventoryService.findProductsWithClaimMutations.mockResolvedValue([
+        productWithMarker({ mutationId: 'mut-X', claimId: new Types.ObjectId(), quantity: 2, createdAt: new Date() }),
+      ]);
+      claimModel.findOne.mockReturnValue(execable(null));
+
+      const result = await service.sweepClaimMutations();
+
+      expect(result.ambiguous).toBe(1);
+      expect(inventoryService.updateStock).not.toHaveBeenCalled();
+    });
+
+    it('never touches receipts owned by an in-flight claim inside the grace window', async () => {
+      const claim = makeClaim({
+        createdAt: new Date(), // inside grace
+        items: [
+          { productId: 'prodA', name: 'Product A', quantity: 2, mutationId: 'mut-A1', state: InventoryClaimItemState.PENDING },
+        ],
+      });
+      inventoryService.findProductsWithClaimMutations.mockResolvedValue([
+        productWithMarker({ mutationId: 'mut-A1', claimId: claim._id, quantity: 2, createdAt: new Date() }),
+      ]);
+      claimModel.findOne.mockReturnValue(execable(claim));
+
+      const result = await service.sweepClaimMutations();
+
+      expect(result.resolved).toBe(0);
+      expect(result.cleared).toBe(0);
+      expect(inventoryService.updateStock).not.toHaveBeenCalled();
+      expect(inventoryService.clearClaimMutation).not.toHaveBeenCalled();
+    });
+
+    it('a concurrent worker that loses the sweep work claim restores nothing', async () => {
+      const claim = makeClaim({
+        state: InventoryClaimState.RELEASING,
+        items: [
+          { productId: 'prodA', name: 'Product A', quantity: 2, mutationId: 'mut-A1', state: InventoryClaimItemState.PENDING },
+        ],
+      });
+      inventoryService.findProductsWithClaimMutations.mockResolvedValue([
+        productWithMarker({ mutationId: 'mut-A1', claimId: claim._id, quantity: 2, createdAt: new Date() }),
+      ]);
+      claimModel.findOne.mockReturnValue(execable(claim));
+      // Another worker already took the item
+      claimModel.updateOne.mockReturnValue(execable({ modifiedCount: 0 }));
+
+      const result = await service.sweepClaimMutations();
+
+      expect(result.resolved).toBe(0);
+      expect(inventoryService.updateStock).not.toHaveBeenCalled();
     });
   });
 });

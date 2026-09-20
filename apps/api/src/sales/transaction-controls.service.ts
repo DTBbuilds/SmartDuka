@@ -118,6 +118,17 @@ export class TransactionControlsService {
             { $set: { 'items.$.state': InventoryClaimItemState.RESTORED } },
           )
           .exec();
+        if (item.mutationId) {
+          try {
+            await this.inventoryService.clearClaimMutation(
+              order.shopId.toString(),
+              item.productId,
+              item.mutationId,
+            );
+          } catch {
+            // Receipt residue is swept by reconciliation; never blocks release.
+          }
+        }
       } catch (itemError: any) {
         this.logger.error(
           `Failed to restore claim ${claim._id} item ${item.productId}: ${itemError?.message}`,

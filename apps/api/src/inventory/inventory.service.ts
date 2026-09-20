@@ -758,25 +758,100 @@ export class InventoryService implements OnModuleInit {
     return rootCategories;
   }
 
-  async updateStock(shopId: string, productId: string, quantityChange: number): Promise<ProductDocument | null> {
+  async updateStock(
+    shopId: string,
+    productId: string,
+    quantityChange: number,
+    mutationRef?: { mutationId: string; claimId: string },
+  ): Promise<ProductDocument | null> {
     // Reductions are bounded atomically in the update filter so two concurrent
     // checkouts can never both consume the same units, stock can never go
     // negative, and insufficient stock returns null (a traceable failure for
     // the caller) instead of being silently clamped to zero.
+    //
+    // When a mutationRef is supplied, the durable mutation receipt is pushed
+    // into the SAME document update as the decrement. Atomicity therefore
+    // proves both sides at once: receipt present = decrement landed, receipt
+    // absent = decrement never applied.
     const filter: any = {
       _id: new Types.ObjectId(productId),
       shopId: new Types.ObjectId(shopId),
     };
+    const update: any = { $inc: { stock: quantityChange } };
     if (quantityChange < 0) {
       filter.stock = { $gte: -quantityChange };
+      if (mutationRef) {
+        update.$push = {
+          claimMutations: {
+            mutationId: mutationRef.mutationId,
+            claimId: new Types.ObjectId(mutationRef.claimId),
+            quantity: -quantityChange,
+            createdAt: new Date(),
+          },
+        };
+      }
     }
 
     return this.productModel
       .findOneAndUpdate(
         filter,
-        { $inc: { stock: quantityChange } },
+        update,
         { new: true }
       )
+      .exec();
+  }
+
+  /**
+   * Remove a durable mutation receipt after the claim item it witnesses has
+   * been durably resolved (CLAIMED transition or restoration). Idempotent.
+   */
+  async clearClaimMutation(
+    shopId: string,
+    productId: string,
+    mutationId: string,
+  ): Promise<void> {
+    await this.productModel
+      .updateOne(
+        { _id: new Types.ObjectId(productId), shopId: new Types.ObjectId(shopId) },
+        { $pull: { claimMutations: { mutationId } } },
+      )
+      .exec();
+  }
+
+  /**
+   * Prove whether a checkout stock decrement durably landed: the receipt is
+   * written atomically with the decrement, so existence is definitive.
+   */
+  async hasClaimMutation(
+    shopId: string,
+    productId: string,
+    mutationId: string,
+  ): Promise<boolean> {
+    const doc = await this.productModel
+      .findOne(
+        {
+          _id: new Types.ObjectId(productId),
+          shopId: new Types.ObjectId(shopId),
+          'claimMutations.mutationId': mutationId,
+        },
+        { _id: 1 },
+      )
+      .exec();
+    return !!doc;
+  }
+
+  /**
+   * Products carrying unresolved mutation receipts (reconciliation sweep).
+   */
+  async findProductsWithClaimMutations(
+    shopId?: string,
+  ): Promise<ProductDocument[]> {
+    const filter: any = { 'claimMutations.0': { $exists: true } };
+    if (shopId) {
+      filter.shopId = new Types.ObjectId(shopId);
+    }
+    return this.productModel
+      .find(filter, { shopId: 1, claimMutations: 1 })
       .exec();
   }
 

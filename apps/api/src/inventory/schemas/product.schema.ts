@@ -238,6 +238,21 @@ export class Product {
     };
   };
 
+  /**
+   * Durable mutation receipts for checkout inventory claims (SDV-005).
+   * Each entry is pushed atomically with the stock decrement in the same
+   * findOneAndUpdate, so its presence proves the decrement landed and its
+   * absence proves it did not. Entries are pulled once the claim item is
+   * durably CLAIMED or restored; residue is swept by reconciliation.
+   */
+  @Prop({ type: [Object], default: [] })
+  claimMutations?: Array<{
+    mutationId: string;
+    claimId: Types.ObjectId;
+    quantity: number;
+    createdAt: Date;
+  }>;
+
   // Soft delete support
   @Prop({ required: false })
   deletedAt?: Date;

@@ -52,6 +52,8 @@ describe('TransactionControlsService inventory consistency', () => {
     inventoryService = {
       updateStock: jest.fn().mockResolvedValue({ stock: 12 }),
       createStockAdjustment: jest.fn().mockResolvedValue({}),
+      clearClaimMutation: jest.fn().mockResolvedValue(undefined),
+      hasClaimMutation: jest.fn().mockResolvedValue(false),
     };
 
     // Durable-claim simulation (SDV2-005): no claim by default -> legacy path.

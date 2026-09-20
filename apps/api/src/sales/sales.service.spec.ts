@@ -156,6 +156,8 @@ describe('SalesService', () => {
             getProductById: jest.fn().mockResolvedValue({ stock: 100, cost: 50 }),
             updateStock: jest.fn().mockResolvedValue({ stock: 98 }),
             createStockAdjustment: jest.fn().mockResolvedValue({}),
+            clearClaimMutation: jest.fn().mockResolvedValue(undefined),
+            hasClaimMutation: jest.fn().mockResolvedValue(false),
           },
         },
         {
@@ -279,7 +281,8 @@ describe('SalesService', () => {
       expect(inventoryService.updateStock).toHaveBeenCalledWith(
         mockShopId,
         'prod1',
-        -2 // Negative for reduction
+        -2, // Negative for reduction
+        expect.objectContaining({ mutationId: expect.any(String) }),
       );
     });
 
@@ -414,8 +417,18 @@ describe('SalesService', () => {
 
       expect(inventoryService.updateStock).toHaveBeenCalledWith(mockShopId, 'prodA', 2);
       expect(inventoryService.updateStock).toHaveBeenCalledWith(mockShopId, 'prodB', 1);
-      expect(inventoryService.updateStock).toHaveBeenCalledWith(mockShopId, 'prodA', -2);
-      expect(inventoryService.updateStock).toHaveBeenCalledWith(mockShopId, 'prodB', -1);
+      expect(inventoryService.updateStock).toHaveBeenCalledWith(
+        mockShopId,
+        'prodA',
+        -2,
+        expect.objectContaining({ mutationId: expect.any(String) }),
+      );
+      expect(inventoryService.updateStock).toHaveBeenCalledWith(
+        mockShopId,
+        'prodB',
+        -1,
+        expect.objectContaining({ mutationId: expect.any(String) }),
+      );
     });
 
     it('two different-key checkouts competing for the last unit: exactly one succeeds', async () => {
@@ -512,7 +525,12 @@ describe('SalesService', () => {
       );
       expect(saleAdjustments).toHaveLength(STOCK);
       // Single-item losers never held a claim, so nothing needed compensation
-      expect(inventoryService.updateStock).toHaveBeenCalledWith(mockShopId, 'prod1', -1);
+      expect(inventoryService.updateStock).toHaveBeenCalledWith(
+        mockShopId,
+        'prod1',
+        -1,
+        expect.objectContaining({ mutationId: expect.any(String) }),
+      );
     });
   });
 
@@ -606,7 +624,12 @@ describe('SalesService', () => {
       expect(second).toBe(canonical);
       // Net inventory effect is exactly one claim: the loser's claim is
       // compensated (+2) after losing the uniqueness race.
-      expect(inventoryService.updateStock).toHaveBeenCalledWith(mockShopId, 'prod1', -2);
+      expect(inventoryService.updateStock).toHaveBeenCalledWith(
+        mockShopId,
+        'prod1',
+        -2,
+        expect.objectContaining({ mutationId: expect.any(String) }),
+      );
       expect(inventoryService.updateStock).toHaveBeenCalledWith(mockShopId, 'prod1', 2);
     });
 
@@ -733,6 +756,29 @@ describe('SalesService', () => {
       expect(createOrder).toBeLessThan(firstClaimOrder);
     });
 
+    it('writes the mutation receipt with the decrement and clears it after the CLAIMED flag', async () => {
+      await service.checkout(mockShopId, mockUserId, mockBranchId, mockCheckoutDto);
+
+      const claims: Map<string, any> = inventoryClaimModel.__claims;
+      const record = [...claims.values()][0];
+      const mutationId = record.items[0].mutationId;
+      expect(mutationId).toBeTruthy();
+
+      // Decrement carried the durable mutation identity
+      expect(inventoryService.updateStock).toHaveBeenCalledWith(
+        mockShopId,
+        'prod1',
+        -2,
+        expect.objectContaining({ mutationId, claimId: record._id.toString() }),
+      );
+      // Receipt pulled once the CLAIMED flag is durable
+      expect(inventoryService.clearClaimMutation).toHaveBeenCalledWith(
+        mockShopId,
+        'prod1',
+        mutationId,
+      );
+    });
+
     it('persists CLAIMING -> per-item CLAIMED -> CLAIMED -> COMMITTED lifecycle', async () => {
       await service.checkout(mockShopId, mockUserId, mockBranchId, twoItemDto);
 
@@ -840,7 +886,12 @@ describe('SalesService', () => {
       ).rejects.toThrow(InternalServerErrorException);
 
       // The stock claim happened, but no order and no payment survive.
-      expect(inventoryService.updateStock).toHaveBeenCalledWith(mockShopId, 'prod1', -2);
+      expect(inventoryService.updateStock).toHaveBeenCalledWith(
+        mockShopId,
+        'prod1',
+        -2,
+        expect.objectContaining({ mutationId: expect.any(String) }),
+      );
       expect(paymentTransactionService.createTransaction).not.toHaveBeenCalled();
       expect(activityService.logActivity).not.toHaveBeenCalled();
     });
