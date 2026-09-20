@@ -64,7 +64,8 @@ export class InventoryReconciliationService {
   private isInFlight(claim: InventoryClaimDocument): boolean {
     const terminal =
       claim.state === InventoryClaimState.COMMITTED ||
-      claim.state === InventoryClaimState.RELEASED;
+      claim.state === InventoryClaimState.RELEASED ||
+      claim.state === InventoryClaimState.RESOLVED;
     if (terminal || !claim.createdAt) return false;
     return new Date(claim.createdAt).getTime() > this.recoveryCutoff().getTime();
   }
@@ -183,7 +184,8 @@ export class InventoryReconciliationService {
       case InventoryClaimState.COMMITTED:
         return 'HEALTHY_COMMITTED';
       case InventoryClaimState.RELEASED:
-        return 'HEALTHY_RELEASED';
+      case InventoryClaimState.RESOLVED:
+        return 'HEALTHY_RELEASED'; // terminal, operator-resolved included
       case InventoryClaimState.RELEASING: {
         const hasAmbiguousItem = claim.items.some(
           (item) => item.state === InventoryClaimItemState.RESTORING,
@@ -412,7 +414,84 @@ export class InventoryReconciliationService {
           const claim = await this.claimModel
             .findOne({ _id: marker.claimId, shopId: product.shopId })
             .exec();
-          const item = claim?.items.find((i) => i.mutationId === marker.mutationId);
+          const item = claim?.items.find(
+            (i) =>
+              i.mutationId === marker.mutationId ||
+              i.resolution?.mutationId === marker.mutationId,
+          );
+
+          // Resolved operator decisions leave residue receipts - pull them.
+          if (marker.resolution?.status === 'resolved') {
+            await this.inventoryService.clearClaimMutation(
+              product.shopId.toString(),
+              product._id.toString(),
+              marker.mutationId,
+            );
+            result.cleared += 1;
+            continue;
+          }
+
+          if (marker.kind === 'restore') {
+            // A restore receipt proves the operator's +qty mutation landed.
+            // If the claim-side finalize crashed, the evidence is complete:
+            // finish it (proven, not guessed).
+            if (
+              claim &&
+              item &&
+              item.resolution?.status === 'resolving' &&
+              item.resolution.mutationId === marker.mutationId
+            ) {
+              await this.claimModel
+                .updateOne(
+                  {
+                    _id: claim._id,
+                    items: {
+                      $elemMatch: {
+                        productId: item.productId,
+                        'resolution.mutationId': marker.mutationId,
+                        'resolution.status': 'resolving',
+                      },
+                    },
+                  },
+                  {
+                    $set: {
+                      'items.$.state': InventoryClaimItemState.RESTORED,
+                      'items.$.resolution.status': 'resolved',
+                    },
+                  },
+                )
+                .exec();
+              await this.inventoryService.clearClaimMutations(
+                product.shopId.toString(),
+                product._id.toString(),
+                [marker.mutationId, item.mutationId].filter(
+                  Boolean,
+                ) as string[],
+              );
+              result.resolved += 1;
+            } else if (item && item.resolution?.status === 'resolved') {
+              await this.inventoryService.clearClaimMutation(
+                product.shopId.toString(),
+                product._id.toString(),
+                marker.mutationId,
+              );
+              result.cleared += 1;
+            } else {
+              this.logger.error(
+                `Restore receipt ${marker.mutationId} on product ${product._id} has no matching resolution - manual review required`,
+              );
+              result.ambiguous += 1;
+            }
+            continue;
+          }
+
+          // A decrement receipt carrying an in-progress operator resolution
+          // is owned by that resolution - the operator endpoint resumes it;
+          // the sweep never guesses.
+          if (marker.resolution?.status === 'resolving') {
+            result.ambiguous += 1;
+            continue;
+          }
 
           if (!claim || !item) {
             this.logger.error(

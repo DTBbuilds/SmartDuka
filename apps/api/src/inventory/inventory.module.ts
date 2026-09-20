@@ -3,6 +3,8 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { InventoryService } from './inventory.service';
 import { InventoryController } from './inventory.controller';
 import { InventoryReconciliationService } from './inventory-reconciliation.service';
+import { InventoryRecoveryService } from './inventory-recovery.service';
+import { InventoryRecoveryController } from './inventory-recovery.controller';
 import { CategorySuggestionService } from './services/category-suggestion.service';
 import { ExpiryTrackingService } from './services/expiry-tracking.service';
 import { ExpiryTrackingController } from './controllers/expiry-tracking.controller';
@@ -33,13 +35,15 @@ import { CloudinaryModule } from '../cloudinary/cloudinary.module';
     CategorySuggestionService,
     ExpiryTrackingService,
     InventoryReconciliationService,
+    InventoryRecoveryService,
   ],
-  controllers: [InventoryController, ExpiryTrackingController],
+  controllers: [InventoryController, ExpiryTrackingController, InventoryRecoveryController],
   exports: [
     InventoryService,
     CategorySuggestionService,
     ExpiryTrackingService,
     InventoryReconciliationService,
+    InventoryRecoveryService,
   ],
 })
 export class InventoryModule {}

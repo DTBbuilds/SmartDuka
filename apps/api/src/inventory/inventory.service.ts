@@ -762,7 +762,7 @@ export class InventoryService implements OnModuleInit {
     shopId: string,
     productId: string,
     quantityChange: number,
-    mutationRef?: { mutationId: string; claimId: string },
+    mutationRef?: { mutationId: string; claimId?: string; kind?: 'claim' | 'restore' },
   ): Promise<ProductDocument | null> {
     // Reductions are bounded atomically in the update filter so two concurrent
     // checkouts can never both consume the same units, stock can never go
@@ -770,9 +770,10 @@ export class InventoryService implements OnModuleInit {
     // the caller) instead of being silently clamped to zero.
     //
     // When a mutationRef is supplied, the durable mutation receipt is pushed
-    // into the SAME document update as the decrement. Atomicity therefore
-    // proves both sides at once: receipt present = decrement landed, receipt
-    // absent = decrement never applied.
+    // into the SAME document update as the stock change. Atomicity therefore
+    // proves both sides at once: receipt present = mutation landed, receipt
+    // absent = mutation never applied. kind 'claim' witnesses checkout
+    // decrements; kind 'restore' witnesses operator restorations (SDV2-006).
     const filter: any = {
       _id: new Types.ObjectId(productId),
       shopId: new Types.ObjectId(shopId),
@@ -780,16 +781,22 @@ export class InventoryService implements OnModuleInit {
     const update: any = { $inc: { stock: quantityChange } };
     if (quantityChange < 0) {
       filter.stock = { $gte: -quantityChange };
-      if (mutationRef) {
-        update.$push = {
-          claimMutations: {
-            mutationId: mutationRef.mutationId,
-            claimId: new Types.ObjectId(mutationRef.claimId),
-            quantity: -quantityChange,
-            createdAt: new Date(),
-          },
-        };
-      }
+    }
+    if (mutationRef) {
+      // Mutation-identity idempotency: if this mutationId already has a
+      // receipt, the mutation already landed - the update is a proven no-op.
+      filter['claimMutations.mutationId'] = { $ne: mutationRef.mutationId };
+      update.$push = {
+        claimMutations: {
+          mutationId: mutationRef.mutationId,
+          ...(mutationRef.claimId
+            ? { claimId: new Types.ObjectId(mutationRef.claimId) }
+            : {}),
+          quantity: Math.abs(quantityChange),
+          kind: mutationRef.kind ?? 'claim',
+          createdAt: new Date(),
+        },
+      };
     }
 
     return this.productModel
@@ -838,6 +845,92 @@ export class InventoryService implements OnModuleInit {
       )
       .exec();
     return !!doc;
+  }
+
+  /**
+   * Count manual-resolution audit adjustments since a timestamp (metrics).
+   */
+  async countResolutionAdjustments(
+    shopId: string,
+    since: Date,
+  ): Promise<number> {
+    return this.adjustmentModel.countDocuments({
+      shopId: new Types.ObjectId(shopId),
+      reason: 'correction',
+      notes: { $regex: 'Manual resolution' },
+      createdAt: { $gte: since },
+    });
+  }
+
+  /**
+   * Fetch a single durable mutation receipt (tenant-scoped).
+   */
+  async getClaimMutation(
+    shopId: string,
+    productId: string,
+    mutationId: string,
+  ): Promise<any | null> {
+    const doc = await this.productModel
+      .findOne(
+        {
+          _id: new Types.ObjectId(productId),
+          shopId: new Types.ObjectId(shopId),
+        },
+        { claimMutations: 1 },
+      )
+      .exec();
+    return (
+      doc?.claimMutations?.find((m: any) => m.mutationId === mutationId) ?? null
+    );
+  }
+
+  /**
+   * Atomically attach an operator-resolution record to a mutation receipt.
+   * Only wins while the receipt is unresolved/unclaimed, so two operators can
+   * never take the same receipt case (SDV2-006).
+   */
+  async claimMutationForResolution(
+    shopId: string,
+    productId: string,
+    mutationId: string,
+    resolution: Record<string, any>,
+  ): Promise<boolean> {
+    const result = await this.productModel
+      .updateOne(
+        {
+          _id: new Types.ObjectId(productId),
+          shopId: new Types.ObjectId(shopId),
+          claimMutations: {
+            $elemMatch: {
+              mutationId,
+              // Only an unclaimed receipt can be taken: a 'resolving' record
+              // belongs to an in-flight resolution (resumed via its stored
+              // mutationId), a 'resolved' one is terminal.
+              resolution: { $exists: false },
+            },
+          },
+        },
+        { $set: { 'claimMutations.$.resolution': resolution } },
+      )
+      .exec();
+    return !!result.modifiedCount;
+  }
+
+  /**
+   * Remove multiple durable mutation receipts at once (idempotent).
+   */
+  async clearClaimMutations(
+    shopId: string,
+    productId: string,
+    mutationIds: string[],
+  ): Promise<void> {
+    if (!mutationIds.length) return;
+    await this.productModel
+      .updateOne(
+        { _id: new Types.ObjectId(productId), shopId: new Types.ObjectId(shopId) },
+        { $pull: { claimMutations: { mutationId: { $in: mutationIds } } } },
+      )
+      .exec();
   }
 
   /**

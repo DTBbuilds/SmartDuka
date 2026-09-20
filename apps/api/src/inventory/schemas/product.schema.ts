@@ -244,13 +244,25 @@ export class Product {
    * findOneAndUpdate, so its presence proves the decrement landed and its
    * absence proves it did not. Entries are pulled once the claim item is
    * durably CLAIMED or restored; residue is swept by reconciliation.
+   *
+   * kind 'claim' (default) witnesses a checkout decrement; 'restore'
+   * witnesses a manual-resolution restoration (SDV2-006). resolution is an
+   * operator decision record persisted on the receipt while the case is open.
    */
   @Prop({ type: [Object], default: [] })
   claimMutations?: Array<{
     mutationId: string;
-    claimId: Types.ObjectId;
+    claimId?: Types.ObjectId;
     quantity: number;
+    kind?: 'claim' | 'restore';
     createdAt: Date;
+    resolution?: {
+      status: 'resolving' | 'resolved';
+      action: 'restore_stock' | 'accept_current_stock';
+      resolvedBy?: Types.ObjectId;
+      resolvedAt?: Date;
+      reason?: string;
+    };
   }>;
 
   // Soft delete support
