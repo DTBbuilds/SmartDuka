@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards, BadRequestException, Res } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+  BadRequestException,
+  Res,
+} from '@nestjs/common';
 import type { Response } from 'express';
 import { SalesService } from './sales.service';
 import { ReceiptService } from './services/receipt.service';
@@ -62,7 +72,14 @@ export class SalesController {
   @Post('checkout')
   checkout(@Body() dto: CheckoutDto, @CurrentUser() user: any) {
     // PHASE 3: Pass branchId from user context
-    return this.salesService.checkout(user.shopId, user.sub, user.branchId, dto);
+    // P0-3A: actor identity comes from the JWT, never from the body
+    return this.salesService.checkout(
+      user.shopId,
+      user.sub,
+      user.branchId,
+      dto,
+      user.name,
+    );
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -91,7 +108,9 @@ export class SalesController {
   ) {
     if (!user?.shopId) {
       console.error('[OrdersAnalytics] No shopId in user token:', user);
-      throw new BadRequestException('Shop ID not found in authentication token. Please log in again.');
+      throw new BadRequestException(
+        'Shop ID not found in authentication token. Please log in again.',
+      );
     }
     return this.salesService.getOrdersAnalytics(user.shopId, branchId);
   }
@@ -105,7 +124,9 @@ export class SalesController {
     @CurrentUser() user: any,
   ) {
     if (!user?.shopId) {
-      throw new BadRequestException('Shop ID not found in authentication token.');
+      throw new BadRequestException(
+        'Shop ID not found in authentication token.',
+      );
     }
     return this.salesService.getProfitAnalytics(user.shopId, range, branchId);
   }
@@ -123,7 +144,9 @@ export class SalesController {
   dailySales(@Param('date') dateStr: string, @CurrentUser() user: any) {
     const date = new Date(dateStr);
     if (isNaN(date.getTime())) {
-      throw new BadRequestException('Invalid date format. Please use YYYY-MM-DD format');
+      throw new BadRequestException(
+        'Invalid date format. Please use YYYY-MM-DD format',
+      );
     }
     return this.salesService.getDailySales(user.shopId, date);
   }
@@ -136,7 +159,11 @@ export class SalesController {
     @Query() query: OrdersQueryDto,
     @CurrentUser() user: any,
   ) {
-    return this.salesService.listOrdersByBranch(user.shopId, branchId, query.limit);
+    return this.salesService.listOrdersByBranch(
+      user.shopId,
+      branchId,
+      query.limit,
+    );
   }
 
   @UseGuards(JwtAuthGuard)
@@ -148,7 +175,9 @@ export class SalesController {
   ) {
     const date = new Date(dateStr);
     if (isNaN(date.getTime())) {
-      throw new BadRequestException('Invalid date format. Please use YYYY-MM-DD format');
+      throw new BadRequestException(
+        'Invalid date format. Please use YYYY-MM-DD format',
+      );
     }
     return this.salesService.getDailySalesByBranch(user.shopId, branchId, date);
   }
@@ -212,7 +241,10 @@ export class SalesController {
 
   @UseGuards(JwtAuthGuard)
   @Get('receipts/order/:orderId')
-  async getReceiptByOrder(@Param('orderId') orderId: string, @CurrentUser() user: any) {
+  async getReceiptByOrder(
+    @Param('orderId') orderId: string,
+    @CurrentUser() user: any,
+  ) {
     return this.receiptService.getByOrderId(user.shopId, orderId);
   }
 
@@ -251,9 +283,18 @@ export class SalesController {
   @Post('invoices')
   async createInvoice(@Body() dto: CreateInvoiceDto, @CurrentUser() user: any) {
     if (dto.orderId) {
-      return this.invoiceService.createFromOrder(user.shopId, user.branchId, dto);
+      return this.invoiceService.createFromOrder(
+        user.shopId,
+        user.branchId,
+        dto,
+      );
     }
-    return this.invoiceService.create(user.shopId, user.branchId, user.sub, dto);
+    return this.invoiceService.create(
+      user.shopId,
+      user.branchId,
+      user.sub,
+      dto,
+    );
   }
 
   @UseGuards(JwtAuthGuard)
@@ -303,7 +344,11 @@ export class SalesController {
 
   @UseGuards(JwtAuthGuard)
   @Get('invoices/:id/html')
-  async getInvoiceHTML(@Param('id') id: string, @CurrentUser() user: any, @Res() res: Response) {
+  async getInvoiceHTML(
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+    @Res() res: Response,
+  ) {
     const invoice = await this.invoiceService.getById(user.shopId, id);
     const html = this.invoiceService.generateInvoiceHTML(invoice);
     res.setHeader('Content-Type', 'text/html');

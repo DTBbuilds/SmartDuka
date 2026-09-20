@@ -14,6 +14,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { ShopSettingsModule } from '../shop-settings/shop-settings.module';
 import { LoyaltyModule } from '../loyalty/loyalty.module';
 import { CustomersModule } from '../customers/customers.module';
+import { ShiftsModule } from '../shifts/shifts.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { CustomersModule } from '../customers/customers.module';
     ShopSettingsModule,
     forwardRef(() => LoyaltyModule),
     forwardRef(() => CustomersModule),
+    ShiftsModule,
   ],
   providers: [SalesService, ReceiptService, InvoiceService],
   controllers: [SalesController],

@@ -8,7 +8,14 @@ import { PaymentTransactionService } from '../payments/services/payment-transact
 import { CacheService } from '../common/services/cache.service';
 import { ShopSettingsService } from '../shop-settings/shop-settings.service';
 import { TransactionService } from '../common/services/transaction.service';
+import { LoyaltyService } from '../loyalty/loyalty.service';
+import { CustomersService } from '../customers/customers.service';
+import { ShiftsService } from '../shifts/shifts.service';
 import { BadRequestException } from '@nestjs/common';
+
+jest.mock('nanoid', () => ({
+  nanoid: () => 'TESTID',
+}));
 
 describe('SalesService', () => {
   let service: SalesService;
@@ -19,6 +26,9 @@ describe('SalesService', () => {
   let cacheService: any;
   let shopSettingsService: any;
   let transactionService: any;
+  let loyaltyService: any;
+  let customersService: any;
+  let shiftsService: any;
 
   const mockShopId = '507f1f77bcf86cd799439011';
   const mockUserId = '507f1f77bcf86cd799439012';
@@ -29,7 +39,13 @@ describe('SalesService', () => {
     shopId: mockShopId,
     orderNumber: 'STK-2024-ABC123',
     items: [
-      { productId: 'prod1', name: 'Test Product', quantity: 2, unitPrice: 100, lineTotal: 200 },
+      {
+        productId: 'prod1',
+        name: 'Test Product',
+        quantity: 2,
+        unitPrice: 100,
+        lineTotal: 200,
+      },
     ],
     subtotal: 200,
     tax: 32,
@@ -79,7 +95,13 @@ describe('SalesService', () => {
         {
           provide: InventoryService,
           useValue: {
-            getProductById: jest.fn().mockResolvedValue({ stock: 100, cost: 50 }),
+            getProductById: jest.fn().mockResolvedValue({
+              _id: 'prod1',
+              name: 'Test Product',
+              price: 100,
+              stock: 100,
+              cost: 50,
+            }),
             updateStock: jest.fn().mockResolvedValue({ stock: 98 }),
             createStockAdjustment: jest.fn().mockResolvedValue({}),
           },
@@ -118,6 +140,30 @@ describe('SalesService', () => {
             checkTransactionSupport: jest.fn().mockResolvedValue(false),
           },
         },
+        {
+          provide: LoyaltyService,
+          useValue: {
+            redeemPoints: jest.fn().mockResolvedValue({}),
+            earnPoints: jest.fn().mockResolvedValue({
+              transactions: [{ type: 'earn', amount: 10 }],
+            }),
+          },
+        },
+        {
+          provide: CustomersService,
+          useValue: {
+            findByIdForShop: jest
+              .fn()
+              .mockResolvedValue({ _id: 'cust1', shopId: mockShopId }),
+            updatePurchaseStats: jest.fn().mockResolvedValue({}),
+          },
+        },
+        {
+          provide: ShiftsService,
+          useValue: {
+            getShiftById: jest.fn().mockResolvedValue(null),
+          },
+        },
       ],
     }).compile();
 
@@ -129,6 +175,9 @@ describe('SalesService', () => {
     cacheService = module.get(CacheService);
     shopSettingsService = module.get(ShopSettingsService);
     transactionService = module.get(TransactionService);
+    loyaltyService = module.get(LoyaltyService);
+    customersService = module.get(CustomersService);
+    shiftsService = module.get(ShiftsService);
   });
 
   afterEach(() => {
@@ -142,15 +191,17 @@ describe('SalesService', () => {
   describe('checkout', () => {
     it('should throw BadRequestException for empty cart', async () => {
       await expect(
-        service.checkout(mockShopId, mockUserId, mockBranchId, { items: [] })
+        service.checkout(mockShopId, mockUserId, mockBranchId, { items: [] }),
       ).rejects.toThrow(BadRequestException);
     });
 
     it('should throw BadRequestException for zero subtotal', async () => {
       await expect(
         service.checkout(mockShopId, mockUserId, mockBranchId, {
-          items: [{ productId: 'prod1', name: 'Test', quantity: 0, unitPrice: 0 }],
-        })
+          items: [
+            { productId: 'prod1', name: 'Test', quantity: 0, unitPrice: 0 },
+          ],
+        }),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -159,18 +210,30 @@ describe('SalesService', () => {
 
       await expect(
         service.checkout(mockShopId, mockUserId, mockBranchId, {
-          items: [{ productId: 'prod1', name: 'Test Product', quantity: 10, unitPrice: 100 }],
-        })
+          items: [
+            {
+              productId: 'prod1',
+              name: 'Test Product',
+              quantity: 10,
+              unitPrice: 100,
+            },
+          ],
+        }),
       ).rejects.toThrow('Insufficient stock');
     });
 
     it('should get tax rate from shop settings', async () => {
       shopSettingsService.getByShopId.mockResolvedValue({
-        tax: { enabled: true, rate: 0.10 }, // 10% tax
+        tax: { enabled: true, rate: 0.1 }, // 10% tax
       });
 
       // The service should use 10% tax rate from settings
-      await service.checkout(mockShopId, mockUserId, mockBranchId, mockCheckoutDto);
+      await service.checkout(
+        mockShopId,
+        mockUserId,
+        mockBranchId,
+        mockCheckoutDto,
+      );
 
       expect(shopSettingsService.getByShopId).toHaveBeenCalledWith(mockShopId);
     });
@@ -180,23 +243,38 @@ describe('SalesService', () => {
         tax: { enabled: false, rate: 0.16 },
       });
 
-      await service.checkout(mockShopId, mockUserId, mockBranchId, mockCheckoutDto);
+      await service.checkout(
+        mockShopId,
+        mockUserId,
+        mockBranchId,
+        mockCheckoutDto,
+      );
 
       expect(shopSettingsService.getByShopId).toHaveBeenCalled();
     });
 
     it('should reduce inventory after successful checkout', async () => {
-      await service.checkout(mockShopId, mockUserId, mockBranchId, mockCheckoutDto);
+      await service.checkout(
+        mockShopId,
+        mockUserId,
+        mockBranchId,
+        mockCheckoutDto,
+      );
 
       expect(inventoryService.updateStock).toHaveBeenCalledWith(
         mockShopId,
         'prod1',
-        -2 // Negative for reduction
+        -2, // Negative for reduction
       );
     });
 
     it('should create stock adjustment audit trail', async () => {
-      await service.checkout(mockShopId, mockUserId, mockBranchId, mockCheckoutDto);
+      await service.checkout(
+        mockShopId,
+        mockUserId,
+        mockBranchId,
+        mockCheckoutDto,
+      );
 
       expect(inventoryService.createStockAdjustment).toHaveBeenCalledWith(
         mockShopId,
@@ -204,12 +282,17 @@ describe('SalesService', () => {
         -2,
         'sale',
         mockUserId,
-        expect.stringContaining('Test Product x2')
+        expect.stringContaining('Test Product x2'),
       );
     });
 
     it('should log checkout activity', async () => {
-      await service.checkout(mockShopId, mockUserId, mockBranchId, mockCheckoutDto);
+      await service.checkout(
+        mockShopId,
+        mockUserId,
+        mockBranchId,
+        mockCheckoutDto,
+      );
 
       expect(activityService.logActivity).toHaveBeenCalledWith(
         mockShopId,
@@ -220,21 +303,34 @@ describe('SalesService', () => {
         expect.objectContaining({
           total: expect.any(Number),
           itemCount: 1,
-        })
+        }),
+        undefined,
+        undefined,
+        mockBranchId,
       );
     });
 
     it('should record payment transactions', async () => {
-      await service.checkout(mockShopId, mockUserId, mockBranchId, mockCheckoutDto);
+      await service.checkout(
+        mockShopId,
+        mockUserId,
+        mockBranchId,
+        mockCheckoutDto,
+      );
 
       expect(paymentTransactionService.createTransaction).toHaveBeenCalled();
     });
 
     it('should invalidate cache after checkout', async () => {
-      await service.checkout(mockShopId, mockUserId, mockBranchId, mockCheckoutDto);
+      await service.checkout(
+        mockShopId,
+        mockUserId,
+        mockBranchId,
+        mockCheckoutDto,
+      );
 
       expect(cacheService.deletePattern).toHaveBeenCalledWith(
-        `shop:${mockShopId}:orders:*`
+        `shop:${mockShopId}:orders:*`,
       );
     });
   });
@@ -243,9 +339,10 @@ describe('SalesService', () => {
     it('should return valid for sufficient stock', async () => {
       inventoryService.getProductById.mockResolvedValue({ stock: 100 });
 
-      const result = await (service as any).validateStockAvailability(mockShopId, [
-        { productId: 'prod1', name: 'Test', quantity: 5 },
-      ]);
+      const result = await (service as any).validateStockAvailability(
+        mockShopId,
+        [{ productId: 'prod1', name: 'Test', quantity: 5 }],
+      );
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -254,26 +351,27 @@ describe('SalesService', () => {
     it('should return invalid for insufficient stock', async () => {
       inventoryService.getProductById.mockResolvedValue({ stock: 2 });
 
-      const result = await (service as any).validateStockAvailability(mockShopId, [
-        { productId: 'prod1', name: 'Test Product', quantity: 5 },
-      ]);
+      const result = await (service as any).validateStockAvailability(
+        mockShopId,
+        [{ productId: 'prod1', name: 'Test Product', quantity: 5 }],
+      );
 
       expect(result.isValid).toBe(false);
       expect(result.errors).toContain(
-        'Test Product: Only 2 available, requested 5'
+        'Test Product: Only 2 available, requested 5',
       );
     });
 
     it('should return invalid for non-existent product', async () => {
       inventoryService.getProductById.mockResolvedValue(null);
 
-      const result = await (service as any).validateStockAvailability(mockShopId, [
-        { productId: 'nonexistent', name: 'Missing Product', quantity: 1 },
-      ]);
+      const result = await (service as any).validateStockAvailability(
+        mockShopId,
+        [{ productId: 'nonexistent', name: 'Missing Product', quantity: 1 }],
+      );
 
       expect(result.isValid).toBe(false);
       expect(result.errors).toContain('Product "Missing Product" not found');
     });
   });
 });
-

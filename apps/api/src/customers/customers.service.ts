@@ -4,17 +4,24 @@ import { Model, Types } from 'mongoose';
 import { Customer, CustomerDocument } from './schemas/customer.schema';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
-import { PaginatedResponse, createPaginatedResponse } from '../common/dto/pagination.dto';
+import {
+  PaginatedResponse,
+  createPaginatedResponse,
+} from '../common/dto/pagination.dto';
 import { CacheService, CACHE_TTL } from '../common/services/cache.service';
 import { Order, OrderDocument } from '../sales/schemas/order.schema';
-import { LoyaltyAccount, LoyaltyAccountDocument } from '../loyalty/schemas/loyalty-account.schema';
+import {
+  LoyaltyAccount,
+  LoyaltyAccountDocument,
+} from '../loyalty/schemas/loyalty-account.schema';
 
 @Injectable()
 export class CustomersService {
   constructor(
     @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>,
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
-    @InjectModel(LoyaltyAccount.name) private loyaltyAccountModel: Model<LoyaltyAccountDocument>,
+    @InjectModel(LoyaltyAccount.name)
+    private loyaltyAccountModel: Model<LoyaltyAccountDocument>,
     private readonly cacheService: CacheService,
   ) {}
 
@@ -83,6 +90,15 @@ export class CustomersService {
     return this.customerModel.findById(id).exec();
   }
 
+  async findByIdForShop(shopId: string, id: string): Promise<Customer | null> {
+    return this.customerModel
+      .findOne({
+        _id: new Types.ObjectId(id),
+        shopId: new Types.ObjectId(shopId),
+      })
+      .exec();
+  }
+
   async findByPhone(shopId: string, phone: string): Promise<Customer | null> {
     return this.customerModel
       .findOne({ shopId: new Types.ObjectId(shopId), phone })
@@ -104,9 +120,7 @@ export class CustomersService {
   }
 
   async update(id: string, dto: UpdateCustomerDto): Promise<Customer | null> {
-    return this.customerModel
-      .findByIdAndUpdate(id, dto, { new: true })
-      .exec();
+    return this.customerModel.findByIdAndUpdate(id, dto, { new: true }).exec();
   }
 
   async delete(id: string): Promise<Customer | null> {
@@ -161,9 +175,7 @@ export class CustomersService {
       .exec();
   }
 
-  async getCustomerInsights(
-    customerId: string,
-  ): Promise<{
+  async getCustomerInsights(customerId: string): Promise<{
     totalSpent: number;
     purchaseCount: number;
     avgOrderValue: number;
