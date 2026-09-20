@@ -230,10 +230,18 @@ export class InventoryController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
   @Post('adjustments')
-  createStockAdjustment(
+  async createStockAdjustment(
     @Body() dto: { productId: string; quantityChange: number; reason: string; notes?: string },
     @CurrentUser() user: any,
   ) {
+    const updated = await this.inventoryService.updateStock(
+      user.shopId,
+      dto.productId,
+      dto.quantityChange,
+    );
+    if (!updated) {
+      throw new BadRequestException('Stock update failed - product not found');
+    }
     return this.inventoryService.createStockAdjustment(
       user.shopId,
       dto.productId,
