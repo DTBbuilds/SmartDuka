@@ -477,7 +477,7 @@ describe('P0-3C checkout idempotency', () => {
           cashierId: USER_B,
           cashierName: 'Mallory',
           payments: [
-            { method: 'cash', amount: 1, mpesaReceiptNumber: 'FAKE123' },
+            { method: 'cash', amount: 348, mpesaReceiptNumber: 'FAKE123' },
           ],
         }),
         'Mallory',
@@ -597,6 +597,201 @@ describe('P0-3C checkout idempotency', () => {
       expect(order.idempotencyKey).toBeUndefined();
       expect(orderStore.size).toBe(0);
       expect(updateStock).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('P0-3C1 payment-intent fingerprint', () => {
+    it('CASH then MPESA under the same key is an idempotency conflict', async () => {
+      await boot();
+      await service.checkout(
+        SHOP_A,
+        USER_A,
+        undefined,
+        basePayload({
+          payments: [{ method: 'cash', amount: 348 }],
+        }),
+      );
+      await expect(
+        service.checkout(
+          SHOP_A,
+          USER_A,
+          undefined,
+          basePayload({
+            payments: [{ method: 'mpesa', amount: 348, status: 'pending' }],
+          }) as any,
+        ),
+      ).rejects.toThrow(ConflictException);
+      expect(orderStore.size).toBe(1);
+      expect(updateStock).toHaveBeenCalledTimes(1);
+    });
+
+    it('MPESA then CASH under the same key is an idempotency conflict', async () => {
+      await boot();
+      await service.checkout(
+        SHOP_A,
+        USER_A,
+        undefined,
+        basePayload({
+          payments: [{ method: 'mpesa', amount: 348, status: 'pending' }],
+        }),
+      );
+      await expect(
+        service.checkout(
+          SHOP_A,
+          USER_A,
+          undefined,
+          basePayload({
+            payments: [{ method: 'cash', amount: 348 }],
+          }) as any,
+        ),
+      ).rejects.toThrow(ConflictException);
+      expect(orderStore.size).toBe(1);
+      expect(createTransaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('split composition change under the same key is a conflict (50/50 split vs 100 cash)', async () => {
+      await boot();
+      await service.checkout(
+        SHOP_A,
+        USER_A,
+        undefined,
+        basePayload({
+          payments: [
+            { method: 'cash', amount: 50 },
+            { method: 'mpesa', amount: 298, status: 'pending' },
+          ],
+        }),
+      );
+      await expect(
+        service.checkout(
+          SHOP_A,
+          USER_A,
+          undefined,
+          basePayload({
+            payments: [{ method: 'cash', amount: 348 }],
+          }) as any,
+        ),
+      ).rejects.toThrow(ConflictException);
+      expect(orderStore.size).toBe(1);
+    });
+
+    it('equivalent split composition in different array order returns the canonical order', async () => {
+      await boot();
+      const first = await service.checkout(
+        SHOP_A,
+        USER_A,
+        undefined,
+        basePayload({
+          payments: [
+            { method: 'cash', amount: 50 },
+            { method: 'mpesa', amount: 298, status: 'pending' },
+          ],
+        }),
+      );
+      const retry = await service.checkout(
+        SHOP_A,
+        USER_A,
+        undefined,
+        basePayload({
+          payments: [
+            { method: 'mpesa', amount: 298, status: 'pending' },
+            { method: 'cash', amount: 50 },
+          ],
+        }),
+      );
+
+      expect(retry._id).toBe(first._id);
+      expect(orderStore.size).toBe(1);
+      expect(updateStock).toHaveBeenCalledTimes(1);
+      expect(createTransaction).toHaveBeenCalledTimes(2);
+    });
+
+    it('provider evidence changes with identical method/allocation resolve canonically', async () => {
+      await boot();
+      const first = await service.checkout(
+        SHOP_A,
+        USER_A,
+        undefined,
+        basePayload({
+          payments: [
+            {
+              method: 'mpesa',
+              amount: 348,
+              status: 'completed',
+              mpesaReceiptNumber: 'REALCONF1',
+            },
+          ],
+        }),
+      );
+      const retry = await service.checkout(
+        SHOP_A,
+        USER_A,
+        undefined,
+        basePayload({
+          payments: [
+            {
+              method: 'mpesa',
+              amount: 348,
+              status: 'pending',
+              mpesaReceiptNumber: 'FORGED999',
+              stripeChargeId: 'ch_fake',
+            },
+          ],
+        }),
+      );
+
+      expect(retry._id).toBe(first._id);
+      expect(orderStore.size).toBe(1);
+      expect(updateStock).toHaveBeenCalledTimes(1);
+    });
+
+    it('loyalty redemption intent change under the same key is a conflict', async () => {
+      await boot();
+      await service.checkout(
+        SHOP_A,
+        USER_A,
+        undefined,
+        basePayload({
+          customerId: CUSTOMER_1,
+        }),
+      );
+      await expect(
+        service.checkout(
+          SHOP_A,
+          USER_A,
+          undefined,
+          basePayload({
+            customerId: CUSTOMER_1,
+            loyaltyPointsToRedeem: 500,
+          }) as any,
+        ),
+      ).rejects.toThrow(ConflictException);
+      // First checkout carried no redemption intent, so no redemption ran;
+      // the retry conflicts before any additional side effect.
+      expect(loyaltyService.redeemPoints).toHaveBeenCalledTimes(0);
+      expect(updatePurchaseStats).toHaveBeenCalledTimes(1);
+    });
+
+    it('same intent with identical tender composition returns canonical order (stock/payment once)', async () => {
+      await boot();
+      const payload = basePayload({
+        payments: [
+          { method: 'cash', amount: 148 },
+          { method: 'mpesa', amount: 100, status: 'pending' },
+        ],
+      });
+      const first = await service.checkout(SHOP_A, USER_A, undefined, payload);
+      const retry = await service.checkout(
+        SHOP_A,
+        USER_A,
+        undefined,
+        JSON.parse(JSON.stringify(payload)),
+      );
+
+      expect(retry._id).toBe(first._id);
+      expect(orderStore.size).toBe(1);
+      expect(updateStock).toHaveBeenCalledTimes(1);
+      expect(createTransaction).toHaveBeenCalledTimes(2);
     });
   });
 

@@ -516,11 +516,19 @@ export class SalesService {
   /**
    * The same key must never be reused for a different logical transaction.
    * The persisted sale is the comparison evidence. Only legitimate client
-   * intent is compared: product IDs + quantities (order-normalized) and the
-   * customer. Server-authoritative fields (unit price, tax, actor, status,
-   * payment evidence) are deliberately excluded — a retry that merely changes
-   * ignored client values is still the same logical checkout and must resolve
-   * to the canonical original, not conflict.
+   * BUSINESS INTENT is compared:
+   *   - product IDs + quantities (order-normalized)
+   *   - customer
+   *   - payment intent: method + tender allocation (order-normalized, so
+   *     equivalent split compositions in different array order match)
+   *   - loyalty redemption intent
+   * Client-asserted business TRUTH is deliberately excluded: unit price,
+   * tax rate, cashier identity, order status, provider evidence (M-Pesa
+   * receipts, Stripe references) and client-calculated totals. A retry that
+   * merely changes those ignored values is still the same logical checkout
+   * and must resolve to the canonical original, not conflict. A retry that
+   * changes payment method, tender composition, or loyalty redemption is a
+   * different logical checkout and must conflict.
    */
   private assertSameLogicalCheckout(
     existing: OrderDocument,
@@ -534,16 +542,37 @@ export class SalesService {
         .sort()
         .join(';');
 
+    // Normalized payment intent: method + allocated amount per tender.
+    // Provider evidence (receipts, references, client status) is excluded.
+    const paymentIntentFingerprint = (
+      payments: Array<{ method?: string; amount?: number }>,
+    ) =>
+      [...(payments ?? [])]
+        .map((p) => `${p.method ?? ''}|${p.amount ?? 0}`)
+        .sort()
+        .join(';');
+
     const existingCustomerId = existing.customerId
       ? existing.customerId.toString()
       : undefined;
     const sameCustomer =
       (existingCustomerId ?? null) === (dto.customerId ?? null);
 
+    const samePaymentIntent =
+      (existing.payments?.length ?? 0) === (dto.payments?.length ?? -1) &&
+      paymentIntentFingerprint(existing.payments) ===
+        paymentIntentFingerprint(dto.payments ?? []);
+
+    const sameLoyaltyIntent =
+      (existing.loyaltyPointsRedeemed ?? 0) ===
+      (dto.loyaltyPointsToRedeem ?? 0);
+
     if (
       (existing.items?.length ?? 0) !== (dto.items?.length ?? -1) ||
       intentFingerprint(existing.items) !== intentFingerprint(dto.items) ||
-      !sameCustomer
+      !sameCustomer ||
+      !samePaymentIntent ||
+      !sameLoyaltyIntent
     ) {
       throw new ConflictException(
         'This idempotency key was already used for a different checkout. Use a new key for a new checkout.',
