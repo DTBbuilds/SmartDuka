@@ -44,7 +44,7 @@ import {
 } from "lucide-react";
 
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
-import { db, getPendingOrdersByShop, getPendingOrderCountByShop, addPendingOrder, deletePendingOrder, clearAllLocalData } from "@/lib/db";
+import { db, getPendingOrdersByShop, getPendingOrderCountByShop, addPendingOrder, deletePendingOrder, clearAllLocalData, type PendingOrder } from "@/lib/db";
 import { useAuth } from "@/lib/auth-context";
 import { useBranch } from "@/lib/branch-context";
 import { config } from "@/lib/config";
@@ -121,6 +121,9 @@ type PendingOrderRow = {
   total: number;
   customerName?: string;
   notes?: string;
+  // Full stored checkout payload — replayed as-is on manual retry so the
+  // original idempotencyKey is preserved.
+  payload?: PendingOrder["payload"];
 };
 
 const paymentOptions = [
@@ -524,6 +527,7 @@ function POSContent() {
               total,
               customerName: order.payload.customerName,
               notes: order.payload.notes,
+              payload: order.payload,
             };
           }),
         );
@@ -1981,7 +1985,7 @@ function POSContent() {
                                   if (!token) {
                                     throw new Error('Authentication token not available. Please log in again.');
                                   }
-                                  const payload = { ...order, status: "completed", isOffline: false };
+                                  const payload = { ...order.payload, status: "completed", isOffline: false };
                                   const res = await fetch(`${config.apiUrl}/sales/checkout`, {
                                     method: "POST",
                                     headers: { 
