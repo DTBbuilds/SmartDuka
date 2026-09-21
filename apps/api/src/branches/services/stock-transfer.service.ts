@@ -813,6 +813,7 @@ export class StockTransferService {
                 eventId,
                 receivedQuantity: reqQty,
                 damagedQuantity: damQty,
+                claimedAt: new Date(),
               },
             },
             $set: {

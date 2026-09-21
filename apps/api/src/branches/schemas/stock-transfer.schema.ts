@@ -62,6 +62,10 @@ export class TransferItem {
     eventId: string;
     receivedQuantity: number;
     damagedQuantity: number;
+    // P0-7C: claim timestamp — the operational sweep needs durable per-event
+    // age evidence; updatedAt/line receivedAt are overwritten by unrelated
+    // writes and cannot serve as claim age.
+    claimedAt?: Date;
   }[];
 }
 
@@ -280,6 +284,20 @@ StockTransferSchema.index({ shopId: 1, status: 1 });
 StockTransferSchema.index({ shopId: 1, fromBranchId: 1 });
 StockTransferSchema.index({ shopId: 1, toBranchId: 1 });
 StockTransferSchema.index({ shopId: 1, createdAt: -1 });
+// P0-7C: narrow sweep indexes — the stranded-claim scan runs collection-wide,
+// so claim age fields get their own selective indexes instead of COLLSCAN.
+StockTransferSchema.index(
+  { shipStartedAt: 1 },
+  { partialFilterExpression: { shipClaimId: { $exists: true } } },
+);
+StockTransferSchema.index(
+  { cancelStartedAt: 1 },
+  { partialFilterExpression: { cancelClaimId: { $exists: true } } },
+);
+StockTransferSchema.index(
+  { pendingReceipts: 1 },
+  { partialFilterExpression: { pendingReceipts: { $gt: 0 } } },
+);
 
 // Virtual for total items count
 StockTransferSchema.virtual('totalItems').get(function () {

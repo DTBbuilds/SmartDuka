@@ -34,6 +34,7 @@ import { FinancialModule } from './financial/financial.module';
 import { ShopSettingsModule } from './shop-settings/shop-settings.module';
 import { ReorderModule } from './reorder/reorder.module';
 import { BranchesModule } from './branches/branches.module';
+import { OperationsModule } from './operations/operations.module';
 import { AuditModule } from './audit/audit.module';
 import { HealthModule } from './health/health.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
@@ -113,6 +114,7 @@ import { EventsModule } from './events/events.module';
     ShopSettingsModule,
     ReorderModule,
     BranchesModule,
+    OperationsModule,
     AuditModule,
     SubscriptionsModule,
     NotificationsModule,

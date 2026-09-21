@@ -75,3 +75,8 @@ export const PurchaseSchema = SchemaFactory.createForClass(Purchase);
 PurchaseSchema.index({ shopId: 1, createdAt: -1 });
 PurchaseSchema.index({ shopId: 1, branchId: 1, createdAt: -1 });
 PurchaseSchema.index({ shopId: 1, status: 1 });
+// P0-7C: stranded receive-claim sweep — selective partial index, no COLLSCAN.
+PurchaseSchema.index(
+  { receivingStartedAt: 1 },
+  { partialFilterExpression: { receivingClaimId: { $exists: true } } },
+);
