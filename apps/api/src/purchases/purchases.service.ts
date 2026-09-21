@@ -247,6 +247,9 @@ export class PurchasesService {
               $set: {
                 receivingClaimId: claimId,
                 receivingStartedAt: new Date(),
+                ...(userId
+                  ? { receivingClaimedBy: new Types.ObjectId(userId) }
+                  : {}),
                 updatedAt: new Date(),
               },
             },

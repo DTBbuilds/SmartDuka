@@ -56,6 +56,7 @@ export class OperationalRecoveryController {
       body.workflow,
       body.resourceId,
       user.shopId,
+      user.sub,
     );
     return { success: true, data: results };
   }

@@ -66,6 +66,9 @@ export class TransferItem {
     // age evidence; updatedAt/line receivedAt are overwritten by unrelated
     // writes and cannot serve as claim age.
     claimedAt?: Date;
+    // P0-7C1: operator who submitted this receipt — lets a zero-client
+    // recovery credit the correct actor instead of a fabricated identity.
+    claimedBy?: Types.ObjectId;
   }[];
 }
 
@@ -195,6 +198,14 @@ export class StockTransfer {
   shipStartedAt?: Date;
 
   /**
+   * P0-7C1: operator who initiated dispatch, written atomically with the
+   * ship claim so recovery never attributes the mutation to a guessed
+   * approver/requester.
+   */
+  @Prop({ required: false, type: Types.ObjectId, ref: 'User' })
+  shipClaimedBy?: Types.ObjectId;
+
+  /**
    * P0-8: durable in-flight cancel claim — serializes receives (which
    * require no active cancel claim) and makes cancellation resumable.
    */
@@ -203,6 +214,18 @@ export class StockTransfer {
 
   @Prop({ required: false })
   cancelStartedAt?: Date;
+
+  /**
+   * P0-7C1: operator + business reason for the cancellation, persisted
+   * atomically with the claim. The canonical reason must survive a crash
+   * before finalize — recovery may never invent a substitute reason, and
+   * a retry carrying a different reason is a conflict, not an overwrite.
+   */
+  @Prop({ required: false, type: Types.ObjectId, ref: 'User' })
+  cancelClaimedBy?: Types.ObjectId;
+
+  @Prop({ required: false })
+  cancelReason?: string;
 
   /**
    * P0-8A: count of per-line receipt claims whose destination stock

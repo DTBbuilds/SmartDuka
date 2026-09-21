@@ -574,6 +574,7 @@ export class StockTransferService {
             $set: {
               shipClaimId: claimId,
               shipStartedAt: new Date(),
+              shipClaimedBy: new Types.ObjectId(userId),
             },
           },
           { new: true },
@@ -632,6 +633,7 @@ export class StockTransferService {
 
     // ── Finalize — the claim owner flips approved→in_transit only after
     // every source deduction is durably proven applied.
+    let shipFinalized = false;
     if (transfer.status !== 'in_transit') {
       const finalized = await this.transferModel
         .findOneAndUpdate(
@@ -672,20 +674,26 @@ export class StockTransferService {
         }
       } else {
         transfer = finalized;
+        shipFinalized = true;
       }
     }
 
     const saved = transfer;
 
-    await this.auditModel.create({
-      shopId: new Types.ObjectId(shopId),
-      branchId: transfer.fromBranchId,
-      userId: new Types.ObjectId(userId),
-      action: 'ship_stock_transfer',
-      resource: 'stock_transfer',
-      resourceId: transfer._id,
-      changes: { status: 'in_transit', shippingDetails },
-    });
+    // One logical dispatch = one history row. Retries/recovery that lose
+    // the finalize race (or replay after it) must not write a second
+    // ship_stock_transfer entry.
+    if (shipFinalized) {
+      await this.auditModel.create({
+        shopId: new Types.ObjectId(shopId),
+        branchId: transfer.fromBranchId,
+        userId: new Types.ObjectId(userId),
+        action: 'ship_stock_transfer',
+        resource: 'stock_transfer',
+        resourceId: transfer._id,
+        changes: { status: 'in_transit', shippingDetails },
+      });
+    }
 
     this.logger.log(`Stock transfer ${transfer.transferNumber} shipped`);
 
@@ -751,6 +759,7 @@ export class StockTransferService {
 
     const eventId = receiptEventId;
     const occurrences = this.countProductOccurrences(transfer.items);
+    let markedAny = false;
 
     for (const receivedItem of receivedItems) {
       const reqQty = receivedItem.receivedQuantity ?? 0;
@@ -814,6 +823,7 @@ export class StockTransferService {
                 receivedQuantity: reqQty,
                 damagedQuantity: damQty,
                 claimedAt: new Date(),
+                claimedBy: new Types.ObjectId(userId),
               },
             },
             $set: {
@@ -872,14 +882,17 @@ export class StockTransferService {
 
       // ── Converge destination credit — exactly once per event ─────────
       const goodQuantity = reqQty - damQty;
-      if (goodQuantity > 0) {
-        const mutationId = this.lineMutationId(
-          transfer,
-          transferItem,
-          lineIdx,
-          occurrences,
-          `receive:${eventId}`,
-        );
+      const mutationId =
+        goodQuantity > 0
+          ? this.lineMutationId(
+              transfer,
+              transferItem,
+              lineIdx,
+              occurrences,
+              `receive:${eventId}`,
+            )
+          : undefined;
+      if (goodQuantity > 0 && mutationId) {
         await this.convergeStock(
           transfer,
           shopId,
@@ -898,7 +911,7 @@ export class StockTransferService {
       // when goodQuantity == 0 (all-damaged receipts still resolve the
       // in-flight claim). The pendingReceipts decrement is guarded by
       // convergedReceiptEventIds so a retried mark can never double-count.
-      await this.transferModel
+      const marked = await this.transferModel
         .findOneAndUpdate(
           {
             _id: transfer._id,
@@ -915,23 +928,28 @@ export class StockTransferService {
         )
         .exec();
 
-      // Create audit log for product history
-      await this.auditModel.create({
-        shopId: new Types.ObjectId(shopId),
-        branchId: transfer.toBranchId,
-        userId: new Types.ObjectId(userId),
-        action: 'stock_transfer_received',
-        resource: 'product',
-        resourceId: transferItem.productId,
-        changes: {
-          transferNumber: transfer.transferNumber,
-          quantity: goodQuantity,
-          damagedQuantity: damQty,
-          receiptEventId: eventId,
-          fromBranch: transfer.fromBranchName,
-          toBranch: transfer.toBranchName,
-        },
-      });
+      // Product-history row only when THIS call actually converged the
+      // line — a replay of an already-converged event writes nothing.
+      if (marked) {
+        markedAny = true;
+        await this.auditModel.create({
+          shopId: new Types.ObjectId(shopId),
+          branchId: transfer.toBranchId,
+          userId: new Types.ObjectId(userId),
+          action: 'stock_transfer_received',
+          resource: 'product',
+          resourceId: transferItem.productId,
+          changes: {
+            transferNumber: transfer.transferNumber,
+            quantity: goodQuantity,
+            damagedQuantity: damQty,
+            receiptEventId: eventId,
+            ...(mutationId ? { mutationId } : {}),
+            fromBranch: transfer.fromBranchName,
+            toBranch: transfer.toBranchName,
+          },
+        });
+      }
     }
 
     // ── Status finalize — 'received' requires every line fully claimed
@@ -971,15 +989,20 @@ export class StockTransferService {
 
     const saved = finalized ?? (await this.reread(transfer)) ?? transfer;
 
-    await this.auditModel.create({
-      shopId: new Types.ObjectId(shopId),
-      branchId: transfer.toBranchId,
-      userId: new Types.ObjectId(userId),
-      action: 'receive_stock_transfer',
-      resource: 'stock_transfer',
-      resourceId: transfer._id,
-      changes: { status: saved.status, receivedItems },
-    });
+    // The receive history row is written only by a call that converged at
+    // least one line-claim for this event — same-event replays that found
+    // everything already converged add no duplicate history.
+    if (markedAny) {
+      await this.auditModel.create({
+        shopId: new Types.ObjectId(shopId),
+        branchId: transfer.toBranchId,
+        userId: new Types.ObjectId(userId),
+        action: 'receive_stock_transfer',
+        resource: 'stock_transfer',
+        resourceId: transfer._id,
+        changes: { status: saved.status, receivedItems },
+      });
+    }
 
     this.logger.log(
       `Stock transfer ${transfer.transferNumber} ${saved.status}`,
@@ -1017,6 +1040,12 @@ export class StockTransferService {
       );
     }
 
+    let cancelFinalized = false;
+    const restoredLines: Array<{
+      item: TransferItem;
+      outstanding: number;
+      mutationId: string;
+    }> = [];
     if (['in_transit', 'partially_received'].includes(transfer.status)) {
       const claimId = `transfer:${transferId}:cancel`;
 
@@ -1040,6 +1069,8 @@ export class StockTransferService {
             $set: {
               cancelClaimId: claimId,
               cancelStartedAt: new Date(),
+              cancelClaimedBy: new Types.ObjectId(userId),
+              cancelReason: reason,
             },
           },
           { new: true },
@@ -1051,11 +1082,19 @@ export class StockTransferService {
         if (!latest) {
           throw new NotFoundException('Stock transfer not found');
         }
-        if (
-          latest.status === 'cancelled' ||
-          (['in_transit', 'partially_received'].includes(latest.status) &&
-            latest.cancelClaimId === claimId)
+        if (latest.status === 'cancelled') {
+          transfer = latest;
+        } else if (
+          ['in_transit', 'partially_received'].includes(latest.status) &&
+          latest.cancelClaimId === claimId
         ) {
+          // A cancel claim owns a canonical reason — a retry carrying a
+          // different one is a conflict, never a silent replacement.
+          if (latest.cancelReason && latest.cancelReason !== reason) {
+            throw new ConflictException(
+              'A cancellation with a different reason is already in progress for this transfer',
+            );
+          }
           transfer = latest;
         } else if ((latest.pendingReceipts ?? 0) > 0) {
           throw new ConflictException(
@@ -1094,21 +1133,7 @@ export class StockTransferService {
           userId,
           `Transfer ${transfer.transferNumber} cancelled: restored ${item.productName} x${outstanding}`,
         );
-
-        await this.auditModel.create({
-          shopId: new Types.ObjectId(shopId),
-          branchId: transfer.fromBranchId,
-          userId: new Types.ObjectId(userId),
-          action: 'stock_transfer_cancelled',
-          resource: 'product',
-          resourceId: item.productId,
-          changes: {
-            transferNumber: transfer.transferNumber,
-            quantity: outstanding,
-            reason: reason,
-            stockReturned: true,
-          },
-        });
+        restoredLines.push({ item, outstanding, mutationId });
       }
 
       // ── Finalize cancelled ───────────────────────────────────────────
@@ -1117,6 +1142,10 @@ export class StockTransferService {
           {
             _id: transfer._id,
             shopId: transfer.shopId,
+            // Status is part of the transition guard: cancelClaimId is
+            // never unset, so without it a concurrent resume re-writes
+            // 'cancelled' and both racers report a transition.
+            status: { $in: ['in_transit', 'partially_received'] },
             cancelClaimId: claimId,
           },
           {
@@ -1124,7 +1153,9 @@ export class StockTransferService {
               status: 'cancelled',
               cancelledBy: new Types.ObjectId(userId),
               cancelledAt: new Date(),
-              cancellationReason: reason,
+              // The claim's persisted reason is canonical — a recovered
+              // cancel replays the operator's words, never a synthetic one.
+              cancellationReason: transfer.cancelReason ?? reason,
             },
           },
           { new: true },
@@ -1145,6 +1176,7 @@ export class StockTransferService {
         }
       } else {
         transfer = finalized;
+        cancelFinalized = true;
       }
     } else {
       // No inventory has moved — a plain atomic claim suffices. Blocked
@@ -1188,19 +1220,45 @@ export class StockTransferService {
         }
       } else {
         transfer = claimed;
+        cancelFinalized = true;
       }
     }
 
     const saved = transfer;
 
-    await this.auditModel.create({
-      shopId: new Types.ObjectId(shopId),
-      userId: new Types.ObjectId(userId),
-      action: 'cancel_stock_transfer',
-      resource: 'stock_transfer',
-      resourceId: transfer._id,
-      changes: { status: 'cancelled', cancellationReason: reason },
-    });
+    // One logical cancellation = one history row set — written only by
+    // the call that performed the atomic transition, so replays and
+    // losing racers add nothing.
+    if (cancelFinalized) {
+      for (const line of restoredLines) {
+        await this.auditModel.create({
+          shopId: new Types.ObjectId(shopId),
+          branchId: transfer.fromBranchId,
+          userId: new Types.ObjectId(userId),
+          action: 'stock_transfer_cancelled',
+          resource: 'product',
+          resourceId: line.item.productId,
+          changes: {
+            transferNumber: transfer.transferNumber,
+            quantity: line.outstanding,
+            reason: transfer.cancelReason ?? reason,
+            stockReturned: true,
+            mutationId: line.mutationId,
+          },
+        });
+      }
+      await this.auditModel.create({
+        shopId: new Types.ObjectId(shopId),
+        userId: new Types.ObjectId(userId),
+        action: 'cancel_stock_transfer',
+        resource: 'stock_transfer',
+        resourceId: transfer._id,
+        changes: {
+          status: 'cancelled',
+          cancellationReason: transfer.cancelReason ?? reason,
+        },
+      });
+    }
 
     this.logger.log(`Stock transfer ${transfer.transferNumber} cancelled`);
 

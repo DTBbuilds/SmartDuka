@@ -53,6 +53,15 @@ export class Purchase {
   @Prop({ required: false })
   receivingStartedAt?: Date;
 
+  /**
+   * P0-7C1: operator who initiated the receive, persisted atomically with
+   * the claim. Recovery needs the ORIGINATOR, not a guessed user —
+   * createdBy names whoever drafted the order, which may be a different
+   * human than the receiver.
+   */
+  @Prop({ required: false, type: Types.ObjectId, ref: 'User' })
+  receivingClaimedBy?: Types.ObjectId;
+
   @Prop()
   invoiceNumber?: string;
 

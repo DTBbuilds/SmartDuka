@@ -1,3 +1,4 @@
+import { ConflictException } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { InventoryService } from '../inventory/inventory.service';
 import { PurchasesService } from '../purchases/purchases.service';
@@ -342,6 +343,7 @@ describe('P0-7C operational claim convergence', () => {
     if (purchaseClaimed) {
       purchase.receivingClaimId = `purchase:${PO_ID}:receive`;
       purchase.receivingStartedAt = purchaseClaimAge;
+      purchase.receivingClaimedBy = new Types.ObjectId(USER);
     }
     purchases.set(PO_ID, purchase);
 
@@ -470,6 +472,19 @@ describe('P0-7C operational claim convergence', () => {
         auditLog.push(doc);
         return doc;
       }),
+      findOne: jest.fn((filter: any) =>
+        toQuery(
+          () =>
+            auditLog.find(
+              (a) =>
+                a.action === filter.action &&
+                (!filter.resourceId ||
+                  a.resourceId?.toString() === filter.resourceId.toString()) &&
+                (filter['changes.mutationId'] === undefined ||
+                  a.changes?.mutationId === filter['changes.mutationId']),
+            ) ?? null,
+        ),
+      ),
     };
 
     const claimMismatch = (f: any, p: any) => {
@@ -592,6 +607,7 @@ describe('P0-7C operational claim convergence', () => {
     qty: number,
     dam = 0,
     claimedAt: Date | undefined = OLD,
+    claimedBy: any = new Types.ObjectId(USER),
   ) => {
     const t = transfer();
     const line = t.items[lineIdx];
@@ -600,7 +616,13 @@ describe('P0-7C operational claim convergence', () => {
     line.receiptEventIds = [...(line.receiptEventIds ?? []), eventId];
     line.receiptEvents = [
       ...(line.receiptEvents ?? []),
-      { eventId, receivedQuantity: qty, damagedQuantity: dam, claimedAt },
+      {
+        eventId,
+        receivedQuantity: qty,
+        damagedQuantity: dam,
+        claimedAt,
+        claimedBy,
+      },
     ];
     t.pendingReceipts = (t.pendingReceipts ?? 0) + 1;
   };
@@ -707,6 +729,7 @@ describe('P0-7C operational claim convergence', () => {
       t.status = 'approved';
       t.shipClaimId = `transfer:${TID}:ship`;
       t.shipStartedAt = age;
+      t.shipClaimedBy = new Types.ObjectId(USER);
     };
 
     it('claim before any source debit: all lines debited once, in_transit', async () => {
@@ -860,11 +883,16 @@ describe('P0-7C operational claim convergence', () => {
 
   describe('transfer cancel claims', () => {
     /** A stranded cancel follows a completed ship — source already debited. */
-    const strandCancel = (age: Date | undefined = OLD) => {
+    const strandCancel = (
+      age: Date | undefined = OLD,
+      reason = 'Shipment damaged',
+    ) => {
       const t = transfer();
       t.status = 'in_transit';
       t.cancelClaimId = `transfer:${TID}:cancel`;
       t.cancelStartedAt = age;
+      t.cancelClaimedBy = new Types.ObjectId(USER);
+      t.cancelReason = reason;
       for (const item of t.items) {
         const pid = item.productId.toString();
         products.get(pid).branchInventory[BRANCH_A].stock -= item.quantity;
@@ -948,6 +976,193 @@ describe('P0-7C operational claim convergence', () => {
       );
       expect(t.status).toBe('partially_received');
       expect(bStock(PID_A, BRANCH_B)).toBe(5);
+    });
+  });
+
+  describe('recovery provenance — P0-7C1', () => {
+    const NIL = '000000000000000000000000';
+    const U2 = '507f1f77bcf86cd799439013';
+
+    it('purchase: recovered receive is attributed to the claim originator', async () => {
+      boot({ purchaseClaimed: true }); // receivingClaimedBy = USER
+      const results = await sweep();
+      expect(results[0].originalActorId).toBe(USER);
+      expect(adjustments[0].adjustedBy.toString()).toBe(USER);
+    });
+
+    it('purchase legacy claim (no originator): explicit system actor, not a guessed human', async () => {
+      boot({ purchaseClaimed: true });
+      delete purchase().receivingClaimedBy;
+      delete purchase().createdBy;
+      const results = await sweep();
+      expect(outcomes(results)).toEqual(['CONVERGED']);
+      expect(adjustments[0].adjustedBy.toString()).toBe(NIL);
+      expect(results[0].originalActorId).toBe(NIL);
+    });
+
+    it('ship: recovered dispatch is attributed to shipClaimedBy', async () => {
+      boot();
+      const t = transfer();
+      t.status = 'approved';
+      t.shipClaimId = `transfer:${TID}:ship`;
+      t.shipStartedAt = OLD;
+      t.shipClaimedBy = new Types.ObjectId(USER);
+      const results = await sweep();
+      expect(results[0].originalActorId).toBe(USER);
+      expect(transfer().shippedBy.toString()).toBe(USER);
+      expect(
+        products.get(PID_A).stockMutations[0]?.actor ??
+          adjustments[0].adjustedBy.toString(),
+      ).toBe(USER);
+    });
+
+    it('ship legacy claim (no originator): system actor, no fabricated approver', async () => {
+      boot();
+      const t = transfer();
+      t.status = 'approved';
+      t.shipClaimId = `transfer:${TID}:ship`;
+      t.shipStartedAt = OLD; // no shipClaimedBy — pre-P0-7C1 claim
+      await sweep();
+      expect(transfer().shippedBy.toString()).toBe(NIL);
+    });
+
+    it('receipt: replayed E1 is attributed to the event originator, not the cron', async () => {
+      boot({ transferStatus: 'in_transit' });
+      strandReceipt('E1', 0, 3); // claimedBy = USER
+      const results = await sweep();
+      expect(results[0].originalActorId).toBe(USER);
+      expect(
+        auditLog
+          .filter((a) => a.action === 'stock_transfer_received')
+          .map((a) => a.userId.toString()),
+      ).toEqual([USER]);
+    });
+
+    it('receipt legacy event (no claimedBy): system actor', async () => {
+      boot({ transferStatus: 'in_transit' });
+      strandReceipt('E1', 0, 3, 0, OLD, null); // no claimedBy
+      const results = await sweep();
+      expect(results[0].originalActorId).toBe(NIL);
+      expect(
+        auditLog
+          .filter((a) => a.action === 'stock_transfer_received')
+          .map((a) => a.userId.toString()),
+      ).toEqual([NIL]);
+    });
+
+    it('cancel: original business reason survives crash + recovery', async () => {
+      boot();
+      const t = transfer();
+      t.status = 'in_transit';
+      t.cancelClaimId = `transfer:${TID}:cancel`;
+      t.cancelStartedAt = OLD;
+      t.cancelClaimedBy = new Types.ObjectId(USER);
+      t.cancelReason = 'Shipment damaged';
+      for (const item of t.items) {
+        products.get(item.productId.toString()).branchInventory[
+          BRANCH_A
+        ].stock -= item.quantity;
+      }
+      await sweep();
+      expect(transfer().status).toBe('cancelled');
+      expect(transfer().cancellationReason).toBe('Shipment damaged');
+      expect(transfer().cancelledBy.toString()).toBe(USER);
+    });
+
+    it('cancel legacy claim without durable reason → manual review, no invented reason', async () => {
+      boot();
+      const t = transfer();
+      t.status = 'in_transit';
+      t.cancelClaimId = `transfer:${TID}:cancel`;
+      t.cancelStartedAt = OLD; // no cancelReason — pre-P0-7C1 claim
+      const results = await sweep();
+      expect(outcomes(results)).toEqual(['MANUAL_REVIEW_REQUIRED']);
+      expect(transfer().status).toBe('in_transit'); // claim retained
+    });
+
+    it('conflicting cancel retry: R1 claimed, R2 retry → conflict, R1 preserved', async () => {
+      boot({ transferStatus: 'in_transit' });
+      // Operator claims cancel with R1 (reason persisted at claim).
+      await transferService.cancel(TID, SHOP, USER, 'Wrong branch');
+      expect(transfer().status).toBe('cancelled'); // converges synchronously
+      // A retry with a DIFFERENT reason on an already-cancelled transfer
+      // hits the terminal guard — the canonical reason cannot change.
+      await expect(
+        transferService.cancel(TID, SHOP, USER, 'Actually keep it'),
+      ).rejects.toThrow();
+      expect(transfer().cancellationReason).toBe('Wrong branch');
+    });
+
+    it('conflicting cancel retry mid-claim: R2 cannot replace R1', async () => {
+      boot({ transferStatus: 'in_transit' });
+      const t = transfer();
+      // Simulate an in-flight cancel claimed with R1 (crash window).
+      t.cancelClaimId = `transfer:${TID}:cancel`;
+      t.cancelStartedAt = new Date();
+      t.cancelReason = 'Customer rejected';
+      await expect(
+        transferService.cancel(TID, SHOP, USER, 'Different reason'),
+      ).rejects.toThrow(ConflictException);
+      // Same-reason retry resumes and preserves R1.
+      await transferService.cancel(TID, SHOP, USER, 'Customer rejected');
+      expect(transfer().cancellationReason).toBe('Customer rejected');
+    });
+
+    it('manual recover by U2: invoker recorded, operation actor stays U1', async () => {
+      boot({ transferStatus: 'in_transit' });
+      strandReceipt('E1', 0, 3);
+      const results = await recovery.recoverResource('transfer', TID, SHOP, U2);
+      expect(results[0].invokerId).toBe(U2);
+      expect(results[0].originalActorId).toBe(USER);
+      // U2 never appears as the operation actor anywhere.
+      for (const a of auditLog) {
+        expect(a.userId.toString()).not.toBe(U2);
+      }
+    });
+  });
+
+  describe('non-stock side-effect idempotency — P0-7C1', () => {
+    const countAudit = (action: string) =>
+      auditLog.filter((a) => a.action === action).length;
+
+    it('repeated + concurrent ship recovery: one ship history row', async () => {
+      boot();
+      const t = transfer();
+      t.status = 'approved';
+      t.shipClaimId = `transfer:${TID}:ship`;
+      t.shipStartedAt = OLD;
+      t.shipClaimedBy = new Types.ObjectId(USER);
+      await Promise.all([sweep(), sweep()]);
+      await sweep();
+      expect(countAudit('ship_stock_transfer')).toBe(1);
+    });
+
+    it('repeated + concurrent receipt recovery: one history row per event-line', async () => {
+      boot({ transferStatus: 'in_transit' });
+      strandReceipt('E1', 0, 3);
+      await Promise.all([sweep(), sweep()]);
+      await sweep();
+      expect(countAudit('stock_transfer_received')).toBe(1);
+      expect(countAudit('receive_stock_transfer')).toBe(1);
+    });
+
+    it('repeated + concurrent cancel recovery: one cancel history row', async () => {
+      boot();
+      const t = transfer();
+      t.status = 'in_transit';
+      t.cancelClaimId = `transfer:${TID}:cancel`;
+      t.cancelStartedAt = OLD;
+      t.cancelClaimedBy = new Types.ObjectId(USER);
+      t.cancelReason = 'Damaged';
+      for (const item of t.items) {
+        products.get(item.productId.toString()).branchInventory[
+          BRANCH_A
+        ].stock -= item.quantity;
+      }
+      await Promise.all([sweep(), sweep()]);
+      await sweep();
+      expect(countAudit('cancel_stock_transfer')).toBe(1);
+      expect(countAudit('stock_transfer_cancelled')).toBe(1);
     });
   });
 });

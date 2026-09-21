@@ -57,6 +57,10 @@ export interface RecoveryResult {
   eventId?: string;
   outcome: RecoveryOutcome;
   detail?: string;
+  /** Persisted claim originator the recovered mutation is attributed to. */
+  originalActorId?: string;
+  /** Operator who invoked a manual recovery (never the operation actor). */
+  invokerId?: string;
 }
 
 /** A claim must outlive this age before a sweep treats it as stranded. */
@@ -188,18 +192,23 @@ export class OperationalRecoveryService {
       );
     }
 
+    // P0-7C1: the recovered receive is attributed to the claim's durable
+    // originator; claims written before receivingClaimedBy existed get an
+    // explicit system actor — never a guessed human (createdBy names the
+    // order's author, who may be someone else entirely).
+    const actor = purchase.receivingClaimedBy?.toString() ?? NIL_ACTOR;
     try {
       await this.purchasesService.update(
         base.resourceId,
         base.shopId,
         { status: 'received' },
-        purchase.createdBy?.toString() ?? NIL_ACTOR,
+        actor,
       );
       const latest = await this.purchaseModel
         .findOne({ _id: purchase._id, shopId: purchase.shopId })
         .exec();
       return latest?.status === 'received'
-        ? this.result(base, 'CONVERGED')
+        ? this.result({ ...base, originalActorId: actor }, 'CONVERGED')
         : this.result(base, 'FAILED_RETRYABLE', 'claim still open');
     } catch (error: any) {
       return this.result(base, this.classifyError(error), error?.message);
@@ -232,13 +241,10 @@ export class OperationalRecoveryService {
       return this.result(base, 'NOT_STALE');
     }
 
+    const actor = transfer.shipClaimedBy?.toString() ?? NIL_ACTOR;
     try {
-      await this.stockTransferService.ship(
-        base.resourceId,
-        base.shopId,
-        this.actorFor(transfer),
-      );
-      return this.result(base, 'CONVERGED');
+      await this.stockTransferService.ship(base.resourceId, base.shopId, actor);
+      return this.result({ ...base, originalActorId: actor }, 'CONVERGED');
     } catch (error: any) {
       return this.result(base, this.classifyError(error), error?.message);
     }
@@ -278,7 +284,7 @@ export class OperationalRecoveryService {
     // Group unresolved line-claims by event: one event may span lines.
     const events = new Map<
       string,
-      { items: ReceiveItemDto[]; stale: boolean }
+      { items: ReceiveItemDto[]; stale: boolean; actor: string }
     >();
     const unreconstructable: string[] = [];
     for (const item of transfer.items ?? []) {
@@ -293,7 +299,13 @@ export class OperationalRecoveryService {
           unreconstructable.push(eventId);
           continue;
         }
-        const entry = events.get(eventId) ?? { items: [], stale: false };
+        const entry = events.get(eventId) ?? {
+          items: [],
+          stale: false,
+          // P0-7C1: the event's persisted originator — the replayed receipt
+          // is attributed to the operator who submitted it, not the cron.
+          actor: record.claimedBy?.toString() ?? NIL_ACTOR,
+        };
         entry.items.push({
           productId: item.productId.toString(),
           receivedQuantity: record.receivedQuantity,
@@ -323,12 +335,17 @@ export class OperationalRecoveryService {
         await this.stockTransferService.receive(
           base.resourceId,
           base.shopId,
-          this.actorFor(transfer),
+          entry.actor,
           entry.items,
           undefined,
           eventId,
         );
-        results.push(this.result({ ...base, eventId }, 'CONVERGED'));
+        results.push(
+          this.result(
+            { ...base, eventId, originalActorId: entry.actor },
+            'CONVERGED',
+          ),
+        );
       } catch (error: any) {
         results.push(
           this.result(
@@ -371,15 +388,26 @@ export class OperationalRecoveryService {
     if (!force && !this.isStale(transfer.cancelStartedAt, cutoff)) {
       return this.result(base, 'NOT_STALE');
     }
+    // P0-7C1: the operator's business reason is part of the claim. A claim
+    // written before cancelReason existed has no canonical reason to
+    // replay — inventing one would falsify the record → manual review.
+    if (!transfer.cancelReason) {
+      return this.result(
+        base,
+        'MANUAL_REVIEW_REQUIRED',
+        'cancel claim predates durable cancelReason',
+      );
+    }
 
+    const actor = transfer.cancelClaimedBy?.toString() ?? NIL_ACTOR;
     try {
       await this.stockTransferService.cancel(
         base.resourceId,
         base.shopId,
-        this.actorFor(transfer),
-        'Operational recovery of interrupted cancellation',
+        actor,
+        transfer.cancelReason,
       );
-      return this.result(base, 'CONVERGED');
+      return this.result({ ...base, originalActorId: actor }, 'CONVERGED');
     } catch (error: any) {
       return this.result(base, this.classifyError(error), error?.message);
     }
@@ -392,8 +420,13 @@ export class OperationalRecoveryService {
     workflow: 'purchase' | 'transfer',
     resourceId: string,
     shopId: string,
+    invokerId?: string,
   ): Promise<RecoveryResult[]> {
     const cutoff = new Date(Date.now() - STALE_CLAIM_MS);
+    // The invoker only AUTHORIZES the resume — operation actor stays the
+    // persisted claim originator (or system), never the recover button's
+    // user.
+    const tag = (r: RecoveryResult) => ({ ...r, invokerId });
 
     if (workflow === 'purchase') {
       const purchase = await this.purchaseModel
@@ -404,17 +437,15 @@ export class OperationalRecoveryService {
         .exec();
       if (!purchase) {
         return [
-          this.result(
-            {
-              workflow: 'purchase_receive',
-              resourceId,
-              shopId,
-            },
-            'NOT_FOUND',
+          tag(
+            this.result(
+              { workflow: 'purchase_receive', resourceId, shopId },
+              'NOT_FOUND',
+            ),
           ),
         ];
       }
-      return [await this.convergePurchase(purchase, cutoff, true)];
+      return [tag(await this.convergePurchase(purchase, cutoff, true))];
     }
 
     const transfer = await this.transferModel
@@ -425,31 +456,31 @@ export class OperationalRecoveryService {
       .exec();
     if (!transfer) {
       return [
-        this.result(
-          {
-            workflow: 'transfer_ship',
-            resourceId,
-            shopId,
-          },
-          'NOT_FOUND',
+        tag(
+          this.result(
+            { workflow: 'transfer_ship', resourceId, shopId },
+            'NOT_FOUND',
+          ),
         ),
       ];
     }
 
     if ((transfer.pendingReceipts ?? 0) > 0) {
-      return this.convergeReceipts(transfer, cutoff, true);
+      return (await this.convergeReceipts(transfer, cutoff, true)).map(tag);
     }
     if (transfer.status === 'approved' && transfer.shipClaimId) {
-      return [await this.convergeShip(transfer, cutoff, true)];
+      return [tag(await this.convergeShip(transfer, cutoff, true))];
     }
     if (transfer.cancelClaimId) {
-      return [await this.convergeCancel(transfer, cutoff, true)];
+      return [tag(await this.convergeCancel(transfer, cutoff, true))];
     }
     return [
-      this.result(
-        { workflow: 'transfer_ship', resourceId, shopId },
-        'ALREADY_CONVERGED',
-        'no open claim on transfer',
+      tag(
+        this.result(
+          { workflow: 'transfer_ship', resourceId, shopId },
+          'ALREADY_CONVERGED',
+          'no open claim on transfer',
+        ),
       ),
     ];
   }
@@ -552,14 +583,6 @@ export class OperationalRecoveryService {
     return new Date(startedAt).getTime() < cutoff.getTime();
   }
 
-  private actorFor(transfer: StockTransferDocument): string {
-    return (
-      transfer.approvedBy?.toString() ??
-      transfer.requestedBy?.toString() ??
-      NIL_ACTOR
-    );
-  }
-
   /**
    * Fail-closed classification: durable-data problems (missing product,
    * not-in-transfer, insufficient source stock, tenant mismatch) need a
@@ -588,6 +611,9 @@ export class OperationalRecoveryService {
       shopId: r.shopId,
       claimId: r.claimId,
       eventId: r.eventId,
+      recoveryActor: 'system',
+      originalActorId: r.originalActorId,
+      recoveryInvokerId: r.invokerId,
       recoveryAction: 'converge',
       result: outcome,
       detail,
