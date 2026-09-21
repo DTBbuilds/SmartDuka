@@ -300,10 +300,24 @@ describe('Stock mutation integrity (P0-1)', () => {
       };
       const purchaseModel: any = {
         findOne: jest.fn(() => toQuery(() => purchase)),
-        findOneAndUpdate: jest.fn((_f: any, update: any) =>
+        findOneAndUpdate: jest.fn((filter: any, update: any) =>
           toQuery(() => {
-            Object.assign(purchase, update);
+            // Honor the conditional lifecycle claim: the update only lands
+            // when the filter's status still matches the purchase.
+            if (
+              filter?.status !== undefined &&
+              purchase.status !== filter.status
+            ) {
+              return null;
+            }
+            Object.assign(purchase, update.$set ?? update);
             return purchase;
+          }),
+        ),
+        updateOne: jest.fn((_f: any, update: any) =>
+          toQuery(() => {
+            Object.assign(purchase, update.$set ?? update);
+            return { modifiedCount: 1 };
           }),
         ),
       };

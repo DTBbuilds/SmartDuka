@@ -1,4 +1,9 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  BadRequestException,
+  ConflictException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Purchase, PurchaseDocument, PurchaseItem } from './purchase.schema';
@@ -24,6 +29,15 @@ export interface UpdatePurchaseDto {
   receivedDate?: Date;
   invoiceNumber?: string;
   notes?: string;
+  /**
+   * Frontend receive form payload. Receiving is FULL-RECEIVE ONLY: every
+   * line's receivedQuantity must equal its ordered quantity.
+   */
+  receivedItems?: Array<{
+    productId: string;
+    receivedQuantity: number;
+  }>;
+  receiveNotes?: string;
 }
 
 @Injectable()
@@ -91,60 +105,170 @@ export class PurchasesService {
   }
 
   /**
-   * PHASE 2: PO TO INVENTORY INTEGRATION
+   * PHASE 2 / P0-7: PO TO INVENTORY INTEGRATION — CANONICAL RECEIVING CONTRACT
    *
-   * When PO status changes to 'received', increase inventory
-   * Multi-tenant safe: filters by shopId
+   * ONE legitimate receipt event = ONE purchase state change + ONE stock
+   * effect per line + ONE durable stock audit per line.
+   *
+   * Lifecycle transitions are claimed atomically at the database level:
+   * only 'pending' may transition (to 'received' or 'cancelled'); received
+   * and cancelled are terminal. The conditional claim — not an application
+   * pre-check — is the concurrency guard, so a receive/cancel race or
+   * duplicate receive resolves to exactly one winner.
+   *
+   * Receive ordering: claim pending→received FIRST, then converge each
+   * line's stock through the P0-2 durable mutation contract keyed
+   * `purchase:<poId>:<productId>` (`…:line:<idx>` when a product repeats).
+   * Retries and races re-run the convergence safely — the mutation witness
+   * (receipt or StockAdjustment) makes every line exactly-once. A crash
+   * between claim and stock leaves the PO 'received' with durable receipts
+   * for landed lines; re-issuing the receive converges the rest.
+   *
+   * Multi-tenant safe: every query filters by shopId.
    */
+  private static readonly ALLOWED_TRANSITIONS: Record<string, string[]> = {
+    pending: ['received', 'cancelled'],
+    received: [],
+    cancelled: [],
+  };
+
   async update(
     purchaseId: string,
     shopId: string,
     dto: UpdatePurchaseDto,
     userId?: string,
   ): Promise<PurchaseDocument | null> {
-    // Get current purchase to check status change
-    const currentPurchase = await this.purchaseModel.findOne({
+    const current = await this.purchaseModel.findOne({
       _id: new Types.ObjectId(purchaseId),
       shopId: new Types.ObjectId(shopId),
     });
 
-    if (!currentPurchase) {
+    if (!current) {
       throw new BadRequestException('Purchase order not found');
     }
 
-    // PHASE 5: If status changing to 'received', increase inventory (branch-aware)
-    if (dto.status === 'received' && currentPurchase.status !== 'received') {
-      const stockIncreaseErrors: string[] = [];
+    const targetStatus = dto.status;
+    let purchase: PurchaseDocument = current;
 
-      for (const item of currentPurchase.items) {
+    // Full-receive contract: when the caller supplies per-line received
+    // quantities they must match the ordered quantities exactly. Validated
+    // BEFORE any state claim so a bad request commits nothing.
+    if (targetStatus === 'received' && dto.receivedItems?.length) {
+      for (const ri of dto.receivedItems) {
+        const line = current.items.find(
+          (i) => i.productId.toString() === ri.productId?.toString(),
+        );
+        if (!line) {
+          throw new BadRequestException(
+            'receivedItems references a product not on this purchase order',
+          );
+        }
+        if (ri.receivedQuantity !== line.quantity) {
+          throw new BadRequestException(
+            `Partial receiving is not supported: '${line.productName}' was ordered x${line.quantity} but receivedQuantity ${ri.receivedQuantity} was supplied. Receive the full ordered quantity.`,
+          );
+        }
+      }
+    }
+
+    // ── LIFECYCLE TRANSITION — atomic conditional claim ────────────────
+    if (targetStatus && targetStatus !== current.status) {
+      if (
+        !PurchasesService.ALLOWED_TRANSITIONS[current.status]?.includes(
+          targetStatus,
+        )
+      ) {
+        throw new BadRequestException(
+          `Cannot change purchase order status from '${current.status}' to '${targetStatus}'`,
+        );
+      }
+
+      // DB-level claim: exactly one caller transitions out of 'pending'.
+      const claimed = await this.purchaseModel
+        .findOneAndUpdate(
+          {
+            _id: current._id,
+            shopId: current.shopId,
+            status: current.status,
+          },
+          {
+            $set: {
+              status: targetStatus,
+              ...(targetStatus === 'received'
+                ? { receivedDate: dto.receivedDate ?? new Date() }
+                : {}),
+              updatedAt: new Date(),
+            },
+          },
+          { new: true },
+        )
+        .exec();
+
+      if (!claimed) {
+        const latest = await this.purchaseModel
+          .findOne({ _id: current._id, shopId: current.shopId })
+          .exec();
+        if (!latest) {
+          throw new BadRequestException('Purchase order not found');
+        }
+        if (latest.status === targetStatus) {
+          // Lost the claim race to an identical request — converge below.
+          purchase = latest;
+        } else {
+          throw new ConflictException(
+            `Purchase order status changed concurrently (now '${latest.status}')`,
+          );
+        }
+      } else {
+        purchase = claimed;
+      }
+    }
+
+    // ── INVENTORY CONVERGENCE — full receive, exactly once per line ────
+    // Runs for the claiming request AND idempotent retries on an
+    // already-received purchase: each line's mutationId is deduplicated by
+    // the P0-2 durable witness, so convergence never double-applies.
+    if (targetStatus === 'received' && purchase.status === 'received') {
+      // Line identity: a productId that appears on multiple lines is
+      // disambiguated by index so legitimate lines never collapse into one
+      // mutation.
+      const occurrences = new Map<string, number>();
+      for (const item of purchase.items) {
+        const pid = item.productId.toString();
+        occurrences.set(pid, (occurrences.get(pid) ?? 0) + 1);
+      }
+
+      const stockIncreaseErrors: string[] = [];
+      for (const [idx, item] of purchase.items.entries()) {
+        if (item.quantity <= 0) continue;
+        const pid = item.productId.toString();
+        const mutationId =
+          (occurrences.get(pid) ?? 0) > 1
+            ? `purchase:${purchase._id?.toString() ?? purchase.purchaseNumber}:${pid}:line:${idx}`
+            : `purchase:${purchase._id?.toString() ?? purchase.purchaseNumber}:${pid}`;
+        const purchaseMutation = {
+          mutationId,
+          reason: 'purchase',
+          actor: userId || 'system',
+          referenceType: 'purchase',
+          referenceId: purchase._id?.toString() ?? purchase.purchaseNumber,
+          notes: `Purchase Order ${purchase.purchaseNumber} - ${item.productName} x${item.quantity}`,
+        };
         try {
-          // PHASE 5: If branchId exists, update branch stock; otherwise update shared stock
-          let updatedProduct;
-          const purchaseMutation = {
-            mutationId: `purchase:${currentPurchase._id?.toString() ?? currentPurchase.purchaseNumber}:${item.productId}`,
-            reason: 'purchase',
-            actor: userId || 'system',
-            referenceType: 'purchase',
-            referenceId:
-              currentPurchase._id?.toString() ?? currentPurchase.purchaseNumber,
-            notes: `Purchase Order ${currentPurchase.purchaseNumber} - ${item.productName} x${item.quantity}`,
-          };
-          if (currentPurchase.branchId) {
-            updatedProduct = await this.inventoryService.updateBranchStock(
-              shopId,
-              item.productId.toString(),
-              currentPurchase.branchId.toString(),
-              item.quantity, // Positive = increase
-              purchaseMutation,
-            );
-          } else {
-            updatedProduct = await this.inventoryService.updateStock(
-              shopId,
-              item.productId.toString(),
-              item.quantity, // Positive = increase
-              purchaseMutation,
-            );
-          }
+          const updatedProduct = purchase.branchId
+            ? await this.inventoryService.updateBranchStock(
+                shopId,
+                pid,
+                purchase.branchId.toString(),
+                item.quantity,
+                purchaseMutation,
+              )
+            : await this.inventoryService.updateStock(
+                shopId,
+                pid,
+                item.quantity,
+                purchaseMutation,
+              );
 
           if (!updatedProduct) {
             stockIncreaseErrors.push(
@@ -152,11 +276,9 @@ export class PurchasesService {
             );
             continue;
           }
-          // P0-2: the audit projection happens inside updateStock/updateBranchStock
-          // with durable evidence keyed to this purchase line.
 
           this.logger.log(
-            `Stock increased for ${item.productName}: +${item.quantity} (PO: ${currentPurchase.purchaseNumber})`,
+            `Stock increased for ${item.productName}: +${item.quantity} (PO: ${purchase.purchaseNumber})`,
           );
         } catch (error: any) {
           stockIncreaseErrors.push(
@@ -169,28 +291,46 @@ export class PurchasesService {
         }
       }
 
-      // Handle partial failures
       if (stockIncreaseErrors.length > 0) {
+        const warning = `INVENTORY SYNC WARNING: ${stockIncreaseErrors.join('; ')}`;
         this.logger.error(
-          `Stock increase errors for PO ${currentPurchase.purchaseNumber}:`,
+          `Stock increase errors for PO ${purchase.purchaseNumber}:`,
           stockIncreaseErrors,
         );
-
-        // Add warning to notes
-        dto.notes =
-          (dto.notes || '') +
-          `\n⚠️ INVENTORY SYNC WARNING: ${stockIncreaseErrors.join('; ')}`;
+        // Persist the warning on the purchase itself — the failure is loud
+        // and a retry of the receive converges the missing lines.
+        await this.purchaseModel
+          .updateOne(
+            { _id: purchase._id, shopId: purchase.shopId },
+            {
+              $set: {
+                notes: `${purchase.notes ?? ''}${purchase.notes ? '\n' : ''}⚠️ ${warning}`,
+                updatedAt: new Date(),
+              },
+            },
+          )
+          .exec();
+        throw new BadRequestException(
+          `Purchase order ${purchase.purchaseNumber} received with inventory errors - retry to converge remaining lines: ${stockIncreaseErrors.join('; ')}`,
+        );
       }
     }
 
-    // Update purchase order
+    // ── Apply remaining updatable fields (status already claimed) ──────
+    const {
+      status: _status,
+      receivedItems: _receivedItems,
+      receiveNotes: _receiveNotes,
+      ...rest
+    } = dto as any;
+
     const updated = await this.purchaseModel
       .findOneAndUpdate(
         {
           _id: new Types.ObjectId(purchaseId),
           shopId: new Types.ObjectId(shopId),
         },
-        { ...dto, updatedAt: new Date() },
+        { ...rest, updatedAt: new Date() },
         { new: true },
       )
       .populate('supplierId', 'name phone email')
@@ -199,14 +339,43 @@ export class PurchasesService {
     return updated;
   }
 
+  /**
+   * Hard delete is only permitted for purchases that never touched
+   * inventory. A received purchase carries durable stock mutations and
+   * audit records — deleting it would erase the business explanation for
+   * stock that physically exists.
+   */
   async delete(purchaseId: string, shopId: string): Promise<boolean> {
-    const result = await this.purchaseModel
-      .deleteOne({
+    const purchase = await this.purchaseModel
+      .findOne({
         _id: new Types.ObjectId(purchaseId),
         shopId: new Types.ObjectId(shopId),
       })
       .exec();
-    return result.deletedCount > 0;
+    if (!purchase) {
+      return false;
+    }
+    if (purchase.status === 'received') {
+      throw new BadRequestException(
+        'Cannot delete a received purchase order - its inventory effect must remain auditable',
+      );
+    }
+
+    // Atomic guard closes a delete/receive race: the delete only lands if
+    // the purchase is still non-received at write time.
+    const result = await this.purchaseModel
+      .deleteOne({
+        _id: new Types.ObjectId(purchaseId),
+        shopId: new Types.ObjectId(shopId),
+        status: { $ne: 'received' },
+      })
+      .exec();
+    if (result.deletedCount === 0) {
+      throw new ConflictException(
+        'Purchase order status changed concurrently - reload and retry',
+      );
+    }
+    return true;
   }
 
   async getPending(shopId: string): Promise<PurchaseDocument[]> {
@@ -569,6 +738,18 @@ export class PurchasesService {
       )
         ? group.meta.status
         : 'pending';
+
+      // P0-7: importing a PO as 'received' would create a purchase-state /
+      // inventory divergence — the record claims stock arrived while no
+      // durable mutation ever ran. Import as 'pending' and receive through
+      // the standard update flow so inventory is applied exactly once.
+      if (status === 'received') {
+        errors.push(
+          `Rows ${group.rowNums.join(',')}: status 'received' cannot be imported - import as 'pending' and receive via the standard update flow`,
+        );
+        skipped++;
+        continue;
+      }
 
       try {
         await this.purchaseModel.create({
