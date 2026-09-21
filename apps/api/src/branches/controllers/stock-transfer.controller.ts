@@ -9,7 +9,10 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { StockTransferService } from '../services/stock-transfer.service';
-import type { CreateTransferDto, ReceiveItemDto } from '../services/stock-transfer.service';
+import type {
+  CreateTransferDto,
+  ReceiveItemDto,
+} from '../services/stock-transfer.service';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
@@ -101,7 +104,10 @@ export class StockTransferController {
     @CurrentUser() user: any,
     @Query('branchId') branchId?: string,
   ) {
-    const stats = await this.stockTransferService.getStats(user.shopId, branchId);
+    const stats = await this.stockTransferService.getStats(
+      user.shopId,
+      branchId,
+    );
     return {
       success: true,
       data: stats,
@@ -208,7 +214,8 @@ export class StockTransferController {
   @Post(':id/receive')
   async receive(
     @Param('id') id: string,
-    @Body() body: { items: ReceiveItemDto[]; notes?: string },
+    @Body()
+    body: { items: ReceiveItemDto[]; notes?: string; receiptEventId?: string },
     @CurrentUser() user: any,
   ) {
     const transfer = await this.stockTransferService.receive(
@@ -217,10 +224,14 @@ export class StockTransferController {
       user.sub,
       body.items,
       body.notes,
+      body.receiptEventId,
     );
     return {
       success: true,
-      message: transfer.status === 'received' ? 'Transfer fully received' : 'Transfer partially received',
+      message:
+        transfer.status === 'received'
+          ? 'Transfer fully received'
+          : 'Transfer partially received',
       data: transfer,
     };
   }

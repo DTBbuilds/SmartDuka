@@ -488,6 +488,7 @@ export class InventoryController {
       fromBranchId: string;
       toBranchId: string;
       quantity: number;
+      idempotencyKey?: string;
     },
     @CurrentUser() user: any,
   ) {
@@ -498,6 +499,7 @@ export class InventoryController {
       dto.toBranchId,
       dto.quantity,
       user.sub,
+      dto.idempotencyKey,
     );
   }
 

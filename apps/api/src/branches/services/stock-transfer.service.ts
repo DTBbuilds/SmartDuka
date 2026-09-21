@@ -1,15 +1,34 @@
-import { Injectable, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+  Logger,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { StockTransfer, StockTransferDocument, TransferItem } from '../schemas/stock-transfer.schema';
+import { nanoid } from 'nanoid';
+import {
+  StockTransfer,
+  StockTransferDocument,
+  TransferItem,
+} from '../schemas/stock-transfer.schema';
 import { Branch, BranchDocument } from '../branch.schema';
-import { Product, ProductDocument } from '../../inventory/schemas/product.schema';
+import {
+  Product,
+  ProductDocument,
+} from '../../inventory/schemas/product.schema';
 import { AuditLog, AuditLogDocument } from '../../audit/audit-log.schema';
+import { InventoryService } from '../../inventory/inventory.service';
 
 export interface CreateTransferDto {
   fromBranchId: string;
   toBranchId: string;
-  transferType?: 'branch_to_branch' | 'warehouse_to_branch' | 'branch_to_warehouse' | 'emergency';
+  transferType?:
+    | 'branch_to_branch'
+    | 'warehouse_to_branch'
+    | 'branch_to_warehouse'
+    | 'emergency';
   priority?: 'low' | 'normal' | 'high' | 'urgent';
   reason?: string;
   notes?: string;
@@ -42,11 +61,85 @@ export class StockTransferService {
   private readonly logger = new Logger(StockTransferService.name);
 
   constructor(
-    @InjectModel(StockTransfer.name) private readonly transferModel: Model<StockTransferDocument>,
-    @InjectModel(Branch.name) private readonly branchModel: Model<BranchDocument>,
-    @InjectModel(Product.name) private readonly productModel: Model<ProductDocument>,
-    @InjectModel(AuditLog.name) private readonly auditModel: Model<AuditLogDocument>,
+    @InjectModel(StockTransfer.name)
+    private readonly transferModel: Model<StockTransferDocument>,
+    @InjectModel(Branch.name)
+    private readonly branchModel: Model<BranchDocument>,
+    @InjectModel(Product.name)
+    private readonly productModel: Model<ProductDocument>,
+    @InjectModel(AuditLog.name)
+    private readonly auditModel: Model<AuditLogDocument>,
+    private readonly inventoryService: InventoryService,
   ) {}
+
+  /**
+   * P0-8: every physical transfer mutation routes through the P0-2 durable
+   * stock contract — never a raw $inc. `null` branchId means the main store
+   * (global `stock`), matching the established ownership model.
+   */
+  private async convergeStock(
+    transfer: StockTransferDocument,
+    shopId: string,
+    productId: string,
+    branchId: string | null,
+    quantityDelta: number,
+    mutationId: string,
+    userId: string,
+    notes: string,
+  ): Promise<ProductDocument | null> {
+    const evidence = {
+      mutationId,
+      reason: 'transfer',
+      actor: userId || 'system',
+      referenceType: 'transfer',
+      referenceId: transfer._id?.toString(),
+      notes,
+    };
+    return branchId
+      ? this.inventoryService.updateBranchStock(
+          shopId,
+          productId,
+          branchId,
+          quantityDelta,
+          evidence,
+        )
+      : this.inventoryService.updateStock(
+          shopId,
+          productId,
+          quantityDelta,
+          evidence,
+        );
+  }
+
+  /** Deterministic per-line mutation identity (`:line:<idx>` on duplicate products). */
+  private lineMutationId(
+    transfer: StockTransferDocument,
+    item: TransferItem,
+    idx: number,
+    occurrences: Map<string, number>,
+    suffix: string,
+  ): string {
+    const pid = item.productId.toString();
+    const base = (occurrences.get(pid) ?? 0) > 1 ? `${pid}:line:${idx}` : pid;
+    return `transfer:${transfer._id?.toString()}:${base}:${suffix}`;
+  }
+
+  private countProductOccurrences(items: TransferItem[]): Map<string, number> {
+    const occurrences = new Map<string, number>();
+    for (const item of items) {
+      const pid = item.productId.toString();
+      occurrences.set(pid, (occurrences.get(pid) ?? 0) + 1);
+    }
+    return occurrences;
+  }
+
+  private async reread(
+    transfer: StockTransferDocument,
+  ): Promise<StockTransferDocument | null> {
+    return this.transferModel
+      .findOne({ _id: transfer._id, shopId: transfer.shopId })
+      .exec();
+  }
 
   /**
    * Generate unique transfer number
@@ -54,11 +147,11 @@ export class StockTransferService {
   private async generateTransferNumber(shopId: string): Promise<string> {
     const today = new Date();
     const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
-    
+
     // Count transfers today for this shop
     const startOfDay = new Date(today.setHours(0, 0, 0, 0));
     const endOfDay = new Date(today.setHours(23, 59, 59, 999));
-    
+
     const count = await this.transferModel.countDocuments({
       shopId: new Types.ObjectId(shopId),
       createdAt: { $gte: startOfDay, $lte: endOfDay },
@@ -82,13 +175,24 @@ export class StockTransferService {
     // Validate branches exist and belong to shop
     const [fromBranch, toBranch] = await Promise.all([
       isFromMain
-        ? Promise.resolve({ _id: 'main', name: 'Main Store', code: 'MAIN', type: 'main', canTransferStock: true } as any)
+        ? Promise.resolve({
+            _id: 'main',
+            name: 'Main Store',
+            code: 'MAIN',
+            type: 'main',
+            canTransferStock: true,
+          } as any)
         : this.branchModel.findOne({
             _id: new Types.ObjectId(dto.fromBranchId),
             shopId: new Types.ObjectId(shopId),
           }),
       isToMain
-        ? Promise.resolve({ _id: 'main', name: 'Main Store', code: 'MAIN', type: 'main' } as any)
+        ? Promise.resolve({
+            _id: 'main',
+            name: 'Main Store',
+            code: 'MAIN',
+            type: 'main',
+          } as any)
         : this.branchModel.findOne({
             _id: new Types.ObjectId(dto.toBranchId),
             shopId: new Types.ObjectId(shopId),
@@ -102,12 +206,16 @@ export class StockTransferService {
       throw new BadRequestException('Destination branch not found');
     }
     if (dto.fromBranchId === dto.toBranchId) {
-      throw new BadRequestException('Source and destination branches must be different');
+      throw new BadRequestException(
+        'Source and destination branches must be different',
+      );
     }
 
     // Check if source branch allows stock transfers
     if (fromBranch.canTransferStock === false) {
-      throw new BadRequestException('Source branch does not allow stock transfers');
+      throw new BadRequestException(
+        'Source branch does not allow stock transfers',
+      );
     }
 
     // Validate and enrich items
@@ -131,7 +239,7 @@ export class StockTransferService {
 
       if (availableStock < item.quantity) {
         throw new BadRequestException(
-          `Insufficient stock for ${product.name}. Available: ${availableStock}, Requested: ${item.quantity}`
+          `Insufficient stock for ${product.name}. Available: ${availableStock}, Requested: ${item.quantity}`,
         );
       }
 
@@ -159,7 +267,9 @@ export class StockTransferService {
       fromBranchName: fromBranch.name,
       toBranchId: isToMain ? null : new Types.ObjectId(dto.toBranchId),
       toBranchName: toBranch.name,
-      transferType: dto.transferType || (isFromMain || isToMain ? 'main_to_branch' : 'branch_to_branch'),
+      transferType:
+        dto.transferType ||
+        (isFromMain || isToMain ? 'main_to_branch' : 'branch_to_branch'),
       items: enrichedItems,
       status: 'pending_approval',
       priority: dto.priority || 'normal',
@@ -197,7 +307,9 @@ export class StockTransferService {
       });
     }
 
-    this.logger.log(`Stock transfer ${transferNumber} created: ${fromBranch.name} → ${toBranch.name}`);
+    this.logger.log(
+      `Stock transfer ${transferNumber} created: ${fromBranch.name} → ${toBranch.name}`,
+    );
 
     return saved;
   }
@@ -216,7 +328,12 @@ export class StockTransferService {
       endDate?: Date;
     },
     pagination?: { page?: number; limit?: number },
-  ): Promise<{ transfers: StockTransferDocument[]; total: number; page: number; pages: number }> {
+  ): Promise<{
+    transfers: StockTransferDocument[];
+    total: number;
+    page: number;
+    pages: number;
+  }> {
     const query: any = { shopId: new Types.ObjectId(shopId) };
 
     if (filters?.status) {
@@ -280,13 +397,20 @@ export class StockTransferService {
       ];
     }
 
-    return this.transferModel.find(query).sort({ createdAt: -1 }).limit(50).exec();
+    return this.transferModel
+      .find(query)
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .exec();
   }
 
   /**
    * Get single transfer by ID
    */
-  async findById(transferId: string, shopId: string): Promise<StockTransferDocument> {
+  async findById(
+    transferId: string,
+    shopId: string,
+  ): Promise<StockTransferDocument> {
     const transfer = await this.transferModel.findOne({
       _id: new Types.ObjectId(transferId),
       shopId: new Types.ObjectId(shopId),
@@ -311,15 +435,38 @@ export class StockTransferService {
     const transfer = await this.findById(transferId, shopId);
 
     if (transfer.status !== 'pending_approval') {
-      throw new BadRequestException(`Cannot approve transfer with status: ${transfer.status}`);
+      throw new BadRequestException(
+        `Cannot approve transfer with status: ${transfer.status}`,
+      );
     }
 
-    transfer.status = 'approved';
-    transfer.approvedBy = new Types.ObjectId(userId);
-    transfer.approvedAt = new Date();
-    transfer.approvalNotes = notes;
+    // Atomic conditional claim — a concurrent approve/reject/cancel cannot
+    // slip between the check and the write.
+    const saved = await this.transferModel
+      .findOneAndUpdate(
+        {
+          _id: transfer._id,
+          shopId: transfer.shopId,
+          status: 'pending_approval',
+        },
+        {
+          $set: {
+            status: 'approved',
+            approvedBy: new Types.ObjectId(userId),
+            approvedAt: new Date(),
+            approvalNotes: notes,
+          },
+        },
+        { new: true },
+      )
+      .exec();
 
-    const saved = await transfer.save();
+    if (!saved) {
+      const latest = await this.reread(transfer);
+      throw new ConflictException(
+        `Transfer status changed concurrently (now '${latest?.status ?? 'gone'}')`,
+      );
+    }
 
     await this.auditModel.create({
       shopId: new Types.ObjectId(shopId),
@@ -347,15 +494,36 @@ export class StockTransferService {
     const transfer = await this.findById(transferId, shopId);
 
     if (!['pending_approval', 'draft'].includes(transfer.status)) {
-      throw new BadRequestException(`Cannot reject transfer with status: ${transfer.status}`);
+      throw new BadRequestException(
+        `Cannot reject transfer with status: ${transfer.status}`,
+      );
     }
 
-    transfer.status = 'rejected';
-    transfer.rejectedBy = new Types.ObjectId(userId);
-    transfer.rejectedAt = new Date();
-    transfer.rejectionReason = reason;
+    const saved = await this.transferModel
+      .findOneAndUpdate(
+        {
+          _id: transfer._id,
+          shopId: transfer.shopId,
+          status: { $in: ['pending_approval', 'draft'] },
+        },
+        {
+          $set: {
+            status: 'rejected',
+            rejectedBy: new Types.ObjectId(userId),
+            rejectedAt: new Date(),
+            rejectionReason: reason,
+          },
+        },
+        { new: true },
+      )
+      .exec();
 
-    const saved = await transfer.save();
+    if (!saved) {
+      const latest = await this.reread(transfer);
+      throw new ConflictException(
+        `Transfer status changed concurrently (now '${latest?.status ?? 'gone'}')`,
+      );
+    }
 
     await this.auditModel.create({
       shopId: new Types.ObjectId(shopId),
@@ -373,9 +541,14 @@ export class StockTransferService {
 
   /**
    * Mark transfer as shipped (in transit)
-   * This deducts stock from source branch
-   * NOTE: For branch-to-branch transfers, we only modify branchInventory, NOT main stock
-   * Main stock is only modified when transferring to/from the main store
+   * Deducts stock from source — P0-8: via a durable ship claim while status
+   * stays 'approved', then converges every source deduction through the
+   * P0-2 durable stock contract, then finalizes approved→in_transit.
+   * in_transit therefore PROVES every source deduction landed. A crash
+   * leaves approved+shipClaimId (resumable), never a false in_transit.
+   * NOTE: For branch-to-branch transfers we only modify branchInventory,
+   * NOT main stock. Main stock is only modified when transferring
+   * to/from the main store.
    */
   async ship(
     transferId: string,
@@ -383,58 +556,127 @@ export class StockTransferService {
     userId: string,
     shippingDetails?: { trackingNumber?: string; carrier?: string },
   ): Promise<StockTransferDocument> {
-    const transfer = await this.findById(transferId, shopId);
+    let transfer = await this.findById(transferId, shopId);
+    const claimId = `transfer:${transferId}:ship`;
 
-    if (transfer.status !== 'approved') {
-      throw new BadRequestException(`Cannot ship transfer with status: ${transfer.status}`);
-    }
+    if (transfer.status === 'approved') {
+      // Durable ship claim — atomic; blocks cancel on 'approved' while the
+      // deductions converge.
+      const claimed = await this.transferModel
+        .findOneAndUpdate(
+          {
+            _id: transfer._id,
+            shopId: transfer.shopId,
+            status: 'approved',
+            shipClaimId: null,
+            cancelClaimId: null,
+          },
+          {
+            $set: {
+              shipClaimId: claimId,
+              shipStartedAt: new Date(),
+            },
+          },
+          { new: true },
+        )
+        .exec();
 
-    // Deduct stock from source branch
-    for (const item of transfer.items) {
-      if (transfer.isFromMainStore) {
-        // From main store - only update main stock
-        await this.productModel.updateOne(
-          { _id: item.productId, shopId: new Types.ObjectId(shopId) },
-          { $inc: { stock: -item.quantity } },
-        );
-      } else if (transfer.fromBranchId) {
-        // From a branch - only update branch inventory, NOT main stock
-        const fromBranchKey = `branchInventory.${transfer.fromBranchId.toString()}.stock`;
-        
-        await this.productModel.updateOne(
-          { _id: item.productId, shopId: new Types.ObjectId(shopId) },
-          { $inc: { [fromBranchKey]: -item.quantity } },
-        );
+      if (!claimed) {
+        const latest = await this.reread(transfer);
+        if (!latest) {
+          throw new NotFoundException('Stock transfer not found');
+        }
+        if (
+          latest.status === 'in_transit' ||
+          (latest.status === 'approved' && latest.shipClaimId === claimId)
+        ) {
+          // Already finalized, or the canonical ship claim is active — resume.
+          transfer = latest;
+        } else {
+          throw new ConflictException(
+            `Transfer status changed concurrently (now '${latest.status}')`,
+          );
+        }
+      } else {
+        transfer = claimed;
       }
-
-      // Create audit log for product history
-      await this.auditModel.create({
-        shopId: new Types.ObjectId(shopId),
-        branchId: transfer.fromBranchId,
-        userId: new Types.ObjectId(userId),
-        action: 'stock_transfer_shipped',
-        resource: 'product',
-        resourceId: item.productId,
-        changes: {
-          transferNumber: transfer.transferNumber,
-          quantity: -item.quantity,
-          fromBranch: transfer.fromBranchName,
-          toBranch: transfer.toBranchName,
-        },
-      });
+    } else if (transfer.status !== 'in_transit') {
+      throw new BadRequestException(
+        `Cannot ship transfer with status: ${transfer.status}`,
+      );
     }
 
-    transfer.status = 'in_transit';
-    transfer.shippedAt = new Date();
-    transfer.shippedBy = new Types.ObjectId(userId);
-    if (shippingDetails?.trackingNumber) {
-      transfer.trackingNumber = shippingDetails.trackingNumber;
-    }
-    if (shippingDetails?.carrier) {
-      transfer.carrier = shippingDetails.carrier;
+    // ── Converge source deductions — exactly once per line via P0-2 ────
+    const occurrences = this.countProductOccurrences(transfer.items);
+    for (const [idx, item] of transfer.items.entries()) {
+      if (item.quantity <= 0) continue;
+      const mutationId = this.lineMutationId(
+        transfer,
+        item,
+        idx,
+        occurrences,
+        'ship',
+      );
+      await this.convergeStock(
+        transfer,
+        shopId,
+        item.productId.toString(),
+        transfer.isFromMainStore
+          ? null
+          : (transfer.fromBranchId?.toString() ?? null),
+        -item.quantity,
+        mutationId,
+        userId,
+        `Transfer ${transfer.transferNumber} shipped: ${item.productName} x${item.quantity}`,
+      );
     }
 
-    const saved = await transfer.save();
+    // ── Finalize — the claim owner flips approved→in_transit only after
+    // every source deduction is durably proven applied.
+    if (transfer.status !== 'in_transit') {
+      const finalized = await this.transferModel
+        .findOneAndUpdate(
+          {
+            _id: transfer._id,
+            shopId: transfer.shopId,
+            status: 'approved',
+            shipClaimId: claimId,
+          },
+          {
+            $set: {
+              status: 'in_transit',
+              shippedAt: new Date(),
+              shippedBy: new Types.ObjectId(userId),
+              ...(shippingDetails?.trackingNumber
+                ? { trackingNumber: shippingDetails.trackingNumber }
+                : {}),
+              ...(shippingDetails?.carrier
+                ? { carrier: shippingDetails.carrier }
+                : {}),
+            },
+          },
+          { new: true },
+        )
+        .exec();
+
+      if (!finalized) {
+        const latest = await this.reread(transfer);
+        if (!latest) {
+          throw new NotFoundException('Stock transfer not found');
+        }
+        if (latest.status === 'in_transit') {
+          transfer = latest;
+        } else {
+          throw new ConflictException(
+            `Transfer status changed concurrently (now '${latest.status}')`,
+          );
+        }
+      } else {
+        transfer = finalized;
+      }
+    }
+
+    const saved = transfer;
 
     await this.auditModel.create({
       shopId: new Types.ObjectId(shopId),
@@ -452,8 +694,19 @@ export class StockTransferService {
   }
 
   /**
-   * Receive transfer at destination branch
-   * This adds stock to destination branch
+   * Receive transfer at destination branch — P0-8 hardened.
+   *
+   * Each receive REQUEST is a durable receipt event (`receiptEventId`, or a
+   * generated id when the caller doesn't supply one). Per line:
+   *   1. ATOMIC bound-claim — a single conditional update requiring
+   *      status in {in_transit, partially_received}, no active cancel
+   *      claim, receivedQuantity <= quantity - request, and the event not
+   *      already claimed. Two concurrent receives cannot both satisfy the
+   *      bound — over-receipt is impossible at the DB level.
+   *   2. Stock converge — destination +goodQty via P0-2 with a
+   *      deterministic witness `transfer:<id>:<pid>:receive:<eventId>`.
+   * A crash after a bound-claim leaves the event claimed on the line —
+   * a retry with the same eventId skips the claim and converges stock.
    */
   async receive(
     transferId: string,
@@ -461,106 +714,205 @@ export class StockTransferService {
     userId: string,
     receivedItems: ReceiveItemDto[],
     notes?: string,
+    receiptEventId?: string,
   ): Promise<StockTransferDocument> {
-    const transfer = await this.findById(transferId, shopId);
+    let transfer = await this.findById(transferId, shopId);
 
     if (!['in_transit', 'partially_received'].includes(transfer.status)) {
-      throw new BadRequestException(`Cannot receive transfer with status: ${transfer.status}`);
+      // Idempotent retry of a fully-completed receive: when the caller
+      // supplies the same event id and every target line already carries
+      // it, the receive is proven complete — converge no-ops and return.
+      if (
+        transfer.status === 'received' &&
+        receiptEventId &&
+        receivedItems?.every((ri) =>
+          transfer.items
+            .find((i) => i.productId.toString() === ri.productId)
+            ?.receiptEventIds?.includes(receiptEventId),
+        )
+      ) {
+        return transfer;
+      }
+      throw new BadRequestException(
+        `Cannot receive transfer with status: ${transfer.status}`,
+      );
+    }
+    if (transfer.cancelClaimId) {
+      throw new ConflictException(
+        'A cancellation is in progress for this transfer - it cannot be received',
+      );
+    }
+    if (!receivedItems?.length) {
+      throw new BadRequestException(
+        'receivedItems must contain at least one item',
+      );
     }
 
-    let allReceived = true;
+    const eventId = receiptEventId ?? `rcpt:${nanoid(12)}`;
+    const occurrences = this.countProductOccurrences(transfer.items);
 
     for (const receivedItem of receivedItems) {
-      const transferItem = transfer.items.find(
-        i => i.productId.toString() === receivedItem.productId
+      const reqQty = receivedItem.receivedQuantity ?? 0;
+      const damQty = receivedItem.damagedQuantity ?? 0;
+      if (reqQty < 0 || damQty < 0 || damQty > reqQty) {
+        throw new BadRequestException(
+          'receivedQuantity and damagedQuantity must be >= 0 with damaged <= received',
+        );
+      }
+
+      const lineIdx = transfer.items.findIndex(
+        (i) => i.productId.toString() === receivedItem.productId,
       );
+      const transferItem = transfer.items[lineIdx];
 
       if (!transferItem) {
-        throw new BadRequestException(`Product ${receivedItem.productId} not in transfer`);
+        throw new BadRequestException(
+          `Product ${receivedItem.productId} not in transfer`,
+        );
+      }
+      if (reqQty === 0) {
+        continue;
       }
 
-      // Update transfer item
-      transferItem.receivedQuantity = (transferItem.receivedQuantity || 0) + receivedItem.receivedQuantity;
-      transferItem.damagedQuantity = (transferItem.damagedQuantity || 0) + (receivedItem.damagedQuantity || 0);
-      transferItem.receivedAt = new Date();
-      if (receivedItem.notes) {
-        transferItem.notes = (transferItem.notes || '') + ' | ' + receivedItem.notes;
-      }
+      // ── ATOMIC BOUND-CLAIM — the DB enforces receivedQuantity + request
+      // <= quantity inside the same conditional write that records the
+      // event. Application pre-checks alone would let two receives race.
+      const claimed = await this.transferModel
+        .findOneAndUpdate(
+          {
+            _id: transfer._id,
+            shopId: transfer.shopId,
+            status: { $in: ['in_transit', 'partially_received'] },
+            cancelClaimId: null,
+            items: {
+              $elemMatch: {
+                productId: transferItem.productId,
+                receivedQuantity: { $lte: transferItem.quantity - reqQty },
+                receiptEventIds: { $ne: eventId },
+              },
+            },
+          },
+          {
+            $inc: {
+              'items.$.receivedQuantity': reqQty,
+              'items.$.damagedQuantity': damQty,
+            },
+            $addToSet: { 'items.$.receiptEventIds': eventId },
+            $set: {
+              'items.$.receivedAt': new Date(),
+              ...(receivedItem.notes
+                ? { 'items.$.notes': receivedItem.notes }
+                : {}),
+            },
+          },
+          { new: true },
+        )
+        .exec();
 
-      // Check if fully received
-      if (transferItem.receivedQuantity < transferItem.quantity) {
-        allReceived = false;
-      }
-
-      // Add stock to destination branch
-      const goodQuantity = receivedItem.receivedQuantity - (receivedItem.damagedQuantity || 0);
-      
-      if (goodQuantity > 0) {
-        if (transfer.isToMainStore) {
-          // To main store - only update main stock
-          await this.productModel.updateOne(
-            { _id: transferItem.productId, shopId: new Types.ObjectId(shopId) },
-            { $inc: { stock: goodQuantity } },
+      if (!claimed) {
+        const latest = await this.reread(transfer);
+        if (!latest) {
+          throw new NotFoundException('Stock transfer not found');
+        }
+        const latestLine = latest.items.find(
+          (i) => i.productId.toString() === receivedItem.productId,
+        );
+        if (latestLine?.receiptEventIds?.includes(eventId)) {
+          // This event's bound-claim already landed (crash/retry) —
+          // converge the stock credit below.
+          transfer = latest;
+        } else if (latest.cancelClaimId) {
+          throw new ConflictException(
+            'A cancellation is in progress for this transfer - it cannot be received',
           );
-        } else if (transfer.toBranchId) {
-          // To a branch - only update branch inventory, NOT main stock
-          // First ensure branchInventory exists for this product/branch
-          const toBranchId = transfer.toBranchId.toString();
-          const toBranchKey = `branchInventory.${toBranchId}.stock`;
-          
-          // Use findOneAndUpdate to ensure branchInventory is initialized
-          // This handles the case where the product doesn't have inventory in the destination branch yet
-          await this.productModel.findOneAndUpdate(
-            { _id: transferItem.productId, shopId: new Types.ObjectId(shopId) },
-            [
-              {
-                $set: {
-                  branchInventory: {
-                    $mergeObjects: [
-                      { $ifNull: ['$branchInventory', {}] },
-                      {
-                        [toBranchId]: {
-                          stock: {
-                            $add: [
-                              { $ifNull: [`$branchInventory.${toBranchId}.stock`, 0] },
-                              goodQuantity
-                            ]
-                          }
-                        }
-                      }
-                    ]
-                  }
-                }
-              }
-            ]
+        } else if (
+          !['in_transit', 'partially_received'].includes(latest.status)
+        ) {
+          throw new ConflictException(
+            `Transfer status changed concurrently (now '${latest.status}')`,
+          );
+        } else {
+          throw new BadRequestException(
+            `Over-receipt rejected for ${transferItem.productName}: ordered ${transferItem.quantity}, already received ${latestLine?.receivedQuantity ?? 0}, requested ${reqQty}`,
           );
         }
-
-        // Create audit log for product history
-        await this.auditModel.create({
-          shopId: new Types.ObjectId(shopId),
-          branchId: transfer.toBranchId,
-          userId: new Types.ObjectId(userId),
-          action: 'stock_transfer_received',
-          resource: 'product',
-          resourceId: transferItem.productId,
-          changes: {
-            transferNumber: transfer.transferNumber,
-            quantity: goodQuantity,
-            damagedQuantity: receivedItem.damagedQuantity || 0,
-            fromBranch: transfer.fromBranchName,
-            toBranch: transfer.toBranchName,
-          },
-        });
+      } else {
+        transfer = claimed;
       }
+
+      // ── Converge destination credit — exactly once per event ─────────
+      const goodQuantity = reqQty - damQty;
+      if (goodQuantity > 0) {
+        const mutationId = this.lineMutationId(
+          transfer,
+          transferItem,
+          lineIdx,
+          occurrences,
+          `receive:${eventId}`,
+        );
+        await this.convergeStock(
+          transfer,
+          shopId,
+          transferItem.productId.toString(),
+          transfer.isToMainStore
+            ? null
+            : (transfer.toBranchId?.toString() ?? null),
+          goodQuantity,
+          mutationId,
+          userId,
+          `Transfer ${transfer.transferNumber} received: ${transferItem.productName} x${goodQuantity}${damQty ? ` (${damQty} damaged)` : ''}`,
+        );
+      }
+
+      // Create audit log for product history
+      await this.auditModel.create({
+        shopId: new Types.ObjectId(shopId),
+        branchId: transfer.toBranchId,
+        userId: new Types.ObjectId(userId),
+        action: 'stock_transfer_received',
+        resource: 'product',
+        resourceId: transferItem.productId,
+        changes: {
+          transferNumber: transfer.transferNumber,
+          quantity: goodQuantity,
+          damagedQuantity: damQty,
+          receiptEventId: eventId,
+          fromBranch: transfer.fromBranchName,
+          toBranch: transfer.toBranchName,
+        },
+      });
     }
 
-    transfer.status = allReceived ? 'received' : 'partially_received';
-    transfer.receivedAt = new Date();
-    transfer.receivedBy = new Types.ObjectId(userId);
-    transfer.receiptNotes = notes;
+    // ── Status finalize — 'received' only when every line is fully
+    // received; the conditional write keeps 'received' terminal.
+    const allReceived = transfer.items.every(
+      (i) => (i.receivedQuantity ?? 0) >= i.quantity,
+    );
+    const newStatus = allReceived ? 'received' : 'partially_received';
+    const finalized = await this.transferModel
+      .findOneAndUpdate(
+        {
+          _id: transfer._id,
+          shopId: transfer.shopId,
+          status: { $in: ['in_transit', 'partially_received'] },
+        },
+        {
+          $set: {
+            status: newStatus,
+            ...(allReceived
+              ? {
+                  receivedAt: new Date(),
+                  receivedBy: new Types.ObjectId(userId),
+                }
+              : {}),
+            ...(notes ? { receiptNotes: notes } : {}),
+          },
+        },
+        { new: true },
+      )
+      .exec();
 
-    const saved = await transfer.save();
+    const saved = finalized ?? (await this.reread(transfer)) ?? transfer;
 
     await this.auditModel.create({
       shopId: new Types.ObjectId(shopId),
@@ -572,13 +924,27 @@ export class StockTransferService {
       changes: { status: saved.status, receivedItems },
     });
 
-    this.logger.log(`Stock transfer ${transfer.transferNumber} ${saved.status}`);
+    this.logger.log(
+      `Stock transfer ${transfer.transferNumber} ${saved.status}`,
+    );
 
     return saved;
   }
 
   /**
-   * Cancel a transfer
+   * Cancel a transfer — P0-8 hardened.
+   *
+   * No-stock states (draft/pending_approval/approved/rejected): a single
+   * atomic conditional claim — a ship claim blocks it ('approved' +
+   * shipClaimId means deductions are converging).
+   *
+   * Stocked states (in_transit/partially_received): durable cancelClaimId
+   * marker (status unchanged) → converge per-line restores of the
+   * OUTSTANDING quantity (quantity - receivedQuantity — never the full
+   * quantity, which would duplicate stock already received at the
+   * destination) → finalize cancelled. The claim marker also freezes
+   * receives (their bound-claims require cancelClaimId absent), so
+   * outstanding is stable while restores converge.
    */
   async cancel(
     transferId: string,
@@ -586,32 +952,80 @@ export class StockTransferService {
     userId: string,
     reason: string,
   ): Promise<StockTransferDocument> {
-    const transfer = await this.findById(transferId, shopId);
+    let transfer = await this.findById(transferId, shopId);
 
     if (['received', 'cancelled'].includes(transfer.status)) {
-      throw new BadRequestException(`Cannot cancel transfer with status: ${transfer.status}`);
+      throw new BadRequestException(
+        `Cannot cancel transfer with status: ${transfer.status}`,
+      );
     }
 
-    // If already shipped, need to return stock to source
-    if (transfer.status === 'in_transit') {
-      for (const item of transfer.items) {
-        if (transfer.isFromMainStore) {
-          // Main store - only update main stock
-          await this.productModel.updateOne(
-            { _id: item.productId, shopId: new Types.ObjectId(shopId) },
-            { $inc: { stock: item.quantity } },
-          );
-        } else if (transfer.fromBranchId) {
-          // From a branch - only update branch inventory, NOT main stock
-          const fromBranchKey = `branchInventory.${transfer.fromBranchId.toString()}.stock`;
-          
-          await this.productModel.updateOne(
-            { _id: item.productId, shopId: new Types.ObjectId(shopId) },
-            { $inc: { [fromBranchKey]: item.quantity } },
+    if (['in_transit', 'partially_received'].includes(transfer.status)) {
+      const claimId = `transfer:${transferId}:cancel`;
+
+      const claimed = await this.transferModel
+        .findOneAndUpdate(
+          {
+            _id: transfer._id,
+            shopId: transfer.shopId,
+            status: { $in: ['in_transit', 'partially_received'] },
+            cancelClaimId: null,
+          },
+          {
+            $set: {
+              cancelClaimId: claimId,
+              cancelStartedAt: new Date(),
+            },
+          },
+          { new: true },
+        )
+        .exec();
+
+      if (!claimed) {
+        const latest = await this.reread(transfer);
+        if (!latest) {
+          throw new NotFoundException('Stock transfer not found');
+        }
+        if (
+          latest.status === 'cancelled' ||
+          (['in_transit', 'partially_received'].includes(latest.status) &&
+            latest.cancelClaimId === claimId)
+        ) {
+          transfer = latest;
+        } else {
+          throw new ConflictException(
+            `Transfer status changed concurrently (now '${latest.status}')`,
           );
         }
+      } else {
+        transfer = claimed;
+      }
 
-        // Create audit log for product history
+      // ── Restore ONLY the outstanding quantity per line — exactly once ─
+      const occurrences = this.countProductOccurrences(transfer.items);
+      for (const [idx, item] of transfer.items.entries()) {
+        const outstanding = item.quantity - (item.receivedQuantity ?? 0);
+        if (outstanding <= 0) continue;
+        const mutationId = this.lineMutationId(
+          transfer,
+          item,
+          idx,
+          occurrences,
+          'cancel-restore',
+        );
+        await this.convergeStock(
+          transfer,
+          shopId,
+          item.productId.toString(),
+          transfer.isFromMainStore
+            ? null
+            : (transfer.fromBranchId?.toString() ?? null),
+          outstanding,
+          mutationId,
+          userId,
+          `Transfer ${transfer.transferNumber} cancelled: restored ${item.productName} x${outstanding}`,
+        );
+
         await this.auditModel.create({
           shopId: new Types.ObjectId(shopId),
           branchId: transfer.fromBranchId,
@@ -621,20 +1035,94 @@ export class StockTransferService {
           resourceId: item.productId,
           changes: {
             transferNumber: transfer.transferNumber,
-            quantity: item.quantity,
+            quantity: outstanding,
             reason: reason,
             stockReturned: true,
           },
         });
       }
+
+      // ── Finalize cancelled ───────────────────────────────────────────
+      const finalized = await this.transferModel
+        .findOneAndUpdate(
+          {
+            _id: transfer._id,
+            shopId: transfer.shopId,
+            cancelClaimId: claimId,
+          },
+          {
+            $set: {
+              status: 'cancelled',
+              cancelledBy: new Types.ObjectId(userId),
+              cancelledAt: new Date(),
+              cancellationReason: reason,
+            },
+          },
+          { new: true },
+        )
+        .exec();
+
+      if (!finalized) {
+        const latest = await this.reread(transfer);
+        if (!latest) {
+          throw new NotFoundException('Stock transfer not found');
+        }
+        if (latest.status === 'cancelled') {
+          transfer = latest;
+        } else {
+          throw new ConflictException(
+            `Transfer status changed concurrently (now '${latest.status}')`,
+          );
+        }
+      } else {
+        transfer = finalized;
+      }
+    } else {
+      // No inventory has moved — a plain atomic claim suffices. Blocked
+      // while a ship claim is in flight ('approved' + shipClaimId).
+      const claimed = await this.transferModel
+        .findOneAndUpdate(
+          {
+            _id: transfer._id,
+            shopId: transfer.shopId,
+            status: transfer.status,
+            shipClaimId: null,
+            cancelClaimId: null,
+          },
+          {
+            $set: {
+              status: 'cancelled',
+              cancelledBy: new Types.ObjectId(userId),
+              cancelledAt: new Date(),
+              cancellationReason: reason,
+            },
+          },
+          { new: true },
+        )
+        .exec();
+
+      if (!claimed) {
+        const latest = await this.reread(transfer);
+        if (!latest) {
+          throw new NotFoundException('Stock transfer not found');
+        }
+        if (latest.status === 'cancelled') {
+          transfer = latest;
+        } else if (latest.status === 'approved' && latest.shipClaimId) {
+          throw new ConflictException(
+            'A shipment is in progress for this transfer - it cannot be cancelled mid-dispatch',
+          );
+        } else {
+          throw new ConflictException(
+            `Transfer status changed concurrently (now '${latest.status}')`,
+          );
+        }
+      } else {
+        transfer = claimed;
+      }
     }
 
-    transfer.status = 'cancelled';
-    transfer.cancelledBy = new Types.ObjectId(userId);
-    transfer.cancelledAt = new Date();
-    transfer.cancellationReason = reason;
-
-    const saved = await transfer.save();
+    const saved = transfer;
 
     await this.auditModel.create({
       shopId: new Types.ObjectId(shopId),
@@ -653,7 +1141,10 @@ export class StockTransferService {
   /**
    * Get transfer statistics for a shop
    */
-  async getStats(shopId: string, branchId?: string): Promise<{
+  async getStats(
+    shopId: string,
+    branchId?: string,
+  ): Promise<{
     pending: number;
     inTransit: number;
     received: number;
@@ -662,7 +1153,7 @@ export class StockTransferService {
     thisMonth: number;
   }> {
     const baseQuery: any = { shopId: new Types.ObjectId(shopId) };
-    
+
     if (branchId) {
       baseQuery.$or = [
         { fromBranchId: new Types.ObjectId(branchId) },
@@ -674,20 +1165,30 @@ export class StockTransferService {
     startOfMonth.setDate(1);
     startOfMonth.setHours(0, 0, 0, 0);
 
-    const [pending, inTransit, received, cancelled, valueAgg, thisMonth] = await Promise.all([
-      this.transferModel.countDocuments({ ...baseQuery, status: 'pending_approval' }),
-      this.transferModel.countDocuments({ ...baseQuery, status: 'in_transit' }),
-      this.transferModel.countDocuments({ ...baseQuery, status: 'received' }),
-      this.transferModel.countDocuments({ ...baseQuery, status: 'cancelled' }),
-      this.transferModel.aggregate([
-        { $match: { ...baseQuery, status: 'received' } },
-        { $group: { _id: null, total: { $sum: '$totalValue' } } },
-      ]),
-      this.transferModel.countDocuments({
-        ...baseQuery,
-        createdAt: { $gte: startOfMonth },
-      }),
-    ]);
+    const [pending, inTransit, received, cancelled, valueAgg, thisMonth] =
+      await Promise.all([
+        this.transferModel.countDocuments({
+          ...baseQuery,
+          status: 'pending_approval',
+        }),
+        this.transferModel.countDocuments({
+          ...baseQuery,
+          status: 'in_transit',
+        }),
+        this.transferModel.countDocuments({ ...baseQuery, status: 'received' }),
+        this.transferModel.countDocuments({
+          ...baseQuery,
+          status: 'cancelled',
+        }),
+        this.transferModel.aggregate([
+          { $match: { ...baseQuery, status: 'received' } },
+          { $group: { _id: null, total: { $sum: '$totalValue' } } },
+        ]),
+        this.transferModel.countDocuments({
+          ...baseQuery,
+          createdAt: { $gte: startOfMonth },
+        }),
+      ]);
 
     return {
       pending,

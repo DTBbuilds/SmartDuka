@@ -2475,6 +2475,7 @@ export class InventoryService implements OnModuleInit {
     toBranchId: string,
     quantity: number,
     transferredBy: string,
+    idempotencyKey?: string,
   ): Promise<ProductDocument | null> {
     const product = await this.productModel.findOne({
       _id: new Types.ObjectId(productId),
@@ -2483,6 +2484,31 @@ export class InventoryService implements OnModuleInit {
 
     if (!product) {
       throw new BadRequestException('Product not found');
+    }
+
+    // P0-8: an optional caller-supplied idempotency key gives this one-shot
+    // move a deterministic witness — a retry with the same key is a proven
+    // no-op (embedded receipt OR durable StockAdjustment). Anonymous calls
+    // keep the previous nanoid behaviour.
+    const mutationId = idempotencyKey
+      ? `transfer:${idempotencyKey}`
+      : `transfer:${nanoid(16)}`;
+    const receiptExists = (product.stockMutations ?? []).some(
+      (m: any) => m.mutationId === mutationId,
+    );
+    const auditExists = receiptExists
+      ? null
+      : await this.adjustmentModel
+          .findOne({
+            shopId: new Types.ObjectId(shopId),
+            mutationId,
+          })
+          .exec();
+    if (receiptExists || auditExists) {
+      this.logger.log(
+        `Branch transfer ${mutationId} already applied for product ${productId} - no additional effect`,
+      );
+      return product;
     }
 
     // Initialize branch inventory if needed
@@ -2508,12 +2534,14 @@ export class InventoryService implements OnModuleInit {
 
     // P0-2: the transfer is ONE logical movement with durable evidence —
     // both branch deltas and the mutation receipt share one document write.
-    const mutationId = `transfer:${nanoid(16)}`;
+    // P0-8: the $ne receipt guard makes a concurrent identical-keyed call
+    // lose atomically rather than double-apply.
     const updated = await this.productModel
       .findOneAndUpdate(
         {
           _id: new Types.ObjectId(productId),
           shopId: new Types.ObjectId(shopId),
+          'stockMutations.mutationId': { $ne: mutationId },
           [`branchInventory.${fromBranchId}.stock`]: { $gte: quantity },
         },
         {
@@ -2539,6 +2567,20 @@ export class InventoryService implements OnModuleInit {
       .exec();
 
     if (!updated) {
+      // Lost an idempotency race — the winner's receipt is durable evidence.
+      const canonical = await this.productModel
+        .findOne({
+          _id: new Types.ObjectId(productId),
+          shopId: new Types.ObjectId(shopId),
+        })
+        .exec();
+      if (
+        (canonical?.stockMutations ?? []).some(
+          (m: any) => m.mutationId === mutationId,
+        )
+      ) {
+        return canonical;
+      }
       throw new BadRequestException('Failed to apply branch stock transfer');
     }
 

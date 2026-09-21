@@ -5,7 +5,11 @@ import { AuditLog, AuditLogSchema } from '../audit/audit-log.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { Product, ProductSchema } from '../inventory/schemas/product.schema';
 import { Order, OrderSchema } from '../sales/schemas/order.schema';
-import { StockTransfer, StockTransferSchema } from './schemas/stock-transfer.schema';
+import {
+  StockTransfer,
+  StockTransferSchema,
+} from './schemas/stock-transfer.schema';
+import { InventoryModule } from '../inventory/inventory.module';
 import { BranchesService } from './branches.service';
 import { BranchesController } from './branches.controller';
 import { StaffAssignmentService } from './staff-assignment.service';
@@ -26,9 +30,24 @@ import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
       { name: StockTransfer.name, schema: StockTransferSchema },
     ]),
     forwardRef(() => SubscriptionsModule),
+    InventoryModule,
   ],
-  providers: [BranchesService, StaffAssignmentService, StockTransferService, BranchValidationMiddleware],
-  controllers: [BranchesController, StaffAssignmentController, StockTransferController],
-  exports: [BranchesService, StaffAssignmentService, StockTransferService, BranchValidationMiddleware],
+  providers: [
+    BranchesService,
+    StaffAssignmentService,
+    StockTransferService,
+    BranchValidationMiddleware,
+  ],
+  controllers: [
+    BranchesController,
+    StaffAssignmentController,
+    StockTransferController,
+  ],
+  exports: [
+    BranchesService,
+    StaffAssignmentService,
+    StockTransferService,
+    BranchValidationMiddleware,
+  ],
 })
 export class BranchesModule {}

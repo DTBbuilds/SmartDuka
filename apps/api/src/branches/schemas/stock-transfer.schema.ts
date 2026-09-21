@@ -34,6 +34,14 @@ export class TransferItem {
 
   @Prop({ required: false })
   receivedAt?: Date;
+
+  /**
+   * P0-8: durable receipt-event identities applied to this line. A receive
+   * bound-claim and its stock credit share one event id — retries dedupe,
+   * crashed receives resume by detecting the event already claimed.
+   */
+  @Prop({ required: false, type: [String] })
+  receiptEventIds?: string[];
 }
 
 /**
@@ -72,25 +80,55 @@ export class StockTransfer {
   isToMainStore?: boolean;
 
   // Transfer type
-  @Prop({ 
-    required: true, 
-    enum: ['branch_to_branch', 'warehouse_to_branch', 'branch_to_warehouse', 'main_to_branch', 'branch_to_main', 'emergency'],
-    default: 'branch_to_branch'
+  @Prop({
+    required: true,
+    enum: [
+      'branch_to_branch',
+      'warehouse_to_branch',
+      'branch_to_warehouse',
+      'main_to_branch',
+      'branch_to_main',
+      'emergency',
+    ],
+    default: 'branch_to_branch',
   })
-  transferType: 'branch_to_branch' | 'warehouse_to_branch' | 'branch_to_warehouse' | 'main_to_branch' | 'branch_to_main' | 'emergency';
+  transferType:
+    | 'branch_to_branch'
+    | 'warehouse_to_branch'
+    | 'branch_to_warehouse'
+    | 'main_to_branch'
+    | 'branch_to_main'
+    | 'emergency';
 
   // Items being transferred
   @Prop({ type: [Object], required: true })
   items: TransferItem[];
 
   // Status workflow
-  @Prop({ 
-    required: true, 
-    enum: ['draft', 'pending_approval', 'approved', 'in_transit', 'partially_received', 'received', 'cancelled', 'rejected'],
+  @Prop({
+    required: true,
+    enum: [
+      'draft',
+      'pending_approval',
+      'approved',
+      'in_transit',
+      'partially_received',
+      'received',
+      'cancelled',
+      'rejected',
+    ],
     default: 'draft',
-    index: true
+    index: true,
   })
-  status: 'draft' | 'pending_approval' | 'approved' | 'in_transit' | 'partially_received' | 'received' | 'cancelled' | 'rejected';
+  status:
+    | 'draft'
+    | 'pending_approval'
+    | 'approved'
+    | 'in_transit'
+    | 'partially_received'
+    | 'received'
+    | 'cancelled'
+    | 'rejected';
 
   // Priority for urgent transfers
   @Prop({ enum: ['low', 'normal', 'high', 'urgent'], default: 'normal' })
@@ -118,6 +156,28 @@ export class StockTransfer {
 
   @Prop({ required: false })
   approvalNotes?: string;
+
+  /**
+   * P0-8: durable in-flight ship claim. Ship sets this marker atomically
+   * while status stays 'approved', converges every source deduction, then
+   * finalizes approved→in_transit. A crash leaves approved+claim —
+   * resumable — never 'in_transit' with stock still at source.
+   */
+  @Prop({ required: false })
+  shipClaimId?: string;
+
+  @Prop({ required: false })
+  shipStartedAt?: Date;
+
+  /**
+   * P0-8: durable in-flight cancel claim — serializes receives (which
+   * require no active cancel claim) and makes cancellation resumable.
+   */
+  @Prop({ required: false })
+  cancelClaimId?: string;
+
+  @Prop({ required: false })
+  cancelStartedAt?: Date;
 
   // Shipping details
   @Prop({ required: false })
@@ -191,13 +251,16 @@ StockTransferSchema.index({ shopId: 1, toBranchId: 1 });
 StockTransferSchema.index({ shopId: 1, createdAt: -1 });
 
 // Virtual for total items count
-StockTransferSchema.virtual('totalItems').get(function() {
+StockTransferSchema.virtual('totalItems').get(function () {
   return this.items?.reduce((sum, item) => sum + item.quantity, 0) || 0;
 });
 
 // Virtual for received items count
-StockTransferSchema.virtual('totalReceived').get(function() {
-  return this.items?.reduce((sum, item) => sum + (item.receivedQuantity || 0), 0) || 0;
+StockTransferSchema.virtual('totalReceived').get(function () {
+  return (
+    this.items?.reduce((sum, item) => sum + (item.receivedQuantity || 0), 0) ||
+    0
+  );
 });
 
 StockTransferSchema.set('toJSON', { virtuals: true });
