@@ -116,13 +116,15 @@ export class PurchasesService {
    * pre-check — is the concurrency guard, so a receive/cancel race or
    * duplicate receive resolves to exactly one winner.
    *
-   * Receive ordering: claim pending→received FIRST, then converge each
-   * line's stock through the P0-2 durable mutation contract keyed
-   * `purchase:<poId>:<productId>` (`…:line:<idx>` when a product repeats).
-   * Retries and races re-run the convergence safely — the mutation witness
-   * (receipt or StockAdjustment) makes every line exactly-once. A crash
-   * between claim and stock leaves the PO 'received' with durable receipts
-   * for landed lines; re-issuing the receive converges the rest.
+   * Receive ordering (P0-7A): claim first — but via a durable
+   * `receivingClaimId` marker while status stays 'pending' — then converge
+   * each line's stock through the P0-2 durable mutation contract keyed
+   * `purchase:<poId>:<productId>` (`…:line:<idx>` when a product repeats),
+   * then finalize pending→received. A crash anywhere before finalize leaves
+   * pending+claim — never a false 'received' — and a retry resumes and
+   * converges the rest. Retries and races re-run the convergence safely —
+   * the mutation witness (receipt or StockAdjustment) makes every line
+   * exactly-once.
    *
    * Multi-tenant safe: every query filters by shopId.
    */
@@ -171,7 +173,7 @@ export class PurchasesService {
       }
     }
 
-    // ── LIFECYCLE TRANSITION — atomic conditional claim ────────────────
+    // ── LIFECYCLE TRANSITION — legality guard ──────────────────────────
     if (targetStatus && targetStatus !== current.status) {
       if (
         !PurchasesService.ALLOWED_TRANSITIONS[current.status]?.includes(
@@ -183,52 +185,102 @@ export class PurchasesService {
         );
       }
 
-      // DB-level claim: exactly one caller transitions out of 'pending'.
-      const claimed = await this.purchaseModel
-        .findOneAndUpdate(
-          {
-            _id: current._id,
-            shopId: current.shopId,
-            status: current.status,
-          },
-          {
-            $set: {
-              status: targetStatus,
-              ...(targetStatus === 'received'
-                ? { receivedDate: dto.receivedDate ?? new Date() }
-                : {}),
-              updatedAt: new Date(),
+      if (targetStatus === 'cancelled') {
+        // Atomic cancel claim — blocked while a receive claim is active:
+        // receivingClaimId: null only matches a purchase with no in-flight
+        // receive.
+        const claimed = await this.purchaseModel
+          .findOneAndUpdate(
+            {
+              _id: current._id,
+              shopId: current.shopId,
+              status: 'pending',
+              receivingClaimId: null,
             },
-          },
-          { new: true },
-        )
-        .exec();
-
-      if (!claimed) {
-        const latest = await this.purchaseModel
-          .findOne({ _id: current._id, shopId: current.shopId })
+            { $set: { status: 'cancelled', updatedAt: new Date() } },
+            { new: true },
+          )
           .exec();
-        if (!latest) {
-          throw new BadRequestException('Purchase order not found');
-        }
-        if (latest.status === targetStatus) {
-          // Lost the claim race to an identical request — converge below.
-          purchase = latest;
+
+        if (!claimed) {
+          const latest = await this.purchaseModel
+            .findOne({ _id: current._id, shopId: current.shopId })
+            .exec();
+          if (!latest) {
+            throw new BadRequestException('Purchase order not found');
+          }
+          if (latest.status === 'cancelled') {
+            purchase = latest;
+          } else if (latest.status === 'pending' && latest.receivingClaimId) {
+            throw new ConflictException(
+              'A receive is in progress for this purchase order - it cannot be cancelled mid-receipt',
+            );
+          } else {
+            throw new ConflictException(
+              `Purchase order status changed concurrently (now '${latest.status}')`,
+            );
+          }
         } else {
-          throw new ConflictException(
-            `Purchase order status changed concurrently (now '${latest.status}')`,
-          );
+          purchase = claimed;
         }
-      } else {
-        purchase = claimed;
       }
     }
 
-    // ── INVENTORY CONVERGENCE — full receive, exactly once per line ────
-    // Runs for the claiming request AND idempotent retries on an
-    // already-received purchase: each line's mutationId is deduplicated by
-    // the P0-2 durable witness, so convergence never double-applies.
-    if (targetStatus === 'received' && purchase.status === 'received') {
+    // ── RECEIVE — durable claim → converge stock → finalize ────────────
+    // The claim marks the purchase WITHOUT flipping status: a crash after
+    // the claim leaves pending+receivingClaimId (resumable), never a false
+    // 'received'. Only after every stock line is durably applied does the
+    // finalize write flip pending→received.
+    if (targetStatus === 'received') {
+      const claimId = `purchase:${purchaseId}:receive`;
+
+      if (current.status !== 'received') {
+        const claimed = await this.purchaseModel
+          .findOneAndUpdate(
+            {
+              _id: current._id,
+              shopId: current.shopId,
+              status: 'pending',
+              receivingClaimId: null,
+            },
+            {
+              $set: {
+                receivingClaimId: claimId,
+                receivingStartedAt: new Date(),
+                updatedAt: new Date(),
+              },
+            },
+            { new: true },
+          )
+          .exec();
+
+        if (!claimed) {
+          const latest = await this.purchaseModel
+            .findOne({ _id: current._id, shopId: current.shopId })
+            .exec();
+          if (!latest) {
+            throw new BadRequestException('Purchase order not found');
+          }
+          if (
+            latest.status === 'received' ||
+            (latest.status === 'pending' && latest.receivingClaimId)
+          ) {
+            // Already finalized, or the canonical receive claim is active —
+            // resume/converge the same logical operation.
+            purchase = latest;
+          } else {
+            throw new ConflictException(
+              `Purchase order status changed concurrently (now '${latest.status}')`,
+            );
+          }
+        } else {
+          purchase = claimed;
+        }
+      }
+
+      // INVENTORY CONVERGENCE — runs for the claiming request, a resumed
+      // claim, and idempotent retries on an already-received purchase:
+      // each line's mutationId is deduplicated by the P0-2 durable witness.
       // Line identity: a productId that appears on multiple lines is
       // disambiguated by index so legitimate lines never collapse into one
       // mutation.
@@ -314,15 +366,59 @@ export class PurchasesService {
           `Purchase order ${purchase.purchaseNumber} received with inventory errors - retry to converge remaining lines: ${stockIncreaseErrors.join('; ')}`,
         );
       }
+
+      // ── FINALIZE — the claim owner flips pending→received only after
+      // every stock line is durably proven applied. A crash before this
+      // write leaves pending+claim (resumable); a concurrent winner's
+      // finalize makes this attempt idempotent.
+      if (purchase.status !== 'received') {
+        const finalized = await this.purchaseModel
+          .findOneAndUpdate(
+            {
+              _id: purchase._id,
+              shopId: purchase.shopId,
+              status: 'pending',
+              receivingClaimId: claimId,
+            },
+            {
+              $set: {
+                status: 'received',
+                receivedDate: dto.receivedDate ?? new Date(),
+                updatedAt: new Date(),
+              },
+            },
+            { new: true },
+          )
+          .exec();
+
+        if (!finalized) {
+          const latest = await this.purchaseModel
+            .findOne({ _id: purchase._id, shopId: purchase.shopId })
+            .exec();
+          if (!latest) {
+            throw new BadRequestException('Purchase order not found');
+          }
+          if (latest.status === 'received') {
+            purchase = latest;
+          } else {
+            throw new ConflictException(
+              `Purchase order status changed concurrently (now '${latest.status}')`,
+            );
+          }
+        } else {
+          purchase = finalized;
+        }
+      }
     }
 
-    // ── Apply remaining updatable fields (status already claimed) ──────
-    const {
-      status: _status,
-      receivedItems: _receivedItems,
-      receiveNotes: _receiveNotes,
-      ...rest
-    } = dto as any;
+    // ── Apply remaining updatable fields ───────────────────────────────
+    // Whitelisted: only these fields may be patched. Status flows through
+    // the lifecycle claims above; items/totals/claim markers can never be
+    // rewritten by a generic update (which would falsify stock provenance).
+    const rest: Record<string, any> = {};
+    if (dto.receivedDate !== undefined) rest.receivedDate = dto.receivedDate;
+    if (dto.invoiceNumber !== undefined) rest.invoiceNumber = dto.invoiceNumber;
+    if (dto.notes !== undefined) rest.notes = dto.notes;
 
     const updated = await this.purchaseModel
       .findOneAndUpdate(
@@ -360,14 +456,21 @@ export class PurchasesService {
         'Cannot delete a received purchase order - its inventory effect must remain auditable',
       );
     }
+    if (purchase.receivingClaimId) {
+      throw new ConflictException(
+        'A receive is in progress for this purchase order - it cannot be deleted mid-receipt',
+      );
+    }
 
-    // Atomic guard closes a delete/receive race: the delete only lands if
-    // the purchase is still non-received at write time.
+    // Atomic guard closes the delete/receive race: the delete only lands if
+    // the purchase is still non-received AND has no active receive claim at
+    // write time.
     const result = await this.purchaseModel
       .deleteOne({
         _id: new Types.ObjectId(purchaseId),
         shopId: new Types.ObjectId(shopId),
         status: { $ne: 'received' },
+        receivingClaimId: null,
       })
       .exec();
     if (result.deletedCount === 0) {

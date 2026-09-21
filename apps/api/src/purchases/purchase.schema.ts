@@ -41,6 +41,18 @@ export class Purchase {
   @Prop()
   receivedDate?: Date;
 
+  /**
+   * P0-7A: durable in-flight receive claim. A receive sets this marker
+   * atomically while status stays 'pending', converges every stock line,
+   * then finalizes pending→received. A crash between claim and finalize
+   * leaves a resumable pending+claim purchase — never a false 'received'.
+   */
+  @Prop({ required: false })
+  receivingClaimId?: string;
+
+  @Prop({ required: false })
+  receivingStartedAt?: Date;
+
   @Prop()
   invoiceNumber?: string;
 

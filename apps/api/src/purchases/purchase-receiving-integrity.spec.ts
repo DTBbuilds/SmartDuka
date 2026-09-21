@@ -218,6 +218,21 @@ describe('P0-7 purchase receiving integrity', () => {
           auditFailures -= 1;
           throw new Error('Injected audit persistence failure');
         }
+        // Faithful to the real unique sparse (shopId, mutationId) witness
+        // index: a concurrent duplicate projection is dup-key rejected —
+        // projectStockMutation catches it and leaves the durable receipt.
+        if (
+          doc.mutationId &&
+          adjustments.some(
+            (a) =>
+              a.mutationId === doc.mutationId &&
+              a.shopId.toString() === doc.shopId.toString(),
+          )
+        ) {
+          const dup: any = new Error('E11000 duplicate key error');
+          dup.code = 11000;
+          throw dup;
+        }
         const record = { ...doc, _id: `adj-${adjustments.length + 1}` };
         adjustments.push(record);
         return record;
@@ -239,6 +254,13 @@ describe('P0-7 purchase receiving integrity', () => {
       ...doc,
       save: jest.fn(async () => doc),
     }));
+    // Mongo `field: null` matches absent-or-null; a string value requires
+    // exact equality. Evaluates the P0-7A receiving-claim filters.
+    const claimMismatch = (f: any) => {
+      if (f.receivingClaimId === undefined) return false;
+      if (f.receivingClaimId === null) return purchase.receivingClaimId != null;
+      return purchase.receivingClaimId !== f.receivingClaimId;
+    };
     purchaseModel.findOne = jest.fn((filter: any) =>
       toQuery(() => {
         if (filter._id && filter._id.toString() !== purchase._id.toString())
@@ -251,6 +273,7 @@ describe('P0-7 purchase receiving integrity', () => {
           return null;
         if (filter.status !== undefined && purchase.status !== filter.status)
           return null;
+        if (claimMismatch(filter)) return null;
         return purchase;
       }),
     );
@@ -266,6 +289,7 @@ describe('P0-7 purchase receiving integrity', () => {
           return null;
         if (filter.status !== undefined && purchase.status !== filter.status)
           return null;
+        if (claimMismatch(filter)) return null;
         Object.assign(purchase, update.$set ?? update);
         return purchase;
       }),
@@ -285,8 +309,14 @@ describe('P0-7 purchase receiving integrity', () => {
           purchase.shopId.toString() !== filter.shopId.toString()
         )
           return { deletedCount: 0 };
-        // Atomic non-received guard mirrors the service's deleteOne filter.
+        // Atomic non-received + no-active-claim guard mirrors the service's
+        // deleteOne filter.
         if (filter.status?.$ne === 'received' && purchase.status === 'received')
+          return { deletedCount: 0 };
+        if (
+          filter.receivingClaimId === null &&
+          purchase.receivingClaimId != null
+        )
           return { deletedCount: 0 };
         deletedPurchases.push(purchase._id);
         return { deletedCount: 1 };
@@ -413,19 +443,178 @@ describe('P0-7 purchase receiving integrity', () => {
       expect(adjustments).toHaveLength(1);
     });
 
-    it('stock failure after claim: purchase stays received with warning, retry converges', async () => {
+    it('stock failure after claim: purchase stays pending+claim, retry converges', async () => {
       boot();
       const failing = jest
         .spyOn(inventoryService, 'updateStock')
         .mockRejectedValueOnce(new Error('DB down'));
       await expect(receive()).rejects.toThrow('inventory errors');
-      expect(purchase.status).toBe('received');
+      // P0-7A: a stock failure must NEVER leave a false 'received' — the
+      // durable claim stays resumable while status remains 'pending'.
+      expect(purchase.status).toBe('pending');
+      expect(purchase.receivingClaimId).toBe(`purchase:${PO_ID}:receive`);
       expect(products.get(PID_A).stock).toBe(10);
       expect(purchase.notes).toContain('INVENTORY SYNC WARNING');
 
       failing.mockRestore();
       const retried = await receive();
       expect(retried.status).toBe('received');
+      expect(products.get(PID_A).stock).toBe(15);
+      expect(adjustments).toHaveLength(1);
+    });
+  });
+
+  describe('P0-7A crash safety — claim / converge / finalize', () => {
+    const CLAIM_ID = `purchase:${PO_ID}:receive`;
+    const seedClaim = () => {
+      // Persisted state a hard crash leaves behind: claim written, status
+      // still 'pending'.
+      purchase.receivingClaimId = CLAIM_ID;
+      purchase.receivingStartedAt = new Date();
+    };
+    const seedReceipt = (
+      pid: string,
+      mutationId: string,
+      qty: number,
+      branchKey?: string,
+    ) => {
+      const p = products.get(pid);
+      if (branchKey) {
+        p.branchInventory[branchKey].stock += qty;
+      } else {
+        p.stock += qty;
+      }
+      p.stockMutations = [
+        ...(p.stockMutations ?? []),
+        {
+          mutationId,
+          quantityChange: qty,
+          stockAfter: p.stock,
+          reason: 'purchase',
+          actor: USER,
+          referenceType: 'purchase',
+          referenceId: PO_ID,
+          appliedAt: new Date(),
+          audited: false,
+        },
+      ];
+    };
+
+    it('branch crash/resume: claim + branch stock applied, crash before finalize → retry finalizes once', async () => {
+      boot({ branchId: BRANCH, branchStockA: 10 });
+      purchase.receivingClaimId = `purchase:${PO_ID}:receive`;
+      purchase.receivingStartedAt = new Date();
+      seedReceipt(PID_A, `purchase:${PO_ID}:${PID_A}`, 5, BRANCH);
+      expect(purchase.status).toBe('pending');
+      expect(products.get(PID_A).branchInventory[BRANCH].stock).toBe(15);
+
+      const retried = await receive();
+      expect(retried.status).toBe('received');
+      // Branch mutation witness → no second +5; global stock untouched.
+      expect(products.get(PID_A).branchInventory[BRANCH].stock).toBe(15);
+      expect(products.get(PID_A).stock).toBe(10);
+    });
+
+    it('crash after claim, before any stock: pending+claim persisted, retry completes once', async () => {
+      boot();
+      seedClaim();
+      expect(purchase.status).toBe('pending');
+      expect(products.get(PID_A).stock).toBe(10);
+
+      const retried = await receive();
+      expect(retried.status).toBe('received');
+      expect(products.get(PID_A).stock).toBe(15);
+      expect(adjustments).toHaveLength(1);
+    });
+
+    it('crash after line A, before line B: A deduped, B applied, then received', async () => {
+      boot({
+        items: [
+          { productId: PID_A, quantity: 5 },
+          { productId: PID_B, quantity: 2 },
+        ],
+      });
+      seedClaim();
+      seedReceipt(PID_A, `purchase:${PO_ID}:${PID_A}`, 5);
+      expect(purchase.status).toBe('pending');
+      expect(products.get(PID_A).stock).toBe(15);
+      expect(products.get(PID_B).stock).toBe(20);
+
+      const retried = await receive();
+      expect(retried.status).toBe('received');
+      expect(products.get(PID_A).stock).toBe(15); // no re-apply
+      expect(products.get(PID_B).stock).toBe(22);
+      // A's audit is recovered from its durable receipt, not re-mutated.
+      await inventoryService.recoverUnprojectedStockMutations(SHOP);
+      expect(adjustments).toHaveLength(2);
+      expect(products.get(PID_A).stock).toBe(15);
+    });
+
+    it('crash after all stock, before finalize: retry applies zero stock, finalizes', async () => {
+      boot({
+        items: [
+          { productId: PID_A, quantity: 5 },
+          { productId: PID_B, quantity: 2 },
+        ],
+      });
+      seedClaim();
+      seedReceipt(PID_A, `purchase:${PO_ID}:${PID_A}`, 5);
+      seedReceipt(PID_B, `purchase:${PO_ID}:${PID_B}`, 2);
+      expect(purchase.status).toBe('pending');
+
+      const retried = await receive();
+      expect(retried.status).toBe('received');
+      expect(products.get(PID_A).stock).toBe(15);
+      expect(products.get(PID_B).stock).toBe(22);
+    });
+
+    it('cancel with active receive claim: rejected', async () => {
+      boot();
+      seedClaim();
+      await expect(
+        purchasesService.update(PO_ID, SHOP, { status: 'cancelled' }, USER),
+      ).rejects.toThrow('receive is in progress');
+      expect(purchase.status).toBe('pending');
+      expect(products.get(PID_A).stock).toBe(10);
+      // The claim is resumable after the rejected cancel.
+      const retried = await receive();
+      expect(retried.status).toBe('received');
+      expect(products.get(PID_A).stock).toBe(15);
+    });
+
+    it('delete with active receive claim: rejected', async () => {
+      boot();
+      seedClaim();
+      await expect(purchasesService.delete(PO_ID, SHOP)).rejects.toThrow(
+        'receive is in progress',
+      );
+      expect(deletedPurchases).toHaveLength(0);
+    });
+
+    it('delete vs receive race mid-claim: one winner, no inconsistent state', async () => {
+      boot();
+      const results = await Promise.allSettled([
+        receive(),
+        purchasesService.delete(PO_ID, SHOP),
+      ]);
+      // Exactly one winner. If the claim landed first, delete is rejected
+      // and the receive finalizes; if delete landed first, the receive sees
+      // not-found and never claims or mutates stock.
+      expect(results.filter((r) => r.status === 'rejected').length).toBe(1);
+      if (deletedPurchases.length) {
+        expect(purchase.status).not.toBe('received');
+        expect(products.get(PID_A).stock).toBe(10);
+      } else {
+        expect(purchase.status).toBe('received');
+        expect(products.get(PID_A).stock).toBe(15);
+      }
+    });
+
+    it('concurrent receive: one canonical claim, one stock effect', async () => {
+      boot();
+      await Promise.allSettled([receive(), receive()]);
+      expect(purchase.status).toBe('received');
+      expect(purchase.receivingClaimId).toBe(CLAIM_ID);
       expect(products.get(PID_A).stock).toBe(15);
       expect(adjustments).toHaveLength(1);
     });
