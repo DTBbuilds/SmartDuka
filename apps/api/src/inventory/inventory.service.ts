@@ -1,19 +1,41 @@
-import { Injectable, BadRequestException, NotFoundException, Logger, OnModuleInit, Inject, forwardRef } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+  Logger,
+  OnModuleInit,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import { nanoid } from 'nanoid';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, FilterQuery, Types } from 'mongoose';
 import { Product, ProductDocument } from './schemas/product.schema';
 import { Category, CategoryDocument } from './schemas/category.schema';
-import { StockAdjustment, StockAdjustmentDocument } from './schemas/stock-adjustment.schema';
-import { StockReconciliation, StockReconciliationDocument } from './schemas/stock-reconciliation.schema';
+import {
+  StockAdjustment,
+  StockAdjustmentDocument,
+} from './schemas/stock-adjustment.schema';
+import {
+  StockReconciliation,
+  StockReconciliationDocument,
+} from './schemas/stock-reconciliation.schema';
 import { Order, OrderDocument } from '../sales/schemas/order.schema';
-import { CreateProductDto, BulkImportOptionsDto } from './dto/create-product.dto';
+import {
+  CreateProductDto,
+  BulkImportOptionsDto,
+} from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { QueryProductsDto } from './dto/query-products.dto';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { CategorySuggestionService } from './services/category-suggestion.service';
 import { SubscriptionGuardService } from '../subscriptions/subscription-guard.service';
-import { PaginatedResponse, createPaginatedResponse } from '../common/dto/pagination.dto';
+import {
+  PaginatedResponse,
+  createPaginatedResponse,
+} from '../common/dto/pagination.dto';
 import { CacheService, CACHE_TTL } from '../common/services/cache.service';
 
 @Injectable()
@@ -21,10 +43,14 @@ export class InventoryService implements OnModuleInit {
   private readonly logger = new Logger(InventoryService.name);
 
   constructor(
-    @InjectModel(Product.name) private readonly productModel: Model<ProductDocument>,
-    @InjectModel(Category.name) private readonly categoryModel: Model<CategoryDocument>,
-    @InjectModel(StockAdjustment.name) private readonly adjustmentModel: Model<StockAdjustmentDocument>,
-    @InjectModel(StockReconciliation.name) private readonly reconciliationModel: Model<StockReconciliationDocument>,
+    @InjectModel(Product.name)
+    private readonly productModel: Model<ProductDocument>,
+    @InjectModel(Category.name)
+    private readonly categoryModel: Model<CategoryDocument>,
+    @InjectModel(StockAdjustment.name)
+    private readonly adjustmentModel: Model<StockAdjustmentDocument>,
+    @InjectModel(StockReconciliation.name)
+    private readonly reconciliationModel: Model<StockReconciliationDocument>,
     @InjectModel(Order.name) private readonly orderModel: Model<OrderDocument>,
     private readonly categorySuggestionService: CategorySuggestionService,
     @Inject(forwardRef(() => SubscriptionGuardService))
@@ -39,7 +65,7 @@ export class InventoryService implements OnModuleInit {
     try {
       const collection = this.productModel.collection;
       const indexes = await collection.indexes();
-      
+
       // Check for old global unique indexes and drop them
       for (const index of indexes) {
         if (index.name === 'sku_1' || index.name === 'barcode_1') {
@@ -56,10 +82,28 @@ export class InventoryService implements OnModuleInit {
 
     // Fix any existing negative stock (one-time cleanup, runs async)
     setImmediate(() => {
-      this.fixNegativeStock().catch(err => {
+      this.fixNegativeStock().catch((err) => {
         this.logger.error('Failed to fix negative stock:', err);
       });
     });
+  }
+
+  /**
+   * P0-2 RECOVERY SWEEP — reconstruct missing StockAdjustment audit records
+   * from durable mutation receipts. Idempotent; safe to run concurrently.
+   */
+  @Cron(CronExpression.EVERY_10_MINUTES)
+  async sweepUnprojectedStockMutations(): Promise<void> {
+    try {
+      const result = await this.recoverUnprojectedStockMutations();
+      if (result.recovered > 0) {
+        this.logger.warn(
+          `Stock-audit recovery sweep recovered ${result.recovered} missing audit record(s) across ${result.scanned} product(s)`,
+        );
+      }
+    } catch (error: any) {
+      this.logger.error(`Stock-audit recovery sweep failed: ${error?.message}`);
+    }
   }
 
   /**
@@ -70,13 +114,15 @@ export class InventoryService implements OnModuleInit {
     try {
       const result = await this.productModel.updateMany(
         { stock: { $lt: 0 } },
-        { $set: { stock: 0 } }
+        { $set: { stock: 0 } },
       );
-      
+
       if (result.modifiedCount > 0) {
-        this.logger.warn(`Fixed ${result.modifiedCount} products with negative stock (set to 0)`);
+        this.logger.warn(
+          `Fixed ${result.modifiedCount} products with negative stock (set to 0)`,
+        );
       }
-      
+
       return { fixed: result.modifiedCount };
     } catch (error) {
       this.logger.error('Error fixing negative stock:', error);
@@ -84,7 +130,10 @@ export class InventoryService implements OnModuleInit {
     }
   }
 
-  async createProduct(shopId: string, dto: CreateProductDto): Promise<ProductDocument> {
+  async createProduct(
+    shopId: string,
+    dto: CreateProductDto,
+  ): Promise<ProductDocument> {
     // Enforce product limit
     await this.subscriptionGuard.enforceLimit(shopId, 'products');
 
@@ -93,7 +142,9 @@ export class InventoryService implements OnModuleInit {
       name: dto.name,
       sku: dto.sku,
       barcode: dto.barcode,
-      categoryId: dto.categoryId ? new Types.ObjectId(dto.categoryId) : undefined,
+      categoryId: dto.categoryId
+        ? new Types.ObjectId(dto.categoryId)
+        : undefined,
       price: dto.price,
       cost: dto.cost ?? 0,
       stock: dto.stock ?? 0,
@@ -108,7 +159,10 @@ export class InventoryService implements OnModuleInit {
     return product;
   }
 
-  async getProductById(shopId: string, productId: string): Promise<ProductDocument | null> {
+  async getProductById(
+    shopId: string,
+    productId: string,
+  ): Promise<ProductDocument | null> {
     return this.productModel
       .findOne({
         _id: new Types.ObjectId(productId),
@@ -117,7 +171,11 @@ export class InventoryService implements OnModuleInit {
       .exec();
   }
 
-  async updateProduct(shopId: string, productId: string, dto: UpdateProductDto): Promise<ProductDocument | null> {
+  async updateProduct(
+    shopId: string,
+    productId: string,
+    dto: UpdateProductDto,
+  ): Promise<ProductDocument | null> {
     const product = await this.productModel.findOne({
       _id: new Types.ObjectId(productId),
       shopId: new Types.ObjectId(shopId),
@@ -132,14 +190,17 @@ export class InventoryService implements OnModuleInit {
     if (dto.sku !== undefined) product.sku = dto.sku;
     if (dto.barcode !== undefined) product.barcode = dto.barcode;
     if (dto.categoryId !== undefined) {
-      product.categoryId = dto.categoryId ? new Types.ObjectId(dto.categoryId) : undefined;
+      product.categoryId = dto.categoryId
+        ? new Types.ObjectId(dto.categoryId)
+        : undefined;
     }
     if (dto.price !== undefined) product.price = dto.price;
     if (dto.cost !== undefined) product.cost = dto.cost;
     if (dto.stock !== undefined) product.stock = dto.stock;
     if (dto.tax !== undefined) product.tax = dto.tax;
     if (dto.status !== undefined) product.status = dto.status;
-    if (dto.lowStockThreshold !== undefined) product.lowStockThreshold = dto.lowStockThreshold;
+    if (dto.lowStockThreshold !== undefined)
+      product.lowStockThreshold = dto.lowStockThreshold;
     if (dto.description !== undefined) product.description = dto.description;
     if (dto.image !== undefined) product.image = dto.image;
 
@@ -151,7 +212,11 @@ export class InventoryService implements OnModuleInit {
    * Soft delete a product (sets deletedAt timestamp instead of removing)
    * Product can be restored later if needed
    */
-  async deleteProduct(shopId: string, productId: string, userId?: string): Promise<{ deleted: boolean; message: string }> {
+  async deleteProduct(
+    shopId: string,
+    productId: string,
+    userId?: string,
+  ): Promise<{ deleted: boolean; message: string }> {
     const product = await this.productModel.findOne({
       _id: new Types.ObjectId(productId),
       shopId: new Types.ObjectId(shopId),
@@ -165,15 +230,15 @@ export class InventoryService implements OnModuleInit {
     // Soft delete: set deletedAt timestamp and deletedBy user
     await this.productModel.updateOne(
       { _id: new Types.ObjectId(productId) },
-      { 
-        $set: { 
+      {
+        $set: {
           deletedAt: new Date(),
           deletedBy: userId ? new Types.ObjectId(userId) : undefined,
           status: 'inactive', // Also mark as inactive
-        } 
-      }
+        },
+      },
     );
-    
+
     // Decrement product count
     await this.subscriptionGuard.decrementUsage(shopId, 'products');
 
@@ -183,7 +248,10 @@ export class InventoryService implements OnModuleInit {
   /**
    * Restore a soft-deleted product
    */
-  async restoreProduct(shopId: string, productId: string): Promise<{ restored: boolean; message: string }> {
+  async restoreProduct(
+    shopId: string,
+    productId: string,
+  ): Promise<{ restored: boolean; message: string }> {
     const product = await this.productModel.findOne({
       _id: new Types.ObjectId(productId),
       shopId: new Types.ObjectId(shopId),
@@ -199,7 +267,7 @@ export class InventoryService implements OnModuleInit {
 
     await this.productModel.updateOne(
       { _id: new Types.ObjectId(productId) },
-      { $unset: { deletedAt: 1, deletedBy: 1 }, $set: { status: 'active' } }
+      { $unset: { deletedAt: 1, deletedBy: 1 }, $set: { status: 'active' } },
     );
 
     // Increment product count
@@ -212,7 +280,10 @@ export class InventoryService implements OnModuleInit {
    * Permanently delete a product (hard delete)
    * Use with caution - this cannot be undone
    */
-  async permanentlyDeleteProduct(shopId: string, productId: string): Promise<{ deleted: boolean; message: string }> {
+  async permanentlyDeleteProduct(
+    shopId: string,
+    productId: string,
+  ): Promise<{ deleted: boolean; message: string }> {
     const product = await this.productModel.findOne({
       _id: new Types.ObjectId(productId),
       shopId: new Types.ObjectId(shopId),
@@ -223,7 +294,7 @@ export class InventoryService implements OnModuleInit {
     }
 
     await this.productModel.deleteOne({ _id: new Types.ObjectId(productId) });
-    
+
     // Only decrement if product wasn't already soft-deleted
     if (!product.deletedAt) {
       await this.subscriptionGuard.decrementUsage(shopId, 'products');
@@ -232,21 +303,25 @@ export class InventoryService implements OnModuleInit {
     return { deleted: true, message: 'Product permanently deleted' };
   }
 
-  async listProducts(shopId: string, q: QueryProductsDto): Promise<ProductDocument[]> {
+  async listProducts(
+    shopId: string,
+    q: QueryProductsDto,
+  ): Promise<ProductDocument[]> {
     const filter: FilterQuery<ProductDocument> = {
       shopId: new Types.ObjectId(shopId),
       deletedAt: { $exists: false }, // Exclude soft-deleted products by default
     };
-    
+
     if (q.q) {
       const searchTerm = q.q.trim();
-      
+
       // Check if search term looks like a barcode (numeric, 8-14 digits)
       const isBarcodeLike = /^\d{8,14}$/.test(searchTerm);
-      
+
       // Check if search term looks like a SKU (alphanumeric, typically shorter)
-      const isSkuLike = /^[A-Za-z0-9-_]{3,20}$/.test(searchTerm) && !isBarcodeLike;
-      
+      const isSkuLike =
+        /^[A-Za-z0-9-_]{3,20}$/.test(searchTerm) && !isBarcodeLike;
+
       if (isBarcodeLike) {
         // Prioritize exact barcode match for barcode-like searches
         filter.$or = [
@@ -271,7 +346,7 @@ export class InventoryService implements OnModuleInit {
         ];
       }
     }
-    
+
     if (q.categoryId) {
       filter.categoryId = new Types.ObjectId(q.categoryId);
     }
@@ -296,7 +371,7 @@ export class InventoryService implements OnModuleInit {
     // If branchId provided, transform stock to show branch-specific stock
     if (q.branchId) {
       const branchId = q.branchId; // Capture for type narrowing
-      return products.map(product => {
+      return products.map((product) => {
         const doc = product.toObject() as any;
         const branchStock = product.branchInventory?.[branchId]?.stock ?? 0;
         doc.stock = branchStock;
@@ -324,7 +399,8 @@ export class InventoryService implements OnModuleInit {
     if (q.q) {
       const searchTerm = q.q.trim();
       const isBarcodeLike = /^\d{8,14}$/.test(searchTerm);
-      const isSkuLike = /^[A-Za-z0-9-_]{3,20}$/.test(searchTerm) && !isBarcodeLike;
+      const isSkuLike =
+        /^[A-Za-z0-9-_]{3,20}$/.test(searchTerm) && !isBarcodeLike;
 
       if (isBarcodeLike) {
         filter.$or = [
@@ -365,12 +441,7 @@ export class InventoryService implements OnModuleInit {
     const sort: Record<string, 1 | -1> = { [sortField]: sortOrder };
 
     const [data, total] = await Promise.all([
-      this.productModel
-        .find(filter)
-        .sort(sort)
-        .skip(skip)
-        .limit(limit)
-        .exec(),
+      this.productModel.find(filter).sort(sort).skip(skip).limit(limit).exec(),
       this.productModel.countDocuments(filter),
     ]);
 
@@ -384,7 +455,10 @@ export class InventoryService implements OnModuleInit {
     const cacheKey = CacheService.shopKey(shopId, 'products', 'count');
     return this.cacheService.getOrSet(
       cacheKey,
-      () => this.productModel.countDocuments({ shopId: new Types.ObjectId(shopId) }),
+      () =>
+        this.productModel.countDocuments({
+          shopId: new Types.ObjectId(shopId),
+        }),
       CACHE_TTL.STATS,
     );
   }
@@ -394,109 +468,137 @@ export class InventoryService implements OnModuleInit {
    * Used for barcode scanner - returns single product or null
    * Also checks SKU as fallback for backwards compatibility
    */
-  async findByBarcode(shopId: string, barcode: string): Promise<ProductDocument | null> {
+  async findByBarcode(
+    shopId: string,
+    barcode: string,
+  ): Promise<ProductDocument | null> {
     const trimmedBarcode = barcode.trim();
     const shopObjId = new Types.ObjectId(shopId);
-    
+
     // Try exact barcode match first
-    let product = await this.productModel.findOne({
-      shopId: shopObjId,
-      barcode: trimmedBarcode,
-      status: 'active',
-      deletedAt: { $exists: false },
-    }).exec();
-    
+    let product = await this.productModel
+      .findOne({
+        shopId: shopObjId,
+        barcode: trimmedBarcode,
+        status: 'active',
+        deletedAt: { $exists: false },
+      })
+      .exec();
+
     // If not found, try with leading zeros removed (some scanners add/remove leading zeros)
     if (!product && trimmedBarcode.startsWith('0')) {
-      product = await this.productModel.findOne({
-        shopId: shopObjId,
-        barcode: trimmedBarcode.replace(/^0+/, ''),
-        status: 'active',
-        deletedAt: { $exists: false },
-      }).exec();
+      product = await this.productModel
+        .findOne({
+          shopId: shopObjId,
+          barcode: trimmedBarcode.replace(/^0+/, ''),
+          status: 'active',
+          deletedAt: { $exists: false },
+        })
+        .exec();
     }
-    
+
     // If still not found, try adding leading zero (EAN-13 vs UPC-A conversion)
     if (!product && trimmedBarcode.length === 12) {
-      product = await this.productModel.findOne({
-        shopId: shopObjId,
-        barcode: '0' + trimmedBarcode,
-        status: 'active',
-        deletedAt: { $exists: false },
-      }).exec();
+      product = await this.productModel
+        .findOne({
+          shopId: shopObjId,
+          barcode: '0' + trimmedBarcode,
+          status: 'active',
+          deletedAt: { $exists: false },
+        })
+        .exec();
     }
-    
+
     // FALLBACK: Check SKU field for backwards compatibility
     // (products created before barcode/SKU separation)
     if (!product) {
-      product = await this.productModel.findOne({
-        shopId: shopObjId,
-        sku: trimmedBarcode,
-        status: 'active',
-        deletedAt: { $exists: false },
-      }).exec();
+      product = await this.productModel
+        .findOne({
+          shopId: shopObjId,
+          sku: trimmedBarcode,
+          status: 'active',
+          deletedAt: { $exists: false },
+        })
+        .exec();
     }
-    
+
     return product;
   }
 
   /**
    * Find product by SKU
    */
-  async findBySku(shopId: string, sku: string): Promise<ProductDocument | null> {
-    return this.productModel.findOne({
-      shopId: new Types.ObjectId(shopId),
-      sku: { $regex: `^${sku.trim()}$`, $options: 'i' }, // Case-insensitive exact match
-      status: 'active',
-    }).exec();
+  async findBySku(
+    shopId: string,
+    sku: string,
+  ): Promise<ProductDocument | null> {
+    return this.productModel
+      .findOne({
+        shopId: new Types.ObjectId(shopId),
+        sku: { $regex: `^${sku.trim()}$`, $options: 'i' }, // Case-insensitive exact match
+        status: 'active',
+      })
+      .exec();
   }
 
   /**
    * Quick search for POS - optimized for speed
    * Searches barcode (exact), SKU (prefix), and name (contains)
    */
-  async quickSearch(shopId: string, term: string, limit: number = 10): Promise<ProductDocument[]> {
+  async quickSearch(
+    shopId: string,
+    term: string,
+    limit: number = 10,
+  ): Promise<ProductDocument[]> {
     const searchTerm = term.trim();
     if (!searchTerm) return [];
 
     const shopObjectId = new Types.ObjectId(shopId);
 
     // First, try exact barcode match (fastest for scanner)
-    const exactBarcode = await this.productModel.findOne({
-      shopId: shopObjectId,
-      barcode: searchTerm,
-      status: 'active',
-    }).exec();
+    const exactBarcode = await this.productModel
+      .findOne({
+        shopId: shopObjectId,
+        barcode: searchTerm,
+        status: 'active',
+      })
+      .exec();
 
     if (exactBarcode) {
       return [exactBarcode];
     }
 
     // Then try SKU prefix match
-    const skuMatches = await this.productModel.find({
-      shopId: shopObjectId,
-      sku: { $regex: `^${searchTerm}`, $options: 'i' },
-      status: 'active',
-    }).limit(limit).exec();
+    const skuMatches = await this.productModel
+      .find({
+        shopId: shopObjectId,
+        sku: { $regex: `^${searchTerm}`, $options: 'i' },
+        status: 'active',
+      })
+      .limit(limit)
+      .exec();
 
     if (skuMatches.length > 0) {
       return skuMatches;
     }
 
     // Finally, search by name
-    return this.productModel.find({
-      shopId: shopObjectId,
-      $or: [
-        { name: { $regex: searchTerm, $options: 'i' } },
-        { barcode: { $regex: searchTerm, $options: 'i' } },
-      ],
-      status: 'active',
-    }).limit(limit).exec();
+    return this.productModel
+      .find({
+        shopId: shopObjectId,
+        $or: [
+          { name: { $regex: searchTerm, $options: 'i' } },
+          { barcode: { $regex: searchTerm, $options: 'i' } },
+        ],
+        status: 'active',
+      })
+      .limit(limit)
+      .exec();
   }
 
   async listCategories(shopId: string): Promise<any[]> {
     const shopObjId = new Types.ObjectId(shopId);
-    
+
     const categories = await this.categoryModel
       .find({ shopId: shopObjId })
       .sort({ order: 1, name: 1 })
@@ -505,12 +607,12 @@ export class InventoryService implements OnModuleInit {
 
     // Get accurate product counts using aggregation (excludes soft-deleted products)
     const productCounts = await this.productModel.aggregate([
-      { 
-        $match: { 
+      {
+        $match: {
           shopId: shopObjId,
           deletedAt: { $exists: false },
           status: 'active',
-        } 
+        },
       },
       { $group: { _id: '$categoryId', count: { $sum: 1 } } },
     ]);
@@ -526,7 +628,7 @@ export class InventoryService implements OnModuleInit {
     const countMap = new Map<string, number>();
     let categorizedCount = 0;
     let uncategorizedCount = 0;
-    
+
     productCounts.forEach((pc) => {
       if (pc._id) {
         countMap.set(pc._id.toString(), pc.count);
@@ -548,11 +650,11 @@ export class InventoryService implements OnModuleInit {
       categories: categoriesWithCounts,
       meta: {
         totalCategories: categories.length,
-        rootCategories: categories.filter(c => !c.parentId).length,
+        rootCategories: categories.filter((c) => !c.parentId).length,
         totalProducts,
         categorizedProducts: categorizedCount,
         uncategorizedProducts: uncategorizedCount,
-      }
+      },
     } as any;
   }
 
@@ -560,16 +662,18 @@ export class InventoryService implements OnModuleInit {
    * Sync all category product counts for a shop
    * This fixes any stale productCount values in the database
    */
-  async syncCategoryProductCounts(shopId: string): Promise<{ synced: number; updated: number }> {
+  async syncCategoryProductCounts(
+    shopId: string,
+  ): Promise<{ synced: number; updated: number }> {
     const shopObjId = new Types.ObjectId(shopId);
-    
+
     // Get accurate counts using aggregation (excludes soft-deleted products)
     const productCounts = await this.productModel.aggregate([
-      { 
-        $match: { 
+      {
+        $match: {
           shopId: shopObjId,
           deletedAt: { $exists: false },
-        } 
+        },
       },
       { $group: { _id: '$categoryId', count: { $sum: 1 } } },
     ]);
@@ -584,7 +688,7 @@ export class InventoryService implements OnModuleInit {
 
     // Get all categories for this shop
     const categories = await this.categoryModel.find({ shopId: shopObjId });
-    
+
     let updated = 0;
     for (const category of categories) {
       const actualCount = countMap.get(category._id.toString()) || 0;
@@ -595,13 +699,23 @@ export class InventoryService implements OnModuleInit {
       }
     }
 
-    this.logger.log(`Synced category counts for shop ${shopId}: ${categories.length} categories, ${updated} updated`);
+    this.logger.log(
+      `Synced category counts for shop ${shopId}: ${categories.length} categories, ${updated} updated`,
+    );
     return { synced: categories.length, updated };
   }
 
-  async createCategory(shopId: string, dto: CreateCategoryDto): Promise<CategoryDocument> {
+  async createCategory(
+    shopId: string,
+    dto: CreateCategoryDto,
+  ): Promise<CategoryDocument> {
     // Generate slug if not provided
-    const slug = dto.slug || dto.name.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, '');
+    const slug =
+      dto.slug ||
+      dto.name
+        .toLowerCase()
+        .replace(/\s+/g, '-')
+        .replace(/[^\w-]/g, '');
 
     // Check for duplicate slug within shop
     const existing = await this.categoryModel.findOne({
@@ -610,7 +724,9 @@ export class InventoryService implements OnModuleInit {
     });
 
     if (existing) {
-      throw new BadRequestException(`Category with slug "${slug}" already exists`);
+      throw new BadRequestException(
+        `Category with slug "${slug}" already exists`,
+      );
     }
 
     const category = new this.categoryModel({
@@ -628,7 +744,11 @@ export class InventoryService implements OnModuleInit {
     return category.save();
   }
 
-  async updateCategory(shopId: string, categoryId: string, dto: UpdateCategoryDto): Promise<CategoryDocument | null> {
+  async updateCategory(
+    shopId: string,
+    categoryId: string,
+    dto: UpdateCategoryDto,
+  ): Promise<CategoryDocument | null> {
     const category = await this.categoryModel.findOne({
       _id: new Types.ObjectId(categoryId),
       shopId: new Types.ObjectId(shopId),
@@ -647,7 +767,9 @@ export class InventoryService implements OnModuleInit {
       });
 
       if (existing) {
-        throw new BadRequestException(`Category with slug "${dto.slug}" already exists`);
+        throw new BadRequestException(
+          `Category with slug "${dto.slug}" already exists`,
+        );
       }
     }
 
@@ -656,7 +778,9 @@ export class InventoryService implements OnModuleInit {
     if (dto.slug) category.slug = dto.slug;
     if (dto.description !== undefined) category.description = dto.description;
     if (dto.parentId !== undefined) {
-      category.parentId = dto.parentId ? new Types.ObjectId(dto.parentId) : undefined;
+      category.parentId = dto.parentId
+        ? new Types.ObjectId(dto.parentId)
+        : undefined;
     }
     if (dto.image !== undefined) category.image = dto.image;
     if (dto.order !== undefined) category.order = dto.order;
@@ -700,7 +824,10 @@ export class InventoryService implements OnModuleInit {
     await this.categoryModel.deleteOne({ _id: new Types.ObjectId(categoryId) });
   }
 
-  async getCategoryWithProducts(shopId: string, categoryId: string): Promise<any> {
+  async getCategoryWithProducts(
+    shopId: string,
+    categoryId: string,
+  ): Promise<any> {
     const category = await this.categoryModel.findOne({
       _id: new Types.ObjectId(categoryId),
       shopId: new Types.ObjectId(shopId),
@@ -758,48 +885,408 @@ export class InventoryService implements OnModuleInit {
     return rootCategories;
   }
 
-  async updateStock(shopId: string, productId: string, quantityChange: number): Promise<ProductDocument | null> {
-    // For stock reduction, ensure we don't go below 0
-    if (quantityChange < 0) {
-      // First check current stock
-      const product = await this.productModel.findOne({
+  /**
+   * P0-2 — CANONICAL STOCK-MUTATION CONTRACT.
+   *
+   * ONE logical stock movement = ONE physical quantity change + ONE durable
+   * mutation receipt + ONE durable audit record.
+   *
+   * The receipt is pushed in the SAME document write as the $inc, so receipt
+   * presence proves the mutation landed and receipt absence proves it never
+   * did — there is no window in which stock moves without durable evidence.
+   * Mutation-identity idempotency: a retry with the same mutationId matches
+   * nothing and performs zero additional stock effect. The StockAdjustment
+   * audit projection happens separately; if it fails, the durable receipt
+   * remains and recovery reconstructs the audit from receipt facts (never
+   * from current stock).
+   *
+   * Negative-delta safety preserves the established production behavior:
+   * a reduction that would drive stock below zero is clamped to zero and the
+   * receipt records the ACTUAL applied delta.
+   */
+  private async applyStockMutation(params: {
+    shopId: string;
+    productId: string;
+    quantityDelta: number;
+    mutationId: string;
+    reason: string;
+    actor: string;
+    referenceType?: string;
+    referenceId?: string;
+    branchId?: string;
+    notes?: string;
+    skipAuditProjection?: boolean;
+  }): Promise<ProductDocument | null> {
+    const {
+      shopId,
+      productId,
+      quantityDelta,
+      mutationId,
+      reason,
+      actor,
+      referenceType,
+      referenceId,
+      branchId,
+      notes,
+    } = params;
+
+    const existing = await this.productModel
+      .findOne({
         _id: new Types.ObjectId(productId),
         shopId: new Types.ObjectId(shopId),
-      }).exec();
-      
-      if (!product) {
-        return null;
-      }
-      
-      const currentStock = product.stock || 0;
-      const newStock = currentStock + quantityChange; // quantityChange is negative
-      
-      // Prevent negative stock - set to 0 if would go negative
-      if (newStock < 0) {
-        this.logger.warn(
-          `Stock reduction would result in negative stock for product ${productId}. ` +
-          `Current: ${currentStock}, Requested change: ${quantityChange}. Setting to 0.`
+      })
+      .exec();
+
+    if (!existing) {
+      return null;
+    }
+
+    // Idempotent retry: a durable witness for this mutationId proves the
+    // mutation already landed. Evidence lives in TWO places across the
+    // lifecycle — the embedded receipt (mutation landed, audit pending) and,
+    // after projection+cleanup, the StockAdjustment record itself (which
+    // carries the mutationId permanently). Either one proves "already
+    // applied" — the physical write is a proven no-op.
+    const receiptExists = (existing.stockMutations ?? []).some(
+      (m: any) => m.mutationId === mutationId,
+    );
+    const auditExists = receiptExists
+      ? null
+      : await this.adjustmentModel
+          .findOne({
+            shopId: new Types.ObjectId(shopId),
+            mutationId,
+          })
+          .exec();
+    if (receiptExists || auditExists) {
+      this.logger.log(
+        `Stock mutation ${mutationId} already applied for product ${productId} - no additional stock effect`,
+      );
+      return existing;
+    }
+
+    // Negative-stock safety preserves established behavior: a reduction that
+    // would drive stock below zero is clamped, and the receipt records the
+    // ACTUAL applied delta (never a claimed one).
+    let actualDelta = quantityDelta;
+    const currentStock = existing.stock || 0;
+    if (quantityDelta < 0 && currentStock + quantityDelta < 0) {
+      actualDelta = -currentStock;
+      if (actualDelta === 0) actualDelta = 0; // normalize -0
+      this.logger.warn(
+        `Stock reduction clamped for product ${productId}: requested ${quantityDelta}, applying ${actualDelta} (current ${currentStock})`,
+      );
+    }
+
+    const receipt = {
+      mutationId,
+      quantityDelta: actualDelta,
+      reason,
+      actor,
+      ...(referenceType ? { referenceType } : {}),
+      ...(referenceId ? { referenceId } : {}),
+      ...(branchId ? { branchId } : {}),
+      ...(notes ? { notes } : {}),
+      audited: false,
+      createdAt: new Date(),
+    };
+
+    // ATOMIC: the physical change and its durable witness share one document
+    // write. Receipt present = mutation landed; receipt absent = never applied.
+    const updated = await this.productModel
+      .findOneAndUpdate(
+        {
+          _id: new Types.ObjectId(productId),
+          shopId: new Types.ObjectId(shopId),
+          'stockMutations.mutationId': { $ne: mutationId },
+        },
+        {
+          $inc: { stock: actualDelta },
+          $push: {
+            stockMutations: {
+              mutationId,
+              quantityDelta: actualDelta,
+              reason,
+              actor,
+              ...(referenceType ? { referenceType } : {}),
+              ...(referenceId ? { referenceId } : {}),
+              ...(branchId ? { branchId } : {}),
+              ...(notes ? { notes } : {}),
+              audited: false,
+              createdAt: new Date(),
+            },
+          },
+        },
+        { new: true },
+      )
+      .exec();
+
+    if (!updated) {
+      // Lost an idempotency race against a concurrent identical mutation —
+      // the winner's receipt is the durable evidence.
+      this.logger.log(
+        `Stock mutation ${mutationId} lost an idempotency race - canonical receipt already present`,
+      );
+      return this.productModel
+        .findOne({
+          _id: new Types.ObjectId(productId),
+          shopId: new Types.ObjectId(shopId),
+        })
+        .exec();
+    }
+
+    // NOTE: the audit projection is performed by the public entry points
+    // (updateStock / branch methods) which own the business context. This
+    // primitive only guarantees the atomic mutation + durable receipt.
+    return updated;
+  }
+
+  /**
+   * AUDIT PROJECTION — persist the StockAdjustment for a durable receipt and
+   * finalize the receipt. Failure of the projection leaves the receipt in
+   * place (audited: false) for recovery; it never throws to the caller
+   * because the physical mutation has already landed.
+   */
+  private async projectStockMutation(
+    shopId: string,
+    productId: string,
+    receipt: {
+      mutationId: string;
+      quantityDelta: number;
+      reason: string;
+      actor: string;
+      referenceType?: string;
+      referenceId?: string;
+      branchId?: string;
+      notes?: string;
+    },
+  ): Promise<void> {
+    try {
+      const existing = await this.adjustmentModel
+        .findOne({
+          shopId: new Types.ObjectId(shopId),
+          mutationId: receipt.mutationId,
+        })
+        .exec();
+
+      if (!existing) {
+        await this.createStockAdjustment(
+          shopId,
+          productId,
+          receipt.quantityDelta,
+          this.toAdjustmentReason(receipt.reason),
+          receipt.actor,
+          receipt.notes,
+          receipt.mutationId,
         );
-        return this.productModel
-          .findOneAndUpdate(
-            { _id: new Types.ObjectId(productId), shopId: new Types.ObjectId(shopId) },
-            { $set: { stock: 0 } },
-            { new: true }
+      }
+
+      // Finalize: mark audited, then pull. A crash between the two leaves an
+      // audited receipt that recovery safely removes without duplicating the
+      // audit record (mutationId pre-read guards every path).
+      await this.productModel
+        .updateOne(
+          {
+            _id: new Types.ObjectId(productId),
+            shopId: new Types.ObjectId(shopId),
+          },
+          { $set: { 'stockMutations.$[m].audited': true } },
+          { arrayFilters: [{ 'm.mutationId': receipt.mutationId }] },
+        )
+        .exec();
+      await this.productModel
+        .updateOne(
+          {
+            _id: new Types.ObjectId(productId),
+            shopId: new Types.ObjectId(shopId),
+          },
+          {
+            $pull: {
+              stockMutations: { mutationId: receipt.mutationId, audited: true },
+            },
+          },
+        )
+        .exec();
+    } catch (error: any) {
+      // The durable receipt remains — recovery reconstructs the audit.
+      this.logger.error(
+        `Audit projection failed for stock mutation ${receipt.mutationId} (product ${productId}): ${error?.message} - durable receipt retained for recovery`,
+      );
+    }
+  }
+
+  /**
+   * RECOVERY — reconstruct missing StockAdjustment audit records from durable
+   * mutation receipts. Uses receipt facts only (never current-stock guesses).
+   * Idempotent and concurrency-safe: the (shopId, mutationId) unique index
+   * ensures exactly one audit record per mutation; audited receipts are
+   * finalized and pulled.
+   */
+  async recoverUnprojectedStockMutations(shopId?: string): Promise<{
+    scanned: number;
+    recovered: number;
+    alreadyAudited: number;
+  }> {
+    const filter: any = { stockMutations: { $exists: true, $ne: [] } };
+    if (shopId) {
+      filter.shopId = new Types.ObjectId(shopId);
+    }
+
+    const products = await this.productModel.find(filter).exec();
+    let recovered = 0;
+    let alreadyAudited = 0;
+
+    for (const product of products) {
+      for (const receipt of product.stockMutations ?? []) {
+        if (receipt.audited) {
+          // Crash-after-audit window: audit exists, only cleanup remained.
+          alreadyAudited += 1;
+          continue;
+        }
+
+        const existing = await this.adjustmentModel
+          .findOne({
+            shopId: product.shopId,
+            mutationId: receipt.mutationId,
+          })
+          .exec();
+
+        if (!existing) {
+          try {
+            await this.createStockAdjustment(
+              product.shopId.toString(),
+              product._id.toString(),
+              receipt.quantityDelta,
+              this.toAdjustmentReason(receipt.reason),
+              receipt.actor,
+              receipt.notes ??
+                `Recovered audit for mutation ${receipt.mutationId}${receipt.referenceId ? ` (${receipt.referenceType ?? 'event'} ${receipt.referenceId})` : ''}`,
+              receipt.mutationId,
+            );
+            recovered += 1;
+            this.logger.warn(
+              `Recovered missing stock audit from durable receipt ${receipt.mutationId} (product ${product._id}, delta ${receipt.quantityDelta})`,
+            );
+          } catch (error: any) {
+            if (error?.code === 11000) {
+              // Concurrent recovery worker won the unique index - treat as
+              // projected.
+              alreadyAudited += 1;
+            } else {
+              this.logger.error(
+                `Failed to recover stock audit for mutation ${receipt.mutationId}: ${error?.message}`,
+              );
+              continue;
+            }
+          }
+        } else {
+          alreadyAudited += 1;
+        }
+
+        await this.productModel
+          .updateOne(
+            { _id: product._id, shopId: product.shopId },
+            { $set: { 'stockMutations.$[m].audited': true } },
+            { arrayFilters: [{ 'm.mutationId': receipt.mutationId }] },
           )
           .exec();
       }
+
+      // Cleanup: remove finalized receipts (audit durably persisted).
+      await this.productModel
+        .updateOne(
+          { _id: product._id, shopId: product.shopId },
+          { $pull: { stockMutations: { audited: true } } },
+        )
+        .exec();
     }
-    
-    return this.productModel
-      .findOneAndUpdate(
-        { _id: new Types.ObjectId(productId), shopId: new Types.ObjectId(shopId) },
-        { $inc: { stock: quantityChange } },
-        { new: true }
-      )
-      .exec();
+
+    if (recovered > 0 || alreadyAudited > 0) {
+      this.logger.log(
+        `Stock-audit recovery sweep: scanned ${products.length} product(s), recovered ${recovered}, finalized ${alreadyAudited}`,
+      );
+    }
+
+    return { scanned: products.length, recovered, alreadyAudited };
   }
 
-  async getLowStockProducts(shopId: string, defaultThreshold = 10): Promise<ProductDocument[]> {
+  /**
+   * OBSERVABILITY — count durable receipts awaiting audit projection.
+   */
+  async countUnprojectedStockMutations(shopId?: string): Promise<number> {
+    const filter: any = { 'stockMutations.audited': false };
+    if (shopId) {
+      filter.shopId = new Types.ObjectId(shopId);
+    }
+    const products = await this.productModel
+      .find(filter)
+      .select('stockMutations')
+      .exec();
+    return products.reduce(
+      (sum: number, p: any) =>
+        sum +
+        (p.stockMutations ?? []).filter((m: any) => m.audited === false).length,
+      0,
+    );
+  }
+
+  async updateStock(
+    shopId: string,
+    productId: string,
+    quantityChange: number,
+    evidence?: {
+      mutationId?: string;
+      reason?: string;
+      actor?: string;
+      referenceType?: string;
+      referenceId?: string;
+      notes?: string;
+    },
+  ): Promise<ProductDocument | null> {
+    const mutationId = evidence?.mutationId ?? `mutation:${nanoid(16)}`;
+    const reason = evidence?.reason ?? 'other';
+
+    const updated = await this.applyStockMutation({
+      shopId,
+      productId,
+      quantityDelta: quantityChange,
+      mutationId,
+      reason,
+      actor: evidence?.actor ?? 'system',
+      referenceType: evidence?.referenceType,
+      referenceId: evidence?.referenceId,
+      notes: evidence?.notes,
+    });
+
+    if (!updated) {
+      return null;
+    }
+
+    // AUDIT PROJECTION — durable receipt already witnesses the mutation; the
+    // StockAdjustment record is the queryable projection. Projection failure
+    // is logged + recoverable, never thrown.
+    const appliedReceipt = (updated.stockMutations ?? []).find(
+      (m: any) => m.mutationId === mutationId,
+    );
+    await this.projectStockMutation(shopId, productId, {
+      mutationId,
+      quantityDelta: appliedReceipt
+        ? appliedReceipt.quantityDelta
+        : quantityChange,
+      reason,
+      actor: evidence?.actor ?? 'system',
+      referenceType: evidence?.referenceType,
+      referenceId: evidence?.referenceId,
+      notes: evidence?.notes,
+    });
+
+    return updated;
+  }
+
+  async getLowStockProducts(
+    shopId: string,
+    defaultThreshold = 10,
+  ): Promise<ProductDocument[]> {
     // Use MongoDB $expr to compare stock against each product's own lowStockThreshold
     // Falls back to defaultThreshold if product doesn't have lowStockThreshold set
     return this.productModel
@@ -809,9 +1296,9 @@ export class InventoryService implements OnModuleInit {
         $expr: {
           $lte: [
             '$stock',
-            { $ifNull: ['$lowStockThreshold', defaultThreshold] }
-          ]
-        }
+            { $ifNull: ['$lowStockThreshold', defaultThreshold] },
+          ],
+        },
       })
       .sort({ stock: 1 })
       .exec();
@@ -819,12 +1306,12 @@ export class InventoryService implements OnModuleInit {
 
   /**
    * Import products with automatic category creation and suggestion
-   * 
+   *
    * OPTIMIZED FOR SPEED:
    * - Uses bulk operations (insertMany, bulkWrite) instead of individual saves
    * - Pre-fetches all existing products by SKU/barcode in one query
    * - Batches category product count updates
-   * 
+   *
    * Options:
    * - autoCreateCategories: Create categories from category names in CSV (default: true)
    * - autoSuggestCategories: Suggest categories based on product names (default: true)
@@ -832,11 +1319,11 @@ export class InventoryService implements OnModuleInit {
    * - skipDuplicates: Skip products with duplicate SKU/barcode (default: true)
    */
   async importProducts(
-    shopId: string, 
-    products: CreateProductDto[], 
-    options: BulkImportOptionsDto = {}
-  ): Promise<{ 
-    imported: number; 
+    shopId: string,
+    products: CreateProductDto[],
+    options: BulkImportOptionsDto = {},
+  ): Promise<{
+    imported: number;
     updated: number;
     skipped: number;
     errors: string[];
@@ -859,7 +1346,7 @@ export class InventoryService implements OnModuleInit {
     const categoriesCreated: string[] = [];
     const categorySuggestions: { [productName: string]: string } = {};
     const shopObjId = new Types.ObjectId(shopId);
-    
+
     // If targetCategoryId is provided, validate it exists
     let targetCategory: Types.ObjectId | undefined;
     if (targetCategoryId) {
@@ -870,7 +1357,9 @@ export class InventoryService implements OnModuleInit {
         });
         if (categoryExists) {
           targetCategory = categoryExists._id;
-          this.logger.log(`Importing all products to category: ${categoryExists.name}`);
+          this.logger.log(
+            `Importing all products to category: ${categoryExists.name}`,
+          );
         } else {
           errors.push(`Target category not found: ${targetCategoryId}`);
         }
@@ -881,9 +1370,12 @@ export class InventoryService implements OnModuleInit {
 
     // Step 1: Build category name to ID mapping
     const categoryNameToId = new Map<string, Types.ObjectId>();
-    const existingCategories = await this.categoryModel.find({ shopId: shopObjId }).lean().exec();
-    
-    existingCategories.forEach(cat => {
+    const existingCategories = await this.categoryModel
+      .find({ shopId: shopObjId })
+      .lean()
+      .exec();
+
+    existingCategories.forEach((cat) => {
       categoryNameToId.set(cat.name.toLowerCase(), cat._id);
       if (cat.slug) categoryNameToId.set(cat.slug, cat._id);
     });
@@ -897,20 +1389,26 @@ export class InventoryService implements OnModuleInit {
         .project({ _id: 1, name: 1 })
         .toArray();
       existingSuppliers.forEach((s: any) => {
-        if (s.name) supplierNameToId.set(String(s.name).toLowerCase().trim(), s._id);
+        if (s.name)
+          supplierNameToId.set(String(s.name).toLowerCase().trim(), s._id);
       });
     } catch (err) {
-      this.logger.warn(`Could not preload suppliers for import: ${(err as any)?.message}`);
+      this.logger.warn(
+        `Could not preload suppliers for import: ${err?.message}`,
+      );
     }
 
     // Step 2: Collect all unique category names and suggest categories
     const categoryNamesToCreate = new Set<string>();
-    
+
     for (const product of products) {
       let categoryName = product.category;
-      
+
       if (!categoryName && !product.categoryId && autoSuggestCategories) {
-        const suggested = this.categorySuggestionService.suggestCategory(product.name, product.brand);
+        const suggested = this.categorySuggestionService.suggestCategory(
+          product.name,
+          product.brand,
+        );
         if (suggested) {
           categoryName = suggested;
           categorySuggestions[product.name] = suggested;
@@ -927,17 +1425,22 @@ export class InventoryService implements OnModuleInit {
 
     // Step 3: Bulk create missing categories
     if (categoryNamesToCreate.size > 0) {
-      const categoriesToInsert = Array.from(categoryNamesToCreate).map(name => ({
-        shopId: shopObjId,
-        name,
-        slug: this.generateSlug(name),
-        status: 'active',
-        productCount: 0,
-      }));
+      const categoriesToInsert = Array.from(categoryNamesToCreate).map(
+        (name) => ({
+          shopId: shopObjId,
+          name,
+          slug: this.generateSlug(name),
+          status: 'active',
+          productCount: 0,
+        }),
+      );
 
       try {
-        const insertedCategories = await this.categoryModel.insertMany(categoriesToInsert, { ordered: false });
-        insertedCategories.forEach(cat => {
+        const insertedCategories = await this.categoryModel.insertMany(
+          categoriesToInsert,
+          { ordered: false },
+        );
+        insertedCategories.forEach((cat) => {
           categoryNameToId.set(cat.name.toLowerCase(), cat._id);
           categoryNameToId.set(cat.slug, cat._id);
           categoriesCreated.push(cat.name);
@@ -957,23 +1460,27 @@ export class InventoryService implements OnModuleInit {
     }
 
     // Step 4: Pre-fetch all existing products by SKU/barcode in ONE query
-    const skus = products.map(p => p.sku).filter(Boolean) as string[];
-    const barcodes = products.map(p => p.barcode).filter(Boolean) as string[];
-    
-    const existingProductsMap = new Map<string, ProductDocument>();
-    
-    if (skus.length > 0 || barcodes.length > 0) {
-      const existingProducts = await this.productModel.find({
-        shopId: shopObjId,
-        $or: [
-          ...(skus.length > 0 ? [{ sku: { $in: skus } }] : []),
-          ...(barcodes.length > 0 ? [{ barcode: { $in: barcodes } }] : []),
-        ],
-      }).lean().exec();
+    const skus = products.map((p) => p.sku).filter(Boolean) as string[];
+    const barcodes = products.map((p) => p.barcode).filter(Boolean) as string[];
 
-      existingProducts.forEach(p => {
+    const existingProductsMap = new Map<string, ProductDocument>();
+
+    if (skus.length > 0 || barcodes.length > 0) {
+      const existingProducts = await this.productModel
+        .find({
+          shopId: shopObjId,
+          $or: [
+            ...(skus.length > 0 ? [{ sku: { $in: skus } }] : []),
+            ...(barcodes.length > 0 ? [{ barcode: { $in: barcodes } }] : []),
+          ],
+        })
+        .lean()
+        .exec();
+
+      existingProducts.forEach((p) => {
         if (p.sku) existingProductsMap.set(`sku:${p.sku}`, p as any);
-        if (p.barcode) existingProductsMap.set(`barcode:${p.barcode}`, p as any);
+        if (p.barcode)
+          existingProductsMap.set(`barcode:${p.barcode}`, p as any);
       });
     }
 
@@ -984,7 +1491,7 @@ export class InventoryService implements OnModuleInit {
 
     for (let i = 0; i < products.length; i++) {
       const dto = products[i];
-      
+
       if (!dto.name || dto.price === undefined || dto.price === null) {
         errors.push(`Row ${i + 1}: Missing required fields (name, price)`);
         continue;
@@ -992,7 +1499,7 @@ export class InventoryService implements OnModuleInit {
 
       // Resolve category ID - use targetCategory if provided, otherwise resolve from CSV/suggestions
       let categoryId: Types.ObjectId | undefined = undefined;
-      
+
       if (targetCategory) {
         // Use the target category for all products
         categoryId = targetCategory;
@@ -1006,25 +1513,35 @@ export class InventoryService implements OnModuleInit {
       } else if (dto.category) {
         categoryId = categoryNameToId.get(dto.category.toLowerCase());
       } else if (categorySuggestions[dto.name]) {
-        categoryId = categoryNameToId.get(categorySuggestions[dto.name].toLowerCase());
+        categoryId = categoryNameToId.get(
+          categorySuggestions[dto.name].toLowerCase(),
+        );
       }
 
       // Check for existing product
-      const existingBySku = dto.sku ? existingProductsMap.get(`sku:${dto.sku}`) : null;
-      const existingByBarcode = dto.barcode ? existingProductsMap.get(`barcode:${dto.barcode}`) : null;
+      const existingBySku = dto.sku
+        ? existingProductsMap.get(`sku:${dto.sku}`)
+        : null;
+      const existingByBarcode = dto.barcode
+        ? existingProductsMap.get(`barcode:${dto.barcode}`)
+        : null;
       const existingProduct = existingBySku || existingByBarcode;
 
       // Resolve preferredSupplierId from dto.supplier (name) or dto.preferredSupplierId (ObjectId)
       let preferredSupplierId: Types.ObjectId | undefined;
       if ((dto as any).preferredSupplierId) {
         try {
-          preferredSupplierId = new Types.ObjectId((dto as any).preferredSupplierId);
+          preferredSupplierId = new Types.ObjectId(
+            (dto as any).preferredSupplierId,
+          );
         } catch {
           // Invalid ObjectId, fall through to name resolution
         }
       }
       if (!preferredSupplierId && (dto as any).supplier) {
-        const supplierName = String((dto as any).supplier).toLowerCase().trim();
+        const supplierName = String((dto as any).supplier)
+          .toLowerCase()
+          .trim();
         preferredSupplierId = supplierNameToId.get(supplierName);
         if (!preferredSupplierId) {
           // Non-blocking: product will still import, but without supplier link.
@@ -1038,21 +1555,48 @@ export class InventoryService implements OnModuleInit {
       // Build extended field payload (only include fields explicitly present on DTO)
       const extendedFields: any = {};
       const optionalStringFields = [
-        'unitOfMeasure', 'weightUnit', 'batchNumber', 'lotNumber',
-        'serialNumber', 'imeiNumber', 'drugSchedule', 'dosageForm', 'strength',
-        'activeIngredient', 'storageConditions', 'manufacturer',
-        'size', 'color', 'material', 'season',
-        'vehicleMake', 'vehicleModel', 'vehicleYear', 'partNumber', 'oemNumber',
+        'unitOfMeasure',
+        'weightUnit',
+        'batchNumber',
+        'lotNumber',
+        'serialNumber',
+        'imeiNumber',
+        'drugSchedule',
+        'dosageForm',
+        'strength',
+        'activeIngredient',
+        'storageConditions',
+        'manufacturer',
+        'size',
+        'color',
+        'material',
+        'season',
+        'vehicleMake',
+        'vehicleModel',
+        'vehicleYear',
+        'partNumber',
+        'oemNumber',
         'withdrawalPeriod',
       ];
       for (const f of optionalStringFields) {
-        if ((dto as any)[f] !== undefined && (dto as any)[f] !== null && (dto as any)[f] !== '') {
+        if (
+          (dto as any)[f] !== undefined &&
+          (dto as any)[f] !== null &&
+          (dto as any)[f] !== ''
+        ) {
           extendedFields[f] = (dto as any)[f];
         }
       }
       const optionalNumberFields = [
-        'weight', 'pricePerUnit', 'warrantyMonths', 'preparationTime',
-        'calorieCount', 'coreCharge', 'duration', 'reorderQuantity', 'leadTimeDays',
+        'weight',
+        'pricePerUnit',
+        'warrantyMonths',
+        'preparationTime',
+        'calorieCount',
+        'coreCharge',
+        'duration',
+        'reorderQuantity',
+        'leadTimeDays',
       ];
       for (const f of optionalNumberFields) {
         const v = (dto as any)[f];
@@ -1071,7 +1615,8 @@ export class InventoryService implements OnModuleInit {
       }
       // Boolean fields
       if ((dto as any).requiresPrescription !== undefined) {
-        extendedFields.requiresPrescription = !!(dto as any).requiresPrescription;
+        extendedFields.requiresPrescription = !!(dto as any)
+          .requiresPrescription;
       }
       if ((dto as any).isService !== undefined) {
         extendedFields.isService = !!(dto as any).isService;
@@ -1080,13 +1625,22 @@ export class InventoryService implements OnModuleInit {
       if (Array.isArray((dto as any).tags) && (dto as any).tags.length) {
         extendedFields.tags = (dto as any).tags;
       }
-      if (Array.isArray((dto as any).ingredients) && (dto as any).ingredients.length) {
+      if (
+        Array.isArray((dto as any).ingredients) &&
+        (dto as any).ingredients.length
+      ) {
         extendedFields.ingredients = (dto as any).ingredients;
       }
-      if (Array.isArray((dto as any).allergens) && (dto as any).allergens.length) {
+      if (
+        Array.isArray((dto as any).allergens) &&
+        (dto as any).allergens.length
+      ) {
         extendedFields.allergens = (dto as any).allergens;
       }
-      if (Array.isArray((dto as any).targetSpecies) && (dto as any).targetSpecies.length) {
+      if (
+        Array.isArray((dto as any).targetSpecies) &&
+        (dto as any).targetSpecies.length
+      ) {
         extendedFields.targetSpecies = (dto as any).targetSpecies;
       }
       if (preferredSupplierId) {
@@ -1109,8 +1663,12 @@ export class InventoryService implements OnModuleInit {
                   status: dto.status ?? existingProduct.status ?? 'active',
                   description: dto.description ?? existingProduct.description,
                   brand: dto.brand ?? existingProduct.brand,
-                  lowStockThreshold: dto.lowStockThreshold ?? existingProduct.lowStockThreshold ?? 10,
-                  reorderPoint: dto.reorderPoint ?? existingProduct.reorderPoint ?? 0,
+                  lowStockThreshold:
+                    dto.lowStockThreshold ??
+                    existingProduct.lowStockThreshold ??
+                    10,
+                  reorderPoint:
+                    dto.reorderPoint ?? existingProduct.reorderPoint ?? 0,
                   ...extendedFields,
                   updatedAt: new Date(),
                 },
@@ -1150,14 +1708,19 @@ export class InventoryService implements OnModuleInit {
       // Track category product counts
       if (categoryId) {
         const catIdStr = categoryId.toString();
-        categoryProductCounts.set(catIdStr, (categoryProductCounts.get(catIdStr) || 0) + 1);
+        categoryProductCounts.set(
+          catIdStr,
+          (categoryProductCounts.get(catIdStr) || 0) + 1,
+        );
       }
     }
 
     // Step 6: Execute bulk insert
     if (productsToInsert.length > 0) {
       try {
-        const result = await this.productModel.insertMany(productsToInsert, { ordered: false });
+        const result = await this.productModel.insertMany(productsToInsert, {
+          ordered: false,
+        });
         imported = result.length;
       } catch (err: any) {
         // Handle partial failures
@@ -1169,9 +1732,12 @@ export class InventoryService implements OnModuleInit {
             const idx = writeErr.index;
             const productName = productsToInsert[idx]?.name || 'Unknown';
             let errorMsg = writeErr.errmsg || 'Failed to insert';
-            
+
             // Make duplicate key errors more user-friendly
-            if (errorMsg.includes('duplicate key') || errorMsg.includes('E11000')) {
+            if (
+              errorMsg.includes('duplicate key') ||
+              errorMsg.includes('E11000')
+            ) {
               if (errorMsg.includes('sku')) {
                 errorMsg = `Duplicate SKU "${productsToInsert[idx]?.sku}"`;
               } else if (errorMsg.includes('barcode')) {
@@ -1180,7 +1746,7 @@ export class InventoryService implements OnModuleInit {
                 errorMsg = 'Duplicate product';
               }
             }
-            
+
             errors.push(`Row ${idx + 1} (${productName}): ${errorMsg}`);
           });
         }
@@ -1198,15 +1764,19 @@ export class InventoryService implements OnModuleInit {
 
     // Step 8: Bulk update category product counts
     if (categoryProductCounts.size > 0) {
-      const categoryUpdateOps = Array.from(categoryProductCounts.entries()).map(([catId, count]) => ({
-        updateOne: {
-          filter: { _id: new Types.ObjectId(catId) },
-          update: { $inc: { productCount: count } },
-        },
-      }));
+      const categoryUpdateOps = Array.from(categoryProductCounts.entries()).map(
+        ([catId, count]) => ({
+          updateOne: {
+            filter: { _id: new Types.ObjectId(catId) },
+            update: { $inc: { productCount: count } },
+          },
+        }),
+      );
 
       try {
-        await this.categoryModel.bulkWrite(categoryUpdateOps, { ordered: false });
+        await this.categoryModel.bulkWrite(categoryUpdateOps, {
+          ordered: false,
+        });
       } catch (err: any) {
         this.logger.warn(`Failed to update category counts: ${err.message}`);
       }
@@ -1215,14 +1785,14 @@ export class InventoryService implements OnModuleInit {
     const duration = Date.now() - startTime;
     this.logger.log(
       `Import complete in ${duration}ms: ${imported} imported, ${updated} updated, ` +
-      `${skipped} skipped, ${categoriesCreated.length} categories created`
+        `${skipped} skipped, ${categoriesCreated.length} categories created`,
     );
 
-    return { 
-      imported, 
+    return {
+      imported,
       updated,
       skipped,
-      errors, 
+      errors,
       categoriesCreated,
       categorySuggestions,
     };
@@ -1231,7 +1801,10 @@ export class InventoryService implements OnModuleInit {
   /**
    * Analyze products before import to show what categories will be created/suggested
    */
-  async analyzeImport(shopId: string, products: CreateProductDto[]): Promise<{
+  async analyzeImport(
+    shopId: string,
+    products: CreateProductDto[],
+  ): Promise<{
     total: number;
     withCategory: number;
     withSuggestion: number;
@@ -1242,19 +1815,23 @@ export class InventoryService implements OnModuleInit {
     duplicates: number;
   }> {
     // Get existing categories
-    const existingCategories = await this.categoryModel.find({ 
-      shopId: new Types.ObjectId(shopId) 
-    }).exec();
-    const existingCategoryNames = new Set(existingCategories.map(c => c.name.toLowerCase()));
+    const existingCategories = await this.categoryModel
+      .find({
+        shopId: new Types.ObjectId(shopId),
+      })
+      .exec();
+    const existingCategoryNames = new Set(
+      existingCategories.map((c) => c.name.toLowerCase()),
+    );
 
     // Analyze products
     const analysis = this.categorySuggestionService.analyzeProducts(products);
-    
+
     // Determine which categories are new vs existing
     const newCategories: string[] = [];
     const existingCategoriesUsed: string[] = [];
-    
-    Object.keys(analysis.suggestedCategories).forEach(category => {
+
+    Object.keys(analysis.suggestedCategories).forEach((category) => {
       if (existingCategoryNames.has(category.toLowerCase())) {
         existingCategoriesUsed.push(category);
       } else {
@@ -1266,13 +1843,15 @@ export class InventoryService implements OnModuleInit {
     let duplicates = 0;
     for (const product of products) {
       if (product.sku || product.barcode) {
-        const existing = await this.productModel.findOne({
-          shopId: new Types.ObjectId(shopId),
-          $or: [
-            ...(product.sku ? [{ sku: product.sku }] : []),
-            ...(product.barcode ? [{ barcode: product.barcode }] : []),
-          ],
-        }).exec();
+        const existing = await this.productModel
+          .findOne({
+            shopId: new Types.ObjectId(shopId),
+            $or: [
+              ...(product.sku ? [{ sku: product.sku }] : []),
+              ...(product.barcode ? [{ barcode: product.barcode }] : []),
+            ],
+          })
+          .exec();
         if (existing) duplicates++;
       }
     }
@@ -1299,48 +1878,81 @@ export class InventoryService implements OnModuleInit {
       .replace(/^-|-$/g, '');
   }
 
-  async exportProducts(shopId: string, res: any, categoryId?: string): Promise<void> {
+  async exportProducts(
+    shopId: string,
+    res: any,
+    categoryId?: string,
+  ): Promise<void> {
     try {
       const filter: any = { shopId: new Types.ObjectId(shopId) };
       if (categoryId && categoryId !== 'undefined' && categoryId !== 'null') {
         filter.categoryId = new Types.ObjectId(categoryId);
       }
-      
+
       const products = await this.productModel.find(filter).exec();
-      
+
       // Get categories for name lookup
       const categories = await this.categoryModel
         .find({ shopId: new Types.ObjectId(shopId) })
         .select('_id name')
         .exec();
-      const categoryMap = new Map(categories.map(c => [c._id.toString(), c.name]));
+      const categoryMap = new Map(
+        categories.map((c) => [c._id.toString(), c.name]),
+      );
 
       // Get suppliers for name lookup (preferredSupplierId -> name)
-      const supplierIds = Array.from(new Set(
-        products
-          .map(p => (p as any).preferredSupplierId?.toString())
-          .filter(Boolean)
-      ));
+      const supplierIds = Array.from(
+        new Set(
+          products
+            .map((p) => (p as any).preferredSupplierId?.toString())
+            .filter(Boolean),
+        ),
+      );
       const supplierMap = new Map<string, string>();
       if (supplierIds.length > 0) {
         try {
           const suppliers = await this.productModel.db
             .collection('suppliers')
-            .find({ _id: { $in: supplierIds.map(id => new Types.ObjectId(id)) } })
+            .find({
+              _id: { $in: supplierIds.map((id) => new Types.ObjectId(id)) },
+            })
             .project({ name: 1 })
             .toArray();
-          suppliers.forEach((s: any) => supplierMap.set(s._id.toString(), s.name));
+          suppliers.forEach((s: any) =>
+            supplierMap.set(s._id.toString(), s.name),
+          );
         } catch (err) {
-          this.logger.warn(`Could not resolve supplier names for export: ${(err as any)?.message}`);
+          this.logger.warn(
+            `Could not resolve supplier names for export: ${err?.message}`,
+          );
         }
       }
 
       // Headers cover every field the import pipeline can persist (see importProducts)
       const headers = [
-        'name', 'sku', 'barcode', 'price', 'cost', 'stock', 'category', 'brand',
-        'tax', 'status', 'description', 'lowStockThreshold', 'reorderPoint',
-        'reorderQuantity', 'leadTimeDays', 'supplier', 'unitOfMeasure', 'weight',
-        'weightUnit', 'expiryDate', 'batchNumber', 'lotNumber', 'tags',
+        'name',
+        'sku',
+        'barcode',
+        'price',
+        'cost',
+        'stock',
+        'category',
+        'brand',
+        'tax',
+        'status',
+        'description',
+        'lowStockThreshold',
+        'reorderPoint',
+        'reorderQuantity',
+        'leadTimeDays',
+        'supplier',
+        'unitOfMeasure',
+        'weight',
+        'weightUnit',
+        'expiryDate',
+        'batchNumber',
+        'lotNumber',
+        'tags',
       ];
       const rows = products.map((product) => {
         const p: any = product;
@@ -1367,7 +1979,9 @@ export class InventoryService implements OnModuleInit {
           p.unitOfMeasure || '',
           p.weight ?? '',
           p.weightUnit || '',
-          p.expiryDate ? new Date(p.expiryDate).toISOString().split('T')[0] : '',
+          p.expiryDate
+            ? new Date(p.expiryDate).toISOString().split('T')[0]
+            : '',
           p.batchNumber || '',
           p.lotNumber || '',
           Array.isArray(p.tags) ? p.tags.join(';') : '',
@@ -1380,7 +1994,11 @@ export class InventoryService implements OnModuleInit {
           row
             .map((cell) => {
               const str = String(cell ?? '');
-              if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+              if (
+                str.includes(',') ||
+                str.includes('"') ||
+                str.includes('\n')
+              ) {
                 return `"${str.replace(/"/g, '""')}"`;
               }
               return str;
@@ -1391,9 +2009,12 @@ export class InventoryService implements OnModuleInit {
 
       // Add BOM for Excel UTF-8 compatibility
       const csvWithBOM = '\ufeff' + csvContent;
-      
+
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-      res.setHeader('Content-Disposition', `attachment; filename=products-export-${new Date().toISOString().split('T')[0]}.csv`);
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename=products-export-${new Date().toISOString().split('T')[0]}.csv`,
+      );
       res.send(csvWithBOM);
     } catch (error) {
       console.error('Export products service error:', error);
@@ -1408,17 +2029,46 @@ export class InventoryService implements OnModuleInit {
     reason: string,
     adjustedBy: string,
     notes?: string,
+    mutationId?: string,
   ): Promise<StockAdjustmentDocument> {
     const adjustment = new this.adjustmentModel({
       shopId: new Types.ObjectId(shopId),
       productId: new Types.ObjectId(productId),
       quantityChange,
-      reason,
+      reason: this.toAdjustmentReason(reason),
       adjustedBy: new Types.ObjectId(adjustedBy),
       notes,
+      ...(mutationId ? { mutationId } : {}),
     });
 
     return adjustment.save();
+  }
+
+  /**
+   * Map free-form business reasons onto the StockAdjustment reason enum.
+   */
+  private toAdjustmentReason(reason: string): string {
+    const normalized = (reason || '').toLowerCase();
+    const allowed = [
+      'damage',
+      'loss',
+      'correction',
+      'return',
+      'sale',
+      'purchase',
+      'transfer',
+      'other',
+    ];
+    if (allowed.includes(normalized)) return normalized;
+    const mapped: Record<string, string> = {
+      received: 'purchase',
+      transfer_in: 'transfer',
+      transfer_out: 'transfer',
+      recount: 'correction',
+      expired: 'damage',
+      theft: 'loss',
+    };
+    return mapped[normalized] ?? 'other';
   }
 
   async getStockAdjustmentHistory(
@@ -1453,7 +2103,10 @@ export class InventoryService implements OnModuleInit {
     return this.adjustmentModel.find(query).sort({ createdAt: -1 }).exec();
   }
 
-  async getExpiringProducts(shopId: string, daysUntilExpiry = 30): Promise<ProductDocument[]> {
+  async getExpiringProducts(
+    shopId: string,
+    daysUntilExpiry = 30,
+  ): Promise<ProductDocument[]> {
     const expiryDate = new Date();
     expiryDate.setDate(expiryDate.getDate() + daysUntilExpiry);
 
@@ -1497,22 +2150,22 @@ export class InventoryService implements OnModuleInit {
       notes,
     });
 
-    // If variance exists, apply the physical correction then record it
+    // If variance exists, apply the physical correction. The mutation carries
+    // durable evidence keyed to this reconciliation event; the audit
+    // projection happens inside updateStock (exactly one correction record).
     if (variance !== 0) {
-      const updated = await this.updateStock(shopId, productId, variance);
+      const updated = await this.updateStock(shopId, productId, variance, {
+        mutationId: `correction:${reconciliation._id ?? nanoid(16)}`,
+        reason: 'correction',
+        actor: reconcililedBy,
+        referenceType: 'reconciliation',
+        notes: `Stock reconciliation: ${notes || ''}`,
+      });
       if (!updated) {
         throw new BadRequestException(
           'Failed to apply stock reconciliation variance',
         );
       }
-      await this.createStockAdjustment(
-        shopId,
-        productId,
-        variance,
-        'correction',
-        reconcililedBy,
-        `Stock reconciliation: ${notes || ''}`,
-      );
     }
 
     return reconciliation.save();
@@ -1559,11 +2212,16 @@ export class InventoryService implements OnModuleInit {
       .find({ shopId: new Types.ObjectId(shopId) })
       .exec();
 
-    const lowStockProducts = products.filter((p) => (p.stock || 0) <= 10).length;
+    const lowStockProducts = products.filter(
+      (p) => (p.stock || 0) <= 10,
+    ).length;
     const expiringDate = new Date();
     expiringDate.setDate(expiringDate.getDate() + 30);
     const expiringProducts = products.filter(
-      (p) => p.expiryDate && p.expiryDate <= expiringDate && p.expiryDate >= new Date(),
+      (p) =>
+        p.expiryDate &&
+        p.expiryDate <= expiringDate &&
+        p.expiryDate >= new Date(),
     ).length;
 
     const totalStockValue = products.reduce(
@@ -1586,7 +2244,11 @@ export class InventoryService implements OnModuleInit {
    * Get branch-specific stock for product
    * Multi-tenant safe: filters by shopId and branchId
    */
-  async getBranchStock(shopId: string, productId: string, branchId: string): Promise<number> {
+  async getBranchStock(
+    shopId: string,
+    productId: string,
+    branchId: string,
+  ): Promise<number> {
     const product = await this.productModel.findOne({
       _id: new Types.ObjectId(productId),
       shopId: new Types.ObjectId(shopId),
@@ -1614,31 +2276,95 @@ export class InventoryService implements OnModuleInit {
     productId: string,
     branchId: string,
     quantityChange: number,
+    evidence?: {
+      mutationId?: string;
+      reason?: string;
+      actor?: string;
+      referenceType?: string;
+      referenceId?: string;
+      notes?: string;
+    },
   ): Promise<ProductDocument | null> {
-    const product = await this.productModel.findOne({
-      _id: new Types.ObjectId(productId),
-      shopId: new Types.ObjectId(shopId),
-    });
+    // P0-2: branch stock participates in the durable mutation contract. The
+    // quantity change and its receipt share one document write; the audit
+    // projection and recovery follow the same rules as global stock.
+    const mutationId = evidence?.mutationId ?? `mutation:${nanoid(16)}`;
+    const reason = evidence?.reason ?? 'other';
+    const branchKey = branchId;
 
-    if (!product) {
+    const existing = await this.productModel
+      .findOne({
+        _id: new Types.ObjectId(productId),
+        shopId: new Types.ObjectId(shopId),
+      })
+      .exec();
+    if (!existing) {
       throw new BadRequestException('Product not found');
     }
-
-    // Initialize branch inventory if needed
-    if (!product.branchInventory) {
-      product.branchInventory = {};
+    if (
+      (existing.stockMutations ?? []).some(
+        (m: any) => m.mutationId === mutationId,
+      )
+    ) {
+      this.logger.log(
+        `Branch stock mutation ${mutationId} already applied for product ${productId} - no additional effect`,
+      );
+      return existing;
     }
 
-    if (!product.branchInventory[branchId]) {
-      product.branchInventory[branchId] = {
-        stock: product.stock || 0,
-      };
+    const updated = await this.productModel
+      .findOneAndUpdate(
+        {
+          _id: new Types.ObjectId(productId),
+          shopId: new Types.ObjectId(shopId),
+          [`branchInventory.${branchId}.stock`]: {
+            $gte: Math.max(0, -quantityChange),
+          },
+        },
+        {
+          $inc: { [`branchInventory.${branchId}.stock`]: quantityChange },
+          $push: {
+            stockMutations: {
+              mutationId,
+              quantityDelta: quantityChange,
+              reason: evidence?.reason ?? 'other',
+              actor: evidence?.actor ?? 'system',
+              branchId,
+              ...(evidence?.referenceType
+                ? { referenceType: evidence.referenceType }
+                : {}),
+              ...(evidence?.referenceId
+                ? { referenceId: evidence.referenceId }
+                : {}),
+              ...(evidence?.notes ? { notes: evidence.notes } : {}),
+              audited: false,
+              createdAt: new Date(),
+            },
+          },
+        },
+        { new: true },
+      )
+      .exec();
+
+    if (!updated) {
+      this.logger.warn(
+        `Branch stock mutation ${mutationId} skipped (product/branch state changed concurrently)`,
+      );
+      return null;
     }
 
-    // Update branch stock
-    product.branchInventory[branchId].stock += quantityChange;
+    await this.projectStockMutation(shopId, productId, {
+      mutationId,
+      quantityDelta: quantityChange,
+      reason: evidence?.reason ?? 'other',
+      actor: evidence?.actor ?? 'system',
+      referenceType: evidence?.referenceType,
+      referenceId: evidence?.referenceId,
+      branchId,
+      notes: evidence?.notes,
+    });
 
-    return product.save();
+    return updated;
   }
 
   /**
@@ -1668,7 +2394,10 @@ export class InventoryService implements OnModuleInit {
    * Get inventory stats for branch
    * Multi-tenant safe: filters by shopId and branchId
    */
-  async getBranchInventoryStats(shopId: string, branchId: string): Promise<{
+  async getBranchInventoryStats(
+    shopId: string,
+    branchId: string,
+  ): Promise<{
     totalProducts: number;
     activeProducts: number;
     lowStockProducts: number;
@@ -1739,21 +2468,50 @@ export class InventoryService implements OnModuleInit {
       );
     }
 
-    // Transfer stock
-    product.branchInventory[fromBranchId].stock -= quantity;
-    product.branchInventory[toBranchId].stock += quantity;
+    // P0-2: the transfer is ONE logical movement with durable evidence —
+    // both branch deltas and the mutation receipt share one document write.
+    const mutationId = `transfer:${nanoid(16)}`;
+    const updated = await this.productModel
+      .findOneAndUpdate(
+        {
+          _id: new Types.ObjectId(productId),
+          shopId: new Types.ObjectId(shopId),
+          [`branchInventory.${fromBranchId}.stock`]: { $gte: quantity },
+        },
+        {
+          $inc: {
+            [`branchInventory.${fromBranchId}.stock`]: -quantity,
+            [`branchInventory.${toBranchId}.stock`]: quantity,
+          },
+          $push: {
+            stockMutations: {
+              mutationId,
+              quantityDelta: -quantity,
+              reason: 'transfer',
+              actor: transferredBy,
+              branchId: fromBranchId,
+              notes: `Transfer from ${fromBranchId} to ${toBranchId}`,
+              audited: false,
+              createdAt: new Date(),
+            },
+          },
+        },
+        { new: true },
+      )
+      .exec();
 
-    const updated = await product.save();
+    if (!updated) {
+      throw new BadRequestException('Failed to apply branch stock transfer');
+    }
 
-    // Log transfer as stock adjustment
-    await this.createStockAdjustment(
-      shopId,
-      productId,
-      -quantity,
-      'transfer',
-      transferredBy,
-      `Transfer from ${fromBranchId} to ${toBranchId}`,
-    );
+    await this.projectStockMutation(shopId, productId, {
+      mutationId,
+      quantityDelta: -quantity,
+      reason: 'transfer',
+      actor: transferredBy,
+      branchId: fromBranchId,
+      notes: `Transfer from ${fromBranchId} to ${toBranchId}`,
+    });
 
     return updated;
   }
@@ -1785,24 +2543,36 @@ export class InventoryService implements OnModuleInit {
     }
 
     // Initialize or update branch stock
-    if (!product.branchInventory[branchId]) {
-      product.branchInventory[branchId] = { stock: initialStock };
-    } else {
-      product.branchInventory[branchId].stock = initialStock;
-    }
+    const previousBranchStock = product.branchInventory[branchId]?.stock ?? 0;
+    const delta = initialStock - previousBranchStock;
+    product.branchInventory[branchId] = { stock: initialStock };
+
+    const mutationId = `branch-import:${nanoid(16)}`;
+    (product as any).stockMutations = [
+      ...((product.stockMutations as any[]) ?? []),
+      {
+        mutationId,
+        quantityDelta: delta,
+        reason: 'other',
+        actor: addedBy ?? 'system',
+        branchId,
+        notes: `Product added to branch ${branchId}`,
+        audited: false,
+        createdAt: new Date(),
+      },
+    ];
 
     const updated = await product.save();
 
-    // Log as stock adjustment
     if (addedBy) {
-      await this.createStockAdjustment(
-        shopId,
-        productId,
-        initialStock,
-        'other',
-        addedBy,
-        `Product added to branch ${branchId} with initial stock: ${initialStock}`,
-      );
+      await this.projectStockMutation(shopId, productId, {
+        mutationId,
+        quantityDelta: delta,
+        reason: 'other',
+        actor: addedBy,
+        branchId,
+        notes: `Product added to branch ${branchId} with initial stock: ${initialStock}`,
+      });
     }
 
     return updated;
@@ -1824,7 +2594,13 @@ export class InventoryService implements OnModuleInit {
 
     for (const item of products) {
       try {
-        await this.addProductToBranch(shopId, item.productId, branchId, item.stock, addedBy);
+        await this.addProductToBranch(
+          shopId,
+          item.productId,
+          branchId,
+          item.stock,
+          addedBy,
+        );
         success++;
       } catch (error: any) {
         failed++;
@@ -1846,9 +2622,7 @@ export class InventoryService implements OnModuleInit {
       query[`branchInventory.${branchId}`] = { $exists: true };
     }
 
-    const products = await this.productModel
-      .find(query)
-      .exec();
+    const products = await this.productModel.find(query).exec();
 
     // Helper function to get stock for a product (branch-specific or main)
     const getStock = (product: any): number => {
@@ -1864,32 +2638,36 @@ export class InventoryService implements OnModuleInit {
 
     // Basic stats - use getStock for branch-specific stock
     const totalProducts = products.length;
-    const activeProducts = products.filter(p => p.status === 'active').length;
+    const activeProducts = products.filter((p) => p.status === 'active').length;
     const defaultThreshold = 10;
     // Compare each product's stock against its own lowStockThreshold (or default of 10)
-    const lowStockProducts = products.filter(p => {
+    const lowStockProducts = products.filter((p) => {
       const threshold = p.lowStockThreshold ?? defaultThreshold;
       const stock = getStock(p);
       return stock <= threshold && stock > 0;
     }).length;
-    const outOfStockProducts = products.filter(p => getStock(p) === 0).length;
+    const outOfStockProducts = products.filter((p) => getStock(p) === 0).length;
 
     // Stock value - use branch-specific stock
-    const totalStockValue = products.reduce((sum, p) => sum + ((p.cost || p.price || 0) * getStock(p)), 0);
+    const totalStockValue = products.reduce(
+      (sum, p) => sum + (p.cost || p.price || 0) * getStock(p),
+      0,
+    );
     const totalStockUnits = products.reduce((sum, p) => sum + getStock(p), 0);
 
     // Average stock level
-    const averageStockLevel = totalProducts > 0 ? Math.round(totalStockUnits / totalProducts) : 0;
+    const averageStockLevel =
+      totalProducts > 0 ? Math.round(totalStockUnits / totalProducts) : 0;
 
     // Low stock items - compare each product against its own threshold using branch stock
     const lowStockItems = products
-      .filter(p => {
+      .filter((p) => {
         const threshold = p.lowStockThreshold ?? defaultThreshold;
         return getStock(p) <= threshold;
       })
       .sort((a, b) => getStock(a) - getStock(b))
       .slice(0, 10)
-      .map(p => ({
+      .map((p) => ({
         name: p.name,
         stock: getStock(p),
         threshold: p.lowStockThreshold ?? defaultThreshold,
@@ -1897,12 +2675,19 @@ export class InventoryService implements OnModuleInit {
       }));
 
     // Stock by category - use branch-specific stock
-    const categoryMap = new Map<string, { name: string; count: number; value: number }>();
-    products.forEach(p => {
+    const categoryMap = new Map<
+      string,
+      { name: string; count: number; value: number }
+    >();
+    products.forEach((p) => {
       const catId = p.categoryId?.toString() || 'uncategorized';
-      const category = categories.find(c => c._id.toString() === catId);
+      const category = categories.find((c) => c._id.toString() === catId);
       const catName = category?.name || 'Uncategorized';
-      const existing = categoryMap.get(catId) || { name: catName, count: 0, value: 0 };
+      const existing = categoryMap.get(catId) || {
+        name: catName,
+        count: 0,
+        value: 0,
+      };
       existing.count += 1;
       existing.value += (p.cost || p.price || 0) * getStock(p);
       categoryMap.set(catId, existing);
@@ -1910,7 +2695,11 @@ export class InventoryService implements OnModuleInit {
     const stockByCategory = Array.from(categoryMap.values())
       .sort((a, b) => b.value - a.value)
       .slice(0, 6)
-      .map(c => ({ category: c.name, count: c.count, value: Math.round(c.value) }));
+      .map((c) => ({
+        category: c.name,
+        count: c.count,
+        value: Math.round(c.value),
+      }));
 
     // --- Query actual sales data from orders in the last 30 days ---
     const thirtyDaysAgo = new Date();
@@ -1923,7 +2712,11 @@ export class InventoryService implements OnModuleInit {
     if (branchId) {
       orderQuery.branchId = new Types.ObjectId(branchId);
     }
-    const recentOrders = await this.orderModel.find(orderQuery).select('items createdAt').lean().exec();
+    const recentOrders = await this.orderModel
+      .find(orderQuery)
+      .select('items createdAt')
+      .lean()
+      .exec();
 
     // Build a map: productId -> { soldQty, lastSaleDate }
     const salesMap = new Map<string, { soldQty: number; lastSaleDate: Date }>();
@@ -1932,21 +2725,27 @@ export class InventoryService implements OnModuleInit {
       (order.items || []).forEach((item: any) => {
         const pid = item.productId?.toString();
         if (!pid) return;
-        const existing = salesMap.get(pid) || { soldQty: 0, lastSaleDate: new Date(0) };
+        const existing = salesMap.get(pid) || {
+          soldQty: 0,
+          lastSaleDate: new Date(0),
+        };
         existing.soldQty += item.quantity || 0;
-        if (orderDate > existing.lastSaleDate) existing.lastSaleDate = orderDate;
+        if (orderDate > existing.lastSaleDate)
+          existing.lastSaleDate = orderDate;
         salesMap.set(pid, existing);
       });
     });
 
     // Total units sold this month (for turnover rate)
     let totalUnitsSoldThisMonth = 0;
-    salesMap.forEach(v => { totalUnitsSoldThisMonth += v.soldQty; });
+    salesMap.forEach((v) => {
+      totalUnitsSoldThisMonth += v.soldQty;
+    });
 
     // Top moving products - sorted by soldQty descending
     const topMovingProducts = products
-      .filter(p => p.status === 'active')
-      .map(p => {
+      .filter((p) => p.status === 'active')
+      .map((p) => {
         const pid = p._id.toString();
         const sales = salesMap.get(pid);
         return {
@@ -1955,20 +2754,24 @@ export class InventoryService implements OnModuleInit {
           currentStock: getStock(p),
         };
       })
-      .filter(p => p.soldQty > 0)
+      .filter((p) => p.soldQty > 0)
       .sort((a, b) => b.soldQty - a.soldQty)
       .slice(0, 5);
 
     // Slow moving products - active products with stock but low/no sales
     const now = new Date();
     const slowMovingProducts = products
-      .filter(p => p.status === 'active' && getStock(p) > 0)
-      .map(p => {
+      .filter((p) => p.status === 'active' && getStock(p) > 0)
+      .map((p) => {
         const pid = p._id.toString();
         const sales = salesMap.get(pid);
-        const daysSinceLastSale = sales?.lastSaleDate && sales.lastSaleDate.getTime() > 0
-          ? Math.floor((now.getTime() - sales.lastSaleDate.getTime()) / (1000 * 60 * 60 * 24))
-          : 999;
+        const daysSinceLastSale =
+          sales?.lastSaleDate && sales.lastSaleDate.getTime() > 0
+            ? Math.floor(
+                (now.getTime() - sales.lastSaleDate.getTime()) /
+                  (1000 * 60 * 60 * 24),
+              )
+            : 999;
         return {
           name: p.name,
           soldQty: sales?.soldQty || 0,
@@ -1976,7 +2779,10 @@ export class InventoryService implements OnModuleInit {
           daysSinceLastSale,
         };
       })
-      .sort((a, b) => a.soldQty - b.soldQty || b.daysSinceLastSale - a.daysSinceLastSale)
+      .sort(
+        (a, b) =>
+          a.soldQty - b.soldQty || b.daysSinceLastSale - a.daysSinceLastSale,
+      )
       .slice(0, 5);
 
     // Recent stock changes (from adjustments)
@@ -1988,25 +2794,31 @@ export class InventoryService implements OnModuleInit {
 
     // Create a map of product IDs to names for quick lookup
     const productNameMap = new Map<string, string>();
-    products.forEach(p => {
+    products.forEach((p) => {
       productNameMap.set(p._id.toString(), p.name);
     });
 
-    const recentStockChanges = recentAdjustments.map(adj => {
+    const recentStockChanges = recentAdjustments.map((adj) => {
       const doc = adj as any;
       const productId = doc.productId?.toString() || '';
       const productName = productNameMap.get(productId) || 'Unknown Product';
       return {
         product: productName,
         change: adj.quantityChange || 0,
-        type: (adj.quantityChange || 0) > 0 ? 'in' : (adj.reason === 'correction' ? 'adjustment' : 'out'),
+        type:
+          (adj.quantityChange || 0) > 0
+            ? 'in'
+            : adj.reason === 'correction'
+              ? 'adjustment'
+              : 'out',
         date: doc.createdAt || new Date(),
       };
     });
 
     // Turnover rate: total units sold / average stock (per month)
     const avgStock = totalStockUnits > 0 ? totalStockUnits : 1;
-    const turnoverRate = Math.round((totalUnitsSoldThisMonth / avgStock) * 10) / 10;
+    const turnoverRate =
+      Math.round((totalUnitsSoldThisMonth / avgStock) * 10) / 10;
 
     return {
       totalProducts,

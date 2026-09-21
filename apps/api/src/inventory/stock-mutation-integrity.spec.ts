@@ -22,6 +22,7 @@ describe('Stock mutation integrity (P0-1)', () => {
   let productModel: any;
   let adjustments: any[];
   let adjustmentModel: any;
+  let auditFailures = 0;
   let reconciliationDocs: any[];
   let reconciliationModel: any;
   let inventoryService: InventoryService;
@@ -30,9 +31,34 @@ describe('Stock mutation integrity (P0-1)', () => {
     (!filter._id || filter._id.toString() === PID) &&
     (!filter.shopId || filter.shopId.toString() === SHOP);
 
-  const applyUpdate = (update: any) => {
+  const applyUpdate = (filter: any, update: any) => {
+    // Mutation-identity idempotency: an existing receipt for the same
+    // mutationId means the mutation already landed (proven no-op).
+    const neId = filter['stockMutations.mutationId']?.$ne;
+    if (
+      neId &&
+      (product.stockMutations ?? []).some((m: any) => m.mutationId === neId)
+    ) {
+      return null;
+    }
     if (update.$inc?.stock !== undefined) product.stock += update.$inc.stock;
     if (update.$set?.stock !== undefined) product.stock = update.$set.stock;
+    for (const key of Object.keys(update.$inc ?? {})) {
+      if (key.startsWith('branchInventory.')) {
+        const branchKey = key.split('.')[1];
+        product.branchInventory = product.branchInventory ?? {};
+        product.branchInventory[branchKey] = product.branchInventory[
+          branchKey
+        ] ?? { stock: 0 };
+        product.branchInventory[branchKey].stock += update.$inc[key];
+      }
+    }
+    if (update.$push?.stockMutations) {
+      product.stockMutations = [
+        ...(product.stockMutations ?? []),
+        { ...update.$push.stockMutations },
+      ];
+    }
     return product;
   };
 
@@ -71,21 +97,67 @@ describe('Stock mutation integrity (P0-1)', () => {
       toQuery(() => (id.toString() === PID ? product : null)),
     );
     productModel.findOneAndUpdate = jest.fn((filter: any, update: any) =>
-      toQuery(() => (matchesFilter(filter) ? applyUpdate(update) : null)),
+      toQuery(() =>
+        matchesFilter(filter) ? applyUpdate(filter, update) : null,
+      ),
     );
     productModel.findByIdAndUpdate = jest.fn((id: any, update: any) =>
-      toQuery(() => (id.toString() === PID ? applyUpdate(update) : null)),
+      toQuery(() =>
+        id.toString() === PID ? applyUpdate({ _id: id }, update) : null,
+      ),
     );
 
     adjustments = [];
+    auditFailures = 0;
     adjustmentModel = jest.fn((doc: any) => ({
       ...doc,
       save: jest.fn(async () => {
+        if (auditFailures > 0) {
+          auditFailures -= 1;
+          throw Object.assign(new Error('Injected audit persistence failure'), {
+            code: 500,
+          });
+        }
         const record = { _id: new Types.ObjectId(), ...doc };
         adjustments.push(record);
         return record;
       }),
     }));
+    adjustmentModel.findOne = jest.fn((filter: any) =>
+      toQuery(
+        () =>
+          adjustments.find(
+            (a: any) =>
+              a.mutationId === filter.mutationId &&
+              (!filter.shopId ||
+                a.shopId.toString() === filter.shopId.toString()),
+          ) ?? null,
+      ),
+    );
+    productModel.updateOne = jest.fn((filter: any, update: any, options: any) =>
+      toQuery(() => {
+        if (!matchesFilter(filter)) return { modifiedCount: 0 };
+        if (update.$set?.['stockMutations.$[m].audited'] !== undefined) {
+          const mid = options?.arrayFilters?.[0]?.['m.mutationId'];
+          for (const m of product.stockMutations ?? []) {
+            if (m.mutationId === mid) m.audited = true;
+          }
+        }
+        if (update.$pull?.stockMutations) {
+          const crit = update.$pull.stockMutations;
+          product.stockMutations = (product.stockMutations ?? []).filter(
+            (m: any) =>
+              !(
+                crit.audited === true &&
+                m.audited === true &&
+                (crit.mutationId === undefined ||
+                  m.mutationId === crit.mutationId)
+              ),
+          );
+        }
+        return { modifiedCount: 1 };
+      }),
+    );
 
     reconciliationDocs = [];
     reconciliationModel = jest.fn((doc: any) => ({

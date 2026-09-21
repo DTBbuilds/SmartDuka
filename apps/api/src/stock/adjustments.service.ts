@@ -1,23 +1,43 @@
-import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  BadRequestException,
+  NotFoundException,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
+import { nanoid } from 'nanoid';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Adjustment, AdjustmentDocument } from './adjustment.schema';
 import { Product, ProductDocument } from '../inventory/schemas/product.schema';
+import { InventoryService } from '../inventory/inventory.service';
 
 export interface CreateAdjustmentDto {
   productId: string;
   productName: string;
   delta: number;
-  reason: 'damage' | 'loss' | 'recount' | 'return' | 'correction' | 'received' | 'transfer_in' | 'transfer_out' | 'expired' | 'theft' | 'other';
+  reason:
+    | 'damage'
+    | 'loss'
+    | 'recount'
+    | 'return'
+    | 'correction'
+    | 'received'
+    | 'transfer_in'
+    | 'transfer_out'
+    | 'expired'
+    | 'theft'
+    | 'other';
   description?: string;
   reference?: string;
 }
 
 /**
  * Stock Adjustments Service
- * 
+ *
  * Handles stock adjustments with proper audit trail and atomic updates.
- * 
+ *
  * Best Practices Implemented:
  * 1. Atomic transaction: Product stock and adjustment record updated together
  * 2. Audit trail: Every adjustment is logged with who, when, why, and how much
@@ -29,19 +49,46 @@ export class AdjustmentsService {
   private readonly logger = new Logger(AdjustmentsService.name);
 
   constructor(
-    @InjectModel(Adjustment.name) private readonly adjustmentModel: Model<AdjustmentDocument>,
-    @InjectModel(Product.name) private readonly productModel: Model<ProductDocument>,
+    @InjectModel(Adjustment.name)
+    private readonly adjustmentModel: Model<AdjustmentDocument>,
+    @InjectModel(Product.name)
+    private readonly productModel: Model<ProductDocument>,
+    @Inject(forwardRef(() => InventoryService))
+    private readonly inventoryService: InventoryService,
   ) {}
 
   /**
+   * Map adjustment-service reasons onto the canonical StockAdjustment enum.
+   */
+  private mapReason(reason: string): string {
+    const mapped: Record<string, string> = {
+      damage: 'damage',
+      loss: 'loss',
+      recount: 'correction',
+      return: 'return',
+      correction: 'correction',
+      received: 'purchase',
+      transfer_in: 'transfer',
+      transfer_out: 'transfer',
+      expired: 'damage',
+      theft: 'loss',
+    };
+    return mapped[reason] ?? 'other';
+  }
+
+  /**
    * Create a stock adjustment and update product stock atomically
-   * 
+   *
    * @param shopId - Shop ID for multi-tenant isolation
    * @param userId - User making the adjustment (for audit trail)
    * @param dto - Adjustment details
    * @returns Created adjustment document
    */
-  async create(shopId: string, userId: string, dto: CreateAdjustmentDto): Promise<AdjustmentDocument> {
+  async create(
+    shopId: string,
+    userId: string,
+    dto: CreateAdjustmentDto,
+  ): Promise<AdjustmentDocument> {
     // Validate product exists and belongs to shop
     const product = await this.productModel.findOne({
       _id: new Types.ObjectId(dto.productId),
@@ -58,25 +105,35 @@ export class AdjustmentsService {
     // Prevent negative stock (optional - can be made configurable)
     if (newStock < 0) {
       throw new BadRequestException(
-        `Cannot reduce stock below zero. Current stock: ${previousStock}, Adjustment: ${dto.delta}`
+        `Cannot reduce stock below zero. Current stock: ${previousStock}, Adjustment: ${dto.delta}`,
       );
     }
 
-    // Update product stock FIRST (atomic operation)
-    const updatedProduct = await this.productModel.findByIdAndUpdate(
+    // P0-2: the physical mutation goes through the canonical durable-mutation
+    // contract (atomic $inc + receipt + StockAdjustment projection) so this
+    // parallel service cannot bypass the invariant.
+    const mutationId = `stock-adjustment:${nanoid(16)}`;
+    const updatedProduct = await this.inventoryService.updateStock(
+      shopId,
       dto.productId,
-      { 
-        $inc: { stock: dto.delta },
-        $set: { lastRestockDate: dto.delta > 0 ? new Date() : undefined }
+      dto.delta,
+      {
+        mutationId,
+        reason: this.mapReason(dto.reason),
+        actor: userId,
+        notes:
+          [dto.description, dto.reference ? `Ref: ${dto.reference}` : null]
+            .filter(Boolean)
+            .join(' | ') || undefined,
       },
-      { new: true }
     );
 
     if (!updatedProduct) {
       throw new BadRequestException('Failed to update product stock');
     }
 
-    // Create adjustment record for audit trail
+    // Additional domain-specific audit record (parallel projection), carrying
+    // the same mutation identity.
     const adjustment = new this.adjustmentModel({
       productId: new Types.ObjectId(dto.productId),
       productName: dto.productName || product.name,
@@ -88,14 +145,15 @@ export class AdjustmentsService {
       adjustedBy: new Types.ObjectId(userId),
       previousStock, // Track previous stock for reconciliation
       newStock: updatedProduct.stock,
+      mutationId,
     });
 
     const savedAdjustment = await adjustment.save();
 
     this.logger.log(
       `Stock adjustment: ${product.name} ${dto.delta > 0 ? '+' : ''}${dto.delta} (${dto.reason}) | ` +
-      `Previous: ${previousStock} → New: ${updatedProduct.stock} | ` +
-      `By: ${userId} | Ref: ${dto.reference || 'N/A'}`
+        `Previous: ${previousStock} → New: ${updatedProduct.stock} | ` +
+        `By: ${userId} | Ref: ${dto.reference || 'N/A'}`,
     );
 
     return savedAdjustment;
@@ -108,25 +166,34 @@ export class AdjustmentsService {
       .exec();
 
     // Populate product names for adjustments that might not have them
-    const productIds = [...new Set(adjustments.map(a => a.productId.toString()))];
+    const productIds = [
+      ...new Set(adjustments.map((a) => a.productId.toString())),
+    ];
     const products = await this.productModel
-      .find({ _id: { $in: productIds.map(id => new Types.ObjectId(id)) } })
+      .find({ _id: { $in: productIds.map((id) => new Types.ObjectId(id)) } })
       .select('_id name')
       .exec();
-    
-    const productMap = new Map(products.map(p => [p._id.toString(), p.name]));
-    
+
+    const productMap = new Map(products.map((p) => [p._id.toString(), p.name]));
+
     // Enrich adjustments with product names
-    return adjustments.map(adj => {
+    return adjustments.map((adj) => {
       const adjObj = adj.toObject();
-      if (!adjObj.productName || adjObj.productName === adjObj.productId?.toString()) {
-        adjObj.productName = productMap.get(adjObj.productId?.toString()) || 'Unknown Product';
+      if (
+        !adjObj.productName ||
+        adjObj.productName === adjObj.productId?.toString()
+      ) {
+        adjObj.productName =
+          productMap.get(adjObj.productId?.toString()) || 'Unknown Product';
       }
       return adjObj as AdjustmentDocument;
     });
   }
 
-  async findByProduct(productId: string, shopId: string): Promise<AdjustmentDocument[]> {
+  async findByProduct(
+    productId: string,
+    shopId: string,
+  ): Promise<AdjustmentDocument[]> {
     return this.adjustmentModel
       .find({
         productId: new Types.ObjectId(productId),
@@ -173,7 +240,10 @@ export class AdjustmentsService {
     };
   }
 
-  async getRecentAdjustments(shopId: string, days: number = 7): Promise<AdjustmentDocument[]> {
+  async getRecentAdjustments(
+    shopId: string,
+    days: number = 7,
+  ): Promise<AdjustmentDocument[]> {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
 

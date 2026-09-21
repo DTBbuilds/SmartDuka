@@ -408,11 +408,21 @@ export class SalesService {
 
     for (const item of dto.items) {
       try {
-        // Reduce product stock (atomic operation with shopId filter)
+        // P0-2: the decrement carries durable mutation evidence keyed to the
+        // canonical order; the StockAdjustment audit projection happens inside
+        // updateStock (exactly one sale record per logical movement).
         const updatedProduct = await this.inventoryService.updateStock(
           shopId,
           item.productId,
           -item.quantity, // Negative = reduction
+          {
+            mutationId: `sale:${order._id.toString()}:${item.productId}`,
+            reason: 'sale',
+            actor: userId,
+            referenceType: 'order',
+            referenceId: order._id.toString(),
+            notes: `Order ${orderNumber} - ${item.name} x${item.quantity}`,
+          },
         );
 
         if (!updatedProduct) {
@@ -421,16 +431,6 @@ export class SalesService {
           );
           continue;
         }
-
-        // Log stock adjustment for audit trail
-        await this.inventoryService.createStockAdjustment(
-          shopId,
-          item.productId,
-          -item.quantity,
-          'sale', // reason
-          userId,
-          `Order ${orderNumber} - ${item.name} x${item.quantity}`, // notes
-        );
       } catch (error: any) {
         stockReductionErrors.push(
           `Failed to reduce stock for ${item.name}: ${error?.message || 'Unknown error'}`,

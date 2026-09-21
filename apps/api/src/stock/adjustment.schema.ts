@@ -5,7 +5,7 @@ export type AdjustmentDocument = Adjustment & Document;
 
 /**
  * Stock Adjustment Schema
- * 
+ *
  * Records all stock adjustments with full audit trail for:
  * - Inventory reconciliation
  * - Loss prevention analysis
@@ -23,10 +23,22 @@ export class Adjustment {
   @Prop({ required: true })
   delta: number; // Positive for increase, negative for decrease
 
-  @Prop({ required: true, enum: [
-    'damage', 'loss', 'recount', 'return', 'correction', 
-    'received', 'transfer_in', 'transfer_out', 'expired', 'theft', 'other'
-  ]})
+  @Prop({
+    required: true,
+    enum: [
+      'damage',
+      'loss',
+      'recount',
+      'return',
+      'correction',
+      'received',
+      'transfer_in',
+      'transfer_out',
+      'expired',
+      'theft',
+      'other',
+    ],
+  })
   reason: string;
 
   @Prop()
@@ -37,6 +49,9 @@ export class Adjustment {
 
   @Prop({ type: Types.ObjectId, ref: 'User' })
   adjustedBy?: Types.ObjectId;
+
+  @Prop({ required: false })
+  mutationId?: string;
 
   @Prop()
   adjustedByName?: string; // Denormalized for quick display

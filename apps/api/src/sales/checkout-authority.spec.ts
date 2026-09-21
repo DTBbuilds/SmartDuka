@@ -560,16 +560,11 @@ describe('P0-3A checkout server authority', () => {
         SHOP,
         PRODUCT,
         -3,
+        expect.objectContaining({ reason: 'sale', referenceType: 'order' }),
       );
-      expect(inventoryService.createStockAdjustment).toHaveBeenCalledTimes(1);
-      expect(inventoryService.createStockAdjustment).toHaveBeenCalledWith(
-        SHOP,
-        PRODUCT,
-        -3,
-        'sale',
-        USER_A,
-        expect.any(String),
-      );
+      // P0-2: the audit projection lives inside updateStock — the separate
+      // createStockAdjustment call no longer exists on the checkout path.
+      expect(inventoryService.createStockAdjustment).toHaveBeenCalledTimes(0);
     });
 
     it('fails closed on insufficient stock before order creation', async () => {

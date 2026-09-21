@@ -31,11 +31,16 @@ export class PurchasesService {
   private readonly logger = new Logger(PurchasesService.name);
 
   constructor(
-    @InjectModel(Purchase.name) private readonly purchaseModel: Model<PurchaseDocument>,
+    @InjectModel(Purchase.name)
+    private readonly purchaseModel: Model<PurchaseDocument>,
     private readonly inventoryService: InventoryService,
   ) {}
 
-  async create(shopId: string, userId: string, dto: CreatePurchaseDto): Promise<PurchaseDocument> {
+  async create(
+    shopId: string,
+    userId: string,
+    dto: CreatePurchaseDto,
+  ): Promise<PurchaseDocument> {
     const items: PurchaseItem[] = dto.items.map((item) => ({
       productId: new Types.ObjectId(item.productId),
       productName: item.productName,
@@ -72,7 +77,10 @@ export class PurchasesService {
       .exec();
   }
 
-  async findById(purchaseId: string, shopId: string): Promise<PurchaseDocument | null> {
+  async findById(
+    purchaseId: string,
+    shopId: string,
+  ): Promise<PurchaseDocument | null> {
     return this.purchaseModel
       .findOne({
         _id: new Types.ObjectId(purchaseId),
@@ -84,7 +92,7 @@ export class PurchasesService {
 
   /**
    * PHASE 2: PO TO INVENTORY INTEGRATION
-   * 
+   *
    * When PO status changes to 'received', increase inventory
    * Multi-tenant safe: filters by shopId
    */
@@ -112,48 +120,51 @@ export class PurchasesService {
         try {
           // PHASE 5: If branchId exists, update branch stock; otherwise update shared stock
           let updatedProduct;
+          const purchaseMutation = {
+            mutationId: `purchase:${currentPurchase._id?.toString() ?? currentPurchase.purchaseNumber}:${item.productId}`,
+            reason: 'purchase',
+            actor: userId || 'system',
+            referenceType: 'purchase',
+            referenceId:
+              currentPurchase._id?.toString() ?? currentPurchase.purchaseNumber,
+            notes: `Purchase Order ${currentPurchase.purchaseNumber} - ${item.productName} x${item.quantity}`,
+          };
           if (currentPurchase.branchId) {
             updatedProduct = await this.inventoryService.updateBranchStock(
               shopId,
               item.productId.toString(),
               currentPurchase.branchId.toString(),
-              item.quantity // Positive = increase
+              item.quantity, // Positive = increase
+              purchaseMutation,
             );
           } else {
             updatedProduct = await this.inventoryService.updateStock(
               shopId,
               item.productId.toString(),
-              item.quantity // Positive = increase
+              item.quantity, // Positive = increase
+              purchaseMutation,
             );
           }
 
           if (!updatedProduct) {
             stockIncreaseErrors.push(
-              `Product ${item.productId} not found in shop ${shopId}`
+              `Product ${item.productId} not found in shop ${shopId}`,
             );
             continue;
           }
-
-          // Log stock adjustment for audit trail
-          await this.inventoryService.createStockAdjustment(
-            shopId,
-            item.productId.toString(),
-            item.quantity,
-            'purchase', // reason
-            userId || 'system',
-            `Purchase Order ${currentPurchase.purchaseNumber} - ${item.productName} x${item.quantity}` // notes
-          );
+          // P0-2: the audit projection happens inside updateStock/updateBranchStock
+          // with durable evidence keyed to this purchase line.
 
           this.logger.log(
-            `Stock increased for ${item.productName}: +${item.quantity} (PO: ${currentPurchase.purchaseNumber})`
+            `Stock increased for ${item.productName}: +${item.quantity} (PO: ${currentPurchase.purchaseNumber})`,
           );
         } catch (error: any) {
           stockIncreaseErrors.push(
-            `Failed to increase stock for ${item.productName}: ${error?.message || 'Unknown error'}`
+            `Failed to increase stock for ${item.productName}: ${error?.message || 'Unknown error'}`,
           );
           this.logger.error(
             `Stock increase error for ${item.productName}:`,
-            error
+            error,
           );
         }
       }
@@ -162,11 +173,12 @@ export class PurchasesService {
       if (stockIncreaseErrors.length > 0) {
         this.logger.error(
           `Stock increase errors for PO ${currentPurchase.purchaseNumber}:`,
-          stockIncreaseErrors
+          stockIncreaseErrors,
         );
-        
+
         // Add warning to notes
-        dto.notes = (dto.notes || '') + 
+        dto.notes =
+          (dto.notes || '') +
           `\n⚠️ INVENTORY SYNC WARNING: ${stockIncreaseErrors.join('; ')}`;
       }
     }
@@ -208,7 +220,10 @@ export class PurchasesService {
       .exec();
   }
 
-  async getBySupplier(supplierId: string, shopId: string): Promise<PurchaseDocument[]> {
+  async getBySupplier(
+    supplierId: string,
+    shopId: string,
+  ): Promise<PurchaseDocument[]> {
     return this.purchaseModel
       .find({
         supplierId: new Types.ObjectId(supplierId),
@@ -224,7 +239,10 @@ export class PurchasesService {
    * Get all purchases for branch
    * Multi-tenant safe: filters by shopId and branchId
    */
-  async findByBranch(shopId: string, branchId: string): Promise<PurchaseDocument[]> {
+  async findByBranch(
+    shopId: string,
+    branchId: string,
+  ): Promise<PurchaseDocument[]> {
     return this.purchaseModel
       .find({
         shopId: new Types.ObjectId(shopId),
@@ -239,7 +257,10 @@ export class PurchasesService {
    * Get pending purchases for branch
    * Multi-tenant safe: filters by shopId and branchId
    */
-  async getPendingByBranch(shopId: string, branchId: string): Promise<PurchaseDocument[]> {
+  async getPendingByBranch(
+    shopId: string,
+    branchId: string,
+  ): Promise<PurchaseDocument[]> {
     return this.purchaseModel
       .find({
         shopId: new Types.ObjectId(shopId),
@@ -255,7 +276,10 @@ export class PurchasesService {
    * Get received purchases for branch
    * Multi-tenant safe: filters by shopId and branchId
    */
-  async getReceivedByBranch(shopId: string, branchId: string): Promise<PurchaseDocument[]> {
+  async getReceivedByBranch(
+    shopId: string,
+    branchId: string,
+  ): Promise<PurchaseDocument[]> {
     return this.purchaseModel
       .find({
         shopId: new Types.ObjectId(shopId),
@@ -271,7 +295,11 @@ export class PurchasesService {
    * Export purchase orders to CSV.
    * One row per PO line item (so accounting/spreadsheets can analyse spend per product).
    */
-  async exportPurchasesCSV(shopId: string, res: any, status?: string): Promise<void> {
+  async exportPurchasesCSV(
+    shopId: string,
+    res: any,
+    status?: string,
+  ): Promise<void> {
     const filter: any = { shopId: new Types.ObjectId(shopId) };
     if (status && ['pending', 'received', 'cancelled'].includes(status)) {
       filter.status = status;
@@ -285,46 +313,65 @@ export class PurchasesService {
       .exec();
 
     // Resolve SKUs for all unique product IDs across all POs so the exported CSV is re-importable
-    const productIds = Array.from(new Set(
-      (purchases as any[])
-        .flatMap(po => Array.isArray(po.items) ? po.items : [])
-        .map((item: any) => item?.productId?.toString())
-        .filter(Boolean)
-    ));
+    const productIds = Array.from(
+      new Set(
+        (purchases as any[])
+          .flatMap((po) => (Array.isArray(po.items) ? po.items : []))
+          .map((item: any) => item?.productId?.toString())
+          .filter(Boolean),
+      ),
+    );
     const skuByProductId = new Map<string, string>();
     if (productIds.length > 0) {
       try {
         const productDocs = await this.purchaseModel.db
           .collection('products')
-          .find({ _id: { $in: productIds.map(id => new Types.ObjectId(id)) } })
+          .find({
+            _id: { $in: productIds.map((id) => new Types.ObjectId(id)) },
+          })
           .project({ sku: 1 })
           .toArray();
         productDocs.forEach((p: any) => {
           if (p?.sku) skuByProductId.set(p._id.toString(), p.sku);
         });
       } catch (err) {
-        this.logger.warn(`Could not resolve product SKUs for PO export: ${(err as any)?.message}`);
+        this.logger.warn(
+          `Could not resolve product SKUs for PO export: ${err?.message}`,
+        );
       }
     }
 
     const headers = [
-      'purchaseNumber', 'status', 'supplier', 'invoiceNumber',
-      'createdAt', 'expectedDeliveryDate', 'receivedDate',
-      'productName', 'productSku', 'quantity', 'unitCost', 'lineTotal',
-      'poTotal', 'notes',
+      'purchaseNumber',
+      'status',
+      'supplier',
+      'invoiceNumber',
+      'createdAt',
+      'expectedDeliveryDate',
+      'receivedDate',
+      'productName',
+      'productSku',
+      'quantity',
+      'unitCost',
+      'lineTotal',
+      'poTotal',
+      'notes',
     ];
 
     const rows: (string | number)[][] = [];
     for (const po of purchases as any[]) {
       const supplierName = po.supplierId?.name || '';
-      const created = po.createdAt ? new Date(po.createdAt).toISOString().split('T')[0] : '';
+      const created = po.createdAt
+        ? new Date(po.createdAt).toISOString().split('T')[0]
+        : '';
       const expected = po.expectedDeliveryDate
         ? new Date(po.expectedDeliveryDate).toISOString().split('T')[0]
         : '';
       const received = po.receivedDate
         ? new Date(po.receivedDate).toISOString().split('T')[0]
         : '';
-      const items = Array.isArray(po.items) && po.items.length > 0 ? po.items : [{}];
+      const items =
+        Array.isArray(po.items) && po.items.length > 0 ? po.items : [{}];
       for (const item of items) {
         const productIdStr = item?.productId?.toString?.() || '';
         rows.push([
@@ -352,10 +399,11 @@ export class PurchasesService {
         ? `"${str.replace(/"/g, '""')}"`
         : str;
     };
-    const csv = '\ufeff' + [
-      headers.join(','),
-      ...rows.map(r => r.map(escape).join(',')),
-    ].join('\n');
+    const csv =
+      '\ufeff' +
+      [headers.join(','), ...rows.map((r) => r.map(escape).join(','))].join(
+        '\n',
+      );
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader(
@@ -400,7 +448,8 @@ export class PurchasesService {
       .toArray();
     const supplierByName = new Map<string, Types.ObjectId>();
     suppliers.forEach((s: any) => {
-      if (s.name) supplierByName.set(String(s.name).toLowerCase().trim(), s._id);
+      if (s.name)
+        supplierByName.set(String(s.name).toLowerCase().trim(), s._id);
     });
 
     const products = await db
@@ -416,13 +465,18 @@ export class PurchasesService {
     });
 
     // Group rows by purchaseNumber (or synthetic key)
-    const groups = new Map<string, { meta: any; lines: any[]; rowNums: number[] }>();
+    const groups = new Map<
+      string,
+      { meta: any; lines: any[]; rowNums: number[] }
+    >();
     rows.forEach((raw, idx) => {
       const rowNum = idx + 2; // account for header row
       const supplierName = String(raw.supplier || '').trim();
       const purchaseNumber = String(raw.purchaseNumber || '').trim();
       const invoiceNumber = String(raw.invoiceNumber || '').trim();
-      const groupKey = purchaseNumber || `__new__:${supplierName.toLowerCase()}|${invoiceNumber}|${idx}`;
+      const groupKey =
+        purchaseNumber ||
+        `__new__:${supplierName.toLowerCase()}|${invoiceNumber}|${idx}`;
 
       if (!groups.has(groupKey)) {
         groups.set(groupKey, {
@@ -460,11 +514,13 @@ export class PurchasesService {
         return;
       }
 
-      let product =
+      const product =
         (productSku && productBySku.get(productSku.toLowerCase())) ||
         (productName && productByName.get(productName.toLowerCase()));
       if (!product) {
-        errors.push(`Row ${rowNum}: product "${productName || productSku}" not found in inventory`);
+        errors.push(
+          `Row ${rowNum}: product "${productName || productSku}" not found in inventory`,
+        );
         return;
       }
 
@@ -495,10 +551,12 @@ export class PurchasesService {
 
       // Skip if a PO with this purchaseNumber already exists (idempotent re-import)
       if (group.meta.purchaseNumber) {
-        const existing = await this.purchaseModel.findOne({
-          shopId: shopObjId,
-          purchaseNumber: group.meta.purchaseNumber,
-        }).lean();
+        const existing = await this.purchaseModel
+          .findOne({
+            shopId: shopObjId,
+            purchaseNumber: group.meta.purchaseNumber,
+          })
+          .lean();
         if (existing) {
           skipped++;
           continue;
@@ -506,13 +564,16 @@ export class PurchasesService {
       }
 
       const totalCost = group.lines.reduce((sum, l) => sum + l.totalCost, 0);
-      const status = ['pending', 'received', 'cancelled'].includes(group.meta.status)
+      const status = ['pending', 'received', 'cancelled'].includes(
+        group.meta.status,
+      )
         ? group.meta.status
         : 'pending';
 
       try {
         await this.purchaseModel.create({
-          purchaseNumber: group.meta.purchaseNumber || `PO-${Date.now()}-${nanoid(6)}`,
+          purchaseNumber:
+            group.meta.purchaseNumber || `PO-${Date.now()}-${nanoid(6)}`,
           supplierId,
           shopId: shopObjId,
           items: group.lines,
@@ -544,7 +605,10 @@ export class PurchasesService {
    * Get branch purchase stats
    * Multi-tenant safe: filters by shopId and branchId
    */
-  async getBranchStats(shopId: string, branchId: string): Promise<{
+  async getBranchStats(
+    shopId: string,
+    branchId: string,
+  ): Promise<{
     totalPurchases: number;
     pendingPurchases: number;
     receivedPurchases: number;
@@ -557,8 +621,8 @@ export class PurchasesService {
       })
       .exec();
 
-    const pending = purchases.filter(p => p.status === 'pending').length;
-    const received = purchases.filter(p => p.status === 'received').length;
+    const pending = purchases.filter((p) => p.status === 'pending').length;
+    const received = purchases.filter((p) => p.status === 'received').length;
     const totalSpent = purchases.reduce((sum, p) => sum + p.totalCost, 0);
 
     return {

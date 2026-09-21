@@ -265,6 +265,7 @@ describe('SalesService', () => {
         mockShopId,
         'prod1',
         -2, // Negative for reduction
+        expect.objectContaining({ reason: 'sale' })
       );
     });
 
@@ -276,13 +277,17 @@ describe('SalesService', () => {
         mockCheckoutDto,
       );
 
-      expect(inventoryService.createStockAdjustment).toHaveBeenCalledWith(
+      // P0-2: the audit projection happens inside updateStock with durable
+      // mutation evidence keyed to the canonical order.
+      expect(inventoryService.updateStock).toHaveBeenCalledWith(
         mockShopId,
         'prod1',
         -2,
-        'sale',
-        mockUserId,
-        expect.stringContaining('Test Product x2'),
+        expect.objectContaining({
+          reason: 'sale',
+          referenceType: 'order',
+          mutationId: expect.stringContaining('sale:'),
+        }),
       );
     });
 

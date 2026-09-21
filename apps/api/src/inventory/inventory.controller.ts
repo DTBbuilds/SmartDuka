@@ -1,4 +1,18 @@
-import { Body, Controller, Delete, Get, Post, Put, Query, UseGuards, Response, Param, UploadedFile, UseInterceptors, BadRequestException } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Post,
+  Put,
+  Query,
+  UseGuards,
+  Response,
+  Param,
+  UploadedFile,
+  UseInterceptors,
+  BadRequestException,
+} from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { InventoryService } from './inventory.service';
 import { QueryProductsDto } from './dto/query-products.dto';
@@ -34,8 +48,14 @@ export class InventoryController {
 
   @UseGuards(JwtAuthGuard)
   @Get('products/barcode/:barcode')
-  async findByBarcode(@Param('barcode') barcode: string, @CurrentUser() user: any) {
-    const product = await this.inventoryService.findByBarcode(user.shopId, barcode);
+  async findByBarcode(
+    @Param('barcode') barcode: string,
+    @CurrentUser() user: any,
+  ) {
+    const product = await this.inventoryService.findByBarcode(
+      user.shopId,
+      barcode,
+    );
     if (!product) {
       return { found: false, product: null };
     }
@@ -54,8 +74,16 @@ export class InventoryController {
 
   @UseGuards(JwtAuthGuard)
   @Get('products/search/quick')
-  quickSearch(@Query('q') q: string, @Query('limit') limit: string, @CurrentUser() user: any) {
-    return this.inventoryService.quickSearch(user.shopId, q || '', limit ? parseInt(limit, 10) : 10);
+  quickSearch(
+    @Query('q') q: string,
+    @Query('limit') limit: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.inventoryService.quickSearch(
+      user.shopId,
+      q || '',
+      limit ? parseInt(limit, 10) : 10,
+    );
   }
 
   @UseGuards(JwtAuthGuard)
@@ -67,7 +95,11 @@ export class InventoryController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
   @Put('products/:id')
-  updateProduct(@Param('id') productId: string, @Body() dto: UpdateProductDto, @CurrentUser() user: any) {
+  updateProduct(
+    @Param('id') productId: string,
+    @Body() dto: UpdateProductDto,
+    @CurrentUser() user: any,
+  ) {
     return this.inventoryService.updateProduct(user.shopId, productId, dto);
   }
 
@@ -75,7 +107,11 @@ export class InventoryController {
   @Roles('admin')
   @Delete('products/:id')
   deleteProduct(@Param('id') productId: string, @CurrentUser() user: any) {
-    return this.inventoryService.deleteProduct(user.shopId, productId, user.sub);
+    return this.inventoryService.deleteProduct(
+      user.shopId,
+      productId,
+      user.sub,
+    );
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -88,8 +124,14 @@ export class InventoryController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
   @Delete('products/:id/permanent')
-  permanentlyDeleteProduct(@Param('id') productId: string, @CurrentUser() user: any) {
-    return this.inventoryService.permanentlyDeleteProduct(user.shopId, productId);
+  permanentlyDeleteProduct(
+    @Param('id') productId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.inventoryService.permanentlyDeleteProduct(
+      user.shopId,
+      productId,
+    );
   }
 
   @UseGuards(JwtAuthGuard)
@@ -106,8 +148,14 @@ export class InventoryController {
 
   @UseGuards(JwtAuthGuard)
   @Get('categories/:id')
-  getCategoryWithProducts(@Param('id') categoryId: string, @CurrentUser() user: any) {
-    return this.inventoryService.getCategoryWithProducts(user.shopId, categoryId);
+  getCategoryWithProducts(
+    @Param('id') categoryId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.inventoryService.getCategoryWithProducts(
+      user.shopId,
+      categoryId,
+    );
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -120,7 +168,11 @@ export class InventoryController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
   @Put('categories/:id')
-  updateCategory(@Param('id') categoryId: string, @Body() dto: UpdateCategoryDto, @CurrentUser() user: any) {
+  updateCategory(
+    @Param('id') categoryId: string,
+    @Body() dto: UpdateCategoryDto,
+    @CurrentUser() user: any,
+  ) {
     return this.inventoryService.updateCategory(user.shopId, categoryId, dto);
   }
 
@@ -141,8 +193,15 @@ export class InventoryController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
   @Post('stock/update')
-  updateStock(@Body() dto: { productId: string; quantityChange: number }, @CurrentUser() user: any) {
-    return this.inventoryService.updateStock(user.shopId, dto.productId, dto.quantityChange);
+  updateStock(
+    @Body() dto: { productId: string; quantityChange: number },
+    @CurrentUser() user: any,
+  ) {
+    return this.inventoryService.updateStock(
+      user.shopId,
+      dto.productId,
+      dto.quantityChange,
+    );
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -154,7 +213,11 @@ export class InventoryController {
   ) {
     // If branchId is provided, use branch-specific low stock method
     if (branchId) {
-      return this.inventoryService.getLowStockProductsByBranch(user.shopId, branchId, 10);
+      return this.inventoryService.getLowStockProductsByBranch(
+        user.shopId,
+        branchId,
+        10,
+      );
     }
     return this.inventoryService.getLowStockProducts(user.shopId, 10);
   }
@@ -167,11 +230,14 @@ export class InventoryController {
   async getStockMovements(
     @Param('productId') productId: string,
     @Query('limit') limit: string,
-    @CurrentUser() user: any
+    @CurrentUser() user: any,
   ) {
-    const movements = await this.inventoryService.getStockAdjustmentHistory(user.shopId, {
-      productId,
-    });
+    const movements = await this.inventoryService.getStockAdjustmentHistory(
+      user.shopId,
+      {
+        productId,
+      },
+    );
     // Apply limit after fetching (service doesn't support limit param)
     const limitNum = limit ? parseInt(limit, 10) : 10;
     return movements.slice(0, limitNum);
@@ -181,7 +247,8 @@ export class InventoryController {
   @Roles('admin')
   @Post('products/import')
   importProducts(
-    @Body() dto: { 
+    @Body()
+    dto: {
       products: CreateProductDto[];
       options?: {
         autoCreateCategories?: boolean;
@@ -189,10 +256,14 @@ export class InventoryController {
         updateExisting?: boolean;
         skipDuplicates?: boolean;
       };
-    }, 
-    @CurrentUser() user: any
+    },
+    @CurrentUser() user: any,
   ) {
-    return this.inventoryService.importProducts(user.shopId, dto.products, dto.options);
+    return this.inventoryService.importProducts(
+      user.shopId,
+      dto.products,
+      dto.options,
+    );
   }
 
   /**
@@ -202,26 +273,35 @@ export class InventoryController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
   @Post('products/import/analyze')
-  analyzeImport(@Body() dto: { products: CreateProductDto[] }, @CurrentUser() user: any) {
+  analyzeImport(
+    @Body() dto: { products: CreateProductDto[] },
+    @CurrentUser() user: any,
+  ) {
     return this.inventoryService.analyzeImport(user.shopId, dto.products);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
   @Get('products/export')
-  async exportProducts(@Response() res: any, @Query('categoryId') categoryId: string, @CurrentUser() user: any) {
+  async exportProducts(
+    @Response() res: any,
+    @Query('categoryId') categoryId: string,
+    @CurrentUser() user: any,
+  ) {
     try {
       if (!user?.shopId) {
-        return res.status(401).json({ message: 'Unauthorized: Shop ID not found' });
+        return res
+          .status(401)
+          .json({ message: 'Unauthorized: Shop ID not found' });
       }
       await this.inventoryService.exportProducts(user.shopId, res, categoryId);
     } catch (error) {
       console.error('Export products error:', error);
       // Ensure response hasn't already been sent
       if (!res.headersSent) {
-        res.status(500).json({ 
-          message: 'Failed to export products', 
-          error: error?.message || 'Unknown error occurred'
+        res.status(500).json({
+          message: 'Failed to export products',
+          error: error?.message || 'Unknown error occurred',
         });
       }
     }
@@ -231,24 +311,26 @@ export class InventoryController {
   @Roles('admin')
   @Post('adjustments')
   async createStockAdjustment(
-    @Body() dto: { productId: string; quantityChange: number; reason: string; notes?: string },
+    @Body()
+    dto: {
+      productId: string;
+      quantityChange: number;
+      reason: string;
+      notes?: string;
+    },
     @CurrentUser() user: any,
   ) {
-    const updated = await this.inventoryService.updateStock(
+    // P0-2: one durable mutation + one audit projection inside updateStock.
+    return this.inventoryService.updateStock(
       user.shopId,
       dto.productId,
       dto.quantityChange,
-    );
-    if (!updated) {
-      throw new BadRequestException('Stock update failed - product not found');
-    }
-    return this.inventoryService.createStockAdjustment(
-      user.shopId,
-      dto.productId,
-      dto.quantityChange,
-      dto.reason,
-      user.sub,
-      dto.notes,
+      {
+        mutationId: `manual:${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+        reason: dto.reason,
+        actor: user.sub,
+        notes: dto.notes,
+      },
     );
   }
 
@@ -273,11 +355,11 @@ export class InventoryController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
   @Get('expiring-products')
-  getExpiringProducts(
-    @Query('days') days: string,
-    @CurrentUser() user: any,
-  ) {
-    return this.inventoryService.getExpiringProducts(user.shopId, parseInt(days) || 30);
+  getExpiringProducts(@Query('days') days: string, @CurrentUser() user: any) {
+    return this.inventoryService.getExpiringProducts(
+      user.shopId,
+      parseInt(days) || 30,
+    );
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -333,7 +415,11 @@ export class InventoryController {
     @Param('productId') productId: string,
     @CurrentUser() user: any,
   ) {
-    const stock = await this.inventoryService.getBranchStock(user.shopId, productId, branchId);
+    const stock = await this.inventoryService.getBranchStock(
+      user.shopId,
+      productId,
+      branchId,
+    );
     return { productId, branchId, stock };
   }
 
@@ -396,7 +482,13 @@ export class InventoryController {
   @Roles('admin', 'branch_admin')
   @Post('branch/transfer')
   async transferBranchStock(
-    @Body() dto: { productId: string; fromBranchId: string; toBranchId: string; quantity: number },
+    @Body()
+    dto: {
+      productId: string;
+      fromBranchId: string;
+      toBranchId: string;
+      quantity: number;
+    },
     @CurrentUser() user: any,
   ) {
     return this.inventoryService.transferBranchStock(
@@ -511,7 +603,12 @@ export class InventoryController {
       fileFilter: (_req, file, cb) => {
         const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
         if (!allowed.includes(file.mimetype)) {
-          return cb(new BadRequestException('Only JPEG, PNG, WebP, and GIF images are allowed'), false);
+          return cb(
+            new BadRequestException(
+              'Only JPEG, PNG, WebP, and GIF images are allowed',
+            ),
+            false,
+          );
         }
         cb(null, true);
       },
@@ -525,7 +622,10 @@ export class InventoryController {
       throw new BadRequestException('No image file provided');
     }
 
-    const result = await this.cloudinaryService.uploadImage(file, `smartduka/${user.shopId}/products`);
+    const result = await this.cloudinaryService.uploadImage(
+      file,
+      `smartduka/${user.shopId}/products`,
+    );
     return { url: result.url, publicId: result.publicId };
   }
 }

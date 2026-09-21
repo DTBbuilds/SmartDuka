@@ -251,7 +251,7 @@ describe('P0-3C checkout idempotency', () => {
 
       expect(orderStore.size).toBe(1);
       expect(updateStock).toHaveBeenCalledTimes(1);
-      expect(updateStock).toHaveBeenCalledWith(SHOP_A, PRODUCT_A, -3);
+      expect(updateStock).toHaveBeenCalledWith(SHOP_A, PRODUCT_A, -3, expect.objectContaining({ reason: 'sale' }));
       expect(retry._id).toBe(first._id);
     });
 
@@ -283,7 +283,8 @@ describe('P0-3C checkout idempotency', () => {
 
       expect(retry._id).toBe(first._id);
       expect(updateStock).toHaveBeenCalledTimes(1);
-      expect(createStockAdjustment).toHaveBeenCalledTimes(1);
+      // P0-2: the audit projection lives inside updateStock (mocked here).
+      expect(createStockAdjustment).toHaveBeenCalledTimes(0);
       expect(updatePurchaseStats).toHaveBeenCalledTimes(1);
       expect(earnPoints).toHaveBeenCalledTimes(1);
     });
@@ -835,8 +836,9 @@ describe('P0-3C checkout idempotency', () => {
       }
       expect(orderStore.size).toBe(1);
       expect(updateStock).toHaveBeenCalledTimes(1);
-      expect(updateStock).toHaveBeenCalledWith(SHOP_A, PRODUCT_A, -3);
-      expect(createStockAdjustment).toHaveBeenCalledTimes(1);
+      expect(updateStock).toHaveBeenCalledWith(SHOP_A, PRODUCT_A, -3, expect.objectContaining({ reason: 'sale' }));
+      // P0-2: the audit projection lives inside updateStock (mocked here).
+      expect(createStockAdjustment).toHaveBeenCalledTimes(0);
       expect(last.items[0].quantity).toBe(3);
     });
   });

@@ -505,7 +505,7 @@ describe('P0-3E mpesa order/payment convergence', () => {
       });
       expect(retryAfter._id).toBe(first._id);
       expect(updateStock).toHaveBeenCalledTimes(1);
-      expect(updateStock).toHaveBeenCalledWith(SHOP_A, PRODUCT, -1);
+      expect(updateStock).toHaveBeenCalledWith(SHOP_A, PRODUCT, -1, expect.objectContaining({ reason: 'sale' }));
     });
   });
 });

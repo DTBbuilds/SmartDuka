@@ -86,7 +86,19 @@ export class Product {
   warrantyExpiry?: Date;
 
   // --- Pharmacy / Chemist Fields ---
-  @Prop({ required: false, enum: ['OTC', 'POM', 'P', 'controlled_II', 'controlled_III', 'controlled_IV', 'controlled_V', 'unscheduled'] })
+  @Prop({
+    required: false,
+    enum: [
+      'OTC',
+      'POM',
+      'P',
+      'controlled_II',
+      'controlled_III',
+      'controlled_IV',
+      'controlled_V',
+      'unscheduled',
+    ],
+  })
   drugSchedule?: string;
 
   @Prop({ required: false })
@@ -238,6 +250,40 @@ export class Product {
     };
   };
 
+  // P0-2: Durable stock-mutation receipts. Each receipt is pushed in the SAME
+  // document write as the physical stock change, so receipt presence proves
+  // the mutation landed. Receipts are removed once their StockAdjustment audit
+  // projection is durably persisted (audited: true then pulled).
+  @Prop({
+    type: [
+      {
+        mutationId: String,
+        quantityDelta: Number,
+        reason: String,
+        actor: String,
+        referenceType: String,
+        referenceId: String,
+        branchId: String,
+        notes: String,
+        audited: Boolean,
+        createdAt: Date,
+      },
+    ],
+    default: [],
+  })
+  stockMutations?: Array<{
+    mutationId: string;
+    quantityDelta: number;
+    reason: string;
+    actor: string;
+    referenceType?: string;
+    referenceId?: string;
+    branchId?: string;
+    notes?: string;
+    audited?: boolean;
+    createdAt: Date;
+  }>;
+
   // Soft delete support
   @Prop({ required: false })
   deletedAt?: Date;
@@ -261,5 +307,10 @@ ProductSchema.index({ shopId: 1, branchId: 1 }); // For branch-specific queries
 ProductSchema.index({ shopId: 1, barcode: 1, status: 1 }); // Fast barcode lookup
 ProductSchema.index({ shopId: 1, sku: 1, status: 1 }); // Fast SKU lookup
 ProductSchema.index({ shopId: 1, brand: 1 }); // Brand filtering
-ProductSchema.index({ shopId: 1, name: 'text', description: 'text', brand: 'text' }); // Full-text search
+ProductSchema.index({
+  shopId: 1,
+  name: 'text',
+  description: 'text',
+  brand: 'text',
+}); // Full-text search
 ProductSchema.index({ shopId: 1, deletedAt: 1 }); // For soft delete queries
