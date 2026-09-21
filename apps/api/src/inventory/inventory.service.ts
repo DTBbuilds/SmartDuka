@@ -900,9 +900,11 @@ export class InventoryService implements OnModuleInit {
    * remains and recovery reconstructs the audit from receipt facts (never
    * from current stock).
    *
-   * Negative-delta safety preserves the established production behavior:
-   * a reduction that would drive stock below zero is clamped to zero and the
-   * receipt records the ACTUAL applied delta.
+   * Negative-delta safety fails closed: a reduction that would drive stock
+   * below zero is REJECTED before any write — no partial fulfillment, no
+   * success receipt, no audit record. Absolute corrections
+   * (reconciliation/stocktake) compute a variance bounded by the physical
+   * count (>= 0), so they cannot legitimately overdraw.
    */
   private async applyStockMutation(params: {
     shopId: string;
@@ -965,22 +967,20 @@ export class InventoryService implements OnModuleInit {
       return existing;
     }
 
-    // Negative-stock safety preserves established behavior: a reduction that
-    // would drive stock below zero is clamped, and the receipt records the
-    // ACTUAL applied delta (never a claimed one).
-    let actualDelta = quantityDelta;
+    // Negative-delta safety fails closed: a reduction that would drive stock
+    // below zero is rejected before the atomic write. Partial fulfillment
+    // (clamp) would create order/inventory divergence — the caller asked for
+    // N units and must not silently receive fewer.
     const currentStock = existing.stock || 0;
     if (quantityDelta < 0 && currentStock + quantityDelta < 0) {
-      actualDelta = -currentStock;
-      if (actualDelta === 0) actualDelta = 0; // normalize -0
-      this.logger.warn(
-        `Stock reduction clamped for product ${productId}: requested ${quantityDelta}, applying ${actualDelta} (current ${currentStock})`,
+      throw new BadRequestException(
+        `Insufficient stock for product ${productId}: requested ${-quantityDelta}, available ${currentStock}`,
       );
     }
 
     const receipt = {
       mutationId,
-      quantityDelta: actualDelta,
+      quantityDelta,
       reason,
       actor,
       ...(referenceType ? { referenceType } : {}),
@@ -1001,11 +1001,11 @@ export class InventoryService implements OnModuleInit {
           'stockMutations.mutationId': { $ne: mutationId },
         },
         {
-          $inc: { stock: actualDelta },
+          $inc: { stock: quantityDelta },
           $push: {
             stockMutations: {
               mutationId,
-              quantityDelta: actualDelta,
+              quantityDelta,
               reason,
               actor,
               ...(referenceType ? { referenceType } : {}),
@@ -2301,15 +2301,35 @@ export class InventoryService implements OnModuleInit {
     if (!existing) {
       throw new BadRequestException('Product not found');
     }
-    if (
-      (existing.stockMutations ?? []).some(
-        (m: any) => m.mutationId === mutationId,
-      )
-    ) {
+
+    // Permanent-witness idempotency: the embedded receipt OR the durable
+    // StockAdjustment (which keeps mutationId after receipt cleanup) both
+    // prove the mutation already applied — zero additional effect.
+    const receiptExists = (existing.stockMutations ?? []).some(
+      (m: any) => m.mutationId === mutationId,
+    );
+    const auditExists = receiptExists
+      ? null
+      : await this.adjustmentModel
+          .findOne({
+            shopId: new Types.ObjectId(shopId),
+            mutationId,
+          })
+          .exec();
+    if (receiptExists || auditExists) {
       this.logger.log(
         `Branch stock mutation ${mutationId} already applied for product ${productId} - no additional effect`,
       );
       return existing;
+    }
+
+    // Fail closed: a reduction may never drive branch stock below zero —
+    // no partial movement, no success receipt, no audit.
+    const branchStock = existing.branchInventory?.[branchId]?.stock ?? 0;
+    if (quantityChange < 0 && branchStock + quantityChange < 0) {
+      throw new BadRequestException(
+        `Insufficient stock in branch ${branchId}: requested ${-quantityChange}, available ${branchStock}`,
+      );
     }
 
     const updated = await this.productModel
@@ -2317,6 +2337,7 @@ export class InventoryService implements OnModuleInit {
         {
           _id: new Types.ObjectId(productId),
           shopId: new Types.ObjectId(shopId),
+          'stockMutations.mutationId': { $ne: mutationId },
           [`branchInventory.${branchId}.stock`]: {
             $gte: Math.max(0, -quantityChange),
           },
@@ -2347,10 +2368,27 @@ export class InventoryService implements OnModuleInit {
       .exec();
 
     if (!updated) {
-      this.logger.warn(
-        `Branch stock mutation ${mutationId} skipped (product/branch state changed concurrently)`,
+      // Distinguish a lost idempotency race (the winner's receipt landed) from
+      // concurrent drift or an uninitialized branch — the latter fail closed.
+      const canonical = await this.productModel
+        .findOne({
+          _id: new Types.ObjectId(productId),
+          shopId: new Types.ObjectId(shopId),
+        })
+        .exec();
+      if (
+        (canonical?.stockMutations ?? []).some(
+          (m: any) => m.mutationId === mutationId,
+        )
+      ) {
+        this.logger.log(
+          `Branch stock mutation ${mutationId} lost an idempotency race - canonical receipt already present`,
+        );
+        return canonical;
+      }
+      throw new BadRequestException(
+        `Insufficient stock in branch ${branchId} or branch not initialized`,
       );
-      return null;
     }
 
     await this.projectStockMutation(shopId, productId, {

@@ -91,9 +91,29 @@ describe('P0-2 stock mutation ↔ audit atomicity', () => {
       toQuery(() => (id.toString() === PID ? product : null)),
     );
     productModel.findOneAndUpdate = jest.fn((filter: any, update: any) =>
-      toQuery(() =>
-        matchesFilter(filter) ? applyUpdate(filter, update) : null,
-      ),
+      toQuery(() => {
+        if (!matchesFilter(filter)) return null;
+        // Honor the atomic idempotency guard:
+        //   'stockMutations.mutationId': { $ne: mutationId }
+        const ne = filter?.['stockMutations.mutationId']?.$ne;
+        if (
+          ne !== undefined &&
+          (product.stockMutations ?? []).some((m: any) => m.mutationId === ne)
+        ) {
+          return null;
+        }
+        // Honor branch-stock floor guards:
+        //   'branchInventory.<id>.stock': { $gte: n }
+        for (const key of Object.keys(filter ?? {})) {
+          if (key.startsWith('branchInventory.') && key.endsWith('.stock')) {
+            const branchKey = key.split('.')[1];
+            const min = filter[key]?.$gte ?? 0;
+            const cur = product.branchInventory?.[branchKey]?.stock;
+            if (cur === undefined || cur < min) return null;
+          }
+        }
+        return applyUpdate(filter, update);
+      }),
     );
     productModel.updateOne = jest.fn(
       (filter: any, update: any, options: any) => ({
@@ -227,6 +247,85 @@ describe('P0-2 stock mutation ↔ audit atomicity', () => {
       expect(product.stock).toBe(11);
       expect(adjustments).toHaveLength(2);
     });
+
+    it('different mutationIds remain legitimate: M1 -3 then M2 -2 -> 10 -> 7 -> 5', async () => {
+      boot();
+      await inventoryService.updateStock(SHOP, PID, -3, {
+        mutationId: 'sale:orderA:prodX',
+        reason: 'sale',
+        actor: USER,
+      });
+      await inventoryService.updateStock(SHOP, PID, -2, {
+        mutationId: 'sale:orderB:prodX',
+        reason: 'sale',
+        actor: USER,
+      });
+      expect(product.stock).toBe(5);
+      expect(adjustments).toHaveLength(2);
+    });
+  });
+
+  describe('post-cleanup replay (P0-2A)', () => {
+    it('retry AFTER receipt cleanup: StockAdjustment.mutationId is the permanent witness', async () => {
+      boot();
+      await inventoryService.updateStock(SHOP, PID, -3, {
+        mutationId: 'sale:order1:prod1',
+        reason: 'sale',
+        actor: USER,
+      });
+      expect(product.stock).toBe(7);
+      expect(adjustments).toHaveLength(1);
+      expect(product.stockMutations ?? []).toHaveLength(0); // receipt cleaned
+
+      await inventoryService.updateStock(SHOP, PID, -3, {
+        mutationId: 'sale:order1:prod1',
+        reason: 'sale',
+        actor: USER,
+      });
+      expect(product.stock).toBe(7);
+      expect(adjustments).toHaveLength(1);
+      expect(product.stockMutations ?? []).toHaveLength(0);
+    });
+
+    it('five post-cleanup retries: still exactly one physical mutation', async () => {
+      boot();
+      await inventoryService.updateStock(SHOP, PID, -3, {
+        mutationId: 'sale:order1:prod1',
+        reason: 'sale',
+        actor: USER,
+      });
+      expect(product.stockMutations ?? []).toHaveLength(0); // cleaned
+
+      for (let i = 0; i < 5; i++) {
+        await inventoryService.updateStock(SHOP, PID, -3, {
+          mutationId: 'sale:order1:prod1',
+          reason: 'sale',
+          actor: USER,
+        });
+      }
+      expect(product.stock).toBe(7);
+      expect(adjustments).toHaveLength(1);
+      expect(product.stockMutations ?? []).toHaveLength(0);
+    });
+
+    it('concurrent first executions: exactly one physical mutation', async () => {
+      boot();
+      await Promise.all([
+        inventoryService.updateStock(SHOP, PID, -3, {
+          mutationId: 'sale:order1:prod1',
+          reason: 'sale',
+          actor: USER,
+        }),
+        inventoryService.updateStock(SHOP, PID, -3, {
+          mutationId: 'sale:order1:prod1',
+          reason: 'sale',
+          actor: USER,
+        }),
+      ]);
+      expect(product.stock).toBe(7);
+      expect(adjustments).toHaveLength(1);
+      expect(product.stockMutations ?? []).toHaveLength(0);
+    });
   });
 
   describe('audit-failure window', () => {
@@ -338,28 +437,44 @@ describe('P0-2 stock mutation ↔ audit atomicity', () => {
       expect(adjustments[0].quantityChange).toBe(-3);
     });
 
-    it('insufficient stock: clamp preserves reality, audit matches actual delta', async () => {
-      boot({ stock: 1 });
-      await inventoryService.updateStock(SHOP, PID, -3, {
-        mutationId: 'sale:order1:prod1',
-        reason: 'sale',
-        actor: USER,
-      });
-      expect(product.stock).toBe(0);
-      expect(adjustments).toHaveLength(1);
-      expect(adjustments[0].quantityChange).toBe(-1);
+    it('insufficient stock: reduction fails closed — stock unchanged, no audit, no receipt', async () => {
+      boot({ stock: 2 });
+      await expect(
+        inventoryService.updateStock(SHOP, PID, -3, {
+          mutationId: 'sale:order1:prod1',
+          reason: 'sale',
+          actor: USER,
+        }),
+      ).rejects.toThrow('Insufficient stock');
+      expect(product.stock).toBe(2);
+      expect(adjustments).toHaveLength(0);
+      expect(product.stockMutations ?? []).toHaveLength(0);
     });
 
-    it('rejected mutation never creates audit evidence claiming success', async () => {
+    it('zero stock: sale delta -1 rejected, no success audit, no success receipt', async () => {
       boot({ stock: 0 });
+      await expect(
+        inventoryService.updateStock(SHOP, PID, -1, {
+          mutationId: 'sale:order1:prod1',
+          reason: 'sale',
+          actor: USER,
+        }),
+      ).rejects.toThrow('Insufficient stock');
+      expect(product.stock).toBe(0);
+      expect(adjustments).toHaveLength(0);
+      expect(product.stockMutations ?? []).toHaveLength(0);
+    });
+
+    it('sufficient sale: stock 5 -3 -> 2', async () => {
+      boot({ stock: 5 });
       await inventoryService.updateStock(SHOP, PID, -3, {
         mutationId: 'sale:order1:prod1',
         reason: 'sale',
         actor: USER,
       });
-      expect(product.stock).toBe(0);
+      expect(product.stock).toBe(2);
       expect(adjustments).toHaveLength(1);
-      expect(adjustments[0].quantityChange).toBe(0);
+      expect(adjustments[0].quantityChange).toBe(-3);
     });
   });
 
@@ -407,6 +522,23 @@ describe('P0-2 stock mutation ↔ audit atomicity', () => {
       );
     });
 
+    it('reconciliation to zero is legitimate: physical count 0 on stock 2 applies -2', async () => {
+      boot({ stock: 2 });
+      await inventoryService.createStockReconciliation(
+        SHOP,
+        PID,
+        0,
+        new Date(),
+        USER,
+        'stocktake',
+      );
+      expect(product.stock).toBe(0);
+      expect(adjustments).toHaveLength(1);
+      expect(adjustments[0]).toEqual(
+        expect.objectContaining({ quantityChange: -2, reason: 'correction' }),
+      );
+    });
+
     it('branch stock mutation carries durable evidence and audit', async () => {
       boot({ branchInventory: { 'branch-1': { stock: 10 } } });
       await inventoryService.updateBranchStock(SHOP, PID, 'branch-1', -2, {
@@ -419,6 +551,59 @@ describe('P0-2 stock mutation ↔ audit atomicity', () => {
       expect(adjustments).toHaveLength(1);
       expect(adjustments[0].quantityChange).toBe(-2);
       expect(product.stockMutations ?? []).toHaveLength(0);
+    });
+
+    it('branch insufficient stock: reduction fails closed — no partial movement', async () => {
+      boot({ branchInventory: { 'branch-1': { stock: 2 } } });
+      await expect(
+        inventoryService.updateBranchStock(SHOP, PID, 'branch-1', -3, {
+          mutationId: 'branch:adj1',
+          reason: 'correction',
+          actor: USER,
+        }),
+      ).rejects.toThrow('Insufficient stock in branch');
+      expect(product.branchInventory['branch-1'].stock).toBe(2);
+      expect(adjustments).toHaveLength(0);
+      expect(product.stockMutations ?? []).toHaveLength(0);
+    });
+
+    it('branch post-cleanup replay: retry after receipt cleanup does not re-mutate', async () => {
+      boot({ branchInventory: { 'branch-1': { stock: 10 } } });
+      await inventoryService.updateBranchStock(SHOP, PID, 'branch-1', -2, {
+        mutationId: 'branch:adj1',
+        reason: 'correction',
+        actor: USER,
+      });
+      expect(product.branchInventory['branch-1'].stock).toBe(8);
+      expect(product.stockMutations ?? []).toHaveLength(0); // cleaned
+
+      for (let i = 0; i < 5; i++) {
+        await inventoryService.updateBranchStock(SHOP, PID, 'branch-1', -2, {
+          mutationId: 'branch:adj1',
+          reason: 'correction',
+          actor: USER,
+        });
+      }
+      expect(product.branchInventory['branch-1'].stock).toBe(8);
+      expect(adjustments).toHaveLength(1);
+    });
+
+    it('branch concurrent first executions: exactly one physical mutation', async () => {
+      boot({ branchInventory: { 'branch-1': { stock: 10 } } });
+      await Promise.all([
+        inventoryService.updateBranchStock(SHOP, PID, 'branch-1', -2, {
+          mutationId: 'branch:adj1',
+          reason: 'correction',
+          actor: USER,
+        }),
+        inventoryService.updateBranchStock(SHOP, PID, 'branch-1', -2, {
+          mutationId: 'branch:adj1',
+          reason: 'correction',
+          actor: USER,
+        }),
+      ]);
+      expect(product.branchInventory['branch-1'].stock).toBe(8);
+      expect(adjustments).toHaveLength(1);
     });
 
     it('branch transfer: atomic movement with one transfer audit', async () => {
