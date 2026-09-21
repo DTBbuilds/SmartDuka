@@ -336,25 +336,87 @@ export default function StockTransfersPage() {
     }
   };
 
+  // P0-8A1: one stable receipt event id per logical receipt, persisted in
+  // sessionStorage keyed by transfer id so it survives page refresh. An
+  // ambiguous result (network loss, timeout, lost response) retains the
+  // id — a retry of the same payload replays the same event. A changed
+  // payload is a NEW logical receipt and gets a new id. Definitive
+  // success clears the id so the next receipt generates a fresh one.
+  const receiptStorageKey = (transferId: string) =>
+    `smartduka:transfer-receipt:${transferId}`;
+
+  const receiptFingerprint = (
+    items: { productId: string; receivedQuantity: number; damagedQuantity: number }[],
+  ) =>
+    JSON.stringify(
+      items
+        .map((i) => ({
+          p: i.productId,
+          r: i.receivedQuantity,
+          d: i.damagedQuantity,
+        }))
+        .sort((a, b) => a.p.localeCompare(b.p)),
+    );
+
+  const newReceiptEventId = () =>
+    typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `rcpt-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  const resolveReceiptEventId = (
+    transferId: string,
+    items: { productId: string; receivedQuantity: number; damagedQuantity: number }[],
+  ): string => {
+    const fingerprint = receiptFingerprint(items);
+    try {
+      const raw = sessionStorage.getItem(receiptStorageKey(transferId));
+      if (raw) {
+        const stored = JSON.parse(raw);
+        if (stored?.eventId && stored.fingerprint === fingerprint) {
+          return stored.eventId;
+        }
+      }
+    } catch {
+      // sessionStorage unavailable/corrupt — fall through to a fresh id
+    }
+    const eventId = newReceiptEventId();
+    try {
+      sessionStorage.setItem(
+        receiptStorageKey(transferId),
+        JSON.stringify({ eventId, fingerprint }),
+      );
+    } catch {
+      // storage full/unavailable — session still safe via state
+    }
+    return eventId;
+  };
+
+  const clearReceiptEventId = (transferId: string) => {
+    try {
+      sessionStorage.removeItem(receiptStorageKey(transferId));
+    } catch {
+      // ignore
+    }
+  };
+
   const startReceive = (transfer: StockTransfer) => {
-    setReceiveItems(
-      transfer.items.map((item) => ({
-        productId: item.productId,
-        receivedQuantity: item.quantity,
-        damagedQuantity: 0,
-      })),
-    );
+    const items = transfer.items.map((item) => ({
+      productId: item.productId,
+      receivedQuantity: item.quantity,
+      damagedQuantity: 0,
+    }));
+    setReceiveItems(items);
     setReceiveNotes('');
-    setReceiptEventId(
-      typeof crypto !== 'undefined' && crypto.randomUUID
-        ? crypto.randomUUID()
-        : `rcpt-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-    );
+    setReceiptEventId(resolveReceiptEventId(transfer._id, items));
     setIsReceiveMode(true);
   };
 
   const handleReceive = async () => {
-    if (!viewTransfer || !receiptEventId) return;
+    if (!viewTransfer) return;
+    // Resolve at submit time: same payload → same persisted event id;
+    // an edited payload is a new logical receipt → new event id.
+    const eventId = resolveReceiptEventId(viewTransfer._id, receiveItems);
+    setReceiptEventId(eventId);
     setIsReceiving(true);
     setError(null);
 
@@ -368,7 +430,7 @@ export default function StockTransfersPage() {
         body: JSON.stringify({
           items: receiveItems,
           notes: receiveNotes || undefined,
-          receiptEventId,
+          receiptEventId: eventId,
         }),
       });
 
@@ -381,6 +443,8 @@ export default function StockTransfersPage() {
         setSuccess(msg);
         setIsReceiveMode(false);
         setIsViewOpen(false);
+        clearReceiptEventId(viewTransfer._id);
+        setReceiptEventId(null);
         fetchTransfers();
         fetchStats();
         setTimeout(() => setSuccess(null), 5000);

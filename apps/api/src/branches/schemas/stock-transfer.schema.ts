@@ -50,6 +50,19 @@ export class TransferItem {
    */
   @Prop({ required: false, type: [String] })
   convergedReceiptEventIds?: string[];
+
+  /**
+   * P0-8A1: per-event payload records written inside the atomic
+   * bound-claim. An idempotency id IS a payload identity — a retry with
+   * the same event id but a different quantity is a conflict, not a
+   * replay.
+   */
+  @Prop({ required: false, type: [Object] })
+  receiptEvents?: {
+    eventId: string;
+    receivedQuantity: number;
+    damagedQuantity: number;
+  }[];
 }
 
 /**

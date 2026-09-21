@@ -33,20 +33,41 @@ type Product = {
   stock: number;
 };
 
-type StockTransfer = {
-  _id: string;
-  fromBranch: string;
-  fromBranchName: string;
-  toBranch: string;
-  toBranchName: string;
-  product: string;
+// P0-8A1: canonical stock-transfer shape from /stock-transfers — the
+// legacy /inventory/stock-transfers stub endpoint is disabled.
+type StockTransferItem = {
+  productId: string;
   productName: string;
   quantity: number;
-  status: 'pending' | 'approved' | 'rejected' | 'completed';
-  createdAt: string;
-  approvedAt?: string;
-  completedAt?: string;
+  receivedQuantity?: number;
 };
+
+type StockTransfer = {
+  _id: string;
+  transferNumber: string;
+  fromBranchName: string;
+  toBranchName: string;
+  items: StockTransferItem[];
+  status:
+    | 'draft'
+    | 'pending_approval'
+    | 'approved'
+    | 'in_transit'
+    | 'partially_received'
+    | 'received'
+    | 'cancelled'
+    | 'rejected';
+  createdAt?: string;
+  requestedAt?: string;
+  approvedAt?: string;
+  receivedAt?: string;
+};
+
+const transferProductLabel = (t: StockTransfer) =>
+  (t.items ?? []).map((i) => i.productName).join(', ') || 'Transfer';
+
+const transferTotalQuantity = (t: StockTransfer) =>
+  (t.items ?? []).reduce((sum, i) => sum + (i.quantity || 0), 0);
 
 export function BranchStockSharing() {
   const { token } = useAuth();
@@ -76,7 +97,7 @@ export function BranchStockSharing() {
       const [branchesRes, productsRes, transfersRes] = await Promise.all([
         fetch(`${config.apiUrl}/branches`, { headers }),
         fetch(`${config.apiUrl}/inventory/products?limit=200`, { headers }),
-        fetch(`${config.apiUrl}/inventory/stock-transfers`, { headers }),
+        fetch(`${config.apiUrl}/stock-transfers`, { headers }),
       ]);
 
       if (branchesRes.ok) {
@@ -119,17 +140,16 @@ export function BranchStockSharing() {
 
     try {
       setSubmitting(true);
-      const res = await fetch(`${config.apiUrl}/inventory/stock-transfers`, {
+      const res = await fetch(`${config.apiUrl}/stock-transfers`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          fromBranch,
-          toBranch,
-          product: selectedProduct,
-          quantity,
+          fromBranchId: fromBranch,
+          toBranchId: toBranch,
+          items: [{ productId: selectedProduct, quantity }],
         }),
       });
 
@@ -155,9 +175,13 @@ export function BranchStockSharing() {
 
   const handleApproveTransfer = async (transferId: string) => {
     try {
-      const res = await fetch(`${config.apiUrl}/inventory/stock-transfers/${transferId}/approve`, {
-        method: 'PUT',
-        headers: { Authorization: `Bearer ${token}` },
+      const res = await fetch(`${config.apiUrl}/stock-transfers/${transferId}/approve`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({}),
       });
 
       const approveText = await res.text();
@@ -175,10 +199,17 @@ export function BranchStockSharing() {
   };
 
   const handleRejectTransfer = async (transferId: string) => {
+    // Canonical API requires a rejection reason.
+    const reason = window.prompt('Reason for rejecting this transfer:');
+    if (!reason) return;
     try {
-      const res = await fetch(`${config.apiUrl}/inventory/stock-transfers/${transferId}/reject`, {
-        method: 'PUT',
-        headers: { Authorization: `Bearer ${token}` },
+      const res = await fetch(`${config.apiUrl}/stock-transfers/${transferId}/reject`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ reason }),
       });
 
       const rejectText = await res.text();
@@ -197,33 +228,25 @@ export function BranchStockSharing() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'pending':
+      case 'draft':
+      case 'pending_approval':
         return 'bg-yellow-500/10 text-yellow-700 dark:text-yellow-400';
       case 'approved':
+      case 'in_transit':
+      case 'partially_received':
         return 'bg-blue-500/10 text-blue-700 dark:text-blue-400';
-      case 'completed':
+      case 'received':
         return 'bg-green-500/10 text-green-700 dark:text-green-400';
       case 'rejected':
+      case 'cancelled':
         return 'bg-red-500/10 text-red-700 dark:text-red-400';
       default:
         return 'bg-gray-500/10 text-gray-700 dark:text-gray-400';
     }
   };
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'pending':
-        return '⏳';
-      case 'approved':
-        return '✅';
-      case 'completed':
-        return '✓';
-      case 'rejected':
-        return '❌';
-      default:
-        return '❓';
-    }
-  };
+  const getStatusLabel = (status: string) =>
+    status === 'pending_approval' ? 'PENDING' : status.replace(/_/g, ' ').toUpperCase();
 
   const selectedProductData = products.find(p => p._id === selectedProduct);
   const fromBranchData = branches.find(b => b._id === fromBranch);
@@ -388,7 +411,7 @@ export function BranchStockSharing() {
                         <Send className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                       </div>
                       <div className="flex-1">
-                        <p className="font-semibold text-sm">{transfer.productName}</p>
+                        <p className="font-semibold text-sm">{transferProductLabel(transfer)}</p>
                         <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
                           <span>{transfer.fromBranchName}</span>
                           <ArrowRight className="h-3 w-3" />
@@ -397,9 +420,9 @@ export function BranchStockSharing() {
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="font-semibold">{transfer.quantity} units</p>
+                      <p className="font-semibold">{transferTotalQuantity(transfer)} units</p>
                       <Badge className={getStatusColor(transfer.status)}>
-                        {getStatusIcon(transfer.status)} {transfer.status.toUpperCase()}
+                        {getStatusLabel(transfer.status)}
                       </Badge>
                     </div>
                   </div>
@@ -408,7 +431,7 @@ export function BranchStockSharing() {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs mb-3 pb-3 border-t">
                     <div>
                       <p className="text-muted-foreground">Created</p>
-                      <p className="font-medium">{new Date(transfer.createdAt).toLocaleDateString()}</p>
+                      <p className="font-medium">{new Date(transfer.createdAt || transfer.requestedAt || '').toLocaleDateString()}</p>
                     </div>
                     {transfer.approvedAt && (
                       <div>
@@ -416,16 +439,16 @@ export function BranchStockSharing() {
                         <p className="font-medium">{new Date(transfer.approvedAt).toLocaleDateString()}</p>
                       </div>
                     )}
-                    {transfer.completedAt && (
+                    {transfer.receivedAt && (
                       <div>
                         <p className="text-muted-foreground">Completed</p>
-                        <p className="font-medium">{new Date(transfer.completedAt).toLocaleDateString()}</p>
+                        <p className="font-medium">{new Date(transfer.receivedAt).toLocaleDateString()}</p>
                       </div>
                     )}
                   </div>
 
                   {/* Actions */}
-                  {transfer.status === 'pending' && (
+                  {transfer.status === 'pending_approval' && (
                     <div className="flex gap-2">
                       <Button
                         size="sm"

@@ -430,6 +430,10 @@ describe('P0-8 stock transfer integrity', () => {
         target[field] = target[field] ?? [];
         if (!target[field].includes(value)) target[field].push(value);
       }
+      if (mode === 'push') {
+        target[field] = target[field] ?? [];
+        target[field].push(value);
+      }
     };
 
     const applyTransferUpdate = (t: any, update: any, matchIdx: number) => {
@@ -443,6 +447,8 @@ describe('P0-8 stock transfer integrity', () => {
         setPath(t, norm(k), v, 'inc');
       for (const [k, v] of Object.entries(update.$addToSet ?? {}))
         setPath(t, norm(k), v, 'addToSet');
+      for (const [k, v] of Object.entries(update.$push ?? {}))
+        setPath(t, norm(k), v, 'push');
       return t;
     };
 
@@ -919,6 +925,16 @@ describe('P0-8 stock transfer integrity', () => {
       await receive([{ productId: PID_A, receivedQuantity: 10 }], 'E1');
       expect(transfer.status).toBe('received');
       expect(bStock(PID_A, BRANCH_B)).toBe(10);
+    });
+
+    it('same event id + conflicting payload: rejected as conflict, not replayed', async () => {
+      await bootShipped();
+      await receive([{ productId: PID_A, receivedQuantity: 3 }], 'E1');
+      await expect(
+        receive([{ productId: PID_A, receivedQuantity: 5 }], 'E1'),
+      ).rejects.toThrow('conflicting payload');
+      expect(transfer.items[0].receivedQuantity).toBe(3);
+      expect(bStock(PID_A, BRANCH_B)).toBe(3);
     });
 
     it('concurrent identical event id: one logical receipt, one credit', async () => {

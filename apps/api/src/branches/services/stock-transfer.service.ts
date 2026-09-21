@@ -808,6 +808,13 @@ export class StockTransferService {
               pendingReceipts: 1,
             },
             $addToSet: { [`items.${lineIdx}.receiptEventIds`]: eventId },
+            $push: {
+              [`items.${lineIdx}.receiptEvents`]: {
+                eventId,
+                receivedQuantity: reqQty,
+                damagedQuantity: damQty,
+              },
+            },
             $set: {
               [`items.${lineIdx}.receivedAt`]: new Date(),
               ...(receivedItem.notes
@@ -826,7 +833,21 @@ export class StockTransferService {
         }
         const latestLine = latest.items[lineIdx];
         if (latestLine?.receiptEventIds?.includes(eventId)) {
-          // This event's bound-claim already landed (crash/retry) —
+          // This event's bound-claim already landed (crash/retry). An
+          // event id IS a payload identity — a retry carrying a
+          // different quantity is a conflict, not a replay.
+          const recorded = latestLine.receiptEvents?.find(
+            (e) => e.eventId === eventId,
+          );
+          if (
+            recorded &&
+            (recorded.receivedQuantity !== reqQty ||
+              recorded.damagedQuantity !== damQty)
+          ) {
+            throw new ConflictException(
+              `Receipt event ${eventId} was already claimed with quantity ${recorded.receivedQuantity} (damaged ${recorded.damagedQuantity}) — refusing conflicting payload ${reqQty}/${damQty}`,
+            );
+          }
           // converge the stock credit below.
           transfer = latest;
         } else if (latest.cancelClaimId) {
