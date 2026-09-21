@@ -7,7 +7,6 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { nanoid } from 'nanoid';
 import {
   StockTransfer,
   StockTransferDocument,
@@ -716,23 +715,25 @@ export class StockTransferService {
     notes?: string,
     receiptEventId?: string,
   ): Promise<StockTransferDocument> {
+    if (!receiptEventId) {
+      // P0-8A: a silent server-generated id would give every retry a fresh
+      // logical identity — the dedupe below would never engage. The client
+      // MUST supply a stable id for the whole logical receipt.
+      throw new BadRequestException(
+        'receiptEventId is required — the client must supply a stable event id so retries dedupe',
+      );
+    }
+
     let transfer = await this.findById(transferId, shopId);
 
-    if (!['in_transit', 'partially_received'].includes(transfer.status)) {
-      // Idempotent retry of a fully-completed receive: when the caller
-      // supplies the same event id and every target line already carries
-      // it, the receive is proven complete — converge no-ops and return.
-      if (
-        transfer.status === 'received' &&
-        receiptEventId &&
-        receivedItems?.every((ri) =>
-          transfer.items
-            .find((i) => i.productId.toString() === ri.productId)
-            ?.receiptEventIds?.includes(receiptEventId),
-        )
-      ) {
-        return transfer;
-      }
+    // 'received' is terminal, but a retry of the SAME event is allowed
+    // through to converge/mark any line that crashed post-claim — its
+    // bound-claim will no-op and the resume branch below handles it.
+    if (
+      !['in_transit', 'partially_received', 'received'].includes(
+        transfer.status,
+      )
+    ) {
       throw new BadRequestException(
         `Cannot receive transfer with status: ${transfer.status}`,
       );
@@ -748,7 +749,7 @@ export class StockTransferService {
       );
     }
 
-    const eventId = receiptEventId ?? `rcpt:${nanoid(12)}`;
+    const eventId = receiptEventId;
     const occurrences = this.countProductOccurrences(transfer.items);
 
     for (const receivedItem of receivedItems) {
@@ -774,9 +775,14 @@ export class StockTransferService {
         continue;
       }
 
-      // ── ATOMIC BOUND-CLAIM — the DB enforces receivedQuantity + request
-      // <= quantity inside the same conditional write that records the
-      // event. Application pre-checks alone would let two receives race.
+      // ── ATOMIC BOUND-CLAIM — one conditional write enforces
+      // receivedQuantity + request <= quantity, requires no active cancel
+      // claim, dedupes the event, and records the in-flight receipt
+      // (pendingReceipts) in the same mutation. Positional `items.<idx>`
+      // paths pin the exact line — $elemMatch-by-productId could target a
+      // different duplicate-product line than the one we found. The $or
+      // covers lines whose receivedQuantity field is absent (never
+      // received) — a bare $lte does not match missing fields in Mongo.
       const claimed = await this.transferModel
         .findOneAndUpdate(
           {
@@ -784,24 +790,28 @@ export class StockTransferService {
             shopId: transfer.shopId,
             status: { $in: ['in_transit', 'partially_received'] },
             cancelClaimId: null,
-            items: {
-              $elemMatch: {
-                productId: transferItem.productId,
-                receivedQuantity: { $lte: transferItem.quantity - reqQty },
-                receiptEventIds: { $ne: eventId },
+            [`items.${lineIdx}.productId`]: transferItem.productId,
+            [`items.${lineIdx}.receiptEventIds`]: { $ne: eventId },
+            $or: [
+              {
+                [`items.${lineIdx}.receivedQuantity`]: {
+                  $lte: transferItem.quantity - reqQty,
+                },
               },
-            },
+              { [`items.${lineIdx}.receivedQuantity`]: { $exists: false } },
+            ],
           },
           {
             $inc: {
-              'items.$.receivedQuantity': reqQty,
-              'items.$.damagedQuantity': damQty,
+              [`items.${lineIdx}.receivedQuantity`]: reqQty,
+              [`items.${lineIdx}.damagedQuantity`]: damQty,
+              pendingReceipts: 1,
             },
-            $addToSet: { 'items.$.receiptEventIds': eventId },
+            $addToSet: { [`items.${lineIdx}.receiptEventIds`]: eventId },
             $set: {
-              'items.$.receivedAt': new Date(),
+              [`items.${lineIdx}.receivedAt`]: new Date(),
               ...(receivedItem.notes
-                ? { 'items.$.notes': receivedItem.notes }
+                ? { [`items.${lineIdx}.notes`]: receivedItem.notes }
                 : {}),
             },
           },
@@ -814,9 +824,7 @@ export class StockTransferService {
         if (!latest) {
           throw new NotFoundException('Stock transfer not found');
         }
-        const latestLine = latest.items.find(
-          (i) => i.productId.toString() === receivedItem.productId,
-        );
+        const latestLine = latest.items[lineIdx];
         if (latestLine?.receiptEventIds?.includes(eventId)) {
           // This event's bound-claim already landed (crash/retry) —
           // converge the stock credit below.
@@ -864,6 +872,27 @@ export class StockTransferService {
         );
       }
 
+      // ── Mark the claim converged — atomic, self-deduping. Runs even
+      // when goodQuantity == 0 (all-damaged receipts still resolve the
+      // in-flight claim). The pendingReceipts decrement is guarded by
+      // convergedReceiptEventIds so a retried mark can never double-count.
+      await this.transferModel
+        .findOneAndUpdate(
+          {
+            _id: transfer._id,
+            shopId: transfer.shopId,
+            [`items.${lineIdx}.receiptEventIds`]: eventId,
+            [`items.${lineIdx}.convergedReceiptEventIds`]: { $ne: eventId },
+          },
+          {
+            $addToSet: {
+              [`items.${lineIdx}.convergedReceiptEventIds`]: eventId,
+            },
+            $inc: { pendingReceipts: -1 },
+          },
+        )
+        .exec();
+
       // Create audit log for product history
       await this.auditModel.create({
         shopId: new Types.ObjectId(shopId),
@@ -883,8 +912,10 @@ export class StockTransferService {
       });
     }
 
-    // ── Status finalize — 'received' only when every line is fully
-    // received; the conditional write keeps 'received' terminal.
+    // ── Status finalize — 'received' requires every line fully claimed
+    // AND zero in-flight receipts (pendingReceipts == 0). A concurrent
+    // event still converging cannot be prematurely sealed as delivered —
+    // whichever event finishes last performs the transition.
     const allReceived = transfer.items.every(
       (i) => (i.receivedQuantity ?? 0) >= i.quantity,
     );
@@ -895,6 +926,10 @@ export class StockTransferService {
           _id: transfer._id,
           shopId: transfer.shopId,
           status: { $in: ['in_transit', 'partially_received'] },
+          $or: [
+            { pendingReceipts: { $exists: false } },
+            { pendingReceipts: 0 },
+          ],
         },
         {
           $set: {
@@ -963,6 +998,10 @@ export class StockTransferService {
     if (['in_transit', 'partially_received'].includes(transfer.status)) {
       const claimId = `transfer:${transferId}:cancel`;
 
+      // pendingReceipts == 0 is part of the atomic claim: a receipt
+      // claimed but not yet stock-converged must NOT be treated as
+      // delivered — restoring only the outstanding quantity while its
+      // credit is still missing would silently erase that stock.
       const claimed = await this.transferModel
         .findOneAndUpdate(
           {
@@ -970,6 +1009,10 @@ export class StockTransferService {
             shopId: transfer.shopId,
             status: { $in: ['in_transit', 'partially_received'] },
             cancelClaimId: null,
+            $or: [
+              { pendingReceipts: { $exists: false } },
+              { pendingReceipts: 0 },
+            ],
           },
           {
             $set: {
@@ -992,6 +1035,10 @@ export class StockTransferService {
             latest.cancelClaimId === claimId)
         ) {
           transfer = latest;
+        } else if ((latest.pendingReceipts ?? 0) > 0) {
+          throw new ConflictException(
+            'A receipt is still converging for this transfer - retry the receive to converge it before cancelling',
+          );
         } else {
           throw new ConflictException(
             `Transfer status changed concurrently (now '${latest.status}')`,

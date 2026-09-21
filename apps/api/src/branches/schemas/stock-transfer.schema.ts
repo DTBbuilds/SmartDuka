@@ -42,6 +42,14 @@ export class TransferItem {
    */
   @Prop({ required: false, type: [String] })
   receiptEventIds?: string[];
+
+  /**
+   * P0-8A: receipt events whose destination stock credit is proven
+   * converged. receiptEventIds - convergedReceiptEventIds = in-flight
+   * claims; cancellation is blocked while any exist.
+   */
+  @Prop({ required: false, type: [String] })
+  convergedReceiptEventIds?: string[];
 }
 
 /**
@@ -178,6 +186,16 @@ export class StockTransfer {
 
   @Prop({ required: false })
   cancelStartedAt?: Date;
+
+  /**
+   * P0-8A: count of per-line receipt claims whose destination stock
+   * credit is not yet proven converged. Incremented inside the atomic
+   * bound-claim, decremented by the post-convergence mark. Cancellation
+   * requires pendingReceipts == 0 so a claimed-but-not-credited receipt
+   * can never be mistaken for delivered stock.
+   */
+  @Prop({ required: false })
+  pendingReceipts?: number;
 
   // Shipping details
   @Prop({ required: false })

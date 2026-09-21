@@ -292,70 +292,157 @@ describe('P0-8 stock transfer integrity', () => {
     };
 
     /**
-     * Transfer-doc filter evaluator. Returns the matched line index for
-     * $elemMatch (drives the `items.$` positional update), true/false else.
+     * Single-condition evaluator for a transfer doc — handles scalar ops
+     * ($in/$ne/$lte/$gte/$exists), positional `items.<idx>.<field>` paths,
+     * and the legacy `items.$elemMatch` shape (returns the matched index).
      */
-    const evalFilter = (f: any, t: any): number | boolean => {
-      if (f._id && f._id.toString() !== t._id.toString()) return false;
-      if (f.shopId && t.shopId.toString() !== f.shopId.toString()) return false;
-      if (f.status !== undefined) {
-        if (f.status.$in) {
-          if (!f.status.$in.includes(t.status)) return false;
-        } else if (t.status !== f.status) return false;
-      }
-      for (const k of ['shipClaimId', 'cancelClaimId']) {
-        if (f[k] === undefined) continue;
-        if (f[k] === null) {
-          if (t[k] != null) return false;
-        } else if (t[k] !== f[k]) return false;
-      }
-      if (f.items?.$elemMatch) {
-        const em = f.items.$elemMatch;
-        const idx = t.items.findIndex((i: any) => {
-          if (
-            em.productId &&
-            i.productId.toString() !== em.productId.toString()
-          )
+    const evalCond = (f: any, t: any): number | boolean => {
+      for (const [k, v] of Object.entries(f)) {
+        const pos = /^items\.(\d+)\.(.+)$/.exec(k);
+        if (pos) {
+          const el = t.items?.[Number(pos[1])];
+          const field = pos[2];
+          if (v && typeof v === 'object' && !Array.isArray(v)) {
+            const cond = v as any;
+            if (cond.$ne !== undefined) {
+              if (
+                (el?.[field] ?? []).includes
+                  ? (el?.[field] ?? []).includes(cond.$ne)
+                  : el?.[field] === cond.$ne
+              )
+                return false;
+            }
+            if (cond.$lte !== undefined) {
+              // Real Mongo: $lte does NOT match a missing field.
+              if (!(el && field in el) || el[field] > cond.$lte) return false;
+            }
+            if (cond.$gte !== undefined) {
+              if (!(el && field in el) || el[field] < cond.$gte) return false;
+            }
+            if (cond.$exists !== undefined) {
+              if ((el != null && field in el) === cond.$exists) continue;
+              return false;
+            }
+            if (cond.$in !== undefined) {
+              if (!cond.$in.includes(el?.[field])) return false;
+            }
+          } else {
+            // Real Mongo: scalar equality against an array field means
+            // "contains", against a scalar field it means "equals".
+            const ev = el?.[field];
+            if (Array.isArray(ev)) {
+              if (!ev.map(String).includes(String(v))) return false;
+            } else if (
+              (ev?.toString?.() ?? ev ?? null) !==
+              ((v as any)?.toString?.() ?? v ?? null)
+            ) {
+              return false;
+            }
+          }
+          continue;
+        }
+        if (k === 'items' && v?.$elemMatch) {
+          const em = v.$elemMatch;
+          const idx = t.items.findIndex((i: any) => {
+            if (
+              em.productId &&
+              i.productId.toString() !== em.productId.toString()
+            )
+              return false;
+            if (
+              em.receivedQuantity?.$lte !== undefined &&
+              (i.receivedQuantity ?? 0) > em.receivedQuantity.$lte
+            )
+              return false;
+            if (
+              em.receiptEventIds?.$ne &&
+              (i.receiptEventIds ?? []).includes(em.receiptEventIds.$ne)
+            )
+              return false;
+            return true;
+          });
+          if (idx < 0) return false;
+          return idx;
+        }
+        if (k === '_id' && f._id.toString() !== t._id.toString()) return false;
+        if (k === 'shopId' && t.shopId.toString() !== f.shopId.toString())
+          return false;
+        if (k === 'status') {
+          if (f.status.$in) {
+            if (!f.status.$in.includes(t.status)) return false;
+          } else if (t.status !== f.status) return false;
+          continue;
+        }
+        if (['shipClaimId', 'cancelClaimId'].includes(k)) {
+          if (v === null) {
+            if (t[k] != null) return false;
+          } else if (t[k] !== v) return false;
+          continue;
+        }
+        if (k === 'pendingReceipts') {
+          const cond = v as any;
+          if (cond && typeof cond === 'object') {
+            if (cond.$exists !== undefined) {
+              if ('pendingReceipts' in t !== cond.$exists) return false;
+            }
+            if (cond.$lte !== undefined && !('pendingReceipts' in t))
+              return false;
+            if (cond.$lte !== undefined && (t.pendingReceipts ?? 0) > cond.$lte)
+              return false;
+            if (cond.$gte !== undefined && (t.pendingReceipts ?? 0) < cond.$gte)
+              return false;
+          } else if ((t.pendingReceipts ?? null) !== v) {
             return false;
-          if (
-            em.receivedQuantity?.$lte !== undefined &&
-            (i.receivedQuantity ?? 0) > em.receivedQuantity.$lte
-          )
-            return false;
-          if (
-            em.receiptEventIds?.$ne &&
-            (i.receiptEventIds ?? []).includes(em.receiptEventIds.$ne)
-          )
-            return false;
-          return true;
-        });
-        return idx >= 0 ? idx : false;
+          }
+          continue;
+        }
+        if (k === '$or') continue;
       }
       return true;
     };
 
+    /**
+     * Transfer-doc filter evaluator — top-level keys incl. $or.
+     * Returns the matched line index when an items condition matched
+     * positionally (drives the `items.$` positional update), else bool.
+     */
+    const evalFilter = (f: any, t: any): number | boolean => {
+      if (f._id && f._id.toString() !== t._id.toString()) return false;
+      if (f.shopId && t.shopId.toString() !== f.shopId.toString()) return false;
+      if (f.$or) {
+        const ok = f.$or.some((c: any) => evalCond(c, t) !== false);
+        if (!ok) return false;
+      }
+      const rest = { ...f };
+      delete rest.$or;
+      delete rest._id;
+      delete rest.shopId;
+      return evalCond(rest, t);
+    };
+
+    const setPath = (obj: any, path: string, value: any, mode: string) => {
+      const m = /^items\.(\d+)\.(.+)$/.exec(path);
+      const target = m ? obj.items[Number(m[1])] : obj;
+      const field = m ? m[2] : path;
+      if (mode === 'set') target[field] = value;
+      if (mode === 'inc') target[field] = (target[field] ?? 0) + value;
+      if (mode === 'addToSet') {
+        target[field] = target[field] ?? [];
+        if (!target[field].includes(value)) target[field].push(value);
+      }
+    };
+
     const applyTransferUpdate = (t: any, update: any, matchIdx: number) => {
-      const i = matchIdx >= 0 ? matchIdx : 0;
-      for (const [k, v] of Object.entries(update.$set ?? {})) {
-        if (k.startsWith('items.$.')) {
-          t.items[i][k.slice(8)] = v;
-        } else {
-          t[k] = v;
-        }
-      }
-      for (const [k, v] of Object.entries(update.$inc ?? {})) {
-        if (k.startsWith('items.$.')) {
-          const field = k.slice(8);
-          t.items[i][field] = (t.items[i][field] ?? 0) + (v as number);
-        }
-      }
-      for (const [k, v] of Object.entries(update.$addToSet ?? {})) {
-        if (k.startsWith('items.$.')) {
-          const field = k.slice(8);
-          t.items[i][field] = t.items[i][field] ?? [];
-          if (!t.items[i][field].includes(v)) t.items[i][field].push(v);
-        }
-      }
+      const norm = (path: string) =>
+        path.startsWith('items.$.')
+          ? `items.${matchIdx >= 0 ? matchIdx : 0}.${path.slice(8)}`
+          : path;
+      for (const [k, v] of Object.entries(update.$set ?? {}))
+        setPath(t, norm(k), v, 'set');
+      for (const [k, v] of Object.entries(update.$inc ?? {}))
+        setPath(t, norm(k), v, 'inc');
+      for (const [k, v] of Object.entries(update.$addToSet ?? {}))
+        setPath(t, norm(k), v, 'addToSet');
       return t;
     };
 
@@ -411,6 +498,11 @@ describe('P0-8 stock transfer integrity', () => {
     );
   }
 
+  const bootShipped = async (opts: any = {}) => {
+    boot(opts);
+    await transferService.approve(TID, SHOP, USER);
+    await transferService.ship(TID, SHOP, USER);
+  };
   const approve = () => transferService.approve(TID, SHOP, USER);
   const ship = () => transferService.ship(TID, SHOP, USER);
   const receive = (items: any[], eventId?: string) =>
@@ -554,17 +646,12 @@ describe('P0-8 stock transfer integrity', () => {
 
   // ══ RECEIVE — BOUNDED, EXACTLY-ONCE DESTINATION CREDIT ═════════════
   describe('receive — destination credit', () => {
-    const bootShipped = async (opts: any = {}) => {
-      boot(opts);
-      await approve();
-      await ship();
-    };
-
     it('full receive: destination +10, status received', async () => {
       await bootShipped();
-      const result = await receive([
-        { productId: PID_A, receivedQuantity: 10 },
-      ]);
+      const result = await receive(
+        [{ productId: PID_A, receivedQuantity: 10 }],
+        'evt-full',
+      );
       expect(result.status).toBe('received');
       expect(bStock(PID_A, BRANCH_B)).toBe(10);
       expect(transfer.items[0].receivedQuantity).toBe(10);
@@ -623,12 +710,15 @@ describe('P0-8 stock transfer integrity', () => {
       // Persisted crash state: event claimed, stock not credited.
       transfer.items[0].receivedQuantity = 10;
       transfer.items[0].receiptEventIds = ['evt-crash'];
+      transfer.pendingReceipts = 1;
       const retried = await receive(
         [{ productId: PID_A, receivedQuantity: 10 }],
         'evt-crash',
       );
       expect(retried.status).toBe('received');
       expect(bStock(PID_A, BRANCH_B)).toBe(10); // exactly once
+      expect(transfer.pendingReceipts).toBe(0);
+      expect(transfer.items[0].convergedReceiptEventIds).toContain('evt-crash');
     });
 
     it('damaged quantity: only good quantity credited', async () => {
@@ -645,7 +735,7 @@ describe('P0-8 stock transfer integrity', () => {
       boot();
       await approve();
       await expect(
-        receive([{ productId: PID_A, receivedQuantity: 5 }]),
+        receive([{ productId: PID_A, receivedQuantity: 5 }], 'e1'),
       ).rejects.toThrow('Cannot receive');
       expect(bStock(PID_A, BRANCH_B)).toBe(0);
     });
@@ -734,6 +824,130 @@ describe('P0-8 stock transfer integrity', () => {
     });
   });
 
+  // ══ P0-8A — RECEIPT IDENTITY + CLAIM/CONVERGE CONVERGENCE ═══════════
+  describe('P0-8A — receipt identity and convergence', () => {
+    it('receiptEventId is mandatory: keyless receive rejected before any mutation', async () => {
+      await bootShipped();
+      await expect(
+        transferService.receive(TID, SHOP, USER, [
+          { productId: PID_A, receivedQuantity: 3 },
+        ]),
+      ).rejects.toThrow('receiptEventId is required');
+      expect(transfer.items[0].receivedQuantity ?? 0).toBe(0);
+      expect(bStock(PID_A, BRANCH_B)).toBe(0);
+    });
+
+    it('lost response: partial receipt E1 retried with same id → +0', async () => {
+      await bootShipped();
+      await receive([{ productId: PID_A, receivedQuantity: 3 }], 'E1');
+      expect(bStock(PID_A, BRANCH_B)).toBe(3);
+      const retried = await receive(
+        [{ productId: PID_A, receivedQuantity: 3 }],
+        'E1',
+      );
+      expect(transfer.items[0].receivedQuantity).toBe(3);
+      expect(bStock(PID_A, BRANCH_B)).toBe(3);
+      expect(retried.status).toBe('partially_received');
+      expect(
+        adjustments.filter((a) => a.mutationId.includes('E1')),
+      ).toHaveLength(1);
+    });
+
+    it('equal-quantity DISTINCT receipts are not deduped: E1 +3, E2 +3 → +6', async () => {
+      await bootShipped();
+      await receive([{ productId: PID_A, receivedQuantity: 3 }], 'E1');
+      await receive([{ productId: PID_A, receivedQuantity: 3 }], 'E2');
+      expect(transfer.items[0].receivedQuantity).toBe(6);
+      expect(bStock(PID_A, BRANCH_B)).toBe(6);
+    });
+
+    it('crash post-claim pre-credit: cancel is BLOCKED until the receipt converges', async () => {
+      await bootShipped();
+      // Persisted in-flight receipt: claimed, destination credit missing.
+      transfer.items[0].receivedQuantity = 4;
+      transfer.items[0].receiptEventIds = ['E1'];
+      transfer.pendingReceipts = 1;
+      await expect(cancel()).rejects.toThrow('still converging');
+      // Nothing moved: source still -10, destination still +0.
+      expect(bStock(PID_A, BRANCH_A)).toBe(0);
+      expect(bStock(PID_A, BRANCH_B)).toBe(0);
+      // Converge via receive retry → then cancel restores only outstanding.
+      await receive([{ productId: PID_A, receivedQuantity: 4 }], 'E1');
+      expect(bStock(PID_A, BRANCH_B)).toBe(4);
+      expect(transfer.pendingReceipts).toBe(0);
+      await cancel();
+      expect(bStock(PID_A, BRANCH_A)).toBe(6); // outstanding 6 restored
+      expect(bStock(PID_A, BRANCH_B)).toBe(4); // delivered stock kept
+      expect(transfer.status).toBe('cancelled');
+    });
+
+    it('cancel claim wins before receipt claim → receipt rejected, full restore', async () => {
+      await bootShipped();
+      transfer.cancelClaimId = `transfer:${TID}:cancel`;
+      transfer.cancelStartedAt = new Date();
+      await expect(
+        receive([{ productId: PID_A, receivedQuantity: 4 }], 'E1'),
+      ).rejects.toThrow('cancellation is in progress');
+      expect(bStock(PID_A, BRANCH_B)).toBe(0);
+    });
+
+    it('crash post-credit pre-mark: retry adds +0 stock and completes the mark', async () => {
+      await bootShipped();
+      // Claimed + destination credited (witness exists) but the
+      // converged-mark/pending decrement never landed.
+      transfer.items[0].receivedQuantity = 4;
+      transfer.items[0].receiptEventIds = ['E1'];
+      transfer.pendingReceipts = 1;
+      seedReceipt(PID_A, `transfer:${TID}:${PID_A}:receive:E1`, 4, BRANCH_B);
+      expect(bStock(PID_A, BRANCH_B)).toBe(4);
+      await receive([{ productId: PID_A, receivedQuantity: 4 }], 'E1');
+      expect(bStock(PID_A, BRANCH_B)).toBe(4); // no double credit
+      expect(transfer.pendingReceipts).toBe(0);
+      expect(transfer.items[0].convergedReceiptEventIds).toContain('E1');
+    });
+
+    it('final receipt crash: transfer not sealed received while a claim is unconverged', async () => {
+      await bootShipped();
+      // Every line fully claimed, but E1's credit still in flight —
+      // a concurrent event's finalize must not seal 'received'.
+      transfer.items[0].receivedQuantity = 10;
+      transfer.items[0].receiptEventIds = ['E1'];
+      transfer.pendingReceipts = 1;
+      await receive([{ productId: PID_A, receivedQuantity: 0 }], 'E2');
+      expect(transfer.status).not.toBe('received');
+      // Now converge E1 → its own finalize seals it.
+      await receive([{ productId: PID_A, receivedQuantity: 10 }], 'E1');
+      expect(transfer.status).toBe('received');
+      expect(bStock(PID_A, BRANCH_B)).toBe(10);
+    });
+
+    it('concurrent identical event id: one logical receipt, one credit', async () => {
+      await bootShipped();
+      const items = [{ productId: PID_A, receivedQuantity: 5 }];
+      await Promise.allSettled([receive(items, 'E1'), receive(items, 'E1')]);
+      expect(transfer.items[0].receivedQuantity).toBe(5);
+      expect(bStock(PID_A, BRANCH_B)).toBe(5);
+      expect(transfer.pendingReceipts).toBe(0);
+    });
+
+    it('transferBranchStock without idempotencyKey: rejected before any stock move', async () => {
+      boot();
+      await expect(
+        inventoryService.transferBranchStock(
+          SHOP,
+          PID_A,
+          BRANCH_A,
+          BRANCH_B,
+          5,
+          USER,
+          undefined as any,
+        ),
+      ).rejects.toThrow('idempotencyKey is required');
+      expect(bStock(PID_A, BRANCH_A)).toBe(10);
+      expect(bStock(PID_A, BRANCH_B)).toBe(0);
+    });
+  });
+
   // ══ MULTI-LINE ═════════════════════════════════════════════════════
   describe('multi-line transfers', () => {
     it('two lines: each deducted and credited exactly once', async () => {
@@ -804,9 +1018,14 @@ describe('P0-8 stock transfer integrity', () => {
         'not found',
       );
       await expect(
-        transferService.receive(TID, OTHER_SHOP, USER, [
-          { productId: PID_A, receivedQuantity: 1 },
-        ]),
+        transferService.receive(
+          TID,
+          OTHER_SHOP,
+          USER,
+          [{ productId: PID_A, receivedQuantity: 1 }],
+          undefined,
+          'E1',
+        ),
       ).rejects.toThrow('not found');
       await expect(
         transferService.cancel(TID, OTHER_SHOP, USER, 'x'),

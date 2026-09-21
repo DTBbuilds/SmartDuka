@@ -132,6 +132,10 @@ export default function StockTransfersPage() {
   const [receiveItems, setReceiveItems] = useState<{ productId: string; receivedQuantity: number; damagedQuantity: number }[]>([]);
   const [receiveNotes, setReceiveNotes] = useState('');
   const [isReceiving, setIsReceiving] = useState(false);
+  // P0-8A: one stable receipt event id per logical receive submission —
+  // generated once when the form opens and reused on every retry so a
+  // lost response can never double-credit destination stock.
+  const [receiptEventId, setReceiptEventId] = useState<string | null>(null);
 
   const fetchTransfers = useCallback(async () => {
     if (!token) return;
@@ -341,11 +345,16 @@ export default function StockTransfersPage() {
       })),
     );
     setReceiveNotes('');
+    setReceiptEventId(
+      typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `rcpt-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
     setIsReceiveMode(true);
   };
 
   const handleReceive = async () => {
-    if (!viewTransfer) return;
+    if (!viewTransfer || !receiptEventId) return;
     setIsReceiving(true);
     setError(null);
 
@@ -359,6 +368,7 @@ export default function StockTransfersPage() {
         body: JSON.stringify({
           items: receiveItems,
           notes: receiveNotes || undefined,
+          receiptEventId,
         }),
       });
 

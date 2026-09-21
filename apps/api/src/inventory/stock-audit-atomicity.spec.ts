@@ -620,6 +620,7 @@ describe('P0-2 stock mutation ↔ audit atomicity', () => {
         'branch-2',
         4,
         USER,
+        'audit-atomicity-key-1',
       );
       expect(product.branchInventory['branch-1'].stock).toBe(6);
       expect(product.branchInventory['branch-2'].stock).toBe(4);

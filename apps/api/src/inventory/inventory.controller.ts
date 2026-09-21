@@ -492,6 +492,11 @@ export class InventoryController {
     },
     @CurrentUser() user: any,
   ) {
+    if (!dto.idempotencyKey) {
+      throw new BadRequestException(
+        'idempotencyKey is required — the client must supply a stable key so a retried transfer cannot double-move stock',
+      );
+    }
     return this.inventoryService.transferBranchStock(
       user.shopId,
       dto.productId,

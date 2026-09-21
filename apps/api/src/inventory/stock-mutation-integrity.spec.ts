@@ -262,6 +262,7 @@ describe('Stock mutation integrity (P0-1)', () => {
         'b2',
         4,
         USER,
+        'mutation-integrity-key-1',
       );
 
       expect(product.branchInventory.b1.stock).toBe(6);

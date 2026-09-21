@@ -2475,7 +2475,7 @@ export class InventoryService implements OnModuleInit {
     toBranchId: string,
     quantity: number,
     transferredBy: string,
-    idempotencyKey?: string,
+    idempotencyKey: string,
   ): Promise<ProductDocument | null> {
     const product = await this.productModel.findOne({
       _id: new Types.ObjectId(productId),
@@ -2486,13 +2486,15 @@ export class InventoryService implements OnModuleInit {
       throw new BadRequestException('Product not found');
     }
 
-    // P0-8: an optional caller-supplied idempotency key gives this one-shot
-    // move a deterministic witness — a retry with the same key is a proven
-    // no-op (embedded receipt OR durable StockAdjustment). Anonymous calls
-    // keep the previous nanoid behaviour.
-    const mutationId = idempotencyKey
-      ? `transfer:${idempotencyKey}`
-      : `transfer:${nanoid(16)}`;
+    // P0-8A: a caller-supplied idempotency key is MANDATORY — this endpoint
+    // is externally retryable, so an anonymous call could double-move
+    // stock. The key becomes the deterministic P0-2 witness.
+    if (!idempotencyKey) {
+      throw new BadRequestException(
+        'idempotencyKey is required for branch stock transfer',
+      );
+    }
+    const mutationId = `transfer:${idempotencyKey}`;
     const receiptExists = (product.stockMutations ?? []).some(
       (m: any) => m.mutationId === mutationId,
     );
