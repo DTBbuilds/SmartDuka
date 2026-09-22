@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { config } from "@/lib/config";
 import {
   Button,
@@ -41,6 +41,8 @@ export function StockAdjustmentForm({
   const [reason, setReason] = useState("correction");
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
+  // P0-9: stable identity for this logical adjustment — survives submit retries
+  const idempotencyKeyRef = useRef<string | null>(null);
 
   const handleSubmit = async () => {
     if (quantityChange === 0) {
@@ -65,6 +67,7 @@ export function StockAdjustmentForm({
           quantityChange,
           reason,
           notes,
+          idempotencyKey: idempotencyKeyRef.current,
         }),
       });
 
@@ -85,6 +88,7 @@ export function StockAdjustmentForm({
       setQuantityChange(0);
       setReason("correction");
       setNotes("");
+      idempotencyKeyRef.current = null;
       onSuccess();
     } catch (err: any) {
       toast({
@@ -100,7 +104,15 @@ export function StockAdjustmentForm({
   const newStock = currentStock + quantityChange;
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        // One logical adjustment gets one identity, generated when the dialog
+        // opens and retained across retries until it definitively completes.
+        if (next) idempotencyKeyRef.current = crypto.randomUUID();
+      }}
+    >
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">
           <Plus className="h-4 w-4 mr-2" />

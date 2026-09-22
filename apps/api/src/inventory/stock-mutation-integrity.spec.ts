@@ -27,9 +27,22 @@ describe('Stock mutation integrity (P0-1)', () => {
   let reconciliationModel: any;
   let inventoryService: InventoryService;
 
-  const matchesFilter = (filter: any) =>
-    (!filter._id || filter._id.toString() === PID) &&
-    (!filter.shopId || filter.shopId.toString() === SHOP);
+  const matchesFilter = (filter: any) => {
+    if (filter._id && filter._id.toString() !== PID) return false;
+    if (filter.shopId && filter.shopId.toString() !== SHOP) return false;
+    // branchInventory.<b> existence predicates ($exists / $gte)
+    for (const key of Object.keys(filter)) {
+      if (!key.startsWith('branchInventory.')) continue;
+      const branchKey = key.split('.')[1];
+      const cond = filter[key];
+      const entry = product.branchInventory?.[branchKey];
+      if (cond?.$exists === false && entry !== undefined) return false;
+      if (cond?.$exists === true && entry === undefined) return false;
+      if (cond?.$gte !== undefined && (entry?.stock ?? 0) < cond.$gte)
+        return false;
+    }
+    return true;
+  };
 
   const applyUpdate = (filter: any, update: any) => {
     // Mutation-identity idempotency: an existing receipt for the same
@@ -43,6 +56,15 @@ describe('Stock mutation integrity (P0-1)', () => {
     }
     if (update.$inc?.stock !== undefined) product.stock += update.$inc.stock;
     if (update.$set?.stock !== undefined) product.stock = update.$set.stock;
+    for (const key of Object.keys(update.$set ?? {})) {
+      if (key.startsWith('branchInventory.')) {
+        const branchKey = key.split('.')[1];
+        product.branchInventory = product.branchInventory ?? {};
+        product.branchInventory[branchKey] = update.$set[key];
+      } else if (key !== 'stock') {
+        product[key] = update.$set[key];
+      }
+    }
     for (const key of Object.keys(update.$inc ?? {})) {
       if (key.startsWith('branchInventory.')) {
         const branchKey = key.split('.')[1];
@@ -209,7 +231,12 @@ describe('Stock mutation integrity (P0-1)', () => {
       const controller = new InventoryController(inventoryService, {} as any);
 
       await controller.createStockAdjustment(
-        { productId: PID, quantityChange: 3, reason: 'correction' },
+        {
+          productId: PID,
+          quantityChange: 3,
+          reason: 'correction',
+          idempotencyKey: 'adj-plus-3',
+        },
         { shopId: SHOP, sub: USER },
       );
 
@@ -222,7 +249,12 @@ describe('Stock mutation integrity (P0-1)', () => {
       const controller = new InventoryController(inventoryService, {} as any);
 
       await controller.createStockAdjustment(
-        { productId: PID, quantityChange: -2, reason: 'damage' },
+        {
+          productId: PID,
+          quantityChange: -2,
+          reason: 'damage',
+          idempotencyKey: 'adj-minus-2',
+        },
         { shopId: SHOP, sub: USER },
       );
 

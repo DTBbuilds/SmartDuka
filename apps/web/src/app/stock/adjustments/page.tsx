@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { config } from "@/lib/config";
 import {
@@ -92,6 +92,8 @@ export default function StockAdjustmentsPage() {
   const [reasonFilter, setReasonFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const [viewingAdjustment, setViewingAdjustment] = useState<Adjustment | null>(null);
+  // P0-9: stable idempotency identity for the in-flight adjustment
+  const idempotencyKeyRef = useRef<string | null>(null);
 
   const [formData, setFormData] = useState({
     productId: "",
@@ -168,6 +170,8 @@ export default function StockAdjustmentsPage() {
 
   const handleAdd = () => {
     setFormData({ productId: "", adjustmentType: "increase", quantity: 1, reason: "", description: "", reference: "" });
+    // P0-9: one stable identity per logical adjustment — survives submit retries
+    idempotencyKeyRef.current = crypto.randomUUID();
     setIsModalOpen(true);
   };
 
@@ -191,6 +195,7 @@ export default function StockAdjustmentsPage() {
           reason: formData.reason,
           description: formData.description || undefined,
           reference: formData.reference || undefined,
+          idempotencyKey: idempotencyKeyRef.current,
         }),
       });
 

@@ -43,7 +43,7 @@ export class InventoryController {
   @Roles('admin')
   @Post('products')
   createProduct(@Body() dto: CreateProductDto, @CurrentUser() user: any) {
-    return this.inventoryService.createProduct(user.shopId, dto);
+    return this.inventoryService.createProduct(user.shopId, dto, user.sub);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -194,13 +194,31 @@ export class InventoryController {
   @Roles('admin')
   @Post('stock/update')
   updateStock(
-    @Body() dto: { productId: string; quantityChange: number },
+    @Body()
+    dto: {
+      productId: string;
+      quantityChange: number;
+      idempotencyKey?: string;
+      reason?: string;
+      notes?: string;
+    },
     @CurrentUser() user: any,
   ) {
+    if (!dto.idempotencyKey) {
+      throw new BadRequestException(
+        'idempotencyKey is required — the client must supply a stable key so a retried stock update cannot double-apply',
+      );
+    }
     return this.inventoryService.updateStock(
       user.shopId,
       dto.productId,
       dto.quantityChange,
+      {
+        mutationId: `manual:${dto.idempotencyKey}`,
+        reason: dto.reason ?? 'other',
+        actor: user.sub,
+        notes: dto.notes,
+      },
     );
   }
 
@@ -263,6 +281,7 @@ export class InventoryController {
       user.shopId,
       dto.products,
       dto.options,
+      user.sub,
     );
   }
 
@@ -317,16 +336,22 @@ export class InventoryController {
       quantityChange: number;
       reason: string;
       notes?: string;
+      idempotencyKey?: string;
     },
     @CurrentUser() user: any,
   ) {
+    if (!dto.idempotencyKey) {
+      throw new BadRequestException(
+        'idempotencyKey is required — the client must supply a stable key so a retried adjustment cannot double-apply',
+      );
+    }
     // P0-2: one durable mutation + one audit projection inside updateStock.
     return this.inventoryService.updateStock(
       user.shopId,
       dto.productId,
       dto.quantityChange,
       {
-        mutationId: `manual:${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+        mutationId: `manual:${dto.idempotencyKey}`,
         reason: dto.reason,
         actor: user.sub,
         notes: dto.notes,
@@ -463,14 +488,32 @@ export class InventoryController {
   @Post('branch/:branchId/stock/update')
   async updateBranchStock(
     @Param('branchId') branchId: string,
-    @Body() dto: { productId: string; quantityChange: number },
+    @Body()
+    dto: {
+      productId: string;
+      quantityChange: number;
+      idempotencyKey?: string;
+      reason?: string;
+      notes?: string;
+    },
     @CurrentUser() user: any,
   ) {
+    if (!dto.idempotencyKey) {
+      throw new BadRequestException(
+        'idempotencyKey is required — the client must supply a stable key so a retried stock update cannot double-apply',
+      );
+    }
     return this.inventoryService.updateBranchStock(
       user.shopId,
       dto.productId,
       branchId,
       dto.quantityChange,
+      {
+        mutationId: `manual-branch:${dto.idempotencyKey}`,
+        reason: dto.reason ?? 'other',
+        actor: user.sub,
+        notes: dto.notes,
+      },
     );
   }
 

@@ -82,3 +82,9 @@ export const AdjustmentSchema = SchemaFactory.createForClass(Adjustment);
 AdjustmentSchema.index({ shopId: 1, createdAt: -1 });
 AdjustmentSchema.index({ shopId: 1, productId: 1 });
 AdjustmentSchema.index({ shopId: 1, reason: 1 });
+// P0-9: one Adjustment projection per logical mutation per shop — makes the
+// create() upsert safe under concurrent retries of the same idempotency key.
+AdjustmentSchema.index(
+  { shopId: 1, mutationId: 1 },
+  { unique: true, sparse: true },
+);

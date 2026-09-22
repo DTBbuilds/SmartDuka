@@ -208,9 +208,12 @@ export default function EditProductPage() {
     try {
       const apiUrl = config.apiUrl;
       
-      // Clean up form data - remove empty IDs, merge business-type fields
+      // Clean up form data - remove empty IDs, merge business-type fields.
+      // Stock is intentionally excluded: the API rejects stock on product edit
+      // (P0-9) — physical stock changes go through witnessed adjustments.
+      const { stock: _stock, ...metadataFields } = formData;
       const payload = {
-        ...formData,
+        ...metadataFields,
         ...businessTypeFields,
         categoryId: formData.categoryId || undefined,
         preferredSupplierId: formData.preferredSupplierId || undefined,

@@ -488,7 +488,7 @@ describe('P0-7 purchase receiving integrity', () => {
         ...(p.stockMutations ?? []),
         {
           mutationId,
-          quantityChange: qty,
+          quantityDelta: qty,
           stockAfter: p.stock,
           reason: 'purchase',
           actor: USER,

@@ -1,6 +1,7 @@
 import {
   Injectable,
   BadRequestException,
+  ConflictException,
   NotFoundException,
   Logger,
   OnModuleInit,
@@ -80,10 +81,12 @@ export class InventoryService implements OnModuleInit {
       }
     }
 
-    // Fix any existing negative stock (one-time cleanup, runs async)
+    // P0-9: startup must never mutate physical inventory. Negative stock is
+    // detected and logged for manual review only — historical repair is an
+    // explicit operator decision, not a silent boot-time rewrite.
     setImmediate(() => {
-      this.fixNegativeStock().catch((err) => {
-        this.logger.error('Failed to fix negative stock:', err);
+      this.detectNegativeStock().catch((err) => {
+        this.logger.error('Failed to scan for negative stock:', err);
       });
     });
   }
@@ -107,37 +110,55 @@ export class InventoryService implements OnModuleInit {
   }
 
   /**
-   * Fix all products with negative stock by setting them to 0
-   * This is a one-time cleanup for data integrity
+   * P0-9: detect negative stock for operator visibility — never repair it.
+   * Physical corrections require an explicit witnessed mutation
+   * (reconciliation or manual adjustment with a stable idempotency key).
    */
-  async fixNegativeStock(): Promise<{ fixed: number }> {
+  async detectNegativeStock(): Promise<{ detected: number; fixed: number }> {
     try {
-      const result = await this.productModel.updateMany(
-        { stock: { $lt: 0 } },
-        { $set: { stock: 0 } },
-      );
+      const detected = await this.productModel
+        .countDocuments({ stock: { $lt: 0 } })
+        .exec();
 
-      if (result.modifiedCount > 0) {
+      if (detected > 0) {
         this.logger.warn(
-          `Fixed ${result.modifiedCount} products with negative stock (set to 0)`,
+          `MANUAL_REVIEW_REQUIRED: ${detected} product(s) have negative stock — ` +
+            'no automatic repair performed; correct via inventory reconciliation',
         );
       }
 
-      return { fixed: result.modifiedCount };
+      return { detected, fixed: 0 };
     } catch (error) {
-      this.logger.error('Error fixing negative stock:', error);
+      this.logger.error('Error detecting negative stock:', error);
       throw error;
     }
+  }
+
+  /**
+   * @deprecated negative stock is never silently repaired; kept for API
+   * compatibility — delegates to detectNegativeStock (no mutation).
+   */
+  async fixNegativeStock(): Promise<{ fixed: number }> {
+    const { detected } = await this.detectNegativeStock();
+    return { fixed: 0 };
   }
 
   async createProduct(
     shopId: string,
     dto: CreateProductDto,
+    actor?: string,
   ): Promise<ProductDocument> {
     // Enforce product limit
     await this.subscriptionGuard.enforceLimit(shopId, 'products');
 
+    // P0-9: initial stock is a witnessed mutation, not a silent field. The
+    // durable receipt is embedded in the same document write as the stock
+    // itself — creation is atomic; the audit projection is recoverable.
+    const productId = new Types.ObjectId();
+    const initialStock = dto.stock ?? 0;
+    const initMutationId = `product-init:${productId.toString()}`;
     const created = new this.productModel({
+      _id: productId,
       shopId: new Types.ObjectId(shopId),
       name: dto.name,
       sku: dto.sku,
@@ -147,11 +168,38 @@ export class InventoryService implements OnModuleInit {
         : undefined,
       price: dto.price,
       cost: dto.cost ?? 0,
-      stock: dto.stock ?? 0,
+      stock: initialStock,
       tax: dto.tax ?? 0,
       status: dto.status ?? 'active',
+      ...(initialStock !== 0
+        ? {
+            stockMutations: [
+              {
+                mutationId: initMutationId,
+                quantityDelta: initialStock,
+                reason: 'other',
+                actor: actor ?? 'system',
+                notes: 'Initial stock on product creation',
+                audited: false,
+                createdAt: new Date(),
+              },
+            ],
+          }
+        : {}),
     });
     const product = await created.save();
+
+    // Project the durable init witness into a StockAdjustment. Failure is
+    // recoverable via the P0-2 sweep — the embedded receipt is the authority.
+    if (initialStock !== 0) {
+      await this.projectStockMutation(shopId, productId.toString(), {
+        mutationId: initMutationId,
+        quantityDelta: initialStock,
+        reason: 'other',
+        actor: actor ?? 'system',
+        notes: 'Initial stock on product creation',
+      });
+    }
 
     // Update usage count
     await this.subscriptionGuard.incrementUsage(shopId, 'products');
@@ -176,36 +224,51 @@ export class InventoryService implements OnModuleInit {
     productId: string,
     dto: UpdateProductDto,
   ): Promise<ProductDocument | null> {
-    const product = await this.productModel.findOne({
-      _id: new Types.ObjectId(productId),
-      shopId: new Types.ObjectId(shopId),
-    });
-
-    if (!product) {
-      throw new NotFoundException('Product not found');
+    // P0-9: routine product edit has no authority over physical stock.
+    // Reject loudly rather than silently discarding a requested change.
+    if (dto.stock !== undefined) {
+      throw new BadRequestException(
+        'stock cannot be changed via product edit — use /inventory/adjustments ' +
+          'or /inventory/reconciliation so the mutation is witnessed and audited',
+      );
     }
 
-    // Update fields if provided
-    if (dto.name !== undefined) product.name = dto.name;
-    if (dto.sku !== undefined) product.sku = dto.sku;
-    if (dto.barcode !== undefined) product.barcode = dto.barcode;
+    // Atomic metadata-only $set: a stale full-document save must never
+    // overwrite a concurrent stock mutation (sale/transfer/receipt).
+    const $set: Record<string, any> = { updatedAt: new Date() };
+    if (dto.name !== undefined) $set.name = dto.name;
+    if (dto.sku !== undefined) $set.sku = dto.sku;
+    if (dto.barcode !== undefined) $set.barcode = dto.barcode;
     if (dto.categoryId !== undefined) {
-      product.categoryId = dto.categoryId
+      $set.categoryId = dto.categoryId
         ? new Types.ObjectId(dto.categoryId)
         : undefined;
     }
-    if (dto.price !== undefined) product.price = dto.price;
-    if (dto.cost !== undefined) product.cost = dto.cost;
-    if (dto.stock !== undefined) product.stock = dto.stock;
-    if (dto.tax !== undefined) product.tax = dto.tax;
-    if (dto.status !== undefined) product.status = dto.status;
+    if (dto.price !== undefined) $set.price = dto.price;
+    if (dto.cost !== undefined) $set.cost = dto.cost;
+    if (dto.tax !== undefined) $set.tax = dto.tax;
+    if (dto.status !== undefined) $set.status = dto.status;
     if (dto.lowStockThreshold !== undefined)
-      product.lowStockThreshold = dto.lowStockThreshold;
-    if (dto.description !== undefined) product.description = dto.description;
-    if (dto.image !== undefined) product.image = dto.image;
+      $set.lowStockThreshold = dto.lowStockThreshold;
+    if (dto.description !== undefined) $set.description = dto.description;
+    if (dto.image !== undefined) $set.image = dto.image;
 
-    product.updatedAt = new Date();
-    return product.save();
+    const updated = await this.productModel
+      .findOneAndUpdate(
+        {
+          _id: new Types.ObjectId(productId),
+          shopId: new Types.ObjectId(shopId),
+        },
+        { $set },
+        { new: true },
+      )
+      .exec();
+
+    if (!updated) {
+      throw new NotFoundException('Product not found');
+    }
+
+    return updated;
   }
 
   /**
@@ -949,10 +1012,12 @@ export class InventoryService implements OnModuleInit {
     // after projection+cleanup, the StockAdjustment record itself (which
     // carries the mutationId permanently). Either one proves "already
     // applied" — the physical write is a proven no-op.
-    const receiptExists = (existing.stockMutations ?? []).some(
+    // P0-9: a mutation identity is immutable business intent — the same id
+    // with a different delta/branch is a conflict, never a silent no-op.
+    const existingReceipt = (existing.stockMutations ?? []).find(
       (m: any) => m.mutationId === mutationId,
     );
-    const auditExists = receiptExists
+    const existingAudit = existingReceipt
       ? null
       : await this.adjustmentModel
           .findOne({
@@ -960,7 +1025,15 @@ export class InventoryService implements OnModuleInit {
             mutationId,
           })
           .exec();
-    if (receiptExists || auditExists) {
+    this.assertMutationCompatible(
+      mutationId,
+      quantityDelta,
+      branchId,
+      existingReceipt,
+      existingAudit,
+      productId,
+    );
+    if (existingReceipt || existingAudit) {
       this.logger.log(
         `Stock mutation ${mutationId} already applied for product ${productId} - no additional stock effect`,
       );
@@ -1024,21 +1097,82 @@ export class InventoryService implements OnModuleInit {
     if (!updated) {
       // Lost an idempotency race against a concurrent identical mutation —
       // the winner's receipt is the durable evidence.
-      this.logger.log(
-        `Stock mutation ${mutationId} lost an idempotency race - canonical receipt already present`,
-      );
-      return this.productModel
+      const canonical = await this.productModel
         .findOne({
           _id: new Types.ObjectId(productId),
           shopId: new Types.ObjectId(shopId),
         })
         .exec();
+      this.assertMutationCompatible(
+        mutationId,
+        quantityDelta,
+        branchId,
+        (canonical?.stockMutations ?? []).find(
+          (m: any) => m.mutationId === mutationId,
+        ),
+        null,
+        productId,
+      );
+      this.logger.log(
+        `Stock mutation ${mutationId} lost an idempotency race - canonical receipt already present`,
+      );
+      return canonical;
     }
 
     // NOTE: the audit projection is performed by the public entry points
     // (updateStock / branch methods) which own the business context. This
     // primitive only guarantees the atomic mutation + durable receipt.
     return updated;
+  }
+
+  /**
+   * P0-9: a mutation identity binds immutable intent. The same mutationId
+   * with a different quantity delta or branch scope is a genuine conflict —
+   * never reinterpret it as a successful replay.
+   */
+  private assertMutationCompatible(
+    mutationId: string,
+    quantityDelta: number,
+    branchId: string | undefined,
+    receipt: any,
+    audit: any,
+    productId?: string,
+  ): void {
+    const witness = receipt ?? audit;
+    if (!witness) return;
+    const witnessedDelta = receipt
+      ? receipt.quantityDelta
+      : audit.quantityChange;
+    if (witnessedDelta !== quantityDelta) {
+      throw new ConflictException(
+        `Stock mutation ${mutationId} already exists with quantity ${witnessedDelta} — ` +
+          `conflicting request for ${quantityDelta}; a mutation identity is immutable`,
+      );
+    }
+    // Audit-level witnesses are shop-scoped: the same identity bound to a
+    // different product is a different business intent — conflict.
+    if (
+      audit &&
+      productId !== undefined &&
+      audit.productId &&
+      audit.productId.toString() !== productId
+    ) {
+      throw new ConflictException(
+        `Stock mutation ${mutationId} already exists for a different product — ` +
+          'a mutation identity is immutable',
+      );
+    }
+    if (
+      receipt &&
+      branchId !== undefined &&
+      receipt.branchId !== undefined &&
+      String(receipt.branchId) !== branchId
+    ) {
+      throw new ConflictException(
+        `Stock mutation ${mutationId} already exists for a different branch scope — ` +
+          'a mutation identity is immutable',
+      );
+    }
   }
 
   /**
@@ -1318,10 +1452,36 @@ export class InventoryService implements OnModuleInit {
    * - updateExisting: Update products if SKU/barcode matches (default: false)
    * - skipDuplicates: Skip products with duplicate SKU/barcode (default: true)
    */
+  /**
+   * P0-9: project each imported product's embedded init witness into a
+   * StockAdjustment. Failures are recoverable — the embedded receipt remains
+   * authoritative and the P0-2 sweep finishes the projection.
+   */
+  private async projectImportedInitialStock(
+    shopId: string,
+    insertedDocs: any[],
+    actor?: string,
+  ): Promise<void> {
+    for (const doc of insertedDocs ?? []) {
+      const receipt = (doc?.stockMutations ?? []).find((m: any) =>
+        String(m.mutationId).startsWith('product-init:'),
+      );
+      if (!receipt || !doc?._id) continue;
+      await this.projectStockMutation(shopId, doc._id.toString(), {
+        mutationId: receipt.mutationId,
+        quantityDelta: receipt.quantityDelta,
+        reason: receipt.reason,
+        actor: receipt.actor ?? actor ?? 'system',
+        notes: receipt.notes,
+      });
+    }
+  }
+
   async importProducts(
     shopId: string,
     products: CreateProductDto[],
     options: BulkImportOptionsDto = {},
+    actor?: string,
   ): Promise<{
     imported: number;
     updated: number;
@@ -1649,6 +1809,14 @@ export class InventoryService implements OnModuleInit {
 
       if (existingProduct) {
         if (updateExisting) {
+          // P0-9: an import row may never overwrite existing physical stock.
+          // Stock corrections require a witnessed adjustment/reconciliation.
+          if (dto.stock !== undefined && dto.stock !== existingProduct.stock) {
+            errors.push(
+              `Row ${i + 1} (${dto.name}): stock ${dto.stock} ignored for existing product — ` +
+                'stock changes require /inventory/adjustments or reconciliation',
+            );
+          }
           updateOperations.push({
             updateOne: {
               filter: { _id: existingProduct._id },
@@ -1657,7 +1825,6 @@ export class InventoryService implements OnModuleInit {
                   name: dto.name,
                   price: dto.price,
                   cost: dto.cost ?? existingProduct.cost ?? 0,
-                  stock: dto.stock ?? existingProduct.stock ?? 0,
                   tax: dto.tax ?? existingProduct.tax ?? 0,
                   categoryId: categoryId ?? existingProduct.categoryId,
                   status: dto.status ?? existingProduct.status ?? 'active',
@@ -1684,8 +1851,14 @@ export class InventoryService implements OnModuleInit {
         continue;
       }
 
-      // Prepare new product for bulk insert
+      // Prepare new product for bulk insert. P0-9: initial stock carries an
+      // embedded durable witness in the same document write — the receipt's
+      // identity is derived from the product _id, so an ambiguous import retry
+      // (same rows) can never produce a second physical mutation.
+      const newProductId = new Types.ObjectId();
+      const initialStock = dto.stock ?? 0;
       productsToInsert.push({
+        _id: newProductId,
         shopId: shopObjId,
         name: dto.name,
         sku: dto.sku || undefined,
@@ -1693,7 +1866,7 @@ export class InventoryService implements OnModuleInit {
         categoryId,
         price: dto.price,
         cost: dto.cost ?? 0,
-        stock: dto.stock ?? 0,
+        stock: initialStock,
         tax: dto.tax ?? 0,
         status: dto.status ?? 'active',
         description: dto.description,
@@ -1701,6 +1874,21 @@ export class InventoryService implements OnModuleInit {
         lowStockThreshold: dto.lowStockThreshold ?? 10,
         reorderPoint: dto.reorderPoint ?? 0,
         ...extendedFields,
+        ...(initialStock !== 0
+          ? {
+              stockMutations: [
+                {
+                  mutationId: `product-init:${newProductId.toString()}`,
+                  quantityDelta: initialStock,
+                  reason: 'other',
+                  actor: actor ?? 'system',
+                  notes: 'Initial stock on product import',
+                  audited: false,
+                  createdAt: new Date(),
+                },
+              ],
+            }
+          : {}),
         createdAt: new Date(),
         updatedAt: new Date(),
       });
@@ -1722,10 +1910,17 @@ export class InventoryService implements OnModuleInit {
           ordered: false,
         });
         imported = result.length;
+        await this.projectImportedInitialStock(shopId, result, actor);
       } catch (err: any) {
-        // Handle partial failures
+        // Handle partial failures — still project witnesses for the rows
+        // that physically landed.
         if (err.insertedDocs) {
           imported = err.insertedDocs.length;
+          await this.projectImportedInitialStock(
+            shopId,
+            err.insertedDocs,
+            actor,
+          );
         }
         if (err.writeErrors) {
           err.writeErrors.forEach((writeErr: any) => {
@@ -1752,6 +1947,8 @@ export class InventoryService implements OnModuleInit {
         }
       }
     }
+
+    // Step 6b: (projection handled inside the insert block above)
 
     // Step 7: Execute bulk updates
     if (updateOperations.length > 0) {
@@ -2305,10 +2502,11 @@ export class InventoryService implements OnModuleInit {
     // Permanent-witness idempotency: the embedded receipt OR the durable
     // StockAdjustment (which keeps mutationId after receipt cleanup) both
     // prove the mutation already applied — zero additional effect.
-    const receiptExists = (existing.stockMutations ?? []).some(
+    // P0-9: same identity + different intent = conflict, not silent no-op.
+    const receipt = (existing.stockMutations ?? []).find(
       (m: any) => m.mutationId === mutationId,
     );
-    const auditExists = receiptExists
+    const audit = receipt
       ? null
       : await this.adjustmentModel
           .findOne({
@@ -2316,9 +2514,17 @@ export class InventoryService implements OnModuleInit {
             mutationId,
           })
           .exec();
-    if (receiptExists || auditExists) {
+    this.assertMutationCompatible(
+      mutationId,
+      quantityChange,
+      branchId,
+      receipt,
+      audit,
+      productId,
+    );
+    if (receipt || audit) {
       this.logger.log(
-        `Branch stock mutation ${mutationId} already applied for product ${productId} - no additional effect`,
+        `Branch stock mutation ${mutationId} already applied for product ${productId} - no additional stock effect`,
       );
       return existing;
     }
@@ -2376,11 +2582,18 @@ export class InventoryService implements OnModuleInit {
           shopId: new Types.ObjectId(shopId),
         })
         .exec();
-      if (
-        (canonical?.stockMutations ?? []).some(
-          (m: any) => m.mutationId === mutationId,
-        )
-      ) {
+      const racedReceipt = (canonical?.stockMutations ?? []).find(
+        (m: any) => m.mutationId === mutationId,
+      );
+      if (racedReceipt) {
+        this.assertMutationCompatible(
+          mutationId,
+          quantityChange,
+          branchId,
+          racedReceipt,
+          null,
+          productId,
+        );
         this.logger.log(
           `Branch stock mutation ${mutationId} lost an idempotency race - canonical receipt already present`,
         );
@@ -2618,44 +2831,105 @@ export class InventoryService implements OnModuleInit {
     if (!product) {
       throw new BadRequestException('Product not found');
     }
-
-    // Initialize branchInventory if needed
-    if (!product.branchInventory) {
-      product.branchInventory = {};
+    if (initialStock < 0) {
+      throw new BadRequestException('Initial branch stock cannot be negative');
     }
 
-    // Initialize or update branch stock
-    const previousBranchStock = product.branchInventory[branchId]?.stock ?? 0;
-    const delta = initialStock - previousBranchStock;
-    product.branchInventory[branchId] = { stock: initialStock };
+    // P0-9: branch initialization is one atomic witnessed write with a
+    // deterministic identity. It may only create the entry — never overwrite
+    // existing branch stock. Corrections go through branch stock update or
+    // reconciliation.
+    const mutationId = `branch-init:${productId}:${branchId}`;
 
-    const mutationId = `branch-import:${nanoid(16)}`;
-    (product as any).stockMutations = [
-      ...((product.stockMutations as any[]) ?? []),
-      {
-        mutationId,
-        quantityDelta: delta,
-        reason: 'other',
-        actor: addedBy ?? 'system',
-        branchId,
-        notes: `Product added to branch ${branchId}`,
-        audited: false,
-        createdAt: new Date(),
-      },
-    ];
-
-    const updated = await product.save();
-
-    if (addedBy) {
-      await this.projectStockMutation(shopId, productId, {
-        mutationId,
-        quantityDelta: delta,
-        reason: 'other',
-        actor: addedBy,
-        branchId,
-        notes: `Product added to branch ${branchId} with initial stock: ${initialStock}`,
-      });
+    const existingReceipt = (product.stockMutations ?? []).find(
+      (m: any) => m.mutationId === mutationId,
+    );
+    const existingAudit = existingReceipt
+      ? null
+      : await this.adjustmentModel
+          .findOne({
+            shopId: new Types.ObjectId(shopId),
+            mutationId,
+          })
+          .exec();
+    this.assertMutationCompatible(
+      mutationId,
+      initialStock,
+      branchId,
+      existingReceipt,
+      existingAudit,
+      productId,
+    );
+    if (existingReceipt || existingAudit) {
+      return product;
     }
+
+    // The atomic filter below is the real guard — a concurrent identical
+    // initialization must converge, not conflict.
+    const updated = await this.productModel
+      .findOneAndUpdate(
+        {
+          _id: new Types.ObjectId(productId),
+          shopId: new Types.ObjectId(shopId),
+          [`branchInventory.${branchId}`]: { $exists: false },
+          'stockMutations.mutationId': { $ne: mutationId },
+        },
+        {
+          $set: { [`branchInventory.${branchId}`]: { stock: initialStock } },
+          $push: {
+            stockMutations: {
+              mutationId,
+              quantityDelta: initialStock,
+              reason: 'other',
+              actor: addedBy ?? 'system',
+              branchId,
+              notes: `Product added to branch ${branchId}`,
+              audited: false,
+              createdAt: new Date(),
+            },
+          },
+        },
+        { new: true },
+      )
+      .exec();
+
+    if (!updated) {
+      // Lost a race — either the winner wrote our identical receipt, or the
+      // branch entry was initialized concurrently by another identity.
+      const canonical = await this.productModel
+        .findOne({
+          _id: new Types.ObjectId(productId),
+          shopId: new Types.ObjectId(shopId),
+        })
+        .exec();
+      const racedReceipt = (canonical?.stockMutations ?? []).find(
+        (m: any) => m.mutationId === mutationId,
+      );
+      if (racedReceipt) {
+        this.assertMutationCompatible(
+          mutationId,
+          initialStock,
+          branchId,
+          racedReceipt,
+          null,
+          productId,
+        );
+        return canonical;
+      }
+      throw new ConflictException(
+        `Product already initialized in branch ${branchId} — ` +
+          'use a witnessed branch stock adjustment or reconciliation instead',
+      );
+    }
+
+    await this.projectStockMutation(shopId, productId, {
+      mutationId,
+      quantityDelta: initialStock,
+      reason: 'other',
+      actor: addedBy ?? 'system',
+      branchId,
+      notes: `Product added to branch ${branchId} with initial stock: ${initialStock}`,
+    });
 
     return updated;
   }

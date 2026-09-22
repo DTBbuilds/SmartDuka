@@ -6,7 +6,6 @@ import {
   Inject,
   forwardRef,
 } from '@nestjs/common';
-import { nanoid } from 'nanoid';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Adjustment, AdjustmentDocument } from './adjustment.schema';
@@ -31,6 +30,12 @@ export interface CreateAdjustmentDto {
     | 'other';
   description?: string;
   reference?: string;
+  /**
+   * P0-9: client-supplied stable identity for this logical adjustment.
+   * Required — a retry of the same operation must carry the same key so the
+   * physical mutation and the Adjustment projection each land exactly once.
+   */
+  idempotencyKey?: string;
 }
 
 /**
@@ -102,6 +107,14 @@ export class AdjustmentsService {
     const previousStock = product.stock || 0;
     const newStock = previousStock + dto.delta;
 
+    // P0-9: one logical adjustment = one immutable client-supplied identity.
+    // Without it a retry would mint a fresh mutation and double-apply.
+    if (!dto.idempotencyKey) {
+      throw new BadRequestException(
+        'idempotencyKey is required — the client must supply a stable key so a retried adjustment cannot double-apply',
+      );
+    }
+
     // Prevent negative stock (optional - can be made configurable)
     if (newStock < 0) {
       throw new BadRequestException(
@@ -112,7 +125,7 @@ export class AdjustmentsService {
     // P0-2: the physical mutation goes through the canonical durable-mutation
     // contract (atomic $inc + receipt + StockAdjustment projection) so this
     // parallel service cannot bypass the invariant.
-    const mutationId = `stock-adjustment:${nanoid(16)}`;
+    const mutationId = `stock-adjustment:${dto.idempotencyKey}`;
     const updatedProduct = await this.inventoryService.updateStock(
       shopId,
       dto.productId,
@@ -133,27 +146,38 @@ export class AdjustmentsService {
     }
 
     // Additional domain-specific audit record (parallel projection), carrying
-    // the same mutation identity.
-    const adjustment = new this.adjustmentModel({
-      productId: new Types.ObjectId(dto.productId),
-      productName: dto.productName || product.name,
-      delta: dto.delta,
-      reason: dto.reason,
-      description: dto.description,
-      reference: dto.reference,
-      shopId: new Types.ObjectId(shopId),
-      adjustedBy: new Types.ObjectId(userId),
-      previousStock, // Track previous stock for reconciliation
-      newStock: updatedProduct.stock,
-      mutationId,
-    });
-
-    const savedAdjustment = await adjustment.save();
+    // the same mutation identity. Upsert keyed on (shopId, mutationId): a
+    // retry after a crash between the stock mutation and this write recovers
+    // exactly one Adjustment row — never a duplicate.
+    const savedAdjustment = await this.adjustmentModel
+      .findOneAndUpdate(
+        {
+          shopId: new Types.ObjectId(shopId),
+          mutationId,
+        },
+        {
+          $setOnInsert: {
+            productId: new Types.ObjectId(dto.productId),
+            productName: dto.productName || product.name,
+            delta: dto.delta,
+            reason: dto.reason,
+            description: dto.description,
+            reference: dto.reference,
+            shopId: new Types.ObjectId(shopId),
+            adjustedBy: new Types.ObjectId(userId),
+            previousStock, // Track previous stock for reconciliation
+            newStock: updatedProduct.stock,
+            mutationId,
+          },
+        },
+        { upsert: true, new: true },
+      )
+      .exec();
 
     this.logger.log(
       `Stock adjustment: ${product.name} ${dto.delta > 0 ? '+' : ''}${dto.delta} (${dto.reason}) | ` +
         `Previous: ${previousStock} → New: ${updatedProduct.stock} | ` +
-        `By: ${userId} | Ref: ${dto.reference || 'N/A'}`,
+        `By: ${userId} | Ref: ${dto.reference || 'N/A'} | mutationId: ${mutationId}`,
     );
 
     return savedAdjustment;
