@@ -14,6 +14,9 @@ interface Category {
   productCount?: number;
 }
 
+// P0-9A: durable identity for one logical category CSV import
+const CATEGORY_IMPORT_OP_KEY = 'smartduka:category-import-op';
+
 interface CategoryImportExportProps {
   token: string;
   isOpen: boolean;
@@ -138,6 +141,25 @@ export function CategoryImportExport({ token, isOpen, onClose, onImportComplete 
         return;
       }
 
+      // P0-9A: one stable identity per logical import, retained across
+      // ambiguous retries so the server replays rows instead of duplicating.
+      const sig = JSON.stringify(
+        products.map((p: any) => [p.name, p.sku, p.barcode, p.stock]),
+      );
+      let importOperationId: string;
+      try {
+        const stored = sessionStorage.getItem(CATEGORY_IMPORT_OP_KEY);
+        const parsed = stored ? JSON.parse(stored) : null;
+        importOperationId =
+          parsed?.sig === sig ? parsed.opId : crypto.randomUUID();
+        sessionStorage.setItem(
+          CATEGORY_IMPORT_OP_KEY,
+          JSON.stringify({ sig, opId: importOperationId }),
+        );
+      } catch {
+        importOperationId = crypto.randomUUID();
+      }
+
       // Import products
       const importRes = await fetch(`${config.apiUrl}/inventory/products/import`, {
         method: 'POST',
@@ -145,7 +167,10 @@ export function CategoryImportExport({ token, isOpen, onClose, onImportComplete 
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ products }),
+        body: JSON.stringify({
+          products,
+          options: { importOperationId },
+        }),
       });
 
       if (!importRes.ok) {
@@ -154,12 +179,19 @@ export function CategoryImportExport({ token, isOpen, onClose, onImportComplete 
       }
 
       const result_data = await importRes.json();
+      try {
+        sessionStorage.removeItem(CATEGORY_IMPORT_OP_KEY);
+      } catch {}
       setImportedCount(result_data.imported);
 
       toast({
         type: 'success',
         title: 'Import complete',
-        message: `Imported ${result_data.imported} products to category`,
+        message:
+          `Imported ${result_data.imported} products to category` +
+          (result_data.errors?.length
+            ? ` — ${result_data.errors.slice(0, 3).join('; ')}`
+            : ''),
       });
 
       setFile(null);

@@ -284,6 +284,20 @@ export class Product {
     createdAt: Date;
   }>;
 
+  // P0-9A: durable import replay identity — `${importOperationId}:${rowId}`
+  // stamped on the created/updated product, plus the stock quantity the row
+  // requested and whether it was physically applied. This is the canonical
+  // evidence that lets a retried import replay instead of duplicating, and
+  // conflict when the same identity carries different intent.
+  @Prop({ required: false })
+  importIdentity?: string;
+
+  @Prop({ required: false })
+  importStock?: number;
+
+  @Prop({ required: false })
+  importStockApplied?: boolean;
+
   // Soft delete support
   @Prop({ required: false })
   deletedAt?: Date;
@@ -298,6 +312,10 @@ export const ProductSchema = SchemaFactory.createForClass(Product);
 ProductSchema.index({ shopId: 1, name: 1 });
 ProductSchema.index({ shopId: 1, barcode: 1 }, { unique: true, sparse: true }); // Unique barcode per shop
 ProductSchema.index({ shopId: 1, sku: 1 }, { unique: true, sparse: true }); // Unique SKU per shop
+ProductSchema.index(
+  { shopId: 1, importIdentity: 1 },
+  { unique: true, sparse: true },
+); // P0-9A: one durable import row identity per shop
 ProductSchema.index({ shopId: 1, status: 1 });
 ProductSchema.index({ shopId: 1, expiryDate: 1 });
 ProductSchema.index({ shopId: 1, stock: 1 }); // For reorder automation

@@ -32,6 +32,8 @@ import { useCachedProducts, useCachedCategories } from '@/hooks/use-smart-cache'
 const PRODUCTS_CACHE_KEY = 'smartduka:cache:products';
 const CATEGORIES_CACHE_KEY = 'smartduka:cache:categories';
 const CACHE_TTL = 2 * 60 * 1000; // 2 minutes
+// P0-9A: durable identity for one logical CSV import (survives ambiguous retries)
+const IMPORT_OP_STORAGE_KEY = 'smartduka:products-import-op';
 
 interface CacheEntry<T> {
   data: T;
@@ -258,26 +260,57 @@ function ProductsContent() {
     if (!token) return;
     try {
       const base = config.apiUrl;
+      // P0-9A: one stable identity per logical import, retained across
+      // ambiguous retries (lost response / reload) so the server replays rows
+      // instead of duplicating products. Keyed to the payload signature — a
+      // genuinely different import mints a new identity.
+      const sig = JSON.stringify(
+        importedProducts.map((p: any) => [p.name, p.sku, p.barcode, p.stock]),
+      );
+      let importOperationId: string | undefined;
+      try {
+        const stored = sessionStorage.getItem(IMPORT_OP_STORAGE_KEY);
+        const parsed = stored ? JSON.parse(stored) : null;
+        importOperationId =
+          parsed?.sig === sig ? parsed.opId : crypto.randomUUID();
+        sessionStorage.setItem(
+          IMPORT_OP_STORAGE_KEY,
+          JSON.stringify({ sig, opId: importOperationId }),
+        );
+      } catch {
+        importOperationId = crypto.randomUUID();
+      }
       const res = await fetch(`${base}/inventory/products/import`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ products: importedProducts, options }),
+        body: JSON.stringify({
+          products: importedProducts,
+          options: { ...options, importOperationId },
+        }),
       });
       if (!res.ok) throw new Error(`Failed (${res.status})`);
       const text = await res.text();
       const result = text ? JSON.parse(text) : {};
-      
+      // Definitive completion — release the identity for the next import.
+      try {
+        sessionStorage.removeItem(IMPORT_OP_STORAGE_KEY);
+      } catch {}
+
       let message = `Imported ${result.imported} products`;
       if (result.updated > 0) message += `, updated ${result.updated}`;
       if (result.skipped > 0) message += `, skipped ${result.skipped} duplicates`;
       if (result.categoriesCreated?.length > 0) {
         message += `. Created ${result.categoriesCreated.length} categories`;
       }
-      if (result.errors?.length > 0) message += `. ${result.errors.length} errors`;
-      
+      if (result.errors?.length > 0) {
+        message += `. ${result.errors.length} warning(s): ${result.errors
+          .slice(0, 3)
+          .join('; ')}`;
+      }
+
       toast({ type: 'success', title: 'Import complete', message });
       clearProductsCache();
       loadData(true);

@@ -460,6 +460,62 @@ describe('Canonical stock mutation boundary (P0-9)', () => {
       expect(mutationCount('manual:k1')).toBe(1);
     });
 
+    it('P0-9A: same key + same delta + different reason → 409', async () => {
+      seedProduct();
+      const user = { shopId: SHOP, sub: USER };
+      await controller.updateStock(
+        {
+          productId: PID,
+          quantityChange: -3,
+          idempotencyKey: 'kr',
+          reason: 'damage',
+        },
+        user,
+      );
+      await expect(
+        controller.updateStock(
+          {
+            productId: PID,
+            quantityChange: -3,
+            idempotencyKey: 'kr',
+            reason: 'theft',
+          },
+          user,
+        ),
+      ).rejects.toThrow(ConflictException);
+      expect(product().stock).toBe(7);
+    });
+
+    it('P0-9A: semantic conflict still 409 after the embedded receipt is cleaned', async () => {
+      seedProduct();
+      const user = { shopId: SHOP, sub: USER };
+      await controller.updateStock(
+        {
+          productId: PID,
+          quantityChange: -3,
+          idempotencyKey: 'kr2',
+          reason: 'damage',
+        },
+        user,
+      );
+      // Projection finalized the receipt — only the StockAdjustment witness
+      // remains; the conflict must still be detected from it.
+      expect(product().stockMutations ?? []).toHaveLength(0);
+      expect(mutationCount('manual:kr2')).toBe(1);
+      await expect(
+        controller.updateStock(
+          {
+            productId: PID,
+            quantityChange: -3,
+            idempotencyKey: 'kr2',
+            reason: 'loss',
+          },
+          user,
+        ),
+      ).rejects.toThrow(ConflictException);
+      expect(product().stock).toBe(7);
+    });
+
     it('same key + different delta → 409', async () => {
       seedProduct();
       const user = { shopId: SHOP, sub: USER };
@@ -588,6 +644,32 @@ describe('Canonical stock mutation boundary (P0-9)', () => {
       expect(product().stock).toBe(13);
       expect(mutationCount('manual:adj-1')).toBe(1);
     });
+
+    it('P0-9A: same key + different reason → 409', async () => {
+      seedProduct();
+      const user = { shopId: SHOP, sub: USER };
+      await controller.createStockAdjustment(
+        {
+          productId: PID,
+          quantityChange: 3,
+          reason: 'damage',
+          idempotencyKey: 'adj-r',
+        },
+        user,
+      );
+      await expect(
+        controller.createStockAdjustment(
+          {
+            productId: PID,
+            quantityChange: 3,
+            reason: 'loss',
+            idempotencyKey: 'adj-r',
+          },
+          user,
+        ),
+      ).rejects.toThrow(ConflictException);
+      expect(product().stock).toBe(13);
+    });
   });
 
   // ==================== /stock/adjustments (parallel surface) ====================
@@ -641,6 +723,17 @@ describe('Canonical stock mutation boundary (P0-9)', () => {
         adjustmentsService.create(SHOP, USER, { ...dto(), delta: 7 }),
       ).rejects.toThrow(ConflictException);
       expect(product().stock).toBe(14);
+    });
+
+    it('P0-9A: same key + same delta + different reason → 409', async () => {
+      seedProduct();
+      await adjustmentsService.create(SHOP, USER, dto());
+      await expect(
+        adjustmentsService.create(SHOP, USER, { ...dto(), reason: 'loss' }),
+      ).rejects.toThrow(ConflictException);
+      expect(product().stock).toBe(14);
+      // Domain projection preserved the original reason
+      expect(domainAdjustments[0].reason).toBe('damage');
     });
   });
 
@@ -706,18 +799,31 @@ describe('Canonical stock mutation boundary (P0-9)', () => {
   // ==================== IMPORT ====================
 
   describe('products import', () => {
+    const OP = 'imp-op-1';
+
+    it('requires a stable importOperationId', async () => {
+      await expect(
+        service.importProducts(
+          SHOP,
+          [{ name: 'X', price: 1 } as any],
+          {},
+          USER,
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+
     it('new product initial stock is witnessed + audited with real actor', async () => {
       const result = await service.importProducts(
         SHOP,
         [{ name: 'Imported', sku: 'IMP-1', price: 10, stock: 25 }],
-        {},
+        { importOperationId: OP },
         USER,
       );
       expect(result.imported).toBe(1);
       const doc = [...products.values()].find((p: any) => p.sku === 'IMP-1');
       expect(doc.stock).toBe(25);
       const adj = stockAdjustments.find((a: any) =>
-        String(a.mutationId).startsWith('product-init:'),
+        String(a.mutationId).startsWith('import-init:'),
       );
       expect(adj).toBeDefined();
       expect(adj.quantityChange).toBe(25);
@@ -728,16 +834,127 @@ describe('Canonical stock mutation boundary (P0-9)', () => {
       const rows = [
         { name: 'Imported', sku: 'IMP-1', price: 10, stock: 25 } as any,
       ];
-      await service.importProducts(SHOP, rows, {}, USER);
+      await service.importProducts(SHOP, rows, { importOperationId: OP }, USER);
       const doc = [...products.values()].find((p: any) => p.sku === 'IMP-1');
-      const second = await service.importProducts(SHOP, rows, {}, USER);
+      const second = await service.importProducts(
+        SHOP,
+        rows,
+        { importOperationId: OP },
+        USER,
+      );
       expect(second.imported).toBe(0);
       expect(products.get(doc._id.toString()).stock).toBe(25);
       expect(
         stockAdjustments.filter((a: any) =>
-          String(a.mutationId).startsWith('product-init:'),
+          String(a.mutationId).startsWith('import-init:'),
         ),
       ).toHaveLength(1);
+    });
+
+    it('P0-9A: row without SKU/barcode replays once — no duplicate product', async () => {
+      const rows = [{ name: 'NoIdent', price: 10, stock: 10 } as any];
+      const first = await service.importProducts(
+        SHOP,
+        rows,
+        { importOperationId: OP },
+        USER,
+      );
+      expect(first.imported).toBe(1);
+      // Lost response — client retries the SAME logical import.
+      const second = await service.importProducts(
+        SHOP,
+        rows,
+        { importOperationId: OP },
+        USER,
+      );
+      expect(second.imported).toBe(0);
+      const all = [...products.values()];
+      expect(all).toHaveLength(1);
+      expect(all[0].stock).toBe(10);
+      expect(all[0].importIdentity).toBe(`${OP}:0`);
+      expect(
+        stockAdjustments.filter((a: any) =>
+          String(a.mutationId).startsWith('import-init:'),
+        ),
+      ).toHaveLength(1);
+    });
+
+    it('P0-9A: same import identity + changed stock conflicts', async () => {
+      await service.importProducts(
+        SHOP,
+        [{ name: 'NoIdent', price: 10, stock: 10 }],
+        { importOperationId: OP },
+        USER,
+      );
+      const conflict = await service.importProducts(
+        SHOP,
+        [{ name: 'NoIdent', price: 10, stock: 25 }],
+        { importOperationId: OP },
+        USER,
+      );
+      expect(conflict.imported).toBe(0);
+      expect(conflict.errors.some((e: string) => e.includes('conflict'))).toBe(
+        true,
+      );
+      expect([...products.values()][0].stock).toBe(10);
+    });
+
+    it('P0-9A: a different importOperationId is a legitimate new import', async () => {
+      await service.importProducts(
+        SHOP,
+        [{ name: 'NoIdent', price: 10, stock: 10 }],
+        { importOperationId: OP },
+        USER,
+      );
+      const second = await service.importProducts(
+        SHOP,
+        [{ name: 'NoIdent', price: 10, stock: 10 }],
+        { importOperationId: 'imp-op-2' },
+        USER,
+      );
+      expect(second.imported).toBe(1);
+      expect([...products.values()]).toHaveLength(2);
+    });
+
+    it('P0-9A: partial insert crash resumes without duplicating rows', async () => {
+      const rows = [
+        { name: 'R1', price: 1, stock: 1 } as any,
+        { name: 'R2', price: 1, stock: 2 } as any,
+        { name: 'R3', price: 1, stock: 3 } as any,
+      ];
+      // Simulate a crash: first two docs land, third write fails.
+      const realInsertMany = productModel.insertMany;
+      productModel.insertMany = jest.fn(async (docs: any[]) => {
+        const landed = docs.slice(0, 2);
+        for (const d of landed) products.set(d._id.toString(), { ...d });
+        const err: any = new Error('insertMany partial failure');
+        err.insertedDocs = landed;
+        err.writeErrors = [{ index: 2 }];
+        throw err;
+      });
+      await service.importProducts(SHOP, rows, { importOperationId: OP }, USER);
+      productModel.insertMany = realInsertMany;
+
+      const before = [...products.values()];
+      expect(before).toHaveLength(2);
+
+      const resumed = await service.importProducts(
+        SHOP,
+        rows,
+        { importOperationId: OP },
+        USER,
+      );
+      const all = [...products.values()];
+      expect(all).toHaveLength(3);
+      expect(resumed.skipped).toBe(2);
+      expect(all.find((p: any) => p.name === 'R1').stock).toBe(1);
+      expect(all.find((p: any) => p.name === 'R2').stock).toBe(2);
+      expect(all.find((p: any) => p.name === 'R3').stock).toBe(3);
+      expect(
+        stockAdjustments.filter((a: any) =>
+          String(a.mutationId).startsWith('import-init:'),
+        ),
+      ).toHaveLength(3);
     });
 
     it('updateExisting never overwrites stock', async () => {
@@ -745,7 +962,7 @@ describe('Canonical stock mutation boundary (P0-9)', () => {
       const result = await service.importProducts(
         SHOP,
         [{ name: 'Imported', sku: 'IMP-1', price: 99, stock: 500 }],
-        { updateExisting: true },
+        { updateExisting: true, importOperationId: OP },
         USER,
       );
       expect(product().stock).toBe(10);

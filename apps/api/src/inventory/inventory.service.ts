@@ -1032,6 +1032,7 @@ export class InventoryService implements OnModuleInit {
       existingReceipt,
       existingAudit,
       productId,
+      reason,
     );
     if (existingReceipt || existingAudit) {
       this.logger.log(
@@ -1112,6 +1113,7 @@ export class InventoryService implements OnModuleInit {
         ),
         null,
         productId,
+        reason,
       );
       this.logger.log(
         `Stock mutation ${mutationId} lost an idempotency race - canonical receipt already present`,
@@ -1137,6 +1139,7 @@ export class InventoryService implements OnModuleInit {
     receipt: any,
     audit: any,
     productId?: string,
+    reason?: string,
   ): void {
     const witness = receipt ?? audit;
     if (!witness) return;
@@ -1172,6 +1175,25 @@ export class InventoryService implements OnModuleInit {
         `Stock mutation ${mutationId} already exists for a different branch scope — ` +
           'a mutation identity is immutable',
       );
+    }
+    // P0-9A: semantic reason is part of immutable intent — same key + same
+    // delta + different reason is a conflict, never a successful replay.
+    // Receipts store the raw reason and audits store the canonical enum, so
+    // both sides are canonicalized before comparing.
+    if (reason !== undefined) {
+      const canon = this.toAdjustmentReason(reason);
+      if (receipt && this.toAdjustmentReason(receipt.reason) !== canon) {
+        throw new ConflictException(
+          `Stock mutation ${mutationId} already exists with reason "${receipt.reason}" — ` +
+            `conflicting request for "${reason}"; a mutation identity is immutable`,
+        );
+      }
+      if (audit && audit.reason && audit.reason !== canon) {
+        throw new ConflictException(
+          `Stock mutation ${mutationId} already exists with reason "${audit.reason}" — ` +
+            `conflicting request for "${reason}"; a mutation identity is immutable`,
+        );
+      }
     }
   }
 
@@ -1463,8 +1485,10 @@ export class InventoryService implements OnModuleInit {
     actor?: string,
   ): Promise<void> {
     for (const doc of insertedDocs ?? []) {
-      const receipt = (doc?.stockMutations ?? []).find((m: any) =>
-        String(m.mutationId).startsWith('product-init:'),
+      const receipt = (doc?.stockMutations ?? []).find(
+        (m: any) =>
+          String(m.mutationId).startsWith('product-init:') ||
+          String(m.mutationId).startsWith('import-init:'),
       );
       if (!receipt || !doc?._id) continue;
       await this.projectStockMutation(shopId, doc._id.toString(), {
@@ -1497,7 +1521,19 @@ export class InventoryService implements OnModuleInit {
       updateExisting = false,
       skipDuplicates = true,
       targetCategoryId, // Import all products to this specific category
+      importOperationId,
     } = options;
+
+    // P0-9A: a logical import needs a stable operation identity. SKU/barcode
+    // are optional, so they cannot be the only retry mechanism — without a
+    // durable per-row identity a lost-response retry duplicates products and
+    // double-applies initial stock.
+    if (!importOperationId) {
+      throw new BadRequestException(
+        'options.importOperationId is required — the client must generate one ' +
+          'stable identity per logical import and reuse it across retries',
+      );
+    }
 
     const errors: string[] = [];
     let imported = 0;
@@ -1625,13 +1661,20 @@ export class InventoryService implements OnModuleInit {
 
     const existingProductsMap = new Map<string, ProductDocument>();
 
-    if (skus.length > 0 || barcodes.length > 0) {
+    // P0-9A: durable per-row import identities — `${opId}:${rowId}`, where
+    // rowId is the client-supplied rowId or the stable row index.
+    const rowIdentityFor = (dto: CreateProductDto, i: number) =>
+      `${importOperationId}:${dto.rowId ?? i}`;
+    const importIdentities = products.map((p, i) => rowIdentityFor(p, i));
+
+    if (skus.length > 0 || barcodes.length > 0 || importIdentities.length > 0) {
       const existingProducts = await this.productModel
         .find({
           shopId: shopObjId,
           $or: [
             ...(skus.length > 0 ? [{ sku: { $in: skus } }] : []),
             ...(barcodes.length > 0 ? [{ barcode: { $in: barcodes } }] : []),
+            { importIdentity: { $in: importIdentities } },
           ],
         })
         .lean()
@@ -1641,6 +1684,8 @@ export class InventoryService implements OnModuleInit {
         if (p.sku) existingProductsMap.set(`sku:${p.sku}`, p as any);
         if (p.barcode)
           existingProductsMap.set(`barcode:${p.barcode}`, p as any);
+        if (p.importIdentity)
+          existingProductsMap.set(`import:${p.importIdentity}`, p as any);
       });
     }
 
@@ -1676,6 +1721,39 @@ export class InventoryService implements OnModuleInit {
         categoryId = categoryNameToId.get(
           categorySuggestions[dto.name].toLowerCase(),
         );
+      }
+
+      // P0-9A replay detection — the durable import identity proves this row
+      // was already processed even when it has no SKU/barcode. Identical
+      // replay skips; same identity carrying different stock/name is a
+      // conflict, never a silent reinterpretation.
+      const importIdentity = rowIdentityFor(dto, i);
+      const existingByImport = existingProductsMap.get(
+        `import:${importIdentity}`,
+      );
+      if (existingByImport) {
+        const sameIntent =
+          (dto.stock ?? null) === (existingByImport.importStock ?? null) &&
+          dto.name === existingByImport.name;
+        if (!sameIntent) {
+          errors.push(
+            `Row ${i + 1} (${dto.name}): conflicts with a row already imported under ` +
+              `import operation "${importOperationId}" — a retried import must carry ` +
+              'identical row payloads; use a new importOperationId for a different import',
+          );
+          continue;
+        }
+        if (
+          existingByImport.importStockApplied === false &&
+          dto.stock !== undefined
+        ) {
+          errors.push(
+            `Row ${i + 1} (${dto.name}): stock ${dto.stock} ignored for existing product — ` +
+              'stock changes require /inventory/adjustments or reconciliation',
+          );
+        }
+        skipped++;
+        continue;
       }
 
       // Check for existing product
@@ -1836,6 +1914,11 @@ export class InventoryService implements OnModuleInit {
                     10,
                   reorderPoint:
                     dto.reorderPoint ?? existingProduct.reorderPoint ?? 0,
+                  // P0-9A: stamp the durable row identity so a retry of this
+                  // logical import replays instead of re-updating.
+                  importIdentity,
+                  importStock: dto.stock,
+                  importStockApplied: false,
                   ...extendedFields,
                   updatedAt: new Date(),
                 },
@@ -1873,12 +1956,16 @@ export class InventoryService implements OnModuleInit {
         brand: dto.brand,
         lowStockThreshold: dto.lowStockThreshold ?? 10,
         reorderPoint: dto.reorderPoint ?? 0,
+        // P0-9A: durable row identity + requested stock — replay evidence.
+        importIdentity,
+        importStock: dto.stock,
+        importStockApplied: initialStock !== 0,
         ...extendedFields,
         ...(initialStock !== 0
           ? {
               stockMutations: [
                 {
-                  mutationId: `product-init:${newProductId.toString()}`,
+                  mutationId: `import-init:${importIdentity}`,
                   quantityDelta: initialStock,
                   reason: 'other',
                   actor: actor ?? 'system',
@@ -2521,6 +2608,7 @@ export class InventoryService implements OnModuleInit {
       receipt,
       audit,
       productId,
+      reason,
     );
     if (receipt || audit) {
       this.logger.log(
@@ -2593,6 +2681,7 @@ export class InventoryService implements OnModuleInit {
           racedReceipt,
           null,
           productId,
+          reason,
         );
         this.logger.log(
           `Branch stock mutation ${mutationId} lost an idempotency race - canonical receipt already present`,
@@ -2859,6 +2948,7 @@ export class InventoryService implements OnModuleInit {
       existingReceipt,
       existingAudit,
       productId,
+      'other',
     );
     if (existingReceipt || existingAudit) {
       return product;
@@ -2913,6 +3003,7 @@ export class InventoryService implements OnModuleInit {
           racedReceipt,
           null,
           productId,
+          'other',
         );
         return canonical;
       }

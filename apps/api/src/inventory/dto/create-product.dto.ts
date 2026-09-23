@@ -1,4 +1,16 @@
-import { IsEnum, IsMongoId, IsNumber, IsOptional, IsString, IsBoolean, Min, MinLength, IsArray, IsDate, ValidateNested } from 'class-validator';
+import {
+  IsEnum,
+  IsMongoId,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsBoolean,
+  Min,
+  MinLength,
+  IsArray,
+  IsDate,
+  ValidateNested,
+} from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 
 export class CreateProductDto {
@@ -37,6 +49,13 @@ export class CreateProductDto {
   @Min(0)
   stock?: number;
 
+  // P0-9A: stable row identity inside a logical import — survives request
+  // retries. Combined with options.importOperationId it forms the durable
+  // importIdentity that makes replay/convergence safe.
+  @IsOptional()
+  @IsString()
+  rowId?: string;
+
   @IsOptional()
   @IsNumber()
   @Min(0)
@@ -48,11 +67,29 @@ export class CreateProductDto {
     if (!value || typeof value !== 'string') return 'active';
     const normalized = value.toString().toLowerCase().trim();
     // Values that mean "active"
-    if (['active', '1', 'true', 'yes', 'enabled', 'on', 'y', 'a'].includes(normalized)) {
+    if (
+      ['active', '1', 'true', 'yes', 'enabled', 'on', 'y', 'a'].includes(
+        normalized,
+      )
+    ) {
       return 'active';
     }
     // Values that mean "inactive"
-    if (['inactive', '0', 'false', 'no', 'disabled', 'off', 'n', 'i', 'disabled', 'draft', 'pending'].includes(normalized)) {
+    if (
+      [
+        'inactive',
+        '0',
+        'false',
+        'no',
+        'disabled',
+        'off',
+        'n',
+        'i',
+        'disabled',
+        'draft',
+        'pending',
+      ].includes(normalized)
+    ) {
       return 'inactive';
     }
     // Default to active for any other unexpected value
@@ -329,6 +366,13 @@ export class BulkImportOptionsDto {
   @IsOptional()
   @IsString()
   targetCategoryId?: string; // Import all products to this specific category
+
+  // P0-9A: stable identity for one logical import operation. The client
+  // generates it once per import and reuses it on ambiguous retries so the
+  // server can replay rows instead of duplicating products/stock.
+  @IsOptional()
+  @IsString()
+  importOperationId?: string;
 }
 
 export class BulkImportDto {

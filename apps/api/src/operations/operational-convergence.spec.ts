@@ -657,6 +657,7 @@ describe('P0-7C operational claim convergence', () => {
       products.get(PID_A).stockMutations.push({
         mutationId: `purchase:${PO_ID}:${PID_A}`,
         quantityDelta: 5,
+        reason: 'purchase',
       });
       const results = await sweep();
       expect(outcomes(results)).toEqual(['CONVERGED']);
@@ -755,6 +756,7 @@ describe('P0-7C operational claim convergence', () => {
       products.get(PID_A).stockMutations.push({
         mutationId: `transfer:${TID}:${PID_A}:ship`,
         quantityDelta: -4,
+        reason: 'transfer',
         branchId: BRANCH_A,
       });
       await sweep();
@@ -812,6 +814,7 @@ describe('P0-7C operational claim convergence', () => {
       products.get(PID_A).stockMutations.push({
         mutationId: `transfer:${TID}:${PID_A}:receive:E1`,
         quantityDelta: 3,
+        reason: 'transfer',
         branchId: BRANCH_B,
       });
       await sweep();
@@ -841,6 +844,7 @@ describe('P0-7C operational claim convergence', () => {
       products.get(PID_A).stockMutations.push({
         mutationId: `transfer:${TID}:${PID_A}:receive:E1`,
         quantityDelta: 3,
+        reason: 'transfer',
         branchId: BRANCH_B,
       });
       // E2 claimed, stock missing.
@@ -927,6 +931,7 @@ describe('P0-7C operational claim convergence', () => {
       products.get(PID_A).stockMutations.push({
         mutationId: `transfer:${TID}:${PID_A}:cancel-restore`,
         quantityDelta: 4,
+        reason: 'transfer',
         branchId: BRANCH_A,
       });
       await sweep();
