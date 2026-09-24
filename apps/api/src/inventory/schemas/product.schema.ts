@@ -314,8 +314,15 @@ ProductSchema.index({ shopId: 1, barcode: 1 }, { unique: true, sparse: true }); 
 ProductSchema.index({ shopId: 1, sku: 1 }, { unique: true, sparse: true }); // Unique SKU per shop
 ProductSchema.index(
   { shopId: 1, importIdentity: 1 },
-  { unique: true, sparse: true },
-); // P0-9A: one durable import row identity per shop
+  {
+    unique: true,
+    // P0-9A: one durable import row identity per shop. Partial — historical
+    // documents without importIdentity remain outside the index entirely;
+    // a compound sparse index cannot express that because shopId is always
+    // present (missing importIdentity would index as null and collide).
+    partialFilterExpression: { importIdentity: { $exists: true } },
+  },
+);
 ProductSchema.index({ shopId: 1, status: 1 });
 ProductSchema.index({ shopId: 1, expiryDate: 1 });
 ProductSchema.index({ shopId: 1, stock: 1 }); // For reorder automation

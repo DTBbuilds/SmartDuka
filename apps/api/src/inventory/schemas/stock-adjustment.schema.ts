@@ -58,10 +58,13 @@ export const StockAdjustmentSchema =
 StockAdjustmentSchema.index({ shopId: 1, productId: 1 });
 StockAdjustmentSchema.index({ shopId: 1, createdAt: -1 });
 StockAdjustmentSchema.index({ shopId: 1, reason: 1 });
-// P0-2: one audit record per logical mutation per shop. Sparse so historical
-// records without the field remain valid; MongoDB 4.2+ builds are
-// non-blocking, so a failed build degrades to recovery pre-reads.
+// P0-2: one audit record per logical mutation per shop. Partial so historical
+// documents without mutationId remain outside the index; MongoDB 4.2+ builds
+// are non-blocking, so a failed build degrades to recovery pre-reads.
 StockAdjustmentSchema.index(
   { shopId: 1, mutationId: 1 },
-  { unique: true, sparse: true },
+  {
+    unique: true,
+    partialFilterExpression: { mutationId: { $exists: true } },
+  },
 );
