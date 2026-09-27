@@ -310,8 +310,19 @@ export const ProductSchema = SchemaFactory.createForClass(Product);
 
 // Create indexes for multi-tenant queries
 ProductSchema.index({ shopId: 1, name: 1 });
-ProductSchema.index({ shopId: 1, barcode: 1 }, { unique: true, sparse: true }); // Unique barcode per shop
-ProductSchema.index({ shopId: 1, sku: 1 }, { unique: true, sparse: true }); // Unique SKU per shop
+// Unique barcode/SKU per shop when populated. Partial filters exclude
+// missing AND empty-string values — compound sparse cannot express this
+// (shopId is always present, so absent identifiers would index as null and
+// collide) and treats "" as a real value, which would make every
+// barcode-less product collide.
+ProductSchema.index(
+  { shopId: 1, barcode: 1 },
+  { unique: true, partialFilterExpression: { barcode: { $gt: '' } } },
+);
+ProductSchema.index(
+  { shopId: 1, sku: 1 },
+  { unique: true, partialFilterExpression: { sku: { $gt: '' } } },
+);
 ProductSchema.index(
   { shopId: 1, importIdentity: 1 },
   {

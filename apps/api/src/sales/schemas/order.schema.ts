@@ -277,10 +277,15 @@ export const OrderSchema = SchemaFactory.createForClass(Order);
 // Create indexes for multi-tenant queries
 OrderSchema.index({ shopId: 1, createdAt: -1 });
 // Tenant-scoped checkout idempotency: one logical checkout per shop per key.
-// Sparse so historical orders without the key remain valid.
+// Partial so historical orders without the key remain outside the index —
+// a compound sparse index cannot express that (shopId is always present,
+// so missing keys would index as null and collide).
 OrderSchema.index(
   { shopId: 1, idempotencyKey: 1 },
-  { unique: true, sparse: true },
+  {
+    unique: true,
+    partialFilterExpression: { idempotencyKey: { $exists: true } },
+  },
 );
 OrderSchema.index({ shopId: 1, branchId: 1, createdAt: -1 });
 OrderSchema.index({ shopId: 1, userId: 1 });

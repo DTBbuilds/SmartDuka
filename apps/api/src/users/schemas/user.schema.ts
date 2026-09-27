@@ -14,10 +14,10 @@ export class User {
   @Prop({ required: false, unique: true, sparse: true, trim: true })
   phone?: string;
 
-  @Prop({ 
-    required: true, 
-    enum: ['admin', 'branch_admin', 'branch_manager', 'supervisor', 'cashier'], 
-    default: 'cashier' 
+  @Prop({
+    required: true,
+    enum: ['admin', 'branch_admin', 'branch_manager', 'supervisor', 'cashier'],
+    default: 'cashier',
   })
   role: 'admin' | 'branch_admin' | 'branch_manager' | 'supervisor' | 'cashier';
 
@@ -69,7 +69,7 @@ export class User {
   lastActivityAt?: Date;
 
   // PHASE 2: Branch Management Fields
-  
+
   // Primary branch (for cashiers assigned to single branch)
   @Prop({ required: false, type: Types.ObjectId, ref: 'Branch' })
   branchId?: Types.ObjectId;
@@ -140,7 +140,13 @@ export const UserSchema = SchemaFactory.createForClass(User);
 UserSchema.index({ shopId: 1, role: 1 });
 UserSchema.index({ shopId: 1, branchId: 1 });
 UserSchema.index({ shopId: 1, branchId: 1, role: 1 }); // For branch-level cashier queries
-UserSchema.index({ shopId: 1, cashierId: 1 }, { unique: true, sparse: true }); // Unique cashierId per shop
+// Unique cashierId per shop when populated. Partial excludes missing and
+// empty-string values — compound sparse cannot express that since shopId is
+// always present.
+UserSchema.index(
+  { shopId: 1, cashierId: 1 },
+  { unique: true, partialFilterExpression: { cashierId: { $gt: '' } } },
+);
 UserSchema.index({ branches: 1 });
 UserSchema.index({ createdAt: -1 });
 UserSchema.index({ lastLoginAt: -1 });
