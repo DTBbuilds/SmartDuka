@@ -1,8 +1,13 @@
 'use client';
 
 import { config } from '@/lib/config';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
+import {
+  clearOperationId,
+  getOrCreateOperationId,
+  type PostSaleIntent,
+} from '@/lib/postsale-operations';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -19,9 +24,6 @@ export default function VoidRefundPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  // Stable per-intent operation id: retrying the same request replays the same
-  // server-side operation instead of applying a second financial effect.
-  const operationIdRef = useRef<string | null>(null);
 
   const handleSubmit = async () => {
     const refundAmount = action === 'refund' ? Number(amount) : 0;
@@ -30,15 +32,25 @@ export default function VoidRefundPage() {
       return;
     }
 
+    // Durable logical identity: orderId + intent fingerprint → operationId.
+    // Survives reload and ambiguous transport failure; retries replay the same
+    // server-side operation instead of double-applying. Cleared only on
+    // canonical success or a definitive 409 conflict.
+    const intent: PostSaleIntent =
+      action === 'void'
+        ? { orderId, action: 'void', reason }
+        : {
+            orderId,
+            action: 'refund',
+            amount: refundAmount,
+            reason,
+          };
+    const operationId = getOrCreateOperationId(intent);
+
     try {
       setIsProcessing(true);
       setError(null);
       setSuccess(null);
-
-      if (!operationIdRef.current) {
-        operationIdRef.current = crypto.randomUUID();
-      }
-      const operationId = operationIdRef.current;
 
       const res =
         action === 'void'
@@ -69,18 +81,28 @@ export default function VoidRefundPage() {
             });
 
       if (res.ok) {
-        setSuccess(`Order ${action === 'void' ? 'voided' : 'refund recorded'} successfully`);
+        // Definitive success — the canonical operation is durable server-side.
+        clearOperationId(intent);
+        setSuccess(
+          `Order ${action === 'void' ? 'voided' : 'refund recorded'} successfully`,
+        );
         setOrderId('');
         setAmount('');
         setReason('');
-        operationIdRef.current = null;
       } else {
         const body = await res.json().catch(() => null);
+        if (res.status === 409) {
+          // Definitive conflict — this intent can never be retried.
+          clearOperationId(intent);
+        }
+        // Ambiguous outcomes (5xx, network) keep the operation id so a retry
+        // replays the same server-side operation.
         setError(body?.message ?? 'Failed to process request');
       }
     } catch (error) {
+      // Network/timeout — commit state unknown; operation id is retained.
       console.error('Error:', error);
-      setError('An error occurred');
+      setError('An error occurred — if you retry, the same operation will resume');
     } finally {
       setIsProcessing(false);
     }
@@ -112,10 +134,7 @@ export default function VoidRefundPage() {
             <Label>Action</Label>
             <select
               value={action}
-              onChange={(e) => {
-                setAction(e.target.value);
-                operationIdRef.current = null;
-              }}
+              onChange={(e) => setAction(e.target.value)}
               className="w-full p-2 border rounded"
             >
               <option value="void">Void Transaction</option>
@@ -127,10 +146,7 @@ export default function VoidRefundPage() {
             <Label>Order ID</Label>
             <Input
               value={orderId}
-              onChange={(e) => {
-                setOrderId(e.target.value);
-                operationIdRef.current = null;
-              }}
+              onChange={(e) => setOrderId(e.target.value)}
               placeholder="Enter order ID"
             />
           </div>
@@ -143,10 +159,7 @@ export default function VoidRefundPage() {
                 min="0"
                 step="0.01"
                 value={amount}
-                onChange={(e) => {
-                  setAmount(e.target.value);
-                  operationIdRef.current = null;
-                }}
+                onChange={(e) => setAmount(e.target.value)}
                 placeholder="Amount to refund"
               />
             </div>
@@ -156,10 +169,7 @@ export default function VoidRefundPage() {
             <Label>Reason</Label>
             <textarea
               value={reason}
-              onChange={(e) => {
-                setReason(e.target.value);
-                operationIdRef.current = null;
-              }}
+              onChange={(e) => setReason(e.target.value)}
               placeholder="Enter reason for void/refund"
               className="w-full p-2 border rounded"
               rows={4}

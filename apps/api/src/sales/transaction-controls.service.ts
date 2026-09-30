@@ -11,6 +11,10 @@ import { Model, Types } from 'mongoose';
 import { Order, OrderDocument, RefundAllocation } from './schemas/order.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { Product, ProductDocument } from '../inventory/schemas/product.schema';
+import {
+  StockAdjustment,
+  StockAdjustmentDocument,
+} from '../inventory/schemas/stock-adjustment.schema';
 import { InventoryService } from '../inventory/inventory.service';
 
 type PostSaleOp = 'refund' | 'void' | 'discount';
@@ -45,6 +49,8 @@ export class TransactionControlsService {
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel(Product.name) private productModel: Model<ProductDocument>,
+    @InjectModel(StockAdjustment.name)
+    private readonly adjustmentModel: Model<StockAdjustmentDocument>,
     private readonly inventoryService: InventoryService,
   ) {}
 
@@ -344,18 +350,40 @@ export class TransactionControlsService {
           },
           {
             $set: {
-              refundStatus: {
-                $cond: [
-                  {
-                    $gte: [
-                      { $ifNull: [{ $sum: '$refunds.amount' }, 0] },
-                      confirmedPaid,
-                    ],
+              // P0-10A: refundStatus reflects COMPLETED refunds only — money
+              // honestly confirmed moved. A manual_required event reserves
+              // refundable balance (the $expr bound counts all events) but
+              // must never make the order claim it was refunded.
+              refundStatus: (() => {
+                const completedSum = {
+                  $sum: {
+                    $map: {
+                      input: {
+                        $filter: {
+                          input: { $ifNull: ['$refunds', []] },
+                          as: 'r',
+                          cond: { $eq: ['$$r.status', 'completed'] },
+                        },
+                      },
+                      as: 'r',
+                      in: '$$r.amount',
+                    },
                   },
-                  'refunded',
-                  'partially_refunded',
-                ],
-              },
+                };
+                return {
+                  $cond: [
+                    { $gte: [completedSum, confirmedPaid] },
+                    'refunded',
+                    {
+                      $cond: [
+                        { $gt: [completedSum, 0] },
+                        'partially_refunded',
+                        'not_refunded',
+                      ],
+                    },
+                  ],
+                };
+              })(),
             },
           },
         ],
@@ -551,8 +579,12 @@ export class TransactionControlsService {
     }
 
     // STOCK COMPENSATION — restore each line once, only if the sale deduction
-    // is proven by its durable receipt. Each restoration is an idempotent
-    // canonical mutation; retries and races converge, never double-restore.
+    // is proven by DURABLE EVIDENCE, never by current stock level. P0-2 pulls
+    // embedded receipts after audit projection, so "sale landed" means either:
+    //   (a) embedded product.stockMutations receipt still present, OR
+    //   (b) the permanent StockAdjustment {shopId, mutationId} exists — the
+    //       normal long-term production state.
+    // Neither witness → the deduction never happened → restore nothing.
     for (const item of order.items ?? []) {
       const productId = item.productId.toString();
       const saleMutationId = `sale:${orderId}:${productId}`;
@@ -566,9 +598,22 @@ export class TransactionControlsService {
       const saleReceipt = (product?.stockMutations ?? []).find(
         (m: any) => m.mutationId === saleMutationId,
       );
-      const qty = saleReceipt ? -saleReceipt.quantityDelta : 0;
+      let qty = saleReceipt ? -saleReceipt.quantityDelta : 0;
+      if (!saleReceipt && product) {
+        // Embedded receipt cleaned → fall back to the permanent
+        // StockAdjustment witness (tenant-scoped, mutationId-identified).
+        const saleAudit = await this.adjustmentModel
+          .findOne({
+            shopId: new Types.ObjectId(shopId),
+            mutationId: saleMutationId,
+          })
+          .exec();
+        if (saleAudit) {
+          qty = -saleAudit.quantityChange;
+        }
+      }
       if (!product || qty <= 0) {
-        continue; // stock was never deducted for this line
+        continue; // no proven sale deduction for this line
       }
 
       await this.inventoryService.updateStock(shopId, productId, qty, {
@@ -871,8 +916,41 @@ export class TransactionControlsService {
           _id: { transactionType: '$transactionType', status: '$status' },
           count: { $sum: 1 },
           totalAmount: { $sum: '$total' },
+          // Completed money only — manual_required events reserve refundable
+          // balance but are not refunded cash.
           refundedAmount: {
-            $sum: { $ifNull: [{ $sum: '$refunds.amount' }, 0] },
+            $sum: {
+              $sum: {
+                $map: {
+                  input: {
+                    $filter: {
+                      input: { $ifNull: ['$refunds', []] },
+                      as: 'r',
+                      cond: { $eq: ['$$r.status', 'completed'] },
+                    },
+                  },
+                  as: 'r',
+                  in: '$$r.amount',
+                },
+              },
+            },
+          },
+          pendingRefundAmount: {
+            $sum: {
+              $sum: {
+                $map: {
+                  input: {
+                    $filter: {
+                      input: { $ifNull: ['$refunds', []] },
+                      as: 'r',
+                      cond: { $eq: ['$$r.status', 'manual_required'] },
+                    },
+                  },
+                  as: 'r',
+                  in: '$$r.amount',
+                },
+              },
+            },
           },
         },
       },
@@ -895,7 +973,38 @@ export class TransactionControlsService {
           count: { $sum: 1 },
           totalAmount: { $sum: '$total' },
           refundedAmount: {
-            $sum: { $ifNull: [{ $sum: '$refunds.amount' }, 0] },
+            $sum: {
+              $sum: {
+                $map: {
+                  input: {
+                    $filter: {
+                      input: { $ifNull: ['$refunds', []] },
+                      as: 'r',
+                      cond: { $eq: ['$$r.status', 'completed'] },
+                    },
+                  },
+                  as: 'r',
+                  in: '$$r.amount',
+                },
+              },
+            },
+          },
+          pendingRefundAmount: {
+            $sum: {
+              $sum: {
+                $map: {
+                  input: {
+                    $filter: {
+                      input: { $ifNull: ['$refunds', []] },
+                      as: 'r',
+                      cond: { $eq: ['$$r.status', 'manual_required'] },
+                    },
+                  },
+                  as: 'r',
+                  in: '$$r.amount',
+                },
+              },
+            },
           },
         },
       },

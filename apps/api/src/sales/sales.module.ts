@@ -7,6 +7,10 @@ import { Receipt, ReceiptSchema } from './schemas/receipt.schema';
 import { Invoice, InvoiceSchema } from './schemas/invoice.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { Product, ProductSchema } from '../inventory/schemas/product.schema';
+import {
+  StockAdjustment,
+  StockAdjustmentSchema,
+} from '../inventory/schemas/stock-adjustment.schema';
 import { TransactionControlsController } from './transaction-controls.controller';
 import { TransactionControlsService } from './transaction-controls.service';
 import { ReceiptService } from './services/receipt.service';
@@ -28,6 +32,7 @@ import { ShiftsModule } from '../shifts/shifts.module';
       { name: Invoice.name, schema: InvoiceSchema },
       { name: User.name, schema: UserSchema },
       { name: Product.name, schema: ProductSchema },
+      { name: StockAdjustment.name, schema: StockAdjustmentSchema },
     ]),
     InventoryModule,
     ActivityModule,

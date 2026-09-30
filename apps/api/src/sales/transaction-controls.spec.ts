@@ -7,9 +7,11 @@ import { ReconciliationService } from '../financial/reconciliation.service';
 import { Order } from './schemas/order.schema';
 import { User } from '../users/schemas/user.schema';
 import { Product } from '../inventory/schemas/product.schema';
+import { StockAdjustment } from '../inventory/schemas/stock-adjustment.schema';
 import { Shift } from '../shifts/schemas/shift.schema';
 import { Reconciliation } from '../financial/reconciliation.schema';
 import { InventoryService } from '../inventory/inventory.service';
+import * as postsaleOps from '../../../web/src/lib/postsale-operations';
 
 jest.mock('nanoid', () => ({ nanoid: () => 'IDEM' }));
 
@@ -289,6 +291,7 @@ describe('P0-10 post-sale financial controls', () => {
   const orderStore = new Collection();
   const productStore = new Collection();
   const userStore = new Collection();
+  const adjustmentStore = new Collection(); // permanent StockAdjustment witness
 
   let appliedMutations: Map<string, number>; // mutationId -> qty (idempotent)
   let updateStockCalls: { mutationId: string; quantityDelta: number }[];
@@ -310,16 +313,23 @@ describe('P0-10 post-sale financial controls', () => {
             throw new Error('simulated crash during stock compensation');
           }
           const mutationId = meta.mutationId;
-          // Canonical idempotency: same mutationId = no second effect.
-          if (appliedMutations.has(mutationId)) {
-            const product = productStore.docs.find(
-              (p) => String(p._id) === productId && String(p.shopId) === shopId,
-            );
-            return { stock: product?.stock };
-          }
           const product = productStore.docs.find(
             (p) => String(p._id) === productId && String(p.shopId) === shopId,
           );
+          // Canonical dual-witness idempotency: embedded receipt OR permanent
+          // StockAdjustment {shopId, mutationId} proves the mutation landed.
+          const hasWitness =
+            appliedMutations.has(mutationId) ||
+            product?.stockMutations?.some(
+              (m: any) => m.mutationId === mutationId,
+            ) ||
+            adjustmentStore.docs.some(
+              (a: any) =>
+                a.mutationId === mutationId && String(a.shopId) === shopId,
+            );
+          if (hasWitness) {
+            return { stock: product?.stock };
+          }
           if (!product) throw new Error('product not found');
           if (product.stock + quantityDelta < 0) {
             throw new Error('insufficient stock');
@@ -374,6 +384,7 @@ describe('P0-10 post-sale financial controls', () => {
     orderStore.docs = [];
     productStore.docs = [];
     userStore.docs = [];
+    adjustmentStore.docs = [];
     appliedMutations = new Map();
     updateStockCalls = [];
     updateStockCallCount = 0;
@@ -404,6 +415,10 @@ describe('P0-10 post-sale financial controls', () => {
         { provide: getModelToken(Order.name), useValue: orderStore },
         { provide: getModelToken(User.name), useValue: userStore },
         { provide: getModelToken(Product.name), useValue: productStore },
+        {
+          provide: getModelToken(StockAdjustment.name),
+          useValue: adjustmentStore,
+        },
         { provide: InventoryService, useValue: inventoryServiceMock },
       ],
     }).compile();
@@ -1254,6 +1269,351 @@ describe('P0-10 post-sale financial controls', () => {
       );
       // 50 cash in − 20 completed refund (manual_required 10 ignored) = 30
       expect(result.expectedCash).toBe(30);
+    });
+  });
+
+  // ──────────── P0-10A: DUAL SALE-WITNESS VOID ────────────
+
+  describe('P0-10A void — dual sale witness', () => {
+    const seedSaleAdjustment = (
+      mutationId: string,
+      productId: string,
+      quantityChange: number,
+    ) => {
+      adjustmentStore.docs.push({
+        shopId: new Types.ObjectId(SHOP_A),
+        productId: new Types.ObjectId(productId),
+        mutationId,
+        quantityChange,
+        reason: 'sale',
+        adjustedBy: new Types.ObjectId(ADMIN),
+      });
+    };
+
+    it('permanent StockAdjustment only (embedded receipt cleaned) → restores once', async () => {
+      await boot();
+      const order = pendingUnpaidOrder();
+      const oid = String(order._id);
+      // P0-2 lifecycle finished: embedded receipts pulled, permanent
+      // StockAdjustment projections remain as the durable witness.
+      productStore.docs.push({
+        _id: new Types.ObjectId(PRODUCT_1),
+        shopId: new Types.ObjectId(SHOP_A),
+        stock: 7,
+        stockMutations: [],
+      });
+      productStore.docs.push({
+        _id: new Types.ObjectId(PRODUCT_2),
+        shopId: new Types.ObjectId(SHOP_A),
+        stock: 9,
+        stockMutations: [],
+      });
+      seedSaleAdjustment(`sale:${oid}:${PRODUCT_1}`, PRODUCT_1, -3);
+      seedSaleAdjustment(`sale:${oid}:${PRODUCT_2}`, PRODUCT_2, -1);
+
+      const after = await voidOp(oid, {
+        voidOperationId: 'v-1',
+        voidReason: 'post-cleanup void',
+      });
+
+      expect(after.status).toBe('void');
+      expect(
+        productStore.docs.find((p) => String(p._id) === PRODUCT_1).stock,
+      ).toBe(10);
+      expect(
+        productStore.docs.find((p) => String(p._id) === PRODUCT_2).stock,
+      ).toBe(10);
+      expect(after.voidOperation?.stockRestorations).toHaveLength(2);
+    });
+
+    it('no receipt + no StockAdjustment → no phantom stock restoration', async () => {
+      await boot();
+      const order = pendingUnpaidOrder();
+      const oid = String(order._id);
+      productStore.docs.push({
+        _id: new Types.ObjectId(PRODUCT_1),
+        shopId: new Types.ObjectId(SHOP_A),
+        stock: 10,
+        stockMutations: [],
+      });
+      productStore.docs.push({
+        _id: new Types.ObjectId(PRODUCT_2),
+        shopId: new Types.ObjectId(SHOP_A),
+        stock: 10,
+        stockMutations: [],
+      });
+      // no sale receipts, no adjustments — deduction never happened
+
+      const after = await voidOp(oid, {
+        voidOperationId: 'v-1',
+        voidReason: 'never deducted',
+      });
+      expect(after.status).toBe('void'); // lifecycle void is still allowed
+      expect(inventoryServiceMock.updateStock).not.toHaveBeenCalled();
+      expect(
+        productStore.docs.find((p) => String(p._id) === PRODUCT_1).stock,
+      ).toBe(10); // unchanged — nothing invented
+    });
+
+    it('void retry after BOTH receipts cleaned (permanent witnesses only) → +0', async () => {
+      await boot();
+      const order = pendingUnpaidOrder();
+      const oid = String(order._id);
+      seedProductWithSaleReceipt(PRODUCT_1, oid, 3, 7);
+      seedProductWithSaleReceipt(PRODUCT_2, oid, 1, 9);
+
+      await voidOp(oid, { voidOperationId: 'v-1', voidReason: 'r' });
+
+      // Simulate P0-2 cleanup for EVERYTHING: pull all embedded receipts,
+      // keep only permanent StockAdjustment witnesses.
+      const p1 = productStore.docs.find((p) => String(p._id) === PRODUCT_1);
+      const p2 = productStore.docs.find((p) => String(p._id) === PRODUCT_2);
+      seedSaleAdjustment(`sale:${oid}:${PRODUCT_1}`, PRODUCT_1, -3);
+      seedSaleAdjustment(`sale:${oid}:${PRODUCT_2}`, PRODUCT_2, -1);
+      adjustmentStore.docs.push({
+        shopId: new Types.ObjectId(SHOP_A),
+        productId: new Types.ObjectId(PRODUCT_1),
+        mutationId: `void:${oid}:${PRODUCT_1}`,
+        quantityChange: 3,
+        reason: 'correction',
+        adjustedBy: new Types.ObjectId(ADMIN),
+      });
+      adjustmentStore.docs.push({
+        shopId: new Types.ObjectId(SHOP_A),
+        productId: new Types.ObjectId(PRODUCT_2),
+        mutationId: `void:${oid}:${PRODUCT_2}`,
+        quantityChange: 1,
+        reason: 'correction',
+        adjustedBy: new Types.ObjectId(ADMIN),
+      });
+      p1.stockMutations = []; // receipts cleaned
+      p2.stockMutations = [];
+
+      const retry = await voidOp(oid, {
+        voidOperationId: 'v-1',
+        voidReason: 'r',
+      });
+      expect(retry.status).toBe('void');
+      expect(p1.stock).toBe(10); // +0 — permanent witness proves restore landed
+      expect(p2.stock).toBe(10);
+    });
+  });
+
+  // ──────────── P0-10A: MANUAL_REQUIRED TRUTH ────────────
+
+  describe('P0-10A manual_required reservation model', () => {
+    it('full external refund → manual_required, order NOT marked refunded, balance reserved', async () => {
+      await boot();
+      const order = seedOrder({
+        payments: [{ method: 'mpesa', amount: 100, status: 'completed' }],
+      });
+      const after = await refund(String(order._id), {
+        refundOperationId: 'r-ext',
+        refundAmount: 100,
+        refundReason: 'full external refund',
+      });
+
+      expect(after.refunds[0].status).toBe('manual_required');
+      // Money has NOT provably moved — never claim refunded.
+      expect(after.refundStatus).toBe('not_refunded');
+      expect(after.status).toBe('completed');
+      // But the event RESERVES the refundable balance: a second request for
+      // any additional amount must fail (100 of 100 already reserved).
+      await expect(
+        refund(String(order._id), {
+          refundOperationId: 'r-ext2',
+          refundAmount: 10,
+          refundReason: 'extra',
+        }),
+      ).rejects.toThrow(/exceed/i);
+    });
+
+    it('cash refund still completes → refundStatus refunded + till reduction', async () => {
+      await boot();
+      const order = seedOrder({});
+      const after = await refund(String(order._id), {
+        refundOperationId: 'r-cash',
+        refundAmount: 100,
+        refundReason: 'full cash refund',
+      });
+      expect(after.refunds[0].status).toBe('completed');
+      expect(after.refundStatus).toBe('refunded');
+      expect(after.status).toBe('completed');
+    });
+  });
+
+  // ────── P0-10A: DURABLE CLIENT OPERATION IDENTITY ──────
+
+  describe('P0-10A durable post-sale operation ids', () => {
+    class StorageShim {
+      private m = new Map<string, string>();
+      getItem(k: string) {
+        return this.m.get(k) ?? null;
+      }
+      setItem(k: string, v: string) {
+        this.m.set(k, v);
+      }
+      removeItem(k: string) {
+        this.m.delete(k);
+      }
+    }
+
+    let seq: number;
+    const mint = () => `op-${++seq}`;
+    // The helper is stateless — all durable identity lives in sessionStorage.
+    // Swapping the storage object simulates a browser reload.
+    const ops = postsaleOps;
+
+    beforeEach(() => {
+      (globalThis as any).sessionStorage = new StorageShim();
+      seq = 0;
+    });
+
+    it('same refund intent reuses the same operationId across reloads', () => {
+      const intent = {
+        orderId: 'ord-1',
+        action: 'refund' as const,
+        amount: 30,
+        reason: 'damaged',
+      };
+      const id1 = ops.getOrCreateOperationId(intent, mint);
+      // simulate reload: module state gone, sessionStorage survives
+      const id2 = ops.getOrCreateOperationId(intent, mint);
+      expect(id1).toBe('op-1');
+      expect(id2).toBe('op-1'); // persisted, not re-minted
+    });
+
+    it('changed intent fingerprints produce a new operationId', () => {
+      const base = {
+        orderId: 'ord-1',
+        action: 'refund' as const,
+        amount: 30,
+        reason: 'damaged',
+      };
+      const id1 = ops.getOrCreateOperationId(base, mint);
+      const id2 = ops.getOrCreateOperationId({ ...base, amount: 40 }, mint);
+      const id3 = ops.getOrCreateOperationId({ ...base, reason: 'x' }, mint);
+      expect(new Set([id1, id2, id3]).size).toBe(3);
+    });
+
+    it('allocation ordering does not change the fingerprint', () => {
+      const a = ops.getOrCreateOperationId(
+        {
+          orderId: 'ord-1',
+          action: 'refund',
+          amount: 80,
+          reason: 'x',
+          allocations: [
+            { method: 'cash', amount: 50 },
+            { method: 'mpesa', amount: 30 },
+          ],
+        },
+        mint,
+      );
+      const b = ops.getOrCreateOperationId(
+        {
+          orderId: 'ord-1',
+          action: 'refund',
+          amount: 80,
+          reason: 'x',
+          allocations: [
+            { method: 'mpesa', amount: 30 },
+            { method: 'cash', amount: 50 },
+          ],
+        },
+        mint,
+      );
+      expect(a).toBe(b);
+    });
+
+    it('clearing after success mints a NEW id for a legitimate second refund', () => {
+      const intent = {
+        orderId: 'ord-1',
+        action: 'refund' as const,
+        amount: 30,
+        reason: 'damaged',
+      };
+      const r1 = ops.getOrCreateOperationId(intent, mint);
+      ops.clearOperationId(intent); // definitive success
+      const r2 = ops.getOrCreateOperationId(intent, mint);
+      expect(r1).toBe('op-1');
+      expect(r2).toBe('op-2'); // distinct attempt — not collapsed
+    });
+
+    it('service-level lost-response replay: committed R1 + retry = one event, total 30', async () => {
+      await boot();
+      const order = seedOrder({});
+      // Server commits R1; client never saw the response, reloads, retries
+      // with the SAME persisted operationId.
+      await refund(String(order._id), {
+        refundOperationId: 'r-1',
+        refundAmount: 30,
+        refundReason: 'damaged',
+      });
+      const after = await refund(String(order._id), {
+        refundOperationId: 'r-1',
+        refundAmount: 30,
+        refundReason: 'damaged',
+      });
+      expect(after.refunds).toHaveLength(1);
+      expect(after.refunds.reduce((s: number, r: any) => s + r.amount, 0)).toBe(
+        30,
+      ); // never 60
+    });
+
+    it('interrupted void reload: same operationId resumes claim and converges', async () => {
+      await boot();
+      const order = pendingUnpaidOrder();
+      const oid = String(order._id);
+      seedProductWithSaleReceipt(PRODUCT_1, oid, 3, 7);
+      seedProductWithSaleReceipt(PRODUCT_2, oid, 1, 9);
+
+      // Client mints V1, server claims + restores line 1, then the response
+      // is lost mid-flight (simulated crash on line 2).
+      failOnUpdateStockCall = 2;
+      await expect(
+        voidOp(oid, { voidOperationId: 'v-1', voidReason: 'interrupted' }),
+      ).rejects.toThrow('simulated crash');
+
+      // Browser reload → same intent fingerprint → SAME v-1 operationId.
+      failOnUpdateStockCall = 0;
+      const after = await voidOp(oid, {
+        voidOperationId: 'v-1',
+        voidReason: 'interrupted',
+      });
+      expect(after.status).toBe('void');
+      expect(after.voidOperation?.voidOperationId).toBe('v-1');
+      expect(
+        productStore.docs.find((p) => String(p._id) === PRODUCT_1).stock,
+      ).toBe(10); // line 1 not double-restored
+      expect(
+        productStore.docs.find((p) => String(p._id) === PRODUCT_2).stock,
+      ).toBe(10); // line 2 completed on resume
+      // stranded claims impossible: the durable claim is the resume anchor
+    });
+
+    it('conflicting intent on an in-progress void fails closed', async () => {
+      await boot();
+      const order = pendingUnpaidOrder();
+      const oid = String(order._id);
+      seedProductWithSaleReceipt(PRODUCT_1, oid, 3, 7);
+      seedProductWithSaleReceipt(PRODUCT_2, oid, 1, 9);
+
+      failOnUpdateStockCall = 1; // crash before any compensation
+      await expect(
+        voidOp(oid, { voidOperationId: 'v-1', voidReason: 'original' }),
+      ).rejects.toThrow('simulated crash');
+      const mid = orderStore.docs[0];
+      expect(mid.voidOperation.status).toBe('in_progress');
+
+      failOnUpdateStockCall = 0;
+      // Same op id, materially different reason → refuse; the durable claim
+      // identity/reason must not be overwritten.
+      await expect(
+        voidOp(oid, { voidOperationId: 'v-1', voidReason: 'tampered' }),
+      ).rejects.toThrow(/different reason/i);
+      expect(orderStore.docs[0].voidOperation.reason).toBe('original');
+      expect(orderStore.docs[0].voidOperation.status).toBe('in_progress');
     });
   });
 });
