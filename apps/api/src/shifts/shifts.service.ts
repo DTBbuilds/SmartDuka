@@ -86,16 +86,79 @@ export class ShiftsService {
         },
       },
       {
+        $project: {
+          total: 1,
+          // P0-10: expected cash = confirmed cash receipts − completed cash
+          // refunds. Non-cash payments never enter the till; refunds marked
+          // 'manual_required' reduce nothing until the money actually moves.
+          cashIn: {
+            $sum: {
+              $map: {
+                input: {
+                  $filter: {
+                    input: { $ifNull: ['$payments', []] },
+                    as: 'p',
+                    cond: {
+                      $and: [
+                        { $eq: ['$$p.method', 'cash'] },
+                        { $eq: ['$$p.status', 'completed'] },
+                      ],
+                    },
+                  },
+                },
+                as: 'p',
+                in: '$$p.amount',
+              },
+            },
+          },
+          cashRefunds: {
+            $sum: {
+              $map: {
+                input: {
+                  $filter: {
+                    input: { $ifNull: ['$refunds', []] },
+                    as: 'r',
+                    cond: { $eq: ['$$r.status', 'completed'] },
+                  },
+                },
+                as: 'r',
+                in: {
+                  $sum: {
+                    $map: {
+                      input: {
+                        $filter: {
+                          input: '$$r.allocations',
+                          as: 'a',
+                          cond: { $eq: ['$$a.method', 'cash'] },
+                        },
+                      },
+                      as: 'a',
+                      in: '$$a.amount',
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      {
         $group: {
           _id: null,
           totalSales: { $sum: '$total' },
           transactionCount: { $sum: 1 },
+          cashIn: { $sum: '$cashIn' },
+          cashRefunds: { $sum: '$cashRefunds' },
         },
       },
     ]);
 
-    const shiftSales = sales.length > 0 ? sales[0] : { totalSales: 0, transactionCount: 0 };
-    const expectedCash = shift.openingBalance + shiftSales.totalSales;
+    const shiftSales =
+      sales.length > 0
+        ? sales[0]
+        : { totalSales: 0, transactionCount: 0, cashIn: 0, cashRefunds: 0 };
+    const expectedCash =
+      shift.openingBalance + shiftSales.cashIn - shiftSales.cashRefunds;
 
     return {
       totalSales: shiftSales.totalSales,
@@ -131,7 +194,9 @@ export class ShiftsService {
       throw new BadRequestException('Shift must be closed before reconciliation');
     }
 
-    // Calculate actual sales from orders during this shift
+    // Calculate actual sales from orders during this shift. P0-10: net cash
+    // = confirmed cash receipts − completed cash refunds (same formula as
+    // getShiftSalesData).
     const sales = await this.orderModel.aggregate([
       {
         $match: {
@@ -141,16 +206,76 @@ export class ShiftsService {
         },
       },
       {
+        $project: {
+          total: 1,
+          cashIn: {
+            $sum: {
+              $map: {
+                input: {
+                  $filter: {
+                    input: { $ifNull: ['$payments', []] },
+                    as: 'p',
+                    cond: {
+                      $and: [
+                        { $eq: ['$$p.method', 'cash'] },
+                        { $eq: ['$$p.status', 'completed'] },
+                      ],
+                    },
+                  },
+                },
+                as: 'p',
+                in: '$$p.amount',
+              },
+            },
+          },
+          cashRefunds: {
+            $sum: {
+              $map: {
+                input: {
+                  $filter: {
+                    input: { $ifNull: ['$refunds', []] },
+                    as: 'r',
+                    cond: { $eq: ['$$r.status', 'completed'] },
+                  },
+                },
+                as: 'r',
+                in: {
+                  $sum: {
+                    $map: {
+                      input: {
+                        $filter: {
+                          input: '$$r.allocations',
+                          as: 'a',
+                          cond: { $eq: ['$$a.method', 'cash'] },
+                        },
+                      },
+                      as: 'a',
+                      in: '$$a.amount',
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      {
         $group: {
           _id: null,
           totalSales: { $sum: '$total' },
           transactionCount: { $sum: 1 },
+          cashIn: { $sum: '$cashIn' },
+          cashRefunds: { $sum: '$cashRefunds' },
         },
       },
     ]);
 
-    const shiftSales = sales.length > 0 ? sales[0] : { totalSales: 0, transactionCount: 0 };
-    const expectedCash = shift.openingBalance + shiftSales.totalSales;
+    const shiftSales =
+      sales.length > 0
+        ? sales[0]
+        : { totalSales: 0, transactionCount: 0, cashIn: 0, cashRefunds: 0 };
+    const expectedCash =
+      shift.openingBalance + shiftSales.cashIn - shiftSales.cashRefunds;
     const variance = actualCash - expectedCash;
 
     shift.actualCash = actualCash;

@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { TransactionControlsService } from './transaction-controls.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -7,7 +15,9 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
 @Controller('transactions')
 export class TransactionControlsController {
-  constructor(private readonly transactionControlsService: TransactionControlsService) {}
+  constructor(
+    private readonly transactionControlsService: TransactionControlsService,
+  ) {}
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin', 'cashier')
@@ -16,18 +26,19 @@ export class TransactionControlsController {
     @Body()
     body: {
       orderId: string;
+      voidOperationId?: string;
       voidReason: string;
     },
     @CurrentUser() user: any,
   ) {
-    const order = await this.transactionControlsService.voidTransaction(
+    // Actor + tenant always come from the authenticated token — body identity
+    // fields are never trusted for authority.
+    return this.transactionControlsService.voidTransaction(
       body.orderId,
       user.shopId,
-      body.voidReason,
+      { voidOperationId: body.voidOperationId, voidReason: body.voidReason },
       user.sub,
-      true,
     );
-    return order;
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -37,20 +48,22 @@ export class TransactionControlsController {
     @Body()
     body: {
       orderId: string;
+      discountOperationId?: string;
       discountAmount: number;
       discountReason: string;
     },
     @CurrentUser() user: any,
   ) {
-    const order = await this.transactionControlsService.applyDiscount(
+    return this.transactionControlsService.applyDiscount(
       body.orderId,
       user.shopId,
-      body.discountAmount,
-      body.discountReason,
+      {
+        discountOperationId: body.discountOperationId,
+        discountAmount: body.discountAmount,
+        discountReason: body.discountReason,
+      },
       user.sub,
-      true,
     );
-    return order;
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -60,20 +73,24 @@ export class TransactionControlsController {
     @Body()
     body: {
       orderId: string;
+      refundOperationId?: string;
       refundAmount: number;
       refundReason: string;
+      allocations?: { method: string; amount: number }[];
     },
     @CurrentUser() user: any,
   ) {
-    const order = await this.transactionControlsService.processRefund(
+    return this.transactionControlsService.processRefund(
       body.orderId,
       user.shopId,
-      body.refundAmount,
-      body.refundReason,
+      {
+        refundOperationId: body.refundOperationId,
+        refundAmount: body.refundAmount,
+        refundReason: body.refundReason,
+        allocations: body.allocations,
+      },
       user.sub,
-      true,
     );
-    return order;
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -83,10 +100,11 @@ export class TransactionControlsController {
     @Query('limit') limit: string = '50',
     @CurrentUser() user: any,
   ) {
-    const transactions = await this.transactionControlsService.getVoidedTransactions(
-      user.shopId,
-      parseInt(limit, 10),
-    );
+    const transactions =
+      await this.transactionControlsService.getVoidedTransactions(
+        user.shopId,
+        parseInt(limit, 10),
+      );
     return transactions;
   }
 
@@ -97,10 +115,11 @@ export class TransactionControlsController {
     @Query('limit') limit: string = '50',
     @CurrentUser() user: any,
   ) {
-    const transactions = await this.transactionControlsService.getRefundedTransactions(
-      user.shopId,
-      parseInt(limit, 10),
-    );
+    const transactions =
+      await this.transactionControlsService.getRefundedTransactions(
+        user.shopId,
+        parseInt(limit, 10),
+      );
     return transactions;
   }
 
@@ -112,11 +131,12 @@ export class TransactionControlsController {
     @Query('limit') limit: string = '50',
     @CurrentUser() user: any,
   ) {
-    const transactions = await this.transactionControlsService.getTransactionsByCashier(
-      user.shopId,
-      cashierId,
-      parseInt(limit, 10),
-    );
+    const transactions =
+      await this.transactionControlsService.getTransactionsByCashier(
+        user.shopId,
+        cashierId,
+        parseInt(limit, 10),
+      );
     return transactions;
   }
 
@@ -128,11 +148,12 @@ export class TransactionControlsController {
     @Query('limit') limit: string = '100',
     @CurrentUser() user: any,
   ) {
-    const transactions = await this.transactionControlsService.getShiftTransactions(
-      user.shopId,
-      shiftId,
-      parseInt(limit, 10),
-    );
+    const transactions =
+      await this.transactionControlsService.getShiftTransactions(
+        user.shopId,
+        shiftId,
+        parseInt(limit, 10),
+      );
     return transactions;
   }
 
@@ -140,7 +161,9 @@ export class TransactionControlsController {
   @Roles('admin')
   @Get('stats/shop')
   async getTransactionStats(@CurrentUser() user: any) {
-    const stats = await this.transactionControlsService.getTransactionStats(user.shopId);
+    const stats = await this.transactionControlsService.getTransactionStats(
+      user.shopId,
+    );
     return stats;
   }
 
@@ -151,7 +174,10 @@ export class TransactionControlsController {
     @Param('cashierId') cashierId: string,
     @CurrentUser() user: any,
   ) {
-    const stats = await this.transactionControlsService.getCashierStats(user.shopId, cashierId);
+    const stats = await this.transactionControlsService.getCashierStats(
+      user.shopId,
+      cashierId,
+    );
     return stats;
   }
 }

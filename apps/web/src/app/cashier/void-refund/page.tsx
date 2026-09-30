@@ -1,7 +1,7 @@
 'use client';
 
 import { config } from '@/lib/config';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,37 +12,71 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 
 export default function VoidRefundPage() {
   const { token } = useAuth();
-  const [orderNumber, setOrderNumber] = useState('');
+  const [orderId, setOrderId] = useState('');
+  const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('');
   const [action, setAction] = useState('void');
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  // Stable per-intent operation id: retrying the same request replays the same
+  // server-side operation instead of applying a second financial effect.
+  const operationIdRef = useRef<string | null>(null);
 
   const handleSubmit = async () => {
-    if (!orderNumber || !reason) {
+    const refundAmount = action === 'refund' ? Number(amount) : 0;
+    if (!orderId || !reason || (action === 'refund' && !(refundAmount > 0))) {
       setError('Please fill in all fields');
       return;
     }
 
     try {
       setIsProcessing(true);
-      const endpoint = action === 'void' ? 'void' : 'refund';
-      const res = await fetch(`${config.apiUrl}/sales/${orderNumber}/${endpoint}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ reason }),
-      });
+      setError(null);
+      setSuccess(null);
+
+      if (!operationIdRef.current) {
+        operationIdRef.current = crypto.randomUUID();
+      }
+      const operationId = operationIdRef.current;
+
+      const res =
+        action === 'void'
+          ? await fetch(`${config.apiUrl}/transactions/void`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                orderId,
+                voidOperationId: operationId,
+                voidReason: reason,
+              }),
+            })
+          : await fetch(`${config.apiUrl}/transactions/refund`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                orderId,
+                refundOperationId: operationId,
+                refundAmount,
+                refundReason: reason,
+              }),
+            });
 
       if (res.ok) {
-        setSuccess(`Order ${action}ed successfully`);
-        setOrderNumber('');
+        setSuccess(`Order ${action === 'void' ? 'voided' : 'refund recorded'} successfully`);
+        setOrderId('');
+        setAmount('');
         setReason('');
+        operationIdRef.current = null;
       } else {
-        setError('Failed to process request');
+        const body = await res.json().catch(() => null);
+        setError(body?.message ?? 'Failed to process request');
       }
     } catch (error) {
       console.error('Error:', error);
@@ -78,7 +112,10 @@ export default function VoidRefundPage() {
             <Label>Action</Label>
             <select
               value={action}
-              onChange={(e) => setAction(e.target.value)}
+              onChange={(e) => {
+                setAction(e.target.value);
+                operationIdRef.current = null;
+              }}
               className="w-full p-2 border rounded"
             >
               <option value="void">Void Transaction</option>
@@ -87,19 +124,42 @@ export default function VoidRefundPage() {
           </div>
 
           <div>
-            <Label>Order Number</Label>
+            <Label>Order ID</Label>
             <Input
-              value={orderNumber}
-              onChange={(e) => setOrderNumber(e.target.value)}
-              placeholder="Enter order number"
+              value={orderId}
+              onChange={(e) => {
+                setOrderId(e.target.value);
+                operationIdRef.current = null;
+              }}
+              placeholder="Enter order ID"
             />
           </div>
+
+          {action === 'refund' && (
+            <div>
+              <Label>Refund Amount</Label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={amount}
+                onChange={(e) => {
+                  setAmount(e.target.value);
+                  operationIdRef.current = null;
+                }}
+                placeholder="Amount to refund"
+              />
+            </div>
+          )}
 
           <div>
             <Label>Reason</Label>
             <textarea
               value={reason}
-              onChange={(e) => setReason(e.target.value)}
+              onChange={(e) => {
+                setReason(e.target.value);
+                operationIdRef.current = null;
+              }}
               placeholder="Enter reason for void/refund"
               className="w-full p-2 border rounded"
               rows={4}

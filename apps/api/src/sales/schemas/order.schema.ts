@@ -96,6 +96,120 @@ export class PaymentRecord {
 
 export const PaymentRecordSchema = SchemaFactory.createForClass(PaymentRecord);
 
+@Schema({ _id: false })
+export class RefundAllocation {
+  @Prop({ required: true })
+  method: string;
+
+  @Prop({ required: true, min: 0 })
+  amount: number;
+}
+export const RefundAllocationSchema =
+  SchemaFactory.createForClass(RefundAllocation);
+
+/**
+ * P0-10: durable append-only refund event. A refund is a NEW financial event
+ * against an immutable settled sale — never an overwrite of sale fields.
+ * `status` is payment truth: 'completed' only when SmartDuka can honestly
+ * claim money moved (cash); provider methods are 'manual_required' until a
+ * real reversal confirmation exists.
+ */
+@Schema({ _id: false })
+export class RefundEvent {
+  @Prop({ required: true })
+  refundOperationId: string;
+
+  @Prop({ required: true, min: 0 })
+  amount: number;
+
+  @Prop({ required: true })
+  reason: string;
+
+  @Prop({ required: true, type: Types.ObjectId, ref: 'User' })
+  requestedBy: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  approvedBy?: Types.ObjectId;
+
+  @Prop({ required: true })
+  createdAt: Date;
+
+  @Prop({ type: [RefundAllocationSchema], default: [] })
+  allocations: RefundAllocation[];
+
+  @Prop({ enum: ['completed', 'manual_required'], required: true })
+  status: string;
+}
+export const RefundEventSchema = SchemaFactory.createForClass(RefundEvent);
+
+/**
+ * P0-10: durable void claim + stock-compensation progress. Claimed before any
+ * compensation; retry of the same voidOperationId resumes safely, a different
+ * id conflicts.
+ */
+@Schema({ _id: false })
+export class VoidOperation {
+  @Prop({ required: true })
+  voidOperationId: string;
+
+  @Prop({ required: true })
+  reason: string;
+
+  @Prop({ required: true, type: Types.ObjectId, ref: 'User' })
+  requestedBy: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  approvedBy?: Types.ObjectId;
+
+  @Prop({ required: true })
+  createdAt: Date;
+
+  @Prop({ enum: ['in_progress', 'completed'], required: true })
+  status: string;
+
+  @Prop({
+    type: [
+      {
+        productId: { type: String, required: true },
+        quantity: { type: Number, required: true },
+        mutationId: { type: String, required: true },
+      },
+    ],
+    default: [],
+  })
+  stockRestorations: Array<{
+    productId: string;
+    quantity: number;
+    mutationId: string;
+  }>;
+
+  @Prop()
+  completedAt?: Date;
+}
+export const VoidOperationSchema = SchemaFactory.createForClass(VoidOperation);
+
+@Schema({ _id: false })
+export class DiscountEvent {
+  @Prop({ required: true })
+  discountOperationId: string;
+
+  @Prop({ required: true, min: 0 })
+  amount: number;
+
+  @Prop({ required: true })
+  reason: string;
+
+  @Prop({ required: true, type: Types.ObjectId, ref: 'User' })
+  requestedBy: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  approvedBy?: Types.ObjectId;
+
+  @Prop({ required: true })
+  createdAt: Date;
+}
+export const DiscountEventSchema = SchemaFactory.createForClass(DiscountEvent);
+
 @Schema({ timestamps: true })
 export class Order {
   @Prop({ required: true, type: Types.ObjectId, ref: 'Shop' })
@@ -206,6 +320,25 @@ export class Order {
 
   @Prop()
   refundApprovedAt?: Date;
+
+  // P0-10: append-only financial events. The settled sale facts (items,
+  // subtotal, tax, total, payments, transactionType) are immutable — refunds,
+  // voids, and pre-settlement discounts are recorded here, never by rewriting
+  // the sale.
+  @Prop({ type: [RefundEventSchema], default: [] })
+  refunds?: RefundEvent[];
+
+  @Prop({
+    enum: ['not_refunded', 'partially_refunded', 'refunded'],
+    default: 'not_refunded',
+  })
+  refundStatus?: string;
+
+  @Prop({ type: VoidOperationSchema })
+  voidOperation?: VoidOperation;
+
+  @Prop({ type: [DiscountEventSchema], default: [] })
+  discounts?: DiscountEvent[];
 
   // Shift reference
   @Prop({ type: Types.ObjectId, ref: 'Shift' })

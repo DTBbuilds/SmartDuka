@@ -5,6 +5,10 @@ import { SalesController } from './sales.controller';
 import { Order, OrderSchema } from './schemas/order.schema';
 import { Receipt, ReceiptSchema } from './schemas/receipt.schema';
 import { Invoice, InvoiceSchema } from './schemas/invoice.schema';
+import { User, UserSchema } from '../users/schemas/user.schema';
+import { Product, ProductSchema } from '../inventory/schemas/product.schema';
+import { TransactionControlsController } from './transaction-controls.controller';
+import { TransactionControlsService } from './transaction-controls.service';
 import { ReceiptService } from './services/receipt.service';
 import { InvoiceService } from './services/invoice.service';
 import { InventoryModule } from '../inventory/inventory.module';
@@ -22,6 +26,8 @@ import { ShiftsModule } from '../shifts/shifts.module';
       { name: Order.name, schema: OrderSchema },
       { name: Receipt.name, schema: ReceiptSchema },
       { name: Invoice.name, schema: InvoiceSchema },
+      { name: User.name, schema: UserSchema },
+      { name: Product.name, schema: ProductSchema },
     ]),
     InventoryModule,
     ActivityModule,
@@ -32,8 +38,18 @@ import { ShiftsModule } from '../shifts/shifts.module';
     forwardRef(() => CustomersModule),
     ShiftsModule,
   ],
-  providers: [SalesService, ReceiptService, InvoiceService],
-  controllers: [SalesController],
-  exports: [SalesService, ReceiptService, InvoiceService],
+  providers: [
+    SalesService,
+    ReceiptService,
+    InvoiceService,
+    TransactionControlsService,
+  ],
+  controllers: [SalesController, TransactionControlsController],
+  exports: [
+    SalesService,
+    ReceiptService,
+    InvoiceService,
+    TransactionControlsService,
+  ],
 })
 export class SalesModule {}

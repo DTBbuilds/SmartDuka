@@ -1,7 +1,10 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Reconciliation, ReconciliationDocument } from './reconciliation.schema';
+import {
+  Reconciliation,
+  ReconciliationDocument,
+} from './reconciliation.schema';
 import { Order, OrderDocument } from '../sales/schemas/order.schema';
 
 @Injectable()
@@ -37,17 +40,25 @@ export class ReconciliationService {
         })
         .exec();
 
-      // Calculate expected cash from orders
+      // Calculate expected cash from orders.
+      // P0-10: net cash = confirmed cash receipts − completed cash refunds.
+      // 'manual_required' refunds reduce nothing until money actually moves.
       const expectedCash = orders.reduce((sum, order) => {
         const cashPayments = (order.payments || [])
-          .filter((p) => p.method === 'cash')
+          .filter((p) => p.method === 'cash' && p.status === 'completed')
           .reduce((s, p) => s + p.amount, 0);
-        return sum + cashPayments;
+        const cashRefunds = (order.refunds || [])
+          .filter((r: any) => r.status === 'completed')
+          .flatMap((r: any) => r.allocations || [])
+          .filter((a: any) => a.method === 'cash')
+          .reduce((s: number, a: any) => s + a.amount, 0);
+        return sum + cashPayments - cashRefunds;
       }, 0);
 
       // Calculate variance
       const variance = actualCash - expectedCash;
-      const variancePercentage = expectedCash > 0 ? (variance / expectedCash) * 100 : 0;
+      const variancePercentage =
+        expectedCash > 0 ? (variance / expectedCash) * 100 : 0;
 
       // Determine status
       let status: 'pending' | 'reconciled' | 'variance_pending' = 'reconciled';
@@ -140,7 +151,9 @@ export class ReconciliationService {
 
       const variances = reconciliations.map((r) => r.variance);
       const totalVariance = variances.reduce((sum, v) => sum + Math.abs(v), 0);
-      const pendingVariances = reconciliations.filter((r) => r.status === 'variance_pending').length;
+      const pendingVariances = reconciliations.filter(
+        (r) => r.status === 'variance_pending',
+      ).length;
 
       return {
         totalReconciliations: reconciliations.length,
@@ -185,7 +198,9 @@ export class ReconciliationService {
     investigationNotes: string,
   ): Promise<ReconciliationDocument | null> {
     try {
-      const reconciliation = await this.reconciliationModel.findById(reconciliationId).exec();
+      const reconciliation = await this.reconciliationModel
+        .findById(reconciliationId)
+        .exec();
 
       if (!reconciliation) {
         throw new BadRequestException('Reconciliation not found');
@@ -204,7 +219,9 @@ export class ReconciliationService {
 
       await reconciliation.save();
 
-      this.logger.log(`Variance investigation recorded for reconciliation ${reconciliationId}`);
+      this.logger.log(
+        `Variance investigation recorded for reconciliation ${reconciliationId}`,
+      );
 
       return reconciliation;
     } catch (error: any) {
@@ -235,10 +252,15 @@ export class ReconciliationService {
         };
       }
 
-      const reconciled = reconciliations.filter((r) => r.status === 'reconciled').length;
-      const pendingVariances = reconciliations.filter((r) => r.status === 'variance_pending').length;
+      const reconciled = reconciliations.filter(
+        (r) => r.status === 'reconciled',
+      ).length;
+      const pendingVariances = reconciliations.filter(
+        (r) => r.status === 'variance_pending',
+      ).length;
       const averageVariance =
-        reconciliations.reduce((sum, r) => sum + Math.abs(r.variance), 0) / reconciliations.length;
+        reconciliations.reduce((sum, r) => sum + Math.abs(r.variance), 0) /
+        reconciliations.length;
 
       return {
         totalReconciliations: reconciliations.length,
