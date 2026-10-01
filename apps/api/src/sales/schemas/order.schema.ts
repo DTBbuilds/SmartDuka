@@ -87,6 +87,14 @@ export class PaymentRecord {
   @Prop()
   mpesaReceiptNumber?: string;
 
+  /**
+   * P0-10C: timestamp of the last durable provider-initiation claim on this
+   * record. Set atomically before any provider call so a crash leaves visible,
+   * unresolved provenance (status stays 'pending' → void remains blocked).
+   */
+  @Prop()
+  initiatedAt?: Date;
+
   @Prop()
   reversalReason?: string;
 

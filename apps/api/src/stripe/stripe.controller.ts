@@ -9,13 +9,19 @@ import {
   HttpCode,
   HttpStatus,
   BadRequestException,
+  HttpException,
 } from '@nestjs/common';
+import { Types } from 'mongoose';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { StripeService } from './stripe.service';
 import { StripeCustomerService } from './services/stripe-customer.service';
 import { StripePaymentService } from './services/stripe-payment.service';
 import { StripeSubscriptionService } from './services/stripe-subscription.service';
 import { StripeAnalyticsService } from './services/stripe-analytics.service';
+import {
+  OrderPaymentAuthorityService,
+  toMinorUnits,
+} from '../payments/services/order-payment-authority.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -24,13 +30,13 @@ import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 
 /**
  * Stripe Controller
- * 
+ *
  * Handles all Stripe payment operations including:
  * - Payment intents for POS and subscriptions
  * - Customer management
  * - Subscription management
  * - Analytics and reporting
- * 
+ *
  * Mobile-first design with support for Kenyan and global users.
  */
 @ApiTags('Stripe Payments')
@@ -42,6 +48,7 @@ export class StripeController {
     private readonly paymentService: StripePaymentService,
     private readonly subscriptionService: StripeSubscriptionService,
     private readonly analyticsService: StripeAnalyticsService,
+    private readonly orderPaymentAuthority: OrderPaymentAuthorityService,
   ) {}
 
   // ============================================
@@ -159,21 +166,87 @@ export class StripeController {
       throw new BadRequestException('Stripe is not configured');
     }
 
-    const result = await this.paymentService.createPOSPayment({
-      shopId: user.shopId,
-      orderId: dto.orderId,
-      orderNumber: dto.orderNumber,
-      amount: dto.amount,
-      currency: dto.currency,
-      customerEmail: dto.customerEmail,
-      customerName: dto.customerName,
-      description: dto.description,
-    });
+    const result = await this.initiatePOSPayment(user, dto);
 
     return {
       success: true,
       ...result,
     };
+  }
+
+  /**
+   * P0-10C: order-linked POS initiation must pass order payment authority —
+   * tenant-scoped order, payable lifecycle state, no active void claim, and
+   * server-authoritative amount/orderNumber. Orderless pre-checkout intents
+   * (non-ObjectId placeholder orderIds such as `temp-*`) remain supported for
+   * existing POS clients; they bind to no order, so there is nothing to void.
+   */
+  private async initiatePOSPayment(
+    user: JwtPayload,
+    dto: {
+      orderId?: string;
+      orderNumber?: string;
+      amount: number;
+      currency?: string;
+      customerEmail?: string;
+      customerName?: string;
+      description?: string;
+    },
+  ): Promise<{
+    paymentIntentId: string;
+    clientSecret: string;
+    amount: number;
+    currency: string;
+    minimumAmount?: number;
+  }> {
+    const orderLinked = !!dto.orderId && Types.ObjectId.isValid(dto.orderId);
+    let amount = dto.amount;
+    let orderNumber = dto.orderNumber;
+
+    if (orderLinked) {
+      const claim = await this.orderPaymentAuthority.claimExternalPaymentIntent(
+        user.shopId,
+        dto.orderId!,
+        'stripe',
+        {
+          expectedAmount: dto.amount,
+          amountUnit: 'minor',
+          currency: dto.currency,
+        },
+      );
+      amount = toMinorUnits(claim.amount, dto.currency);
+      orderNumber = claim.orderNumber;
+    }
+
+    try {
+      return await this.paymentService.createPOSPayment({
+        shopId: user.shopId,
+        orderId: dto.orderId || `pos-${Date.now()}`,
+        orderNumber: orderNumber || `POS-${Date.now()}`,
+        amount,
+        currency: dto.currency,
+        customerEmail: dto.customerEmail,
+        customerName: dto.customerName,
+        description: dto.description,
+      });
+    } catch (err) {
+      // Definitive local validation rejection (4xx raised before the Stripe
+      // API call) → release the claim to terminal 'failed'. Ambiguous throws
+      // (network/5xx after the request may have reached Stripe) leave the
+      // intent 'pending' so void stays blocked until settlement is known.
+      if (
+        orderLinked &&
+        err instanceof HttpException &&
+        err.getStatus() < 500
+      ) {
+        await this.orderPaymentAuthority.markIntentFailed(
+          user.shopId,
+          dto.orderId!,
+          'stripe',
+        );
+      }
+      throw err;
+    }
   }
 
   /**
@@ -184,7 +257,9 @@ export class StripeController {
   @Post('create-payment-intent')
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Create payment intent (alias for pos/create-payment)' })
+  @ApiOperation({
+    summary: 'Create payment intent (alias for pos/create-payment)',
+  })
   async createPaymentIntentAlias(
     @CurrentUser() user: JwtPayload,
     @Body()
@@ -205,19 +280,12 @@ export class StripeController {
     currency: string;
   }> {
     if (!this.stripeService.isStripeConfigured()) {
-      throw new BadRequestException('Stripe is not configured. Please configure Stripe in your shop settings or contact support.');
+      throw new BadRequestException(
+        'Stripe is not configured. Please configure Stripe in your shop settings or contact support.',
+      );
     }
 
-    const result = await this.paymentService.createPOSPayment({
-      shopId: user.shopId,
-      orderId: dto.orderId || `pos-${Date.now()}`,
-      orderNumber: dto.orderNumber || `POS-${Date.now()}`,
-      amount: dto.amount,
-      currency: dto.currency,
-      customerEmail: dto.customerEmail,
-      customerName: dto.customerName,
-      description: dto.description,
-    });
+    const result = await this.initiatePOSPayment(user, dto);
 
     return {
       success: true,
@@ -238,7 +306,8 @@ export class StripeController {
     success: boolean;
     payment: any;
   }> {
-    const payment = await this.paymentService.syncPaymentStatus(paymentIntentId);
+    const payment =
+      await this.paymentService.syncPaymentStatus(paymentIntentId);
 
     return {
       success: true,
@@ -351,13 +420,13 @@ export class StripeController {
   @Get('subscription/current')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current subscription' })
-  async getCurrentSubscription(
-    @CurrentUser() user: JwtPayload,
-  ): Promise<{
+  async getCurrentSubscription(@CurrentUser() user: JwtPayload): Promise<{
     success: boolean;
     subscription: any;
   }> {
-    const subscription = await this.subscriptionService.getSubscriptionByShopId(user.shopId);
+    const subscription = await this.subscriptionService.getSubscriptionByShopId(
+      user.shopId,
+    );
 
     return {
       success: true,
@@ -392,7 +461,9 @@ export class StripeController {
     success: boolean;
     message: string;
   }> {
-    const subscription = await this.subscriptionService.getSubscriptionByShopId(user.shopId);
+    const subscription = await this.subscriptionService.getSubscriptionByShopId(
+      user.shopId,
+    );
 
     if (!subscription) {
       throw new BadRequestException('No active subscription found');
@@ -405,9 +476,10 @@ export class StripeController {
 
     return {
       success: true,
-      message: dto.cancelAtPeriodEnd !== false
-        ? 'Subscription will be canceled at the end of the billing period'
-        : 'Subscription canceled immediately',
+      message:
+        dto.cancelAtPeriodEnd !== false
+          ? 'Subscription will be canceled at the end of the billing period'
+          : 'Subscription canceled immediately',
     };
   }
 
@@ -455,19 +527,23 @@ export class StripeController {
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create setup intent for saving payment method' })
-  async createSetupIntent(
-    @CurrentUser() user: JwtPayload,
-  ): Promise<{
+  async createSetupIntent(@CurrentUser() user: JwtPayload): Promise<{
     success: boolean;
     clientSecret: string;
   }> {
-    const customer = await this.customerService.getCustomerByShopId(user.shopId);
+    const customer = await this.customerService.getCustomerByShopId(
+      user.shopId,
+    );
 
     if (!customer) {
-      throw new BadRequestException('Customer not found. Create customer first.');
+      throw new BadRequestException(
+        'Customer not found. Create customer first.',
+      );
     }
 
-    const setupIntent = await this.customerService.createSetupIntent(customer.stripeCustomerId);
+    const setupIntent = await this.customerService.createSetupIntent(
+      customer.stripeCustomerId,
+    );
 
     return {
       success: true,
@@ -482,19 +558,21 @@ export class StripeController {
   @Get('customer/payment-methods')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'List saved payment methods' })
-  async listPaymentMethods(
-    @CurrentUser() user: JwtPayload,
-  ): Promise<{
+  async listPaymentMethods(@CurrentUser() user: JwtPayload): Promise<{
     success: boolean;
     paymentMethods: any[];
   }> {
-    const customer = await this.customerService.getCustomerByShopId(user.shopId);
+    const customer = await this.customerService.getCustomerByShopId(
+      user.shopId,
+    );
 
     if (!customer) {
       return { success: true, paymentMethods: [] };
     }
 
-    const methods = await this.customerService.listPaymentMethods(customer.stripeCustomerId);
+    const methods = await this.customerService.listPaymentMethods(
+      customer.stripeCustomerId,
+    );
 
     return {
       success: true,
@@ -529,7 +607,9 @@ export class StripeController {
     success: boolean;
     message: string;
   }> {
-    const customer = await this.customerService.getCustomerByShopId(user.shopId);
+    const customer = await this.customerService.getCustomerByShopId(
+      user.shopId,
+    );
 
     if (!customer) {
       throw new BadRequestException('Customer not found');
@@ -555,9 +635,7 @@ export class StripeController {
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Detach payment method from customer' })
-  async detachPaymentMethod(
-    @Body() dto: { paymentMethodId: string },
-  ): Promise<{
+  async detachPaymentMethod(@Body() dto: { paymentMethodId: string }): Promise<{
     success: boolean;
     message: string;
   }> {
@@ -624,11 +702,13 @@ export class StripeController {
     success: boolean;
     stats: any;
   }> {
-    const dateRange = from && to
-      ? { from: new Date(from), to: new Date(to) }
-      : undefined;
+    const dateRange =
+      from && to ? { from: new Date(from), to: new Date(to) } : undefined;
 
-    const stats = await this.analyticsService.getShopPaymentStats(user.shopId, dateRange);
+    const stats = await this.analyticsService.getShopPaymentStats(
+      user.shopId,
+      dateRange,
+    );
 
     return {
       success: true,
@@ -748,9 +828,7 @@ export class StripeController {
   @Get('admin/transactions')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get all recent transactions (Super Admin)' })
-  async getAllTransactions(
-    @Query('limit') limit?: string,
-  ): Promise<{
+  async getAllTransactions(@Query('limit') limit?: string): Promise<{
     success: boolean;
     transactions: any[];
   }> {
@@ -789,14 +867,14 @@ export class StripeController {
     success: boolean;
     distribution: any;
   }> {
-    const dateRange = from && to
-      ? { from: new Date(from), to: new Date(to) }
-      : undefined;
+    const dateRange =
+      from && to ? { from: new Date(from), to: new Date(to) } : undefined;
 
-    const distribution = await this.analyticsService.getPaymentMethodDistribution(
-      undefined,
-      dateRange,
-    );
+    const distribution =
+      await this.analyticsService.getPaymentMethodDistribution(
+        undefined,
+        dateRange,
+      );
 
     return {
       success: true,

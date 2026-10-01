@@ -18,6 +18,8 @@ import {
   MPESA_TIMING,
 } from './services/mpesa-transaction-manager.service';
 import { MpesaReconciliationService } from './services/mpesa-reconciliation.service';
+import { OrderPaymentAuthorityService } from './services/order-payment-authority.service';
+import { HttpException } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -73,6 +75,7 @@ export class MpesaController {
     private readonly mpesaMultiTenantService: MpesaMultiTenantService,
     private readonly transactionManager: MpesaTransactionManagerService,
     private readonly reconciliationService: MpesaReconciliationService,
+    private readonly orderPaymentAuthority: OrderPaymentAuthorityService,
   ) {}
 
   /**
@@ -146,19 +149,44 @@ export class MpesaController {
       };
     }
 
-    // Use multi-tenant service with shop-specific credentials
-    const orderNumber = `ORD-${dto.orderId.slice(-8).toUpperCase()}`;
+    // P0-10C: ORDER PAYMENT AUTHORITY — resolve the order by
+    // {_id, authenticated shopId}, reject void/voiding/completed orders, and
+    // atomically (re-)establish the unresolved external payment intent BEFORE
+    // contacting Daraja. Amount and order number are server-authoritative;
+    // dto.amount is only a tamper check, never the charged value.
+    const claim = await this.orderPaymentAuthority.claimExternalPaymentIntent(
+      user.shopId,
+      dto.orderId,
+      'mpesa',
+      { expectedAmount: dto.amount, amountUnit: 'major' },
+    );
 
-    const result = await this.mpesaMultiTenantService.initiateSTKPush({
-      shopId: user.shopId,
-      phoneNumber: dto.phoneNumber,
-      amount: dto.amount,
-      orderId: dto.orderId,
-      orderNumber: orderNumber,
-      description: dto.transactionDesc,
-      cashierId: user.sub,
-      cashierName: (user as any).name || user.email || 'Cashier',
-    });
+    let result: Awaited<ReturnType<MpesaMultiTenantService['initiateSTKPush']>>;
+    try {
+      result = await this.mpesaMultiTenantService.initiateSTKPush({
+        shopId: user.shopId,
+        phoneNumber: dto.phoneNumber,
+        amount: claim.amount,
+        orderId: dto.orderId,
+        orderNumber: claim.orderNumber,
+        description: dto.transactionDesc,
+        cashierId: user.sub,
+        cashierName: (user as any).name || user.email || 'Cashier',
+      });
+    } catch (err) {
+      // Definitive local validation rejection (4xx) → release the claim to
+      // terminal 'failed'. Any other throw (network/5xx/timeout after the
+      // request may have reached Daraja) is ambiguous → leave the intent
+      // 'pending' so void stays blocked until settlement is known.
+      if (err instanceof HttpException && err.getStatus() < 500) {
+        await this.orderPaymentAuthority.markIntentFailed(
+          user.shopId,
+          dto.orderId,
+          'mpesa',
+        );
+      }
+      throw err;
+    }
 
     // Map multi-tenant response to standard response format
     if (result.success) {
@@ -167,9 +195,15 @@ export class MpesaController {
         transactionId: result.transactionId || '',
         checkoutRequestId: result.checkoutRequestId,
         status: 'PENDING' as any,
-        message: `STK push sent. Enter your M-Pesa PIN to complete payment of KES ${dto.amount.toLocaleString()}.`,
+        message: `STK push sent. Enter your M-Pesa PIN to complete payment of KES ${claim.amount.toLocaleString()}.`,
       };
     } else {
+      // Definitive provider rejection → terminal failure transition.
+      await this.orderPaymentAuthority.markIntentFailed(
+        user.shopId,
+        dto.orderId,
+        'mpesa',
+      );
       return {
         success: false,
         transactionId: result.transactionId || '',
@@ -494,14 +528,44 @@ export class MpesaController {
       };
     }
 
-    return this.mpesaMultiTenantService.initiateSTKPush({
-      shopId: user.shopId,
-      phoneNumber: dto.phoneNumber,
-      amount: dto.amount,
-      orderId: dto.orderId,
-      orderNumber: dto.orderNumber,
-      description: dto.description,
-    });
+    // P0-10C: same order authority + void interlock as /initiate. The
+    // client-supplied orderNumber is never trusted; dto.amount is checked
+    // against the server-authoritative allocation, not used for the charge.
+    const claim = await this.orderPaymentAuthority.claimExternalPaymentIntent(
+      user.shopId,
+      dto.orderId,
+      'mpesa',
+      { expectedAmount: dto.amount, amountUnit: 'major' },
+    );
+
+    let result: Awaited<ReturnType<MpesaMultiTenantService['initiateSTKPush']>>;
+    try {
+      result = await this.mpesaMultiTenantService.initiateSTKPush({
+        shopId: user.shopId,
+        phoneNumber: dto.phoneNumber,
+        amount: claim.amount,
+        orderId: dto.orderId,
+        orderNumber: claim.orderNumber,
+        description: dto.description,
+      });
+    } catch (err) {
+      if (err instanceof HttpException && err.getStatus() < 500) {
+        await this.orderPaymentAuthority.markIntentFailed(
+          user.shopId,
+          dto.orderId,
+          'mpesa',
+        );
+      }
+      throw err;
+    }
+    if (!result.success) {
+      await this.orderPaymentAuthority.markIntentFailed(
+        user.shopId,
+        dto.orderId,
+        'mpesa',
+      );
+    }
+    return result;
   }
 
   /**

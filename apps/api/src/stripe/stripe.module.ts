@@ -11,6 +11,8 @@ import { StripeSubscriptionService } from './services/stripe-subscription.servic
 import { StripeAnalyticsService } from './services/stripe-analytics.service';
 import { StripeConnectService } from './services/stripe-connect.service';
 import { Shop, ShopSchema } from '../shops/schemas/shop.schema';
+import { Order, OrderSchema } from '../sales/schemas/order.schema';
+import { OrderPaymentAuthorityService } from '../payments/services/order-payment-authority.service';
 import {
   StripeCustomer,
   StripeCustomerSchema,
@@ -42,9 +44,14 @@ export class StripeModule {
           { name: StripeSubscription.name, schema: StripeSubscriptionSchema },
           { name: StripeWebhookEvent.name, schema: StripeWebhookEventSchema },
           { name: Shop.name, schema: ShopSchema },
+          { name: Order.name, schema: OrderSchema },
         ]),
       ],
-      controllers: [StripeController, StripeConnectController, StripeWebhookController],
+      controllers: [
+        StripeController,
+        StripeConnectController,
+        StripeWebhookController,
+      ],
       providers: [
         {
           provide: 'STRIPE_API_KEY',
@@ -66,6 +73,7 @@ export class StripeModule {
         StripeSubscriptionService,
         StripeAnalyticsService,
         StripeConnectService,
+        OrderPaymentAuthorityService,
       ],
       exports: [
         StripeService,

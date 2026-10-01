@@ -11,6 +11,7 @@ import { MpesaEncryptionService } from './services/mpesa-encryption.service';
 import { MpesaReconciliationService } from './services/mpesa-reconciliation.service';
 import { PaymentConfigService } from './services/payment-config.service';
 import { MpesaTransactionManagerService } from './services/mpesa-transaction-manager.service';
+import { OrderPaymentAuthorityService } from './services/order-payment-authority.service';
 import { MpesaController } from './mpesa.controller';
 import { PaymentConfigController } from './payment-config.controller';
 import { PaymentReadinessController } from './payment-readiness.controller';
@@ -66,6 +67,7 @@ import { CustomersModule } from '../customers/customers.module';
     MpesaReconciliationService,
     PaymentConfigService,
     MpesaTransactionManagerService,
+    OrderPaymentAuthorityService,
   ],
   controllers: [
     PaymentsController,
