@@ -8,6 +8,7 @@ import { Order } from './schemas/order.schema';
 import { User } from '../users/schemas/user.schema';
 import { Product } from '../inventory/schemas/product.schema';
 import { StockAdjustment } from '../inventory/schemas/stock-adjustment.schema';
+import { PaymentTransaction } from '../payments/schemas/payment-transaction.schema';
 import { Shift } from '../shifts/schemas/shift.schema';
 import { Reconciliation } from '../financial/reconciliation.schema';
 import { InventoryService } from '../inventory/inventory.service';
@@ -153,6 +154,10 @@ describe('P0-10 post-sale financial controls', () => {
         if (!evalExpr(v, doc)) return false;
         continue;
       }
+      if (k === '$and') {
+        if (!(v as any[]).every((f) => matchFilter(doc, f))) return false;
+        continue;
+      }
       const actual = getPath(doc, k);
       const isOpObj =
         v !== null &&
@@ -172,6 +177,14 @@ describe('P0-10 post-sale financial controls', () => {
             }
           } else if (op === '$in') {
             if (!(val as any[]).some((x) => eqVal(actual, x))) return false;
+          } else if (op === '$not') {
+            const sub = val as any;
+            if (sub.$elemMatch) {
+              const arr = Array.isArray(actual) ? actual : [];
+              if (arr.some((el) => matchFilter(el, sub.$elemMatch))) {
+                return false;
+              }
+            }
           }
         }
       } else {
@@ -292,6 +305,7 @@ describe('P0-10 post-sale financial controls', () => {
   const productStore = new Collection();
   const userStore = new Collection();
   const adjustmentStore = new Collection(); // permanent StockAdjustment witness
+  const paymentTxStore = new Collection(); // authoritative PaymentTransactions
 
   let appliedMutations: Map<string, number>; // mutationId -> qty (idempotent)
   let updateStockCalls: { mutationId: string; quantityDelta: number }[];
@@ -385,6 +399,7 @@ describe('P0-10 post-sale financial controls', () => {
     productStore.docs = [];
     userStore.docs = [];
     adjustmentStore.docs = [];
+    paymentTxStore.docs = [];
     appliedMutations = new Map();
     updateStockCalls = [];
     updateStockCallCount = 0;
@@ -418,6 +433,10 @@ describe('P0-10 post-sale financial controls', () => {
         {
           provide: getModelToken(StockAdjustment.name),
           useValue: adjustmentStore,
+        },
+        {
+          provide: getModelToken(PaymentTransaction.name),
+          useValue: paymentTxStore,
         },
         { provide: InventoryService, useValue: inventoryServiceMock },
       ],
@@ -845,17 +864,45 @@ describe('P0-10 post-sale financial controls', () => {
 
   // ──────────────────────────── VOID ────────────────────────────
 
+  // P0-10B: a pending order carrying a PENDING external intent is NOT
+  // voidable. The legitimately voidable pending order is one whose external
+  // attempt already resolved TERMINAL-FAILED (stock deducted, no money
+  // pending, no money paid) — e.g. STK push failed after checkout.
   const pendingUnpaidOrder = (overrides: any = {}) =>
     seedOrder({
       status: 'pending',
       paymentStatus: 'unpaid',
-      payments: [{ method: 'mpesa', amount: 100, status: 'pending' }],
+      payments: [{ method: 'mpesa', amount: 100, status: 'failed' }],
       items: [
         { productId: PRODUCT_1, name: 'Widget', quantity: 3, unitPrice: 20 },
         { productId: PRODUCT_2, name: 'Gadget', quantity: 1, unitPrice: 40 },
       ],
       ...overrides,
     });
+
+  const pendingExternalOrder = (method: 'mpesa' | 'stripe' = 'mpesa') =>
+    seedOrder({
+      status: 'pending',
+      paymentStatus: 'unpaid',
+      payments: [{ method, amount: 100, status: 'pending' }],
+      items: [
+        { productId: PRODUCT_1, name: 'Widget', quantity: 3, unitPrice: 20 },
+      ],
+    });
+
+  const seedPaymentTx = (overrides: any) => {
+    paymentTxStore.docs.push({
+      shopId: new Types.ObjectId(SHOP_A),
+      orderId: new Types.ObjectId(overrides.orderId),
+      orderNumber: 'ORD-X',
+      cashierId: new Types.ObjectId(ADMIN),
+      cashierName: 't',
+      paymentMethod: 'mpesa',
+      amount: 100,
+      status: 'pending',
+      ...overrides,
+    });
+  };
 
   const seedProductWithSaleReceipt = (
     productId: string,
@@ -1614,6 +1661,185 @@ describe('P0-10 post-sale financial controls', () => {
       ).rejects.toThrow(/different reason/i);
       expect(orderStore.docs[0].voidOperation.reason).toBe('original');
       expect(orderStore.docs[0].voidOperation.status).toBe('in_progress');
+    });
+  });
+
+  // ────── P0-10B: EXTERNAL SETTLEMENT / VOID RACE ──────
+
+  describe('P0-10B void — unresolved external settlement', () => {
+    it('pending M-Pesa intent → void rejected with zero mutation', async () => {
+      await boot();
+      const order = pendingExternalOrder('mpesa');
+      const oid = String(order._id);
+      seedProductWithSaleReceipt(PRODUCT_1, oid, 3, 7);
+
+      await expect(
+        voidOp(oid, { voidOperationId: 'v-1', voidReason: 'x' }),
+      ).rejects.toThrow(/settlement is still pending/i);
+
+      const doc = orderStore.docs[0];
+      expect(doc.voidOperation).toBeUndefined(); // no claim created
+      expect(doc.status).toBe('pending'); // lifecycle untouched
+      expect(doc.payments[0].status).toBe('pending');
+      expect(inventoryServiceMock.updateStock).not.toHaveBeenCalled();
+      expect(
+        productStore.docs.find((p) => String(p._id) === PRODUCT_1).stock,
+      ).toBe(7); // stock untouched
+    });
+
+    it('pending Stripe intent → void rejected with zero mutation', async () => {
+      await boot();
+      const order = pendingExternalOrder('stripe');
+      const oid = String(order._id);
+      seedProductWithSaleReceipt(PRODUCT_1, oid, 3, 7);
+
+      await expect(
+        voidOp(oid, { voidOperationId: 'v-1', voidReason: 'x' }),
+      ).rejects.toThrow(/settlement is still pending/i);
+      expect(orderStore.docs[0].voidOperation).toBeUndefined();
+      expect(inventoryServiceMock.updateStock).not.toHaveBeenCalled();
+    });
+
+    it('pending PaymentTransaction alone (embedded not yet recorded) blocks void', async () => {
+      await boot();
+      // Provider-tracked state is more current than the embedded record:
+      // payment already failed in the embedded record, but a pending
+      // PaymentTransaction exists → fail closed.
+      const order = pendingUnpaidOrder();
+      const oid = String(order._id);
+      seedProductWithSaleReceipt(PRODUCT_1, oid, 3, 7);
+      seedProductWithSaleReceipt(PRODUCT_2, oid, 1, 9);
+      seedPaymentTx({ orderId: oid, status: 'pending' });
+
+      await expect(
+        voidOp(oid, { voidOperationId: 'v-1', voidReason: 'x' }),
+      ).rejects.toThrow(/settlement is still pending/i);
+      expect(orderStore.docs[0].voidOperation).toBeUndefined();
+      expect(inventoryServiceMock.updateStock).not.toHaveBeenCalled();
+    });
+
+    it('completed PaymentTransaction is authoritative paid evidence → refund path, not void', async () => {
+      await boot();
+      const order = pendingExternalOrder('mpesa');
+      const oid = String(order._id);
+      seedPaymentTx({ orderId: oid, status: 'completed' });
+      // Note: embedded record still says pending — the tx is more current.
+      await expect(
+        voidOp(oid, { voidOperationId: 'v-1', voidReason: 'x' }),
+      ).rejects.toThrow(/refund path/i);
+      expect(orderStore.docs[0].voidOperation).toBeUndefined();
+    });
+
+    it('callback AFTER rejected void → order converges paid, void still blocked', async () => {
+      await boot();
+      const order = pendingExternalOrder('mpesa');
+      const oid = String(order._id);
+      seedProductWithSaleReceipt(PRODUCT_1, oid, 3, 7);
+      seedPaymentTx({ orderId: oid, status: 'pending' });
+
+      await expect(
+        voidOp(oid, { voidOperationId: 'v-1', voidReason: 'x' }),
+      ).rejects.toThrow(/settlement is still pending/i);
+
+      // Provider success arrives — P0-3F convergence path applies the write:
+      // embedded payment completed + paymentStatus paid + status completed.
+      const doc = orderStore.docs[0];
+      doc.payments[0].status = 'completed';
+      doc.paymentStatus = 'paid';
+      doc.status = 'completed';
+      paymentTxStore.docs[0].status = 'completed';
+
+      expect(doc.status).toBe('completed'); // converged, NOT void
+      expect(
+        productStore.docs.find((p) => String(p._id) === PRODUCT_1).stock,
+      ).toBe(7); // stock stays sale-deducted
+
+      await expect(
+        voidOp(oid, { voidOperationId: 'v-1', voidReason: 'x' }),
+      ).rejects.toThrow(/refund path/i);
+      expect(inventoryServiceMock.updateStock).not.toHaveBeenCalled();
+    });
+
+    it('callback wins first → void rejected as paid', async () => {
+      await boot();
+      const order = pendingExternalOrder('mpesa');
+      const oid = String(order._id);
+      seedProductWithSaleReceipt(PRODUCT_1, oid, 3, 7);
+      // Provider confirmation lands first.
+      orderStore.docs[0].payments[0].status = 'completed';
+      orderStore.docs[0].paymentStatus = 'paid';
+      orderStore.docs[0].status = 'completed';
+
+      await expect(
+        voidOp(oid, { voidOperationId: 'v-1', voidReason: 'x' }),
+      ).rejects.toThrow(/refund path/i);
+      expect(orderStore.docs[0].status).toBe('completed');
+      expect(
+        productStore.docs.find((p) => String(p._id) === PRODUCT_1).stock,
+      ).toBe(7); // never restored
+      expect(orderStore.docs[0].voidOperation).toBeUndefined();
+    });
+
+    it('void || callback race — the claim predicate rejects even when pre-read was stale', async () => {
+      await boot();
+      // Order is legitimately voidable at read time (failed mpesa attempt).
+      const order = pendingUnpaidOrder();
+      const oid = String(order._id);
+      seedProductWithSaleReceipt(PRODUCT_1, oid, 3, 7);
+      seedProductWithSaleReceipt(PRODUCT_2, oid, 1, 9);
+
+      // Simulate the dangerous interleave: the guard pre-read sees a voidable
+      // order (terminal-failed payment), then a provider/staff payment
+      // completion lands BETWEEN that read and the atomic claim write. The
+      // claim's $and payments predicates must refuse — this proves the
+      // write-time guard, not just the pre-read.
+      const realUpdateOne = orderStore.updateOne.bind(orderStore);
+      jest
+        .spyOn(orderStore, 'updateOne')
+        .mockImplementationOnce((filter: any, update: any) => {
+          const doc = orderStore.docs[0];
+          doc.payments[0].status = 'completed'; // completion landed mid-flight
+          doc.paymentStatus = 'paid';
+          doc.status = 'completed';
+          // Now the real predicate evaluates against post-completion state.
+          return realUpdateOne(filter, update);
+        });
+
+      await expect(
+        voidOp(oid, { voidOperationId: 'v-1', voidReason: 'raced' }),
+      ).rejects.toThrow(/refund path/i);
+
+      const doc = orderStore.docs[0];
+      // Forbidden triple must never occur:
+      expect(doc.status).toBe('completed'); // payment truth won
+      expect(doc.voidOperation).toBeUndefined(); // claim refused atomically
+      expect(
+        productStore.docs.find((p) => String(p._id) === PRODUCT_1).stock,
+      ).toBe(7); // stock still sale-deducted — never restored
+      expect(inventoryServiceMock.updateStock).not.toHaveBeenCalled();
+    });
+
+    it('terminal-failed provider payment → void still permitted (§12)', async () => {
+      await boot();
+      // pendingUnpaidOrder carries a FAILED mpesa payment — Daraja result
+      // codes are terminal; no pending intent means no late success possible.
+      const order = pendingUnpaidOrder();
+      const oid = String(order._id);
+      seedProductWithSaleReceipt(PRODUCT_1, oid, 3, 7);
+      seedProductWithSaleReceipt(PRODUCT_2, oid, 1, 9);
+      seedPaymentTx({ orderId: oid, status: 'failed' });
+
+      const after = await voidOp(oid, {
+        voidOperationId: 'v-1',
+        voidReason: 'payment failed — cancel order',
+      });
+      expect(after.status).toBe('void');
+      expect(
+        productStore.docs.find((p) => String(p._id) === PRODUCT_1).stock,
+      ).toBe(10);
+      expect(
+        productStore.docs.find((p) => String(p._id) === PRODUCT_2).stock,
+      ).toBe(10);
     });
   });
 });

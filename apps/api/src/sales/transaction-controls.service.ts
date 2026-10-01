@@ -16,6 +16,10 @@ import {
   StockAdjustmentDocument,
 } from '../inventory/schemas/stock-adjustment.schema';
 import { InventoryService } from '../inventory/inventory.service';
+import {
+  PaymentTransaction,
+  PaymentTransactionDocument,
+} from '../payments/schemas/payment-transaction.schema';
 
 type PostSaleOp = 'refund' | 'void' | 'discount';
 
@@ -45,12 +49,23 @@ export class TransactionControlsService {
   /** Methods SmartDuka can honestly mark refunded at request time. */
   private static readonly CASH_LIKE_METHODS = new Set(['cash']);
 
+  /**
+   * P0-10B: provider-settled payment methods. An order carrying a PENDING
+   * intent for one of these is never voidable — a late provider success would
+   * otherwise leave charged + voided + stock-restored, three contradictory
+   * truths. Failed is terminal per the Daraja result-code flow; completed is
+   * caught by the paid-order guard.
+   */
+  private static readonly EXTERNAL_METHODS = new Set(['mpesa', 'stripe']);
+
   constructor(
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel(Product.name) private productModel: Model<ProductDocument>,
     @InjectModel(StockAdjustment.name)
     private readonly adjustmentModel: Model<StockAdjustmentDocument>,
+    @InjectModel(PaymentTransaction.name)
+    private readonly paymentTransactionModel: Model<PaymentTransactionDocument>,
     private readonly inventoryService: InventoryService,
   ) {}
 
@@ -454,6 +469,53 @@ export class TransactionControlsService {
   // ────────────────────────────── VOID ──────────────────────────────
 
   /**
+   * P0-10B: an order with unresolved external settlement is never voidable —
+   * otherwise a late provider success produces the forbidden triple
+   * (charged + voided + stock restored). Two evidence layers, both
+   * tenant-scoped:
+   *   1. embedded order.payments[] — external method in 'pending'
+   *   2. PaymentTransaction rows for this order — provider-tracked state may
+   *      be newer than the embedded record; pending/completed both block.
+   * 'failed' provider state is terminal per the Daraja result-code flow and
+   * does not block. This is a local fail-closed decision only — no provider
+   * API calls are made from the void path.
+   */
+  private async assertNoUnresolvedExternalPayment(order: {
+    _id: unknown;
+    shopId: unknown;
+    payments?: { method: string; status?: string; amount: number }[];
+  }): Promise<void> {
+    const pendingEmbedded = (order.payments ?? []).some(
+      (p) =>
+        TransactionControlsService.EXTERNAL_METHODS.has(p.method) &&
+        p.status === 'pending',
+    );
+    const externalTx = await this.paymentTransactionModel
+      .find({
+        shopId: order.shopId,
+        orderId: order._id,
+        paymentMethod: {
+          $in: [...TransactionControlsService.EXTERNAL_METHODS],
+        },
+        status: { $in: ['pending', 'completed'] },
+      })
+      .exec();
+
+    if (externalTx.some((t) => t.status === 'completed')) {
+      // Provider-tracked completion = authoritative paid evidence even if the
+      // embedded record has not converged yet — refund path, not void.
+      throw new BadRequestException(
+        'Paid orders cannot be voided — use the refund path',
+      );
+    }
+    if (pendingEmbedded || externalTx.some((t) => t.status === 'pending')) {
+      throw new ConflictException(
+        'External payment settlement is still pending. Confirm payment outcome before voiding this order.',
+      );
+    }
+  }
+
+  /**
    * Void = cancellation before settlement. Paid orders are refused outright
    * (refund path required). Stock is restored exactly once via P0-2 canonical
    * mutations keyed void:<orderId>:<productId>, and only for lines whose
@@ -512,6 +574,9 @@ export class TransactionControlsService {
           'Payment settled while void was in progress — paid orders cannot be voided',
         );
       }
+      // An external intent that arrived after the claim must also block the
+      // resume — settlement unresolved → not voidable.
+      await this.assertNoUnresolvedExternalPayment(order);
       // in_progress → resume below (crash-safe convergence)
     } else if (order.status === 'void') {
       throw new BadRequestException('Order is already voided');
@@ -521,8 +586,14 @@ export class TransactionControlsService {
           'Paid orders cannot be voided — use the refund path',
         );
       }
+      // P0-10B: unresolved external settlement blocks before ANY mutation —
+      // no claim, no stock restore, no status change, no audit row.
+      await this.assertNoUnresolvedExternalPayment(order);
       // ATOMIC CLAIM — persist reason/actor before any compensation runs so a
-      // crash is resumable and a concurrent void cannot double-restore.
+      // crash is resumable and a concurrent void cannot double-restore. The
+      // payments predicates repeat the settlement guard AT WRITE TIME so a
+      // provider callback landing between our read and this write cannot
+      // produce charged + voided + restored.
       const claim = await this.orderModel
         .updateOne(
           {
@@ -530,6 +601,25 @@ export class TransactionControlsService {
             shopId: new Types.ObjectId(shopId),
             status: { $ne: 'void' },
             voidOperation: { $exists: false },
+            $and: [
+              {
+                payments: {
+                  $not: { $elemMatch: { status: 'completed' } },
+                },
+              },
+              {
+                payments: {
+                  $not: {
+                    $elemMatch: {
+                      method: {
+                        $in: [...TransactionControlsService.EXTERNAL_METHODS],
+                      },
+                      status: 'pending',
+                    },
+                  },
+                },
+              },
+            ],
           },
           {
             $set: {
@@ -571,9 +661,23 @@ export class TransactionControlsService {
           }
           // fall through — resume the raced in-progress void
         } else {
-          throw new ConflictException(
-            'Order already has a void operation with a different id',
-          );
+          // Claim lost for a settlement predicate, not a rival void — report
+          // the true reason instead of a generic identity conflict.
+          if (!order) {
+            throw new NotFoundException('Order not found');
+          }
+          if (order.voidOperation) {
+            throw new ConflictException(
+              'Order already has a void operation with a different id',
+            );
+          }
+          if (this.confirmedPaid(order) > 0) {
+            throw new BadRequestException(
+              'Paid orders cannot be voided — use the refund path',
+            );
+          }
+          await this.assertNoUnresolvedExternalPayment(order);
+          throw new ConflictException('Void request could not be claimed');
         }
       }
     }

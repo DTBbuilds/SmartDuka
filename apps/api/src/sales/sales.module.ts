@@ -11,6 +11,10 @@ import {
   StockAdjustment,
   StockAdjustmentSchema,
 } from '../inventory/schemas/stock-adjustment.schema';
+import {
+  PaymentTransaction,
+  PaymentTransactionSchema,
+} from '../payments/schemas/payment-transaction.schema';
 import { TransactionControlsController } from './transaction-controls.controller';
 import { TransactionControlsService } from './transaction-controls.service';
 import { ReceiptService } from './services/receipt.service';
@@ -33,6 +37,7 @@ import { ShiftsModule } from '../shifts/shifts.module';
       { name: User.name, schema: UserSchema },
       { name: Product.name, schema: ProductSchema },
       { name: StockAdjustment.name, schema: StockAdjustmentSchema },
+      { name: PaymentTransaction.name, schema: PaymentTransactionSchema },
     ]),
     InventoryModule,
     ActivityModule,

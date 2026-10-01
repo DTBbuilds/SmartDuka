@@ -91,12 +91,10 @@ export default function VoidRefundPage() {
         setReason('');
       } else {
         const body = await res.json().catch(() => null);
-        if (res.status === 409) {
-          // Definitive conflict — this intent can never be retried.
-          clearOperationId(intent);
-        }
-        // Ambiguous outcomes (5xx, network) keep the operation id so a retry
-        // replays the same server-side operation.
+        // The operation id is retained on EVERY non-success — even 409s like
+        // "settlement still pending" may resolve and become retryable, and a
+        // permanent conflict simply keeps replaying the same (idempotent) op.
+        // A changed intent produces a new fingerprint → a new id anyway.
         setError(body?.message ?? 'Failed to process request');
       }
     } catch (error) {
