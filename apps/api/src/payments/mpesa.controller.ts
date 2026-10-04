@@ -161,6 +161,26 @@ export class MpesaController {
       { expectedAmount: dto.amount, amountUnit: 'major' },
     );
 
+    // P0-10D: an earlier initiation already claimed this allocation and its
+    // outcome is unresolved — NEVER send a second STK push. Return the
+    // existing pending transaction so the client keeps polling it.
+    if (!claim.claimed) {
+      const existing =
+        await this.mpesaMultiTenantService.getUnresolvedOrderTransaction(
+          user.shopId,
+          dto.orderId,
+        );
+      return {
+        success: true,
+        transactionId: existing?._id?.toString() || '',
+        checkoutRequestId: existing?.checkoutRequestId,
+        status: 'PENDING' as any,
+        message:
+          'An M-Pesa payment is already awaiting customer confirmation for this order. Check payment status instead of retrying.',
+        errorCode: 'PAYMENT_ALREADY_PENDING',
+      };
+    }
+
     let result: Awaited<ReturnType<MpesaMultiTenantService['initiateSTKPush']>>;
     try {
       result = await this.mpesaMultiTenantService.initiateSTKPush({
@@ -537,6 +557,22 @@ export class MpesaController {
       'mpesa',
       { expectedAmount: dto.amount, amountUnit: 'major' },
     );
+
+    if (!claim.claimed) {
+      const existing =
+        await this.mpesaMultiTenantService.getUnresolvedOrderTransaction(
+          user.shopId,
+          dto.orderId,
+        );
+      return {
+        success: true,
+        transactionId: existing?._id?.toString(),
+        checkoutRequestId: existing?.checkoutRequestId,
+        unresolved: true,
+        message:
+          'An M-Pesa payment is already awaiting customer confirmation for this order.',
+      };
+    }
 
     let result: Awaited<ReturnType<MpesaMultiTenantService['initiateSTKPush']>>;
     try {

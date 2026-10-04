@@ -41,6 +41,8 @@ export interface CreatePaymentTransactionDto {
   notes?: string;
   mpesaReceiptNumber?: string;
   mpesaTransactionId?: string;
+  stripePaymentIntentId?: string;
+  stripeChargeId?: string;
   cardLastFour?: string;
   cardBrand?: string;
   amountTendered?: number;
@@ -98,6 +100,18 @@ export class PaymentTransactionService {
         }
       }
 
+      // Idempotency: the same Stripe PaymentIntent must never produce two
+      // payment records — duplicate webhooks, webhook/retrieve races, and
+      // browser replays all converge on this one row.
+      if (dto.stripePaymentIntentId) {
+        const existing = await this.paymentTransactionModel
+          .findOne({ stripePaymentIntentId: dto.stripePaymentIntentId })
+          .exec();
+        if (existing) {
+          return existing;
+        }
+      }
+
       const transaction = new this.paymentTransactionModel({
         shopId: new Types.ObjectId(dto.shopId),
         orderId: new Types.ObjectId(dto.orderId),
@@ -113,6 +127,8 @@ export class PaymentTransactionService {
         notes: dto.notes,
         mpesaReceiptNumber: dto.mpesaReceiptNumber,
         mpesaTransactionId: dto.mpesaTransactionId,
+        stripePaymentIntentId: dto.stripePaymentIntentId,
+        stripeChargeId: dto.stripeChargeId,
         cardLastFour: dto.cardLastFour,
         cardBrand: dto.cardBrand,
         amountTendered: dto.amountTendered,
@@ -206,13 +222,19 @@ export class PaymentTransactionService {
             ? 'partial'
             : 'unpaid';
 
+      // P0-10D: external methods (mpesa/stripe) flip their embedded pending
+      // allocation to completed on provider-confirmed evidence. The
+      // arrayFilter targets the METHOD'S record (not just mpesa) so Stripe
+      // convergence shares the same once-only semantics.
+      const isExternalMethod =
+        dto.paymentMethod === 'mpesa' || dto.paymentMethod === 'stripe';
       const result = await this.orderModel.updateOne(
         { _id: order._id, shopId: order.shopId, status: 'pending' },
         {
           $set: {
             paymentStatus,
             ...(paymentStatus === 'paid' ? { status: 'completed' } : {}),
-            ...(dto.paymentMethod === 'mpesa'
+            ...(isExternalMethod
               ? {
                   'payments.$[p].status': 'completed',
                   ...(dto.mpesaReceiptNumber
@@ -221,11 +243,23 @@ export class PaymentTransactionService {
                           dto.mpesaReceiptNumber,
                       }
                     : {}),
+                  ...(dto.stripePaymentIntentId
+                    ? {
+                        'payments.$[p].stripePaymentIntentId':
+                          dto.stripePaymentIntentId,
+                      }
+                    : {}),
                 }
               : {}),
           },
         },
-        { arrayFilters: [{ 'p.method': 'mpesa', 'p.status': 'pending' }] },
+        isExternalMethod
+          ? {
+              arrayFilters: [
+                { 'p.method': dto.paymentMethod, 'p.status': 'pending' },
+              ],
+            }
+          : undefined,
       );
 
       if (

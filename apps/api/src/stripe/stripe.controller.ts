@@ -175,11 +175,14 @@ export class StripeController {
   }
 
   /**
-   * P0-10C: order-linked POS initiation must pass order payment authority —
-   * tenant-scoped order, payable lifecycle state, no active void claim, and
-   * server-authoritative amount/orderNumber. Orderless pre-checkout intents
-   * (non-ObjectId placeholder orderIds such as `temp-*`) remain supported for
-   * existing POS clients; they bind to no order, so there is nothing to void.
+   * P0-10C/D: POS Stripe initiation is ORDER-LINKED ONLY — no customer charge
+   * without a canonical SmartDuka order. A real orderId is required and must
+   * pass order payment authority: tenant-scoped order, payable lifecycle
+   * state, no active void claim, pending Stripe allocation, and
+   * server-authoritative amount/orderNumber. The successful claim durably
+   * marks the embedded payment intent 'pending' BEFORE the provider call so
+   * the P0-10B void predicate interlocks. The returned PaymentIntent id is
+   * persisted on the order's payment record for provider-truth convergence.
    */
   private async initiatePOSPayment(
     user: JwtPayload,
@@ -199,49 +202,53 @@ export class StripeController {
     currency: string;
     minimumAmount?: number;
   }> {
-    const orderLinked = !!dto.orderId && Types.ObjectId.isValid(dto.orderId);
-    let amount = dto.amount;
-    let orderNumber = dto.orderNumber;
-
-    if (orderLinked) {
-      const claim = await this.orderPaymentAuthority.claimExternalPaymentIntent(
-        user.shopId,
-        dto.orderId!,
-        'stripe',
-        {
-          expectedAmount: dto.amount,
-          amountUnit: 'minor',
-          currency: dto.currency,
-        },
+    if (!dto.orderId || !Types.ObjectId.isValid(dto.orderId)) {
+      throw new BadRequestException(
+        'A canonical pending order is required to initiate a POS card payment',
       );
-      amount = toMinorUnits(claim.amount, dto.currency);
-      orderNumber = claim.orderNumber;
     }
 
+    const claim = await this.orderPaymentAuthority.claimExternalPaymentIntent(
+      user.shopId,
+      dto.orderId,
+      'stripe',
+      {
+        expectedAmount: dto.amount,
+        amountUnit: 'minor',
+        currency: dto.currency,
+      },
+    );
+    const amount = toMinorUnits(claim.amount, dto.currency);
+
     try {
-      return await this.paymentService.createPOSPayment({
+      const result = await this.paymentService.createPOSPayment({
         shopId: user.shopId,
-        orderId: dto.orderId || `pos-${Date.now()}`,
-        orderNumber: orderNumber || `POS-${Date.now()}`,
+        orderId: dto.orderId,
+        orderNumber: claim.orderNumber,
         amount,
         currency: dto.currency,
         customerEmail: dto.customerEmail,
         customerName: dto.customerName,
         description: dto.description,
       });
+      // Link the provider identity to the canonical payment record so a lost
+      // browser response can still be converged by webhook/server retrieve.
+      await this.orderPaymentAuthority.attachProviderRef(
+        user.shopId,
+        dto.orderId,
+        'stripe',
+        { stripePaymentIntentId: result.paymentIntentId },
+      );
+      return result;
     } catch (err) {
       // Definitive local validation rejection (4xx raised before the Stripe
       // API call) → release the claim to terminal 'failed'. Ambiguous throws
       // (network/5xx after the request may have reached Stripe) leave the
       // intent 'pending' so void stays blocked until settlement is known.
-      if (
-        orderLinked &&
-        err instanceof HttpException &&
-        err.getStatus() < 500
-      ) {
+      if (err instanceof HttpException && err.getStatus() < 500) {
         await this.orderPaymentAuthority.markIntentFailed(
           user.shopId,
-          dto.orderId!,
+          dto.orderId,
           'stripe',
         );
       }

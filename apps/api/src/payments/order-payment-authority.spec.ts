@@ -9,7 +9,11 @@ import {
   toMinorUnits,
 } from './services/order-payment-authority.service';
 import { MpesaController } from './mpesa.controller';
+import { PaymentsService } from './payments.service';
 import { StripeController } from '../stripe/stripe.controller';
+import { StripePaymentService } from '../stripe/services/stripe-payment.service';
+import { PaymentTransactionService } from './services/payment-transaction.service';
+import { isTerminalMpesaResultCode } from './schemas/mpesa-transaction.schema';
 
 jest.mock('nanoid', () => ({ nanoid: () => 'IDEM' }));
 
@@ -96,6 +100,13 @@ describe('P0-10C external payment initiation authority', () => {
 
   function matchArrayElement(el: any, af: any, name: string): boolean {
     return Object.entries(af).every(([k, cond]) => {
+      // Nested logical ops keep the element prefix on their field keys
+      // ({'claim.status': 'pending'}), so recurse with the same prefix
+      // stripping rather than the element-root matchFilter.
+      if (k === '$or')
+        return (cond as any[]).some((c) => matchArrayElement(el, c, name));
+      if (k === '$and')
+        return (cond as any[]).every((c) => matchArrayElement(el, c, name));
       const field = k.startsWith(`${name}.`) ? k.slice(name.length + 1) : k;
       return matchCond(getPath(el, field), cond);
     });
@@ -136,28 +147,43 @@ describe('P0-10C external payment initiation authority', () => {
 
   function makeOrderModel(docs: any[]) {
     return {
-      findOne: jest.fn((filter: any) => ({
-        lean: () => ({
-          exec: async () => docs.find((d) => matchFilter(d, filter)) ?? null,
-        }),
-        exec: async () => docs.find((d) => matchFilter(d, filter)) ?? null,
-      })),
+      findOne: jest.fn((filter: any) => {
+        const find = () => docs.find((d) => matchFilter(d, filter)) ?? null;
+        return {
+          lean: () => ({
+            exec: async () => find(),
+            then: (onF: any, onR: any) =>
+              Promise.resolve(find()).then(onF, onR),
+          }),
+          exec: async () => find(),
+          then: (onF: any, onR: any) => Promise.resolve(find()).then(onF, onR),
+        };
+      }),
       updateOne: jest.fn(
-        (filter: any, update: any, opts?: { arrayFilters?: any[] }) => ({
-          exec: async () => {
-            const doc = docs.find((d) => matchFilter(d, filter));
-            if (!doc) return { matchedCount: 0, modifiedCount: 0 };
-            for (const [path, value] of Object.entries(update.$set ?? {})) {
-              applySetPath(
-                doc,
-                path.split('.'),
-                value,
-                opts?.arrayFilters ?? [],
-              );
-            }
-            return { matchedCount: 1, modifiedCount: 1 };
-          },
-        }),
+        (filter: any, update: any, opts?: { arrayFilters?: any[] }) => {
+          // Mongoose Query is awaitable AND exposes .exec() — mirror both so
+          // services that `await updateOne(...)` and those that call
+          // `.updateOne(...).exec()` share one lazy, once-only write.
+          let promise: Promise<any> | null = null;
+          const run = () =>
+            (promise ??= Promise.resolve().then(() => {
+              const doc = docs.find((d) => matchFilter(d, filter));
+              if (!doc) return { matchedCount: 0, modifiedCount: 0 };
+              for (const [path, value] of Object.entries(update.$set ?? {})) {
+                applySetPath(
+                  doc,
+                  path.split('.'),
+                  value,
+                  opts?.arrayFilters ?? [],
+                );
+              }
+              return { matchedCount: 1, modifiedCount: 1 };
+            }));
+          return {
+            exec: () => run(),
+            then: (onF: any, onR: any) => run().then(onF, onR),
+          };
+        },
       ),
     };
   }
@@ -214,6 +240,8 @@ describe('P0-10C external payment initiation authority', () => {
       status: 'pending',
       paymentStatus: 'unpaid',
       total: 100,
+      cashierId: new Types.ObjectId(CASHIER),
+      cashierName: 'Alice',
       payments: [{ method: 'mpesa', amount: 100, status: 'pending' }],
       ...overrides,
     };
@@ -227,6 +255,7 @@ describe('P0-10C external payment initiation authority', () => {
   let multiTenant: {
     getMpesaConfigStatus: jest.Mock;
     initiateSTKPush: jest.Mock;
+    getUnresolvedOrderTransaction: jest.Mock;
   };
   let mpesa: MpesaController;
   let stripeService: { isStripeConfigured: jest.Mock };
@@ -246,6 +275,10 @@ describe('P0-10C external payment initiation authority', () => {
       initiateSTKPush: jest.fn(async () => ({
         success: true,
         transactionId: 'tx-1',
+        checkoutRequestId: 'cr-1',
+      })),
+      getUnresolvedOrderTransaction: jest.fn(async () => ({
+        _id: 'tx-1',
         checkoutRequestId: 'cr-1',
       })),
     };
@@ -584,39 +617,124 @@ describe('P0-10C external payment initiation authority', () => {
     expect(stripePayments.createPOSPayment).toHaveBeenCalledTimes(1);
   });
 
-  it('re-initiation while pending re-uses the claim (idempotent)', async () => {
+  // ── P0-10D: M-Pesa first-initiation / ambiguous-retry safety ──
+
+  it('M-Pesa first initiation sends exactly one STK push', async () => {
+    docs.push(makeOrder());
+    const res = await mpesa.initiatePayment(user, mpesaDto(ORDER_1, 100));
+    expect(res.success).toBe(true);
+    expect(multiTenant.initiateSTKPush).toHaveBeenCalledTimes(1);
+    expect(docs[0].payments[0].status).toBe('pending');
+    expect(docs[0].payments[0].initiatedAt).toBeInstanceOf(Date);
+  });
+
+  it('M-Pesa ambiguous retry ×5 → zero additional STK pushes, claim stays pending', async () => {
     docs.push(makeOrder());
     await mpesa.initiatePayment(user, mpesaDto(ORDER_1, 100));
-    await mpesa.initiatePayment(user, mpesaDto(ORDER_1, 100));
+    expect(multiTenant.initiateSTKPush).toHaveBeenCalledTimes(1);
+
+    // Browser retries while the first attempt is unresolved (pending +
+    // initiatedAt) — every retry returns the existing pending transaction
+    // and must NEVER reach Daraja again.
+    for (let i = 0; i < 5; i++) {
+      const res = await mpesa.initiatePayment(user, mpesaDto(ORDER_1, 100));
+      expect(res.success).toBe(true);
+      expect(res.status).toBe('PENDING');
+      expect(res.errorCode).toBe('PAYMENT_ALREADY_PENDING');
+      expect(res.checkoutRequestId).toBe('cr-1');
+    }
+    expect(multiTenant.initiateSTKPush).toHaveBeenCalledTimes(1);
+    expect(docs[0].payments[0].status).toBe('pending');
+
+    // ...and the unresolved intent keeps void blocked throughout.
+    const voidResult = await applyVoidClaim(orderModel, ORDER_1, SHOP_A);
+    expect(voidResult.matchedCount).toBe(0);
+  });
+
+  it('M-Pesa retry allowed only after terminal failure → second push succeeds', async () => {
+    docs.push(makeOrder());
+    // First attempt: provider definitively rejects (initiation-level failure)
+    multiTenant.initiateSTKPush.mockResolvedValueOnce({
+      success: false,
+      error: 'definitive rejection',
+      responseCode: '1',
+    });
+    const first = await mpesa.initiatePayment(user, mpesaDto(ORDER_1, 100));
+    expect(first.success).toBe(false);
+    expect(multiTenant.initiateSTKPush).toHaveBeenCalledTimes(1);
+    expect(docs[0].payments[0].status).toBe('failed'); // terminal release
+
+    // Genuinely new attempt after terminal failure → claimable → 2nd push
+    const second = await mpesa.initiatePayment(user, mpesaDto(ORDER_1, 100));
+    expect(second.success).toBe(true);
     expect(multiTenant.initiateSTKPush).toHaveBeenCalledTimes(2);
     expect(docs[0].payments[0].status).toBe('pending');
+    expect(docs[0].payments[0].initiatedAt).toBeInstanceOf(Date);
   });
 
-  // ── orderless compatibility (active pre-checkout callers) ──
+  it('M-Pesa callback terminal codes release the intent; ambiguous 1037 does not', () => {
+    // Classification is a pure function — verify the contract the callback
+    // and status-query paths rely on.
+    // Definitive terminal failures — intent released
+    for (const code of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 1032, 2001]) {
+      expect(isTerminalMpesaResultCode(code)).toBe(true);
+    }
+    // Success is not a failure
+    expect(isTerminalMpesaResultCode(0)).toBe(false);
+    // Ambiguous — outcome may still be settling → NEVER terminal
+    for (const code of [1037, 17, 9999, '1037']) {
+      expect(isTerminalMpesaResultCode(code as any)).toBe(false);
+    }
+    expect(isTerminalMpesaResultCode(undefined)).toBe(false);
+  });
 
-  it('Stripe orderless pre-checkout intent (temp- id) remains supported', async () => {
+  // ── P0-10D: Stripe order-binding + identity ──
+
+  it('Stripe POS requires a real order — missing/placeholder orderId rejected with zero provider calls', async () => {
+    docs.push(makeOrder());
+    // No orderId at all
+    await expect(
+      stripe.createPOSPayment(user, { amount: 100 } as any),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    // temp-* placeholder (the pre-P0-10D flow)
+    await expect(
+      stripe.createPOSPayment(user, {
+        orderId: `temp-${Date.now()}`,
+        orderNumber: `POS-${Date.now()}`,
+        amount: 100,
+      } as any),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    // Alias path is bound identically
+    await expect(
+      stripe.createPaymentIntentAlias(user, { amount: 100 } as any),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(stripePayments.createPOSPayment).not.toHaveBeenCalled();
+  });
+
+  it('Stripe PaymentIntent id is persisted onto the canonical order allocation', async () => {
+    docs.push(
+      makeOrder({
+        payments: [{ method: 'stripe', amount: 100, status: 'pending' }],
+      }),
+    );
     const res = await stripe.createPOSPayment(user, {
-      orderId: `temp-${Date.now()}`,
-      orderNumber: 'POS-1',
-      amount: 5000,
+      orderId: ORDER_1,
+      amount: 100,
+      currency: 'kes',
     });
     expect(res.success).toBe(true);
-    expect(stripePayments.createPOSPayment).toHaveBeenCalledTimes(1);
+    expect(res.paymentIntentId).toBe('pi_1');
+    expect(docs[0].payments[0].stripePaymentIntentId).toBe('pi_1');
   });
 
-  it('Stripe alias enforces authority for real orderIds, orderless otherwise', async () => {
+  // ── orderless is forbidden: P0-10D removed the pre-checkout placeholder ──
+
+  it('Stripe alias enforces authority for real orderIds and rejects orderless', async () => {
     docs.push(makeOrder({ status: 'void' }));
     await expect(
       stripe.createPaymentIntentAlias(user, { orderId: ORDER_1, amount: 100 }),
     ).rejects.toBeInstanceOf(ConflictException);
     expect(stripePayments.createPOSPayment).not.toHaveBeenCalled();
-
-    const res = await stripe.createPaymentIntentAlias(user, { amount: 5000 });
-    expect(res.success).toBe(true);
-    expect(stripePayments.createPOSPayment).toHaveBeenCalledTimes(1);
-    expect(stripePayments.createPOSPayment.mock.calls[0][0].orderId).toMatch(
-      /^pos-/,
-    );
   });
 
   it('initiate-v2 deprecated alias is held to the same authority', async () => {
@@ -632,9 +750,446 @@ describe('P0-10C external payment initiation authority', () => {
     expect(multiTenant.initiateSTKPush).not.toHaveBeenCalled();
   });
 
+  // ── legacy /payments/stk-push surface: same authority, same interlock ──
+
+  describe('legacy /payments/stk-push surface', () => {
+    let daraja: { initiateStkPush: jest.Mock };
+    let paymentsService: PaymentsService;
+
+    const stkDto = (orderId: string, amount = 100) => ({
+      orderId,
+      phoneNumber: '0712345678',
+      amount,
+      accountReference: 'FORGED-REF',
+      customerEmail: 'c@example.com',
+    });
+
+    beforeEach(() => {
+      daraja = {
+        initiateStkPush: jest.fn(async () => ({
+          MerchantRequestID: 'mr-1',
+          CheckoutRequestID: 'cr-9',
+          ResponseCode: '0',
+          CustomerMessage: 'Success',
+        })),
+      };
+      paymentsService = new PaymentsService(daraja as any, authority);
+    });
+
+    it('cannot bypass order authority — void order → zero provider calls', async () => {
+      docs.push(
+        makeOrder({
+          status: 'void',
+          payments: [{ method: 'mpesa', amount: 100, status: 'failed' }],
+        }),
+      );
+      await expect(
+        paymentsService.initiateStkPush(SHOP_A, stkDto(ORDER_1) as any),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(daraja.initiateStkPush).not.toHaveBeenCalled();
+    });
+
+    it('unresolved prior attempt → ConflictException, zero new STK pushes', async () => {
+      docs.push(
+        makeOrder({
+          payments: [
+            {
+              method: 'mpesa',
+              amount: 100,
+              status: 'pending',
+              initiatedAt: new Date(),
+            },
+          ],
+        }),
+      );
+      await expect(
+        paymentsService.initiateStkPush(SHOP_A, stkDto(ORDER_1) as any),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(daraja.initiateStkPush).not.toHaveBeenCalled();
+    });
+
+    it('body amount/accountReference are never charged — order values win', async () => {
+      docs.push(
+        makeOrder({
+          payments: [{ method: 'mpesa', amount: 100, status: 'pending' }],
+        }),
+      );
+      // Tampered amount is rejected outright (tamper check on the allocation)
+      await expect(
+        paymentsService.initiateStkPush(SHOP_A, stkDto(ORDER_1, 99999) as any),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(daraja.initiateStkPush).not.toHaveBeenCalled();
+
+      const res = await paymentsService.initiateStkPush(
+        SHOP_A,
+        stkDto(ORDER_1),
+      );
+      expect(res.requestId).toBe('mr-1');
+      expect(daraja.initiateStkPush).toHaveBeenCalledTimes(1);
+      const sent = daraja.initiateStkPush.mock.calls[0][0];
+      expect(sent.amount).toBe(100); // allocation amount, never body
+      expect(sent.accountReference).toBe('STK-2025-ORD'); // order-derived
+    });
+
+    it('cross-tenant order id → NotFound, zero provider calls', async () => {
+      docs.push(
+        makeOrder({
+          shopId: SHOP_B,
+          payments: [{ method: 'mpesa', amount: 100, status: 'pending' }],
+        }),
+      );
+      await expect(
+        paymentsService.initiateStkPush(SHOP_A, stkDto(ORDER_1) as any),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(daraja.initiateStkPush).not.toHaveBeenCalled();
+    });
+  });
+
   it('toMinorUnits mirrors the web currency contract', () => {
     expect(toMinorUnits(100, 'KES')).toBe(100); // zero-decimal
     expect(toMinorUnits(5, 'USD')).toBe(500);
     expect(toMinorUnits(5, undefined)).toBe(5); // default KES
+  });
+
+  // ────────────────────────────────────────────────────────────────
+  // P0-10D — STRIPE PROVIDER-TRUTH CONVERGENCE
+  // Verified webhooks AND authenticated server-side retrieval converge the
+  // canonical order through the shared PaymentTransactionService primitive —
+  // deduplicated on stripePaymentIntentId, tenant-scoped, once-only.
+  // ────────────────────────────────────────────────────────────────
+
+  describe('P0-10D stripe provider-truth convergence', () => {
+    const PI = 'pi_live_1';
+    let payTxnStore: Map<string, any>;
+    let payTxnSeq: number;
+    let stripePaymentStore: Map<string, any>;
+    let stripePaymentSvc: StripePaymentService;
+    let paymentTxns: PaymentTransactionService;
+    let stripeFull: {
+      retrievePaymentIntent: jest.Mock;
+      createPaymentIntent: jest.Mock;
+      validateMinimumAmount: jest.Mock;
+      isStripeConfigured: jest.Mock;
+    };
+    let earnPoints: jest.Mock;
+    let updatePurchaseStats: jest.Mock;
+
+    const thenable = (doc: any): any => ({
+      exec: async () => doc,
+      lean: () => thenable(doc),
+      select: () => thenable(doc),
+      then: (onF: any, onR: any) => Promise.resolve(doc).then(onF, onR),
+      then: (res: any, rej: any) => Promise.resolve(doc).then(res, rej),
+    });
+
+    const seedStripePayment = (overrides: any = {}) => {
+      const doc = {
+        _id: 'sp-1',
+        stripePaymentIntentId: PI,
+        shopId: new Types.ObjectId(SHOP_A),
+        orderId: new Types.ObjectId(ORDER_1),
+        paymentType: 'pos_sale',
+        amount: 100,
+        currency: 'kes',
+        status: 'requires_payment_method',
+        clientSecret: 'secret_1',
+        metadata: { orderNumber: 'STK-2025-ORD001' },
+        ...overrides,
+      };
+      stripePaymentStore.set(PI, doc);
+      return doc;
+    };
+
+    const intentEvent = (status: string) =>
+      ({
+        id: `evt_${status}`,
+        type: `payment_intent.${status === 'succeeded' ? 'succeeded' : status === 'canceled' ? 'canceled' : 'payment_failed'}`,
+        data: {
+          object: {
+            id: PI,
+            status,
+            latest_charge: 'ch_1',
+            metadata: { shopId: SHOP_A },
+          },
+        },
+      }) as any;
+
+    beforeEach(() => {
+      payTxnStore = new Map();
+      payTxnSeq = 0;
+      stripePaymentStore = new Map();
+      earnPoints = jest.fn(async () => ({}));
+      updatePurchaseStats = jest.fn(async () => ({}));
+
+      // PaymentTransaction store — deduped on provider identity (mirrors the
+      // unique sparse index on stripePaymentIntentId).
+      const ptModel: any = jest.fn().mockImplementation((arg: any) => {
+        const doc: any = {
+          _id: `pt-${++payTxnSeq}`,
+          ...arg,
+          save: jest.fn().mockImplementation(async () => {
+            const key = arg.stripePaymentIntentId || `unkeyed-${payTxnSeq}`;
+            if (payTxnStore.has(key)) {
+              const err: any = new Error('E11000 duplicate key');
+              err.code = 11000;
+              throw err;
+            }
+            payTxnStore.set(key, doc);
+            return doc;
+          }),
+        };
+        return doc;
+      });
+      ptModel.findOne = jest.fn((f: any) =>
+        thenable(
+          f?.stripePaymentIntentId
+            ? (payTxnStore.get(f.stripePaymentIntentId) ?? null)
+            : f?.mpesaTransactionId
+              ? (payTxnStore.get(f.mpesaTransactionId) ?? null)
+              : null,
+        ),
+      );
+
+      paymentTxns = new PaymentTransactionService(
+        ptModel,
+        {} as any,
+        orderModel as any,
+        { earnPoints } as any,
+        { updatePurchaseStats } as any,
+      );
+
+      // StripePayment store keyed by PaymentIntent id.
+      const spModel: any = jest.fn().mockImplementation((arg: any) => ({
+        ...arg,
+        save: jest.fn().mockImplementation(async function (this: any) {
+          stripePaymentStore.set(this.stripePaymentIntentId, this);
+          return this;
+        }),
+      }));
+      spModel.findOne = jest.fn((f: any) =>
+        thenable(
+          f?.stripePaymentIntentId
+            ? (stripePaymentStore.get(f.stripePaymentIntentId) ?? null)
+            : null,
+        ),
+      );
+      spModel.findOneAndUpdate = jest.fn(
+        async (f: any, update: any, _opts?: any) => {
+          const d = stripePaymentStore.get(f?.stripePaymentIntentId);
+          if (!d) return null;
+          Object.assign(d, update?.$set ?? {});
+          return d;
+        },
+      );
+      spModel.updateOne = jest.fn(async (f: any, update: any) => {
+        const d = stripePaymentStore.get(f?.stripePaymentIntentId);
+        if (d) Object.assign(d, update?.$set ?? {});
+        return { modifiedCount: d ? 1 : 0 };
+      });
+
+      stripeFull = {
+        isStripeConfigured: jest.fn(() => true),
+        validateMinimumAmount: jest.fn(() => ({ valid: true })),
+        createPaymentIntent: jest.fn(),
+        retrievePaymentIntent: jest.fn(),
+      };
+
+      stripePaymentSvc = new StripePaymentService(
+        stripeFull as any,
+        {
+          getCustomerByShopId: jest.fn(async () => null),
+          recordPayment: jest.fn(async () => ({})),
+        } as any,
+        { requireConnectedAccountId: jest.fn(async () => 'acct_1') } as any,
+        { get: jest.fn(() => 0) } as any,
+        spModel,
+        orderModel as any,
+        paymentTxns,
+        authority,
+      );
+    });
+
+    it('verified webhook success converges the canonical order (pending → paid/completed)', async () => {
+      docs.push(
+        makeOrder({
+          payments: [
+            {
+              method: 'stripe',
+              amount: 100,
+              status: 'pending',
+              initiatedAt: new Date(),
+              stripePaymentIntentId: PI,
+            },
+          ],
+        }),
+      );
+      seedStripePayment();
+      await stripePaymentSvc.handlePaymentIntentEvent(intentEvent('succeeded'));
+      expect(docs[0].status).toBe('completed');
+      expect(docs[0].paymentStatus).toBe('paid');
+      expect(docs[0].payments[0].status).toBe('completed');
+      expect(payTxnStore.size).toBe(1);
+      expect(payTxnStore.get(PI).paymentMethod).toBe('stripe');
+      expect(payTxnStore.get(PI).stripePaymentIntentId).toBe(PI);
+    });
+
+    it('same successful webhook ×5 → one payment record, one convergence, side effects once', async () => {
+      docs.push(
+        makeOrder({
+          customerId: new Types.ObjectId('507f1f77bcf86cd799439071'),
+          payments: [
+            {
+              method: 'stripe',
+              amount: 100,
+              status: 'pending',
+              initiatedAt: new Date(),
+            },
+          ],
+        }),
+      );
+      seedStripePayment();
+      for (let i = 0; i < 5; i++) {
+        await stripePaymentSvc.handlePaymentIntentEvent(
+          intentEvent('succeeded'),
+        );
+      }
+      expect(payTxnStore.size).toBe(1);
+      expect(earnPoints).toHaveBeenCalledTimes(1);
+      expect(updatePurchaseStats).toHaveBeenCalledTimes(1);
+      expect(docs[0].status).toBe('completed');
+    });
+
+    it('lost browser response: authenticated server retrieve converges the order exactly once', async () => {
+      docs.push(
+        makeOrder({
+          payments: [
+            {
+              method: 'stripe',
+              amount: 100,
+              status: 'pending',
+              initiatedAt: new Date(),
+              stripePaymentIntentId: PI,
+            },
+          ],
+        }),
+      );
+      seedStripePayment();
+      stripeFull.retrievePaymentIntent.mockResolvedValue({
+        id: PI,
+        status: 'succeeded',
+        latest_charge: 'ch_1',
+      });
+      // Browser closed before success — the client status poll (or webhook)
+      // still settles the canonical order.
+      await stripePaymentSvc.syncPaymentStatus(PI);
+      expect(docs[0].status).toBe('completed');
+      expect(docs[0].paymentStatus).toBe('paid');
+      // Webhook arriving later is a deduped no-op
+      await stripePaymentSvc.handlePaymentIntentEvent(intentEvent('succeeded'));
+      expect(payTxnStore.size).toBe(1);
+    });
+
+    it('payment_failed (requires_payment_method) stays unresolved — void stays blocked', async () => {
+      docs.push(
+        makeOrder({
+          payments: [
+            {
+              method: 'stripe',
+              amount: 100,
+              status: 'pending',
+              initiatedAt: new Date(),
+            },
+          ],
+        }),
+      );
+      seedStripePayment();
+      await stripePaymentSvc.handlePaymentIntentEvent(
+        intentEvent('requires_payment_method'),
+      );
+      expect(docs[0].payments[0].status).toBe('pending'); // NOT released
+      const voidResult = await applyVoidClaim(orderModel, ORDER_1, SHOP_A);
+      expect(voidResult.matchedCount).toBe(0);
+    });
+
+    it('canceled → terminal failure → allocation failed → void may proceed', async () => {
+      docs.push(
+        makeOrder({
+          payments: [
+            {
+              method: 'stripe',
+              amount: 100,
+              status: 'pending',
+              initiatedAt: new Date(),
+            },
+          ],
+        }),
+      );
+      seedStripePayment();
+      await stripePaymentSvc.handlePaymentIntentEvent(intentEvent('canceled'));
+      expect(docs[0].payments[0].status).toBe('failed');
+      const voidResult = await applyVoidClaim(orderModel, ORDER_1, SHOP_A);
+      expect(voidResult.matchedCount).toBe(1);
+    });
+
+    it('stripe success || void: void-first → success recorded but order never reopens', async () => {
+      docs.push(
+        makeOrder({
+          payments: [{ method: 'stripe', amount: 100, status: 'failed' }],
+        }),
+      );
+      // void wins the claim before any initiation
+      const voidResult = await applyVoidClaim(orderModel, ORDER_1, SHOP_A);
+      expect(voidResult.matchedCount).toBe(1);
+      docs[0].status = 'void'; // void finalizes
+      // late Stripe success — recorded financially, order stays void
+      seedStripePayment();
+      await stripePaymentSvc.handlePaymentIntentEvent(intentEvent('succeeded'));
+      expect(docs[0].status).toBe('void');
+      expect(payTxnStore.size).toBe(1); // financial record preserved for reconciliation
+    });
+
+    it('stripe success || void: success-first → order completes → void rejected', async () => {
+      docs.push(
+        makeOrder({
+          payments: [
+            {
+              method: 'stripe',
+              amount: 100,
+              status: 'pending',
+              initiatedAt: new Date(),
+            },
+          ],
+        }),
+      );
+      seedStripePayment();
+      await stripePaymentSvc.handlePaymentIntentEvent(intentEvent('succeeded'));
+      expect(docs[0].status).toBe('completed');
+      const voidResult = await applyVoidClaim(orderModel, ORDER_1, SHOP_A);
+      expect(voidResult.matchedCount).toBe(0); // completed order cannot be voided
+    });
+
+    it('non-POS payments (subscription) never converge an order', async () => {
+      docs.push(
+        makeOrder({
+          payments: [{ method: 'stripe', amount: 100, status: 'pending' }],
+        }),
+      );
+      seedStripePayment({ paymentType: 'subscription' });
+      await stripePaymentSvc.handlePaymentIntentEvent(intentEvent('succeeded'));
+      expect(docs[0].status).toBe('pending');
+      expect(payTxnStore.size).toBe(0);
+    });
+
+    it('cross-tenant stripe payment never mutates the order', async () => {
+      docs.push(
+        makeOrder({
+          payments: [{ method: 'stripe', amount: 100, status: 'pending' }],
+        }),
+      );
+      seedStripePayment({ shopId: new Types.ObjectId(SHOP_B) });
+      await stripePaymentSvc.handlePaymentIntentEvent(intentEvent('succeeded'));
+      expect(docs[0].status).toBe('pending');
+      expect(payTxnStore.size).toBe(0);
+    });
   });
 });

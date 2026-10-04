@@ -13,6 +13,7 @@ import { StripeConnectService } from './services/stripe-connect.service';
 import { Shop, ShopSchema } from '../shops/schemas/shop.schema';
 import { Order, OrderSchema } from '../sales/schemas/order.schema';
 import { OrderPaymentAuthorityService } from '../payments/services/order-payment-authority.service';
+import { PaymentsModule } from '../payments/payments.module';
 import {
   StripeCustomer,
   StripeCustomerSchema,
@@ -38,6 +39,9 @@ export class StripeModule {
       module: StripeModule,
       imports: [
         ConfigModule,
+        // PaymentTransactionService (canonical order convergence on trusted
+        // provider truth) is provided + exported by PaymentsModule.
+        PaymentsModule,
         MongooseModule.forFeature([
           { name: StripeCustomer.name, schema: StripeCustomerSchema },
           { name: StripePayment.name, schema: StripePaymentSchema },

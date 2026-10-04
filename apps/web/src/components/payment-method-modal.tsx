@@ -90,6 +90,20 @@ interface PaymentMethodModalProps {
   shopCurrency?: string;
   onConfirm: (paymentMethod: string, amountTendered?: number, phoneNumber?: string) => void;
   onCancel: () => void;
+  /**
+   * P0-10D: ORDER-FIRST card flow. The host page creates the canonical
+   * pending SmartDuka order (stock deducted, stripe allocation recorded as
+   * pending) and returns its real identity BEFORE any Stripe PaymentIntent
+   * is created. `amountMinor` is the order's payable amount in Stripe minor
+   * units and `currency` the Stripe currency — both derived from the order.
+   * If checkout fails, this throws and the Stripe API is never called.
+   */
+  onPrepareCardOrder?: () => Promise<{
+    orderId: string;
+    orderNumber?: string;
+    amountMinor: number;
+    currency: string;
+  }>;
 }
 
 /**
@@ -128,6 +142,7 @@ export function PaymentMethodModal({
   shopCurrency,
   onConfirm,
   onCancel,
+  onPrepareCardOrder,
 }: PaymentMethodModalProps) {
   const { token } = useAuth();
   const currencyConfig = getCurrencyConfig(shopCurrency);
@@ -230,8 +245,20 @@ export function PaymentMethodModal({
       
       const stripeConfig = await configRes.json();
       setStripePublishableKey(stripeConfig.publishableKey);
-      
-      // Create payment intent using POS endpoint
+
+      // P0-10D: canonical order FIRST. The page creates the pending order
+      // (stock deducted, stripe payment allocation recorded) and returns its
+      // real _id — a PaymentIntent is never created for a temp-* placeholder.
+      // If checkout fails this throws and the Stripe API is never called.
+      if (!onPrepareCardOrder) {
+        throw new Error('Card payments are not available in this view');
+      }
+      const orderRef = await onPrepareCardOrder();
+      if (!orderRef?.orderId) {
+        throw new Error('Failed to create the order for this card payment');
+      }
+
+      // Create payment intent using POS endpoint, bound to the real order
       const res = await fetch(`${config.apiUrl}/stripe/pos/create-payment`, {
         method: 'POST',
         headers: {
@@ -239,10 +266,10 @@ export function PaymentMethodModal({
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          orderId: `temp-${Date.now()}`,
-          orderNumber: `POS-${Date.now()}`,
-          amount: toCents(total, shopCurrency), // Convert to cents (smallest unit) for Stripe
-          currency: currencyConfig.stripeCurrency,
+          orderId: orderRef.orderId,
+          orderNumber: orderRef.orderNumber,
+          amount: orderRef.amountMinor, // order-derived, minor units
+          currency: orderRef.currency,
           customerName: customerName || 'Walk-in Customer',
           description: `POS Payment - ${itemCount} item(s)`,
         }),
@@ -272,9 +299,11 @@ export function PaymentMethodModal({
     }
   };
 
-  // Handle successful Stripe payment
+  // Handle successful Stripe payment. The PaymentIntent id is passed to the
+  // host so it can trigger server-side convergence — browser success alone
+  // is not settlement truth.
   const handleStripeSuccess = (paymentIntentId: string) => {
-    onConfirm('card', undefined, undefined);
+    onConfirm('card', undefined, paymentIntentId);
     resetState();
   };
 

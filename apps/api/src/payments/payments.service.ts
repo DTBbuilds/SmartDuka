@@ -1,6 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { ConflictException, Injectable, Logger } from '@nestjs/common';
 import { InitiateStkDto } from './dto/initiate-stk.dto';
-import { DarajaService, StkPushRequest, StkPushResponse } from './daraja.service';
+import {
+  DarajaService,
+  StkPushRequest,
+  StkPushResponse,
+} from './daraja.service';
+import { OrderPaymentAuthorityService } from './services/order-payment-authority.service';
 
 export type StkResponse = {
   requestId: string;
@@ -27,19 +32,59 @@ export type CallbackPayload = {
 export class PaymentsService {
   private readonly logger = new Logger(PaymentsService.name);
 
-  constructor(private darajaService: DarajaService) {}
+  constructor(
+    private darajaService: DarajaService,
+    private readonly orderPaymentAuthority: OrderPaymentAuthorityService,
+  ) {}
 
-  async initiateStkPush(dto: InitiateStkDto): Promise<StkResponse> {
+  async initiateStkPush(
+    shopId: string,
+    dto: InitiateStkDto,
+  ): Promise<StkResponse> {
+    // P0-10C/D: ORDER AUTHORITY — resolve the order by {dto.orderId,
+    // authenticated shopId}, reject void/voiding/non-payable orders, and
+    // atomically claim the pending M-Pesa allocation BEFORE the provider
+    // call (void interlock). Amount and account reference are derived from
+    // the order — the client-supplied values are never charged/trusted.
+    const claim = await this.orderPaymentAuthority.claimExternalPaymentIntent(
+      shopId,
+      dto.orderId,
+      'mpesa',
+      { expectedAmount: dto.amount, amountUnit: 'major' },
+    );
+
+    if (!claim.claimed) {
+      // An earlier initiation is still unresolved — NEVER send a second STK
+      // push. The caller must query the existing attempt's status.
+      throw new ConflictException(
+        'An M-Pesa payment is already awaiting settlement for this order. Check its status instead of retrying.',
+      );
+    }
+
     try {
       const request: StkPushRequest = {
         phoneNumber: dto.phoneNumber,
-        amount: dto.amount,
-        accountReference: dto.accountReference || 'Order',
-        transactionDesc: dto.transactionDesc || 'Payment for order',
-        callbackUrl: process.env.MPESA_CALLBACK_URL || 'https://your-domain.com/payments/callback',
+        amount: claim.amount,
+        accountReference: claim.orderNumber.slice(0, 12) || 'Order',
+        transactionDesc:
+          dto.transactionDesc || `Payment for ${claim.orderNumber}`,
+        callbackUrl:
+          process.env.MPESA_CALLBACK_URL ||
+          'https://your-domain.com/payments/callback',
       };
 
-      const response: StkPushResponse = await this.darajaService.initiateStkPush(request);
+      const response: StkPushResponse =
+        await this.darajaService.initiateStkPush(request);
+
+      if (response.ResponseCode && response.ResponseCode !== '0') {
+        // Definitive provider rejection → release the claim to terminal
+        // 'failed' so the order becomes voidable/retryable.
+        await this.orderPaymentAuthority.markIntentFailed(
+          shopId,
+          dto.orderId,
+          'mpesa',
+        );
+      }
 
       return {
         requestId: response.MerchantRequestID,
@@ -48,15 +93,25 @@ export class PaymentsService {
         customerMessage: response.CustomerMessage,
       };
     } catch (error: any) {
+      // Ambiguous (network/timeout — request may have reached Daraja):
+      // retain the unresolved intent; void stays blocked, no second push.
       this.logger.error('STK Push failed', error?.message);
       throw error;
     }
   }
 
-  async handleCallback(payload: CallbackPayload): Promise<{ ResultCode: number; ResultDesc: string }> {
+  async handleCallback(
+    payload: CallbackPayload,
+  ): Promise<{ ResultCode: number; ResultDesc: string }> {
     try {
       const { stkCallback } = payload.Body;
-      const { ResultCode, CheckoutRequestID, MerchantRequestID, ResultDesc, CallbackMetadata } = stkCallback;
+      const {
+        ResultCode,
+        CheckoutRequestID,
+        MerchantRequestID,
+        ResultDesc,
+        CallbackMetadata,
+      } = stkCallback;
 
       if (ResultCode === 0) {
         // Payment successful - extract amount and phone from CallbackMetadata
@@ -66,7 +121,9 @@ export class PaymentsService {
         if (CallbackMetadata?.Item) {
           const items = CallbackMetadata.Item;
           const amountItem = items.find((item) => item.Name === 'Amount');
-          const receiptItem = items.find((item) => item.Name === 'MpesaReceiptNumber');
+          const receiptItem = items.find(
+            (item) => item.Name === 'MpesaReceiptNumber',
+          );
           const phoneItem = items.find((item) => item.Name === 'PhoneNumber');
 
           if (amountItem) amount = Number(amountItem.Value);
@@ -108,6 +165,9 @@ export class PaymentsService {
   }
 
   async queryStkStatus(checkoutRequestId: string, merchantRequestId: string) {
-    return this.darajaService.queryStkStatus(checkoutRequestId, merchantRequestId);
+    return this.darajaService.queryStkStatus(
+      checkoutRequestId,
+      merchantRequestId,
+    );
   }
 }

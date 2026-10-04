@@ -137,6 +137,12 @@ PaymentTransactionSchema.index(
   { mpesaTransactionId: 1 },
   { unique: true, sparse: true },
 );
+// Same uniqueness contract for Stripe: one PaymentIntent → one payment
+// record, no matter how many webhooks/retrieves report it.
+PaymentTransactionSchema.index(
+  { stripePaymentIntentId: 1 },
+  { unique: true, sparse: true },
+);
 PaymentTransactionSchema.index({ shopId: 1, cashierId: 1 });
 PaymentTransactionSchema.index({ shopId: 1, paymentMethod: 1 });
 PaymentTransactionSchema.index({ shopId: 1, status: 1 });

@@ -8,12 +8,12 @@ export type MpesaTransactionDocument = HydratedDocument<MpesaTransaction>;
  * Implements a state machine for payment lifecycle
  */
 export enum MpesaTransactionStatus {
-  CREATED = 'created',     // Initial state - transaction record created
-  PENDING = 'pending',     // STK push sent, waiting for user action
+  CREATED = 'created', // Initial state - transaction record created
+  PENDING = 'pending', // STK push sent, waiting for user action
   COMPLETED = 'completed', // Payment successful
-  FAILED = 'failed',       // Payment failed (user cancelled, insufficient funds, etc.)
-  EXPIRED = 'expired',     // Transaction timed out
-  REVERSED = 'reversed',   // Payment was reversed/refunded
+  FAILED = 'failed', // Payment failed (user cancelled, insufficient funds, etc.)
+  EXPIRED = 'expired', // Transaction timed out
+  REVERSED = 'reversed', // Payment was reversed/refunded
 }
 
 /**
@@ -39,12 +39,52 @@ export enum MpesaResultCode {
   WRONG_PIN = 2001,
 }
 
+/**
+ * P0-10D: Daraja result codes that prove the CheckoutRequestID is
+ * definitively dead — no later success can arrive for that request:
+ *   1    insufficient balance        5-8  invalid input
+ *   2-4  amount/limit violations     9-12 duplicate/initiator/credential/shortcode
+ *   1032 user cancelled the STK prompt
+ *   2001 wrong PIN entered
+ * Every other non-zero code is AMBIGUOUS: 1037 (DS timeout), 17 (system
+ * busy), and unknown codes mean the outcome may still be settling — the
+ * transaction must remain unresolved (pending), blocking void and blocking a
+ * second STK push until a status query or later callback proves terminal.
+ */
+export const TERMINAL_MPESA_FAILURE_CODES: ReadonlySet<number> = new Set([
+  MpesaResultCode.INSUFFICIENT_BALANCE,
+  MpesaResultCode.LESS_THAN_MIN,
+  MpesaResultCode.MORE_THAN_MAX,
+  MpesaResultCode.DAILY_LIMIT_EXCEEDED,
+  MpesaResultCode.INVALID_AMOUNT,
+  MpesaResultCode.INVALID_ACCOUNT,
+  MpesaResultCode.INVALID_PARTY_A,
+  MpesaResultCode.INVALID_PARTY_B,
+  MpesaResultCode.DUPLICATE_REQUEST,
+  MpesaResultCode.INVALID_INITIATOR,
+  MpesaResultCode.INVALID_SECURITY_CREDENTIAL,
+  MpesaResultCode.INVALID_SHORTCODE,
+  MpesaResultCode.REQUEST_CANCELLED,
+  MpesaResultCode.WRONG_PIN,
+]);
+
+export function isTerminalMpesaResultCode(
+  resultCode: number | string | undefined | null,
+): boolean {
+  if (resultCode === undefined || resultCode === null) return false;
+  const code =
+    typeof resultCode === 'string' ? parseInt(resultCode, 10) : resultCode;
+  if (Number.isNaN(code)) return false;
+  if (code === MpesaResultCode.SUCCESS) return false;
+  return TERMINAL_MPESA_FAILURE_CODES.has(code);
+}
+
 @Schema({ timestamps: true, collection: 'mpesa_transactions' })
 export class MpesaTransaction {
   // ============================================
   // MULTI-TENANT ISOLATION
   // ============================================
-  
+
   @Prop({ required: true, type: Types.ObjectId, ref: 'Shop' })
   shopId: Types.ObjectId;
 
@@ -320,7 +360,8 @@ export class MpesaTransaction {
   updatedAt?: Date;
 }
 
-export const MpesaTransactionSchema = SchemaFactory.createForClass(MpesaTransaction);
+export const MpesaTransactionSchema =
+  SchemaFactory.createForClass(MpesaTransaction);
 
 // ============================================
 // INDEXES FOR PERFORMANCE
@@ -374,7 +415,10 @@ MpesaTransactionSchema.virtual('timeRemaining').get(function () {
 MpesaTransactionSchema.methods.canTransitionTo = function (
   newStatus: MpesaTransactionStatus,
 ): boolean {
-  const validTransitions: Record<MpesaTransactionStatus, MpesaTransactionStatus[]> = {
+  const validTransitions: Record<
+    MpesaTransactionStatus,
+    MpesaTransactionStatus[]
+  > = {
     [MpesaTransactionStatus.CREATED]: [
       MpesaTransactionStatus.PENDING,
       MpesaTransactionStatus.FAILED,
@@ -384,9 +428,7 @@ MpesaTransactionSchema.methods.canTransitionTo = function (
       MpesaTransactionStatus.FAILED,
       MpesaTransactionStatus.EXPIRED,
     ],
-    [MpesaTransactionStatus.COMPLETED]: [
-      MpesaTransactionStatus.REVERSED,
-    ],
+    [MpesaTransactionStatus.COMPLETED]: [MpesaTransactionStatus.REVERSED],
     [MpesaTransactionStatus.FAILED]: [
       MpesaTransactionStatus.PENDING, // Retry
     ],

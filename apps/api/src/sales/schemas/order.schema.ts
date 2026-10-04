@@ -95,6 +95,15 @@ export class PaymentRecord {
   @Prop()
   initiatedAt?: Date;
 
+  /**
+   * P0-10D: provider identity for Stripe card payments — links the order's
+   * payment allocation to the Stripe PaymentIntent so verified webhooks /
+   * server-side retrieval can converge this order (and a lost browser
+   * response never loses the money→order binding).
+   */
+  @Prop()
+  stripePaymentIntentId?: string;
+
   @Prop()
   reversalReason?: string;
 

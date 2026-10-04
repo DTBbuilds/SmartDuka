@@ -13,7 +13,9 @@ import {
   MpesaTransaction,
   MpesaTransactionDocument,
   MpesaTransactionStatus,
+  isTerminalMpesaResultCode,
 } from '../schemas/mpesa-transaction.schema';
+import { OrderPaymentAuthorityService } from './order-payment-authority.service';
 import { DarajaService } from '../daraja.service';
 import { PaymentTransactionService } from './payment-transaction.service';
 import {
@@ -46,6 +48,7 @@ export class MpesaService {
     private readonly darajaService: DarajaService,
     private readonly paymentTransactionService: PaymentTransactionService,
     private readonly configService: ConfigService,
+    private readonly orderPaymentAuthority: OrderPaymentAuthorityService,
   ) {}
 
   /**
@@ -97,7 +100,8 @@ export class MpesaService {
           checkoutRequestId: existingTransaction.checkoutRequestId,
           status: existingTransaction.status,
           expiresAt: existingTransaction.expiresAt,
-          message: 'Existing payment request found. Check your phone for the STK prompt.',
+          message:
+            'Existing payment request found. Check your phone for the STK prompt.',
           isIdempotent: true,
         };
       }
@@ -124,13 +128,15 @@ export class MpesaService {
     if (!formattedPhone || formattedPhone.length !== 12) {
       throw new BadRequestException({
         errorCode: SmartDukaMpesaErrorCode.INVALID_PHONE,
-        message: 'Invalid phone number format. Use 07XX, 01XX, or 254XX format.',
+        message:
+          'Invalid phone number format. Use 07XX, 01XX, or 254XX format.',
       });
     }
 
     // STEP 3: Create transaction record (CREATED state)
     const accountReference = `SD-${orderNumber}`;
-    const transactionDesc = dto.transactionDesc || `Payment for order ${orderNumber}`;
+    const transactionDesc =
+      dto.transactionDesc || `Payment for order ${orderNumber}`;
     const expiresAt = new Date(Date.now() + TRANSACTION_EXPIRY_MS);
 
     let transaction: MpesaTransactionDocument;
@@ -172,67 +178,85 @@ export class MpesaService {
     try {
       let callbackUrl = this.configService.get('MPESA_CALLBACK_URL');
       const mpesaEnv = this.configService.get('MPESA_ENV', 'sandbox');
-      
+
       // Auto-construct callback URL for Render deployments if not set
       if (!callbackUrl) {
         const renderExternalUrl = this.configService.get('RENDER_EXTERNAL_URL');
         const apiBaseUrl = this.configService.get('API_BASE_URL');
-        
+
         if (renderExternalUrl) {
           // Render provides RENDER_EXTERNAL_URL automatically on paid plans
           callbackUrl = `${renderExternalUrl}/payments/mpesa/callback`;
-          this.logger.log(`Auto-constructed callback URL from RENDER_EXTERNAL_URL: ${callbackUrl}`);
+          this.logger.log(
+            `Auto-constructed callback URL from RENDER_EXTERNAL_URL: ${callbackUrl}`,
+          );
         } else if (apiBaseUrl) {
           // Use API_BASE_URL if provided
           callbackUrl = `${apiBaseUrl}/payments/mpesa/callback`;
-          this.logger.log(`Auto-constructed callback URL from API_BASE_URL: ${callbackUrl}`);
+          this.logger.log(
+            `Auto-constructed callback URL from API_BASE_URL: ${callbackUrl}`,
+          );
         } else if (process.env.RENDER === 'true') {
           // On Render free tier, construct from known URL pattern
           // This requires setting API_BASE_URL or MPESA_CALLBACK_URL in Render dashboard
           this.logger.error(
             '❌ MPESA_CALLBACK_URL not set! On Render, please set this environment variable:\n' +
-            '   MPESA_CALLBACK_URL=https://smartduka-91q6.onrender.com/payments/mpesa/callback\n' +
-            '   (Replace with your actual Render service URL)'
+              '   MPESA_CALLBACK_URL=https://smartduka-91q6.onrender.com/payments/mpesa/callback\n' +
+              '   (Replace with your actual Render service URL)',
           );
         }
       }
-      
+
       // DEBUG: Log the actual callback URL being used
       this.logger.log(`🔍 DEBUG: MPESA_CALLBACK_URL = "${callbackUrl}"`);
-      
+
       // Validate callback URL
-      if (!callbackUrl || callbackUrl.includes('your-domain.com') || callbackUrl.includes('localhost')) {
+      if (
+        !callbackUrl ||
+        callbackUrl.includes('your-domain.com') ||
+        callbackUrl.includes('localhost')
+      ) {
         this.logger.warn(
           'MPESA_CALLBACK_URL is not properly configured. ' +
-          'For development, use ngrok: ngrok http 5000, then set MPESA_CALLBACK_URL=https://xxxx.ngrok-free.app/payments/mpesa/callback'
+            'For development, use ngrok: ngrok http 5000, then set MPESA_CALLBACK_URL=https://xxxx.ngrok-free.app/payments/mpesa/callback',
         );
-        
+
         // For production, throw error if callback URL is not set
         if (mpesaEnv === 'production') {
-          throw new Error('MPESA_CALLBACK_URL must be configured for production');
+          throw new Error(
+            'MPESA_CALLBACK_URL must be configured for production',
+          );
         }
       }
 
       // Check for Cloudflare tunnel URLs which often get rejected by M-Pesa
-      const problematicDomains = ['trycloudflare.com', 'cloudflare', 'workers.dev'];
-      const hasProblematicDomain = problematicDomains.some(d => callbackUrl?.includes(d));
-      
+      const problematicDomains = [
+        'trycloudflare.com',
+        'cloudflare',
+        'workers.dev',
+      ];
+      const hasProblematicDomain = problematicDomains.some((d) =>
+        callbackUrl?.includes(d),
+      );
+
       if (hasProblematicDomain) {
         this.logger.error(
           `❌ Cloudflare tunnel URL detected! M-Pesa sandbox rejects these with "Threat Detected" error.\n` +
-          `   Please use ngrok instead:\n` +
-          `   1. Run: pnpm ngrok:start (in a separate terminal)\n` +
-          `   2. Run: pnpm ngrok:watch (in another terminal to auto-update .env)\n` +
-          `   3. Restart the API server`
+            `   Please use ngrok instead:\n` +
+            `   1. Run: pnpm ngrok:start (in a separate terminal)\n` +
+            `   2. Run: pnpm ngrok:watch (in another terminal to auto-update .env)\n` +
+            `   3. Restart the API server`,
         );
         throw new Error(
-          'Cloudflare tunnel URLs are rejected by M-Pesa. Use ngrok instead: pnpm ngrok:start'
+          'Cloudflare tunnel URLs are rejected by M-Pesa. Use ngrok instead: pnpm ngrok:start',
         );
       }
-      
+
       const finalCallbackUrl = callbackUrl;
-      
-      this.logger.log(`STK Push request - Phone: ${formattedPhone}, Amount: ${dto.amount}, Callback: ${finalCallbackUrl}`);
+
+      this.logger.log(
+        `STK Push request - Phone: ${formattedPhone}, Amount: ${dto.amount}, Callback: ${finalCallbackUrl}`,
+      );
 
       const stkResponse = await this.darajaService.initiateStkPush({
         phoneNumber: formattedPhone,
@@ -346,15 +370,20 @@ export class MpesaService {
 
     // Calculate timing metrics
     if (transaction.stkPushSentAt) {
-      transaction.responseTimeMs = callbackReceivedAt.getTime() - transaction.stkPushSentAt.getTime();
-      
+      transaction.responseTimeMs =
+        callbackReceivedAt.getTime() - transaction.stkPushSentAt.getTime();
+
       // Estimate user input time (response time minus ~5s for M-Pesa processing)
       const estimatedProcessingTime = 5000; // 5 seconds for M-Pesa internal processing
-      transaction.userInputTimeMs = Math.max(0, transaction.responseTimeMs - estimatedProcessingTime);
+      transaction.userInputTimeMs = Math.max(
+        0,
+        transaction.responseTimeMs - estimatedProcessingTime,
+      );
     }
 
     if (transaction.createdAt) {
-      transaction.totalTimeMs = callbackReceivedAt.getTime() - transaction.createdAt.getTime();
+      transaction.totalTimeMs =
+        callbackReceivedAt.getTime() - transaction.createdAt.getTime();
     }
 
     // STEP 4: Process based on result code
@@ -404,17 +433,46 @@ export class MpesaService {
 
       // TODO: Update order payment status
       // TODO: Emit WebSocket event for real-time UI update
+    } else if (!isTerminalMpesaResultCode(ResultCode)) {
+      // AMBIGUOUS OUTCOME (P0-10D): DS_TIMEOUT (1037), system busy, and
+      // unknown codes mean the STK request may still settle — the
+      // transaction stays unresolved so the order's pending external intent
+      // keeps blocking void and blocks a second STK push. Reconciliation /
+      // status query resolves it to a terminal state later.
+      transaction.previousStatus = transaction.status;
+      transaction.errorCategory = this.categorizeError(ResultCode);
+      await transaction.save();
+
+      this.logger.warn(
+        `M-Pesa callback for transaction ${transaction._id} reported ambiguous resultCode ${ResultCode} (${ResultDesc}) — transaction kept unresolved`,
+      );
     } else {
-      // FAILURE - Categorize the error
+      // TERMINAL FAILURE - Categorize the error and release the order intent
       transaction.previousStatus = transaction.status;
       transaction.status = MpesaTransactionStatus.FAILED;
       transaction.lastError = getMpesaErrorMessage(ResultCode);
-      
+
       // Categorize error for analytics
       const errorCategory = this.categorizeError(ResultCode);
       transaction.errorCategory = errorCategory;
 
       await transaction.save();
+
+      // Release the order's unresolved intent to terminal failure — the order
+      // becomes voidable and a genuinely new initiation may retry.
+      if (transaction.orderId) {
+        try {
+          await this.orderPaymentAuthority.markIntentFailed(
+            transaction.shopId.toString(),
+            transaction.orderId.toString(),
+            'mpesa',
+          );
+        } catch (error: any) {
+          this.logger.error(
+            `Failed to release order intent for ${transaction.orderId}: ${error?.message}`,
+          );
+        }
+      }
 
       this.logger.warn(
         `M-Pesa payment failed for transaction ${transaction._id}: ${ResultDesc} (category: ${errorCategory})`,
@@ -546,8 +604,48 @@ export class MpesaService {
     if (transaction.retryCount >= transaction.maxRetries) {
       throw new BadRequestException({
         errorCode: SmartDukaMpesaErrorCode.MAX_RETRIES_EXCEEDED,
-        message: 'Maximum retry attempts exceeded. Please create a new payment.',
+        message:
+          'Maximum retry attempts exceeded. Please create a new payment.',
       });
+    }
+
+    // P0-10D: a retry is a NEW provider initiation — it must pass the same
+    // order authority + void interlock as /initiate. The atomic claim
+    // re-establishes the pending intent BEFORE the provider call, rejects
+    // void/voiding/non-payable orders, and refuses a second push while an
+    // earlier attempt is still unresolved.
+    const retryOrderId = transaction.orderId.toString();
+    const claim = await this.orderPaymentAuthority.claimExternalPaymentIntent(
+      shopId,
+      retryOrderId,
+      'mpesa',
+      { expectedAmount: transaction.amount, amountUnit: 'major' },
+    );
+
+    if (!claim.claimed) {
+      const existing = await this.mpesaTransactionModel
+        .findOne({
+          shopId: new Types.ObjectId(shopId),
+          orderId: transaction.orderId,
+          status: {
+            $in: [
+              MpesaTransactionStatus.PENDING,
+              MpesaTransactionStatus.CREATED,
+            ],
+          },
+        })
+        .sort({ createdAt: -1 })
+        .exec();
+      return {
+        success: true,
+        transactionId: existing?._id?.toString() || transactionId,
+        checkoutRequestId: existing?.checkoutRequestId,
+        status: MpesaTransactionStatus.PENDING,
+        expiresAt: transaction.expiresAt,
+        message:
+          'An M-Pesa payment is already awaiting settlement for this order. Check payment status instead of retrying.',
+        isIdempotent: true,
+      };
     }
 
     // Update phone number if provided
@@ -561,23 +659,42 @@ export class MpesaService {
       transaction.orderId.toString(),
     );
 
-    // Create new transaction for retry
-    return this.initiatePayment(
-      shopId,
-      userId,
-      userName,
-      transaction.branchId?.toString(),
-      transaction.orderId.toString(),
-      transaction.orderNumber,
-      {
-        orderId: transaction.orderId.toString(),
-        phoneNumber,
-        amount: transaction.amount,
-        customerName: transaction.customerName,
-        idempotencyKey: newIdempotencyKey,
-        transactionDesc: transaction.transactionDesc,
-      },
-    );
+    // Create new transaction for retry. The server-authoritative amount comes
+    // from the claimed order allocation, not the stored attempt.
+    try {
+      return await this.initiatePayment(
+        shopId,
+        userId,
+        userName,
+        transaction.branchId?.toString(),
+        retryOrderId,
+        claim.orderNumber,
+        {
+          orderId: retryOrderId,
+          phoneNumber,
+          amount: claim.amount,
+          customerName: transaction.customerName,
+          idempotencyKey: newIdempotencyKey,
+          transactionDesc: transaction.transactionDesc,
+        },
+      );
+    } catch (err) {
+      // Definitive local rejection (4xx) → release the claim to terminal
+      // 'failed'. Ambiguous throws (500/network after the request may have
+      // reached Daraja) keep the intent pending — fail-safe.
+      if (
+        err instanceof BadRequestException ||
+        err instanceof NotFoundException ||
+        err instanceof ConflictException
+      ) {
+        await this.orderPaymentAuthority.markIntentFailed(
+          shopId,
+          retryOrderId,
+          'mpesa',
+        );
+      }
+      throw err;
+    }
   }
 
   /**
@@ -636,7 +753,9 @@ export class MpesaService {
     return this.mpesaTransactionModel
       .find({
         shopId: new Types.ObjectId(shopId),
-        status: { $in: [MpesaTransactionStatus.PENDING, MpesaTransactionStatus.CREATED] },
+        status: {
+          $in: [MpesaTransactionStatus.PENDING, MpesaTransactionStatus.CREATED],
+        },
       })
       .sort({ createdAt: -1 })
       .limit(limit)
@@ -652,7 +771,9 @@ export class MpesaService {
   async expireStaleTransactions(): Promise<number> {
     const result = await this.mpesaTransactionModel.updateMany(
       {
-        status: { $in: [MpesaTransactionStatus.PENDING, MpesaTransactionStatus.CREATED] },
+        status: {
+          $in: [MpesaTransactionStatus.PENDING, MpesaTransactionStatus.CREATED],
+        },
         expiresAt: { $lt: new Date() },
       },
       {
@@ -664,7 +785,9 @@ export class MpesaService {
     );
 
     if (result.modifiedCount > 0) {
-      this.logger.log(`Expired ${result.modifiedCount} stale M-Pesa transactions`);
+      this.logger.log(
+        `Expired ${result.modifiedCount} stale M-Pesa transactions`,
+      );
     }
 
     return result.modifiedCount;
@@ -684,7 +807,9 @@ export class MpesaService {
     });
 
     if (!transaction || !transaction.checkoutRequestId) {
-      throw new NotFoundException('Transaction not found or no checkout request ID');
+      throw new NotFoundException(
+        'Transaction not found or no checkout request ID',
+      );
     }
 
     try {
@@ -693,7 +818,10 @@ export class MpesaService {
         transaction.merchantRequestId || '',
       );
 
-      if (status.resultCode === 0 && transaction.status === MpesaTransactionStatus.PENDING) {
+      if (
+        status.resultCode === 0 &&
+        transaction.status === MpesaTransactionStatus.PENDING
+      ) {
         // Payment was successful but callback was missed
         transaction.previousStatus = transaction.status;
         transaction.status = MpesaTransactionStatus.COMPLETED;
@@ -705,6 +833,31 @@ export class MpesaService {
         this.logger.log(
           `Transaction ${transactionId} marked complete via status query`,
         );
+
+        // P0-10D: a status query is trusted provider truth — converge the
+        // canonical order exactly like the callback path (deduped on
+        // CheckoutRequestID, so a callback arriving later is a no-op).
+        try {
+          await this.paymentTransactionService.createTransaction({
+            shopId: transaction.shopId.toString(),
+            orderId: transaction.orderId.toString(),
+            orderNumber: transaction.orderNumber,
+            cashierId: transaction.cashierId.toString(),
+            cashierName: transaction.cashierName,
+            branchId: transaction.branchId?.toString(),
+            paymentMethod: 'mpesa',
+            amount: transaction.amount,
+            status: 'completed',
+            customerName: transaction.customerName,
+            customerPhone: transaction.phoneNumber,
+            mpesaReceiptNumber: transaction.mpesaReceiptNumber,
+            mpesaTransactionId: transaction.checkoutRequestId,
+          });
+        } catch (error: any) {
+          this.logger.error(
+            `Failed to record payment/convergence for query-settled ${transaction._id}: ${error?.message}`,
+          );
+        }
       }
     } catch (error: any) {
       this.logger.error(
@@ -719,7 +872,7 @@ export class MpesaService {
 
   /**
    * GET FAILED TRANSACTIONS
-   * 
+   *
    * Returns all failed M-Pesa transactions for a shop
    */
   async getFailedTransactions(
@@ -754,7 +907,7 @@ export class MpesaService {
 
   /**
    * GET EXPIRED TRANSACTIONS
-   * 
+   *
    * Returns all expired M-Pesa transactions for a shop
    */
   async getExpiredTransactions(
@@ -775,7 +928,7 @@ export class MpesaService {
 
   /**
    * GET TRANSACTION STATISTICS
-   * 
+   *
    * Returns aggregated statistics for M-Pesa transactions
    */
   async getTransactionStats(
@@ -885,7 +1038,9 @@ export class MpesaService {
     // Calculate rates
     const completedOrFailed = result.completed + result.failed;
     if (completedOrFailed > 0) {
-      result.successRate = Math.round((result.completed / completedOrFailed) * 100);
+      result.successRate = Math.round(
+        (result.completed / completedOrFailed) * 100,
+      );
     }
 
     if (result.total > 0) {

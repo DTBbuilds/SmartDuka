@@ -24,7 +24,7 @@ import {
   Textarea,
 } from "@smartduka/ui";
 import { AuthGuard } from "@/components/auth-guard";
-import { formatMoney } from "@/lib/currency";
+import { formatMoney, toCents, getCurrencyConfig } from "@/lib/currency";
 import { ShiftGuard } from "@/components/shift-guard";
 import {
   Check,
@@ -1011,6 +1011,80 @@ function POSContent() {
     setShowPaymentMethodModal(true);
   };
 
+  // P0-10D — ORDER-FIRST CARD FLOW: create the canonical pending order
+  // (server-authoritative stock + pricing rules apply; the stripe payment
+  // allocation is recorded as pending external settlement) BEFORE the modal
+  // creates the Stripe PaymentIntent. If checkout fails this throws and the
+  // Stripe API is never called — no charge without a canonical order.
+  const prepareCardOrder = async (): Promise<{
+    orderId: string;
+    orderNumber?: string;
+    amountMinor: number;
+    currency: string;
+  }> => {
+    const payableTotal = total - loyaltyPointsToRedeem;
+    const payload: any = {
+      items: cartItems.map((item) => ({
+        productId: item.productId,
+        name: item.name,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+      })),
+      taxRate: shopSettings?.tax?.enabled ? shopSettings.tax.rate : 0,
+      payments: [
+        {
+          method: 'stripe',
+          amount: payableTotal,
+          status: 'pending',
+        },
+      ],
+      status: "pending" as const,
+      isOffline: false,
+      notes: orderNotes || undefined,
+      customerId: selectedCustomer?._id || undefined,
+      customerName: selectedCustomer?.name || customerName || undefined,
+      customerPhone: selectedCustomer?.phone || undefined,
+      loyaltyPointsToRedeem: loyaltyPointsToRedeem > 0 ? loyaltyPointsToRedeem : undefined,
+      cashierId,
+      cashierName,
+      shiftId: currentShift?._id,
+      idempotencyKey: getCheckoutIdempotencyKey(),
+      // Business-type-specific order fields
+      ...(orderType !== 'standard' && { orderType }),
+      ...(tableNumber && { tableNumber }),
+    };
+
+    const res = await fetch(`${config.apiUrl}/sales/checkout`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const responseText = await res.text();
+    let order;
+    try {
+      order = responseText ? JSON.parse(responseText) : {};
+    } catch {
+      order = {};
+    }
+
+    if (!res.ok) {
+      throw new Error(order?.message ?? `Failed to create order (${res.status})`);
+    }
+
+    const orderId = order._id || order.id;
+    setPendingOrderId(orderId);
+    return {
+      orderId,
+      orderNumber: order.orderNumber,
+      amountMinor: toCents(payableTotal, shop?.currency),
+      currency: getCurrencyConfig(shop?.currency).stripeCurrency,
+    };
+  };
+
   // Called when user selects a payment method from the modal
   const handlePaymentMethodConfirm = async (paymentMethod: string, cashAmountTendered?: number, referenceOrPhone?: string) => {
     setSelectedPaymentMethod(paymentMethod);
@@ -1100,6 +1174,29 @@ function POSContent() {
         setFeedbackMessage(err?.message || 'Failed to create order');
         toast({ type: 'error', title: 'Order failed', message: err?.message });
       }
+    } else if (paymentMethod === 'card' || paymentMethod === 'stripe') {
+      // P0-10D: the canonical pending order AND the Stripe PaymentIntent
+      // already exist — prepareCardOrder ran before the card form rendered.
+      // Browser success is NOT settlement truth: the server retrieves the
+      // PaymentIntent (authenticated retrieval) which converges the order,
+      // and the verified webhook is the durable fallback for a lost
+      // response. Poll the server briefly, then show the receipt.
+      const intentId = referenceOrPhone;
+      if (intentId) {
+        try {
+          for (let attempt = 0; attempt < 5; attempt++) {
+            const res = await fetch(`${config.apiUrl}/stripe/payment/${intentId}`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            const data = await res.json().catch(() => ({}));
+            if (data?.payment?.status === 'succeeded') break;
+            await new Promise((r) => setTimeout(r, 1500));
+          }
+        } catch {
+          // Convergence continues via the verified webhook — never block the UI.
+        }
+      }
+      handleCardSuccess(intentId);
     } else {
       // For cash and other methods, proceed with normal flow
       if (cashAmountTendered !== undefined) {
@@ -1115,9 +1212,25 @@ function POSContent() {
 
   // Handle M-Pesa payment success
   const handleMpesaSuccess = async (receiptNumber: string) => {
+    await handleExternalPaymentSuccess('mpesa', 'M-Pesa', receiptNumber);
+  };
+
+  // P0-10D: card success — the pending order already exists (pendingOrderId
+  // was set by prepareCardOrder) and Stripe provider truth has converged /
+  // is converging it server-side. This only renders the local receipt.
+  const handleCardSuccess = (paymentIntentId?: string) => {
+    void handleExternalPaymentSuccess('card', 'Card', paymentIntentId);
+  };
+
+  // Shared success path for provider-settled payments (M-Pesa STK + Stripe card)
+  const handleExternalPaymentSuccess = async (
+    methodKey: 'mpesa' | 'card',
+    methodLabel: 'M-Pesa' | 'Card',
+    providerRef?: string,
+  ) => {
     setShowMpesaFlow(false);
     setFeedbackType('success');
-    setFeedbackMessage('M-Pesa payment received!');
+    setFeedbackMessage(`${methodLabel} payment received!`);
     setShowSuccessAnimation(true);
     
     // Track transaction
@@ -1126,7 +1239,7 @@ function POSContent() {
       timestamp: new Date(),
       amount: total,
       itemCount: cartItems.reduce((sum, item) => sum + item.quantity, 0),
-      paymentMethod: 'M-Pesa',
+      paymentMethod: methodLabel,
       customerName: customerName || undefined,
       status: 'completed',
     };
@@ -1154,9 +1267,9 @@ function POSContent() {
       total,
       customerName: selectedCustomer?.name || customerName || undefined,
       cashierName,
-      paymentMethod: 'mpesa',
+      paymentMethod: methodKey === 'mpesa' ? 'mpesa' : 'card',
       notes: orderNotes || undefined,
-      mpesaReceiptNumber: receiptNumber,
+      mpesaReceiptNumber: methodKey === 'mpesa' ? providerRef : undefined,
       // Shop details from settings or defaults
       shopName: receiptSettings.shopName || shop?.name,
       shopAddress: receiptSettings.shopAddress,
@@ -1182,7 +1295,7 @@ function POSContent() {
     // Show receipt preview
     setShowReceiptPreview(true);
     
-    toast({ type: 'success', title: 'Payment successful', message: `M-Pesa receipt: ${receiptNumber}` });
+    toast({ type: 'success', title: 'Payment successful', message: providerRef ? `${methodLabel} reference: ${providerRef}` : `${methodLabel} payment confirmed` });
     
     // Reset cart quickly — receipt modal is already visible
     setTimeout(() => {
@@ -2070,6 +2183,7 @@ function POSContent() {
         shopCurrency={shop?.currency}
         onConfirm={handlePaymentMethodConfirm}
         onCancel={() => setShowPaymentMethodModal(false)}
+        onPrepareCardOrder={prepareCardOrder}
       />
 
       {/* M-Pesa Payment Flow Modal */}

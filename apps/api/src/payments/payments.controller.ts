@@ -1,4 +1,14 @@
-import { Body, Controller, Post, Get, Query, UseGuards, Res, Param, Inject } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Post,
+  Get,
+  Query,
+  UseGuards,
+  Res,
+  Param,
+  Inject,
+} from '@nestjs/common';
 import type { Response } from 'express';
 import { PaymentsService } from './payments.service';
 import { PaymentTransactionService } from './services/payment-transaction.service';
@@ -21,8 +31,12 @@ export class PaymentsController {
   // M-Pesa endpoints
   @UseGuards(JwtAuthGuard)
   @Post('stk-push')
-  async initiateStkPush(@Body() dto: InitiateStkDto) {
-    return this.paymentsService.initiateStkPush(dto);
+  async initiateStkPush(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: InitiateStkDto,
+  ) {
+    // P0-10C/D: tenant identity comes from the JWT — never the request body.
+    return this.paymentsService.initiateStkPush(user.shopId, dto);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -31,7 +45,10 @@ export class PaymentsController {
     @Query('checkoutRequestId') checkoutRequestId: string,
     @Query('merchantRequestId') merchantRequestId: string,
   ) {
-    return this.paymentsService.queryStkStatus(checkoutRequestId, merchantRequestId);
+    return this.paymentsService.queryStkStatus(
+      checkoutRequestId,
+      merchantRequestId,
+    );
   }
 
   @Post('callback')
@@ -83,7 +100,11 @@ export class PaymentsController {
     @Query('to') to?: string,
     @Query('branchId') branchId?: string,
   ) {
-    return this.paymentTransactionService.getStats(user.shopId, { from, to, branchId });
+    return this.paymentTransactionService.getStats(user.shopId, {
+      from,
+      to,
+      branchId,
+    });
   }
 
   @UseGuards(JwtAuthGuard)
@@ -96,11 +117,12 @@ export class PaymentsController {
     @Query('branchId') branchId?: string,
   ) {
     try {
-      const csvContent = await this.paymentTransactionService.exportTransactions(user.shopId, {
-        from,
-        to,
-        branchId,
-      });
+      const csvContent =
+        await this.paymentTransactionService.exportTransactions(user.shopId, {
+          from,
+          to,
+          branchId,
+        });
 
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
       res.setHeader('Content-Disposition', 'attachment; filename=payments.csv');
@@ -116,7 +138,10 @@ export class PaymentsController {
     @CurrentUser() user: JwtPayload,
     @Param('cashierId') cashierId: string,
   ) {
-    return this.paymentTransactionService.getCashierStats(user.shopId, cashierId);
+    return this.paymentTransactionService.getCashierStats(
+      user.shopId,
+      cashierId,
+    );
   }
 
   @UseGuards(JwtAuthGuard)
@@ -133,7 +158,10 @@ export class PaymentsController {
     @Query('branchId') branchId?: string,
   ) {
     // Support both shop-level and branch-level analytics
-    return this.paymentTransactionService.getPaymentsAnalytics(user.shopId, branchId);
+    return this.paymentTransactionService.getPaymentsAnalytics(
+      user.shopId,
+      branchId,
+    );
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -143,7 +171,10 @@ export class PaymentsController {
     @CurrentUser() user: JwtPayload,
     @Param('branchId') branchId: string,
   ) {
-    return this.paymentTransactionService.getBranchPaymentsAnalytics(user.shopId, branchId);
+    return this.paymentTransactionService.getBranchPaymentsAnalytics(
+      user.shopId,
+      branchId,
+    );
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
