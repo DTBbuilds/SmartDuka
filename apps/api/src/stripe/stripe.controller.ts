@@ -18,10 +18,8 @@ import { StripeCustomerService } from './services/stripe-customer.service';
 import { StripePaymentService } from './services/stripe-payment.service';
 import { StripeSubscriptionService } from './services/stripe-subscription.service';
 import { StripeAnalyticsService } from './services/stripe-analytics.service';
-import {
-  OrderPaymentAuthorityService,
-  toMinorUnits,
-} from '../payments/services/order-payment-authority.service';
+import { OrderPaymentAuthorityService } from '../payments/services/order-payment-authority.service';
+import { toMinorUnits } from '../common/currency';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';

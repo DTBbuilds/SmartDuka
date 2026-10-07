@@ -13,10 +13,8 @@ import { StripeCustomerService } from './stripe-customer.service';
 import { StripeConnectService } from './stripe-connect.service';
 import { Order, OrderDocument } from '../../sales/schemas/order.schema';
 import { PaymentTransactionService } from '../../payments/services/payment-transaction.service';
-import {
-  OrderPaymentAuthorityService,
-  fromMinorUnits,
-} from '../../payments/services/order-payment-authority.service';
+import { OrderPaymentAuthorityService } from '../../payments/services/order-payment-authority.service';
+import { fromMinorUnits } from '../../common/currency';
 import {
   StripePayment,
   StripePaymentDocument,

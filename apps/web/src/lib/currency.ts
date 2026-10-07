@@ -36,16 +36,23 @@ export interface CurrencyConfig {
  */
 export const CURRENCIES: Record<string, CurrencyConfig> = {
   // ===== Africa =====
-  KES: { code: 'KES', symbol: 'KSh', name: 'Kenyan Shilling', locale: 'en-KE', stripeCurrency: 'kes', stripeSupported: false, decimals: 0, cardMinimum: 50, countryCode: 'KE', zeroDecimal: true },
+  // KES: Stripe supports KES as a TWO-decimal currency (docs.stripe.com/currencies —
+  // KES is in the supported list and NOT in the zero-decimal list). ISO 4217 display
+  // decimals = 2. Charging 100 KES requires amount=10000; amount=100 charges KSh 1.00.
+  KES: { code: 'KES', symbol: 'KSh', name: 'Kenyan Shilling', locale: 'en-KE', stripeCurrency: 'kes', stripeSupported: true, decimals: 2, cardMinimum: 50, countryCode: 'KE', zeroDecimal: false },
   NGN: { code: 'NGN', symbol: '₦', name: 'Nigerian Naira', locale: 'en-NG', stripeCurrency: 'ngn', stripeSupported: true, decimals: 2, cardMinimum: 50, countryCode: 'NG', zeroDecimal: false },
   ZAR: { code: 'ZAR', symbol: 'R', name: 'South African Rand', locale: 'en-ZA', stripeCurrency: 'zar', stripeSupported: true, decimals: 2, cardMinimum: 10, countryCode: 'ZA', zeroDecimal: false },
   GHS: { code: 'GHS', symbol: 'GH₵', name: 'Ghanaian Cedi', locale: 'en-GH', stripeCurrency: 'ghs', stripeSupported: false, decimals: 2, cardMinimum: 5, countryCode: 'GH', zeroDecimal: false },
-  UGX: { code: 'UGX', symbol: 'USh', name: 'Ugandan Shilling', locale: 'en-UG', stripeCurrency: 'ugx', stripeSupported: true, decimals: 0, cardMinimum: 2000, countryCode: 'UG', zeroDecimal: true },
+  // UGX: ISO display decimals = 0, but Stripe's backwards-compatibility rule
+  // requires API amounts as a two-decimal value ("5 UGX -> amount 500").
+  // zeroDecimal:false here means "Stripe API amount = major * 100".
+  UGX: { code: 'UGX', symbol: 'USh', name: 'Ugandan Shilling', locale: 'en-UG', stripeCurrency: 'ugx', stripeSupported: true, decimals: 0, cardMinimum: 2000, countryCode: 'UG', zeroDecimal: false },
   TZS: { code: 'TZS', symbol: 'TSh', name: 'Tanzanian Shilling', locale: 'en-TZ', stripeCurrency: 'tzs', stripeSupported: true, decimals: 2, cardMinimum: 1500, countryCode: 'TZ', zeroDecimal: false },
   RWF: { code: 'RWF', symbol: 'FRw', name: 'Rwandan Franc', locale: 'en-RW', stripeCurrency: 'rwf', stripeSupported: true, decimals: 0, cardMinimum: 700, countryCode: 'RW', zeroDecimal: true },
   EGP: { code: 'EGP', symbol: 'E£', name: 'Egyptian Pound', locale: 'ar-EG', stripeCurrency: 'egp', stripeSupported: true, decimals: 2, cardMinimum: 10, countryCode: 'EG', zeroDecimal: false },
   MAD: { code: 'MAD', symbol: 'DH', name: 'Moroccan Dirham', locale: 'ar-MA', stripeCurrency: 'mad', stripeSupported: true, decimals: 2, cardMinimum: 5, countryCode: 'MA', zeroDecimal: false },
-  ETB: { code: 'ETB', symbol: 'Br', name: 'Ethiopian Birr', locale: 'am-ET', stripeCurrency: 'etb', stripeSupported: false, decimals: 2, cardMinimum: 30, countryCode: 'ET', zeroDecimal: false },
+  // ETB is in Stripe's supported currency list (docs.stripe.com/currencies).
+  ETB: { code: 'ETB', symbol: 'Br', name: 'Ethiopian Birr', locale: 'am-ET', stripeCurrency: 'etb', stripeSupported: true, decimals: 2, cardMinimum: 30, countryCode: 'ET', zeroDecimal: false },
   XOF: { code: 'XOF', symbol: 'CFA', name: 'West African CFA Franc', locale: 'fr-SN', stripeCurrency: 'xof', stripeSupported: true, decimals: 0, cardMinimum: 300, countryCode: 'SN', zeroDecimal: true },
   XAF: { code: 'XAF', symbol: 'FCFA', name: 'Central African CFA Franc', locale: 'fr-CM', stripeCurrency: 'xaf', stripeSupported: true, decimals: 0, cardMinimum: 300, countryCode: 'CM', zeroDecimal: true },
 
@@ -94,6 +101,11 @@ export const CURRENCIES: Record<string, CurrencyConfig> = {
   // ===== Oceania =====
   AUD: { code: 'AUD', symbol: 'A$', name: 'Australian Dollar', locale: 'en-AU', stripeCurrency: 'aud', stripeSupported: true, decimals: 2, cardMinimum: 0.5, countryCode: 'AU', zeroDecimal: false },
   NZD: { code: 'NZD', symbol: 'NZ$', name: 'New Zealand Dollar', locale: 'en-NZ', stripeCurrency: 'nzd', stripeSupported: true, decimals: 2, cardMinimum: 0.5, countryCode: 'NZ', zeroDecimal: false },
+
+  // ===== Europe (additional) =====
+  // ISK: ISO display decimals = 0, but like UGX Stripe requires the API amount
+  // as a two-decimal value ("5 ISK -> amount 500").
+  ISK: { code: 'ISK', symbol: 'kr', name: 'Icelandic Króna', locale: 'is-IS', stripeCurrency: 'isk', stripeSupported: true, decimals: 0, cardMinimum: 70, countryCode: 'IS', zeroDecimal: false },
 };
 
 /** All supported ISO codes, sorted alphabetically. */
@@ -162,19 +174,34 @@ export function getCurrencySymbol(currencyCode?: string | null): string {
 }
 
 /**
- * Convert main unit to smallest currency unit for Stripe.
- * Zero-decimal currencies (JPY, KES, etc.) keep the integer value.
+ * Convert main unit to the Stripe API amount (smallest unit per Stripe's
+ * semantics — independent of ISO display decimals).
+ *
+ * Stripe (docs.stripe.com/currencies):
+ *   - Default two-decimal: amount = round(major * 100).
+ *   - True zero-decimal (amount = major): BIF CLP DJF GNF JPY KMF KRW MGA PYG
+ *     RWF VND VUV XAF XOF XPF.
+ *   - Special cases UGX and ISK: display zero-decimal but the API amount is a
+ *     two-decimal value ("5 UGX -> amount 500", "5 ISK -> amount 500").
+ *
+ * Unknown codes default to two-decimal (Stripe's global default) — a currency
+ * can never inherit another currency's amount semantics via fallback.
  */
+export const STRIPE_ZERO_DECIMAL_CURRENCIES = new Set([
+  'BIF', 'CLP', 'DJF', 'GNF', 'JPY', 'KMF', 'KRW', 'MGA', 'PYG',
+  'RWF', 'VND', 'VUV', 'XAF', 'XOF', 'XPF',
+]);
+
 export function toCents(amount: number, currencyCode?: string | null): number {
-  const config = getCurrencyConfig(currencyCode);
-  if (config.zeroDecimal) return Math.round(amount);
+  const code = (currencyCode || DEFAULT_CURRENCY).toUpperCase();
+  if (STRIPE_ZERO_DECIMAL_CURRENCIES.has(code)) return Math.round(amount);
   return Math.round(amount * 100);
 }
 
-/** Convert smallest currency unit back to main unit. */
+/** Convert the Stripe API amount back to main unit. */
 export function fromCents(cents: number, currencyCode?: string | null): number {
-  const config = getCurrencyConfig(currencyCode);
-  if (config.zeroDecimal) return cents;
+  const code = (currencyCode || DEFAULT_CURRENCY).toUpperCase();
+  if (STRIPE_ZERO_DECIMAL_CURRENCIES.has(code)) return cents;
   return cents / 100;
 }
 
@@ -213,7 +240,7 @@ export const COUNTRY_DEFAULT_CURRENCY: Record<string, string> = {
   RO: 'RON', TR: 'TRY', RU: 'RUB',
   IN: 'INR', JP: 'JPY', CN: 'CNY', HK: 'HKD', KR: 'KRW', SG: 'SGD', MY: 'MYR',
   ID: 'IDR', PH: 'PHP', TH: 'THB', VN: 'VND', PK: 'PKR', BD: 'BDT',
-  AE: 'AED', SA: 'SAR', IL: 'ILS', QA: 'QAR',
+  AE: 'AED', SA: 'SAR', IL: 'ILS', QA: 'QAR', IS: 'ISK',
   AU: 'AUD', NZ: 'NZD',
 };
 

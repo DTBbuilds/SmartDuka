@@ -4,10 +4,8 @@ import {
   ConflictException,
   NotFoundException,
 } from '@nestjs/common';
-import {
-  OrderPaymentAuthorityService,
-  toMinorUnits,
-} from './services/order-payment-authority.service';
+import { OrderPaymentAuthorityService } from './services/order-payment-authority.service';
+import { toMinorUnits } from '../common/currency';
 import { MpesaController } from './mpesa.controller';
 import { PaymentsService } from './payments.service';
 import { StripeController } from '../stripe/stripe.controller';
@@ -390,7 +388,7 @@ describe('P0-10C external payment initiation authority', () => {
       mpesa.initiatePayment(user, mpesaDto(ORDER_1) as any),
     ).rejects.toBeInstanceOf(NotFoundException);
     await expect(
-      stripe.createPOSPayment(user, { orderId: ORDER_1, amount: 100 }),
+      stripe.createPOSPayment(user, { orderId: ORDER_1, amount: 10000 }),
     ).rejects.toBeInstanceOf(NotFoundException);
     await expect(
       mpesa.initiatePayment(user, mpesaDto(ORDER_UNKNOWN) as any),
@@ -421,7 +419,7 @@ describe('P0-10C external payment initiation authority', () => {
       }),
     );
     await expect(
-      stripe.createPOSPayment(user, { orderId: ORDER_1, amount: 100 }),
+      stripe.createPOSPayment(user, { orderId: ORDER_1, amount: 10000 }),
     ).rejects.toBeInstanceOf(ConflictException);
     expect(stripePayments.createPOSPayment).not.toHaveBeenCalled();
   });
@@ -459,12 +457,20 @@ describe('P0-10C external payment initiation authority', () => {
       stripe.createPOSPayment(user, { orderId: ORDER_1, amount: 1 }),
     ).rejects.toBeInstanceOf(BadRequestException);
     await expect(
-      stripe.createPOSPayment(user, { orderId: ORDER_1, amount: 10000 }),
+      stripe.createPOSPayment(user, { orderId: ORDER_1, amount: 99999 }),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(stripePayments.createPOSPayment).not.toHaveBeenCalled();
+
+    // P0-11A: the CORRECT minor-unit representation of 100 KES (10000) is
+    // accepted — the client amount is a tamper check, not the charge source.
+    const ok = await stripe.createPOSPayment(user, {
+      orderId: ORDER_1,
+      amount: 10000,
+    });
+    expect(ok.success).toBe(true);
   });
 
-  it('sends server-derived Stripe amount + orderNumber (zero-decimal KES)', async () => {
+  it('sends server-derived Stripe amount + orderNumber (KES two-decimal, P0-11A)', async () => {
     docs.push(
       makeOrder({
         payments: [{ method: 'stripe', amount: 100, status: 'pending' }],
@@ -473,12 +479,12 @@ describe('P0-10C external payment initiation authority', () => {
     const res = await stripe.createPOSPayment(user, {
       orderId: ORDER_1,
       orderNumber: 'FORGED',
-      amount: 100,
+      amount: 10000, // client minor units: 100 KES -> 10000 (P0-11A)
       currency: 'kes',
     });
     expect(res.success).toBe(true);
     const call = stripePayments.createPOSPayment.mock.calls[0][0];
-    expect(call.amount).toBe(100);
+    expect(call.amount).toBe(10000); // 100 KES -> 10000 minor (Stripe two-decimal)
     expect(call.orderNumber).toBe('STK-2025-ORD001');
   });
 
@@ -541,7 +547,7 @@ describe('P0-10C external payment initiation authority', () => {
         payments: [{ method: 'stripe', amount: 100, status: 'failed' }],
       }),
     );
-    await stripe.createPOSPayment(user, { orderId: ORDER_1, amount: 100 });
+    await stripe.createPOSPayment(user, { orderId: ORDER_1, amount: 10000 });
     expect(docs[0].payments[0].status).toBe('pending');
     const voidResult = await applyVoidClaim(orderModel, ORDER_1, SHOP_A);
     expect(voidResult.matchedCount).toBe(0);
@@ -556,7 +562,7 @@ describe('P0-10C external payment initiation authority', () => {
     );
     await applyVoidClaim(orderModel, ORDER_1, SHOP_A);
     await expect(
-      stripe.createPOSPayment(user, { orderId: ORDER_1, amount: 100 }),
+      stripe.createPOSPayment(user, { orderId: ORDER_1, amount: 10000 }),
     ).rejects.toBeInstanceOf(ConflictException);
     expect(stripePayments.createPOSPayment).not.toHaveBeenCalled();
   });
@@ -587,7 +593,7 @@ describe('P0-10C external payment initiation authority', () => {
       new BadRequestException('below minimum'),
     );
     await expect(
-      stripe.createPOSPayment(user, { orderId: ORDER_1, amount: 100 }),
+      stripe.createPOSPayment(user, { orderId: ORDER_1, amount: 10000 }),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(docs[0].payments[0].status).toBe('failed');
   });
@@ -611,7 +617,7 @@ describe('P0-10C external payment initiation authority', () => {
         payments: [{ method: 'stripe', amount: 100, status: 'failed' }],
       }),
     );
-    await stripe.createPOSPayment(user, { orderId: ORDER_1, amount: 100 });
+    await stripe.createPOSPayment(user, { orderId: ORDER_1, amount: 10000 });
     expect(docs[0].payments[0].status).toBe('pending');
     expect(docs[0].payments[0].initiatedAt).toBeInstanceOf(Date);
     expect(stripePayments.createPOSPayment).toHaveBeenCalledTimes(1);
@@ -719,7 +725,7 @@ describe('P0-10C external payment initiation authority', () => {
     );
     const res = await stripe.createPOSPayment(user, {
       orderId: ORDER_1,
-      amount: 100,
+      amount: 10000, // 100 KES in minor units (P0-11A)
       currency: 'kes',
     });
     expect(res.success).toBe(true);
@@ -845,10 +851,12 @@ describe('P0-10C external payment initiation authority', () => {
     });
   });
 
-  it('toMinorUnits mirrors the web currency contract', () => {
-    expect(toMinorUnits(100, 'KES')).toBe(100); // zero-decimal
+  it('toMinorUnits mirrors the web currency contract (P0-11A)', () => {
+    expect(toMinorUnits(100, 'KES')).toBe(10000); // KES is two-decimal for Stripe
     expect(toMinorUnits(5, 'USD')).toBe(500);
-    expect(toMinorUnits(5, undefined)).toBe(5); // default KES
+    expect(toMinorUnits(10, 'JPY')).toBe(10); // true zero-decimal
+    expect(toMinorUnits(5, 'ISK')).toBe(500); // special case: display 0-dec, API x100
+    expect(toMinorUnits(5, undefined)).toBe(500); // default KES, two-decimal
   });
 
   // ────────────────────────────────────────────────────────────────
@@ -889,7 +897,7 @@ describe('P0-10C external payment initiation authority', () => {
         shopId: new Types.ObjectId(SHOP_A),
         orderId: new Types.ObjectId(ORDER_1),
         paymentType: 'pos_sale',
-        amount: 100,
+        amount: 10000, // 100.00 KES in Stripe minor units (P0-11A two-decimal)
         currency: 'kes',
         status: 'requires_payment_method',
         clientSecret: 'secret_1',

@@ -1,14 +1,15 @@
 import { Injectable, Inject, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
+import { fromMinorUnits } from '../common/currency';
 
 /**
  * Core Stripe Service
- * 
+ *
  * Provides the main Stripe client instance and core functionality.
  * Supports both Stripe (international) and can work alongside
  * M-Pesa for Kenyan local payments.
- * 
+ *
  * Mobile-first design considerations:
  * - Payment Links for easy mobile checkout
  * - Payment Intents for flexible payment flows
@@ -34,7 +35,9 @@ export class StripeService implements OnModuleInit {
       this.isConfigured = true;
       this.logger.log('✅ Stripe service initialized successfully');
     } else {
-      this.logger.warn('⚠️ Stripe API key not configured. Stripe payments will be disabled.');
+      this.logger.warn(
+        '⚠️ Stripe API key not configured. Stripe payments will be disabled.',
+      );
     }
   }
 
@@ -50,7 +53,9 @@ export class StripeService implements OnModuleInit {
    */
   getClient(): Stripe {
     if (!this.isConfigured) {
-      throw new Error('Stripe is not configured. Please set STRIPE_SECRET_KEY environment variable.');
+      throw new Error(
+        'Stripe is not configured. Please set STRIPE_SECRET_KEY environment variable.',
+      );
     }
     return this.stripe;
   }
@@ -63,25 +68,36 @@ export class StripeService implements OnModuleInit {
   }
 
   /**
-   * Minimum amounts for Stripe payments by currency (in smallest unit)
-   * Stripe requires minimum amounts to cover processing fees
+   * Minimum amounts for Stripe payments by currency, expressed in the SAME
+   * minor-unit contract as PaymentIntent creation (common/currency.ts):
+   * two-decimal currencies in 1/100 units, true zero-decimal currencies in
+   * whole units. Values follow docs.stripe.com/currencies#minimum-and-maximum-
+   * charge-amounts where published; unlisted currencies use the 0.50-USD
+   * equivalent default.
    */
   private readonly MINIMUM_AMOUNTS: Record<string, number> = {
-    usd: 50,   // $0.50
-    gbp: 30,   // £0.30
-    eur: 50,   // €0.50
-    kes: 5000, // KSh 50.00
-    aud: 50,   // A$0.50
+    usd: 50, // $0.50
+    gbp: 30, // £0.30
+    eur: 50, // €0.50
+    kes: 5000, // KSh 50.00 (two-decimal — amount 5000 = 50.00 KES)
+    aud: 50, // A$0.50
+    jpy: 50, // ¥50 (zero-decimal — amount 50 = ¥50)
     default: 50,
   };
 
   /**
-   * Validate payment amount meets Stripe minimums
+   * Validate payment amount meets Stripe minimums.
+   * `amount` MUST already be in Stripe minor-unit representation (the same
+   * value passed to the PaymentIntent API).
    */
-  validateMinimumAmount(amount: number, currency: string): { valid: boolean; minimum: number; message?: string } {
+  validateMinimumAmount(
+    amount: number,
+    currency: string,
+  ): { valid: boolean; minimum: number; message?: string } {
     const currencyLower = currency.toLowerCase();
-    const minimum = this.MINIMUM_AMOUNTS[currencyLower] || this.MINIMUM_AMOUNTS.default;
-    
+    const minimum =
+      this.MINIMUM_AMOUNTS[currencyLower] || this.MINIMUM_AMOUNTS.default;
+
     if (amount < minimum) {
       const formatted = this.formatAmount(minimum, currencyLower);
       return {
@@ -90,18 +106,25 @@ export class StripeService implements OnModuleInit {
         message: `Amount too small for card payment. Minimum is ${formatted}. Please use cash or M-Pesa for smaller amounts.`,
       };
     }
-    
+
     return { valid: true, minimum };
   }
 
   /**
-   * Format amount for display
+   * Format a minor-unit amount for display using the shared currency contract
+   * (fromMinorUnits) so zero-decimal currencies are not divided by 100.
    */
   private formatAmount(amount: number, currency: string): string {
-    const divisor = currency === 'kes' ? 100 : 100;
-    const symbols: Record<string, string> = { usd: '$', gbp: '£', eur: '€', kes: 'KSh ', aud: 'A$' };
+    const symbols: Record<string, string> = {
+      usd: '$',
+      gbp: '£',
+      eur: '€',
+      kes: 'KSh ',
+      aud: 'A$',
+      jpy: '¥',
+    };
     const symbol = symbols[currency] || '';
-    return `${symbol}${(amount / divisor).toFixed(2)}`;
+    return `${symbol}${fromMinorUnits(amount, currency).toLocaleString()}`;
   }
 
   /**
@@ -110,7 +133,7 @@ export class StripeService implements OnModuleInit {
    * Includes idempotency key support for safe retries
    */
   async createPaymentIntent(params: {
-    amount: number; // Amount in smallest currency unit (cents for USD, cents for KES)
+    amount: number; // Amount in Stripe minor units (see common/currency.ts toMinorUnits)
     currency: string;
     customerId?: string;
     metadata?: Record<string, string>;
@@ -161,7 +184,8 @@ export class StripeService implements OnModuleInit {
 
     if (params.paymentMethodTypes && params.paymentMethodTypes.length > 0) {
       paymentIntentParams.automatic_payment_methods = undefined;
-      (paymentIntentParams as any).payment_method_types = params.paymentMethodTypes;
+      (paymentIntentParams as any).payment_method_types =
+        params.paymentMethodTypes;
     }
 
     if (params.applicationFeeAmount && params.applicationFeeAmount > 0) {
@@ -180,11 +204,16 @@ export class StripeService implements OnModuleInit {
       options.stripeAccount = params.stripeAccount;
     }
 
-    const paymentIntent = await stripe.paymentIntents.create(paymentIntentParams, options);
+    const paymentIntent = await stripe.paymentIntents.create(
+      paymentIntentParams,
+      options,
+    );
 
     this.logger.log(
       `PaymentIntent created: ${paymentIntent.id} for ${params.amount} ${currencyLower}` +
-        (params.stripeAccount ? ` on connected account ${params.stripeAccount}` : ' (platform)'),
+        (params.stripeAccount
+          ? ` on connected account ${params.stripeAccount}`
+          : ' (platform)'),
     );
 
     return paymentIntent;
@@ -215,7 +244,7 @@ export class StripeService implements OnModuleInit {
     paymentMethodId?: string,
   ): Promise<Stripe.PaymentIntent> {
     const stripe = this.getClient();
-    
+
     const params: Stripe.PaymentIntentConfirmParams = {};
     if (paymentMethodId) {
       params.payment_method = paymentMethodId;
@@ -227,7 +256,9 @@ export class StripeService implements OnModuleInit {
   /**
    * Cancel a Payment Intent
    */
-  async cancelPaymentIntent(paymentIntentId: string): Promise<Stripe.PaymentIntent> {
+  async cancelPaymentIntent(
+    paymentIntentId: string,
+  ): Promise<Stripe.PaymentIntent> {
     const stripe = this.getClient();
     return stripe.paymentIntents.cancel(paymentIntentId);
   }
@@ -313,7 +344,9 @@ export class StripeService implements OnModuleInit {
       });
       lineItems = [{ price: price.id, quantity: params.quantity || 1 }];
     } else {
-      throw new Error('Either priceId or (productName, amount, currency) must be provided');
+      throw new Error(
+        'Either priceId or (productName, amount, currency) must be provided',
+      );
     }
 
     const paymentLink = await stripe.paymentLinks.create({
@@ -371,7 +404,9 @@ export class StripeService implements OnModuleInit {
     if (params.stripeAccount) {
       // Default: also refund the platform fee so the shop isn't left out of pocket.
       refundParams.refund_application_fee =
-        params.refundApplicationFee === undefined ? true : params.refundApplicationFee;
+        params.refundApplicationFee === undefined
+          ? true
+          : params.refundApplicationFee;
     }
 
     const options: Stripe.RequestOptions = {};
@@ -382,7 +417,8 @@ export class StripeService implements OnModuleInit {
     const refund = await stripe.refunds.create(refundParams, options);
 
     this.logger.log(
-      `Refund created: ${refund.id}` + (params.stripeAccount ? ` on ${params.stripeAccount}` : ''),
+      `Refund created: ${refund.id}` +
+        (params.stripeAccount ? ` on ${params.stripeAccount}` : ''),
     );
 
     return refund;

@@ -8,37 +8,9 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Order, OrderDocument } from '../../sales/schemas/order.schema';
+import { toMinorUnits } from '../../common/currency';
 
 export type ExternalPosPaymentMethod = 'mpesa' | 'stripe';
-
-/**
- * Minor-unit (smallest currency unit) conversion for Stripe-style providers.
- * Mirrors apps/web/src/lib/currency.ts `toCents`: currencies flagged
- * zeroDecimal are charged as integer major units.
- */
-const ZERO_DECIMAL_CURRENCIES = new Set([
-  'KES',
-  'UGX',
-  'RWF',
-  'XOF',
-  'XAF',
-  'CLP',
-  'JPY',
-  'KRW',
-  'VND',
-]);
-
-export function toMinorUnits(amountMajor: number, currency?: string): number {
-  const code = (currency || 'KES').toUpperCase();
-  return ZERO_DECIMAL_CURRENCIES.has(code)
-    ? Math.round(amountMajor)
-    : Math.round(amountMajor * 100);
-}
-
-export function fromMinorUnits(amountMinor: number, currency?: string): number {
-  const code = (currency || 'KES').toUpperCase();
-  return ZERO_DECIMAL_CURRENCIES.has(code) ? amountMinor : amountMinor / 100;
-}
 
 export interface InitiationClaimGranted {
   claimed: true;
