@@ -16,7 +16,7 @@ export class Shop {
   phone: string;
 
   @Prop({ required: true, unique: true, trim: true, index: true })
-  shopId: string;  // Human-readable shop ID (e.g., SHP-00001-A7K2B)
+  shopId: string; // Human-readable shop ID (e.g., SHP-00001-A7K2B)
 
   @Prop({ required: false, trim: true })
   address?: string;
@@ -45,6 +45,26 @@ export class Shop {
   @Prop({ required: false, trim: true })
   tillNumber?: string;
 
+  // P0-11B: previously missing from the registered schema — create(),
+  // completeOnboarding(), updateLanguage() and findByOwner() wrote these
+  // fields but strict mode silently dropped them. Additive restore.
+  @Prop({ type: Types.ObjectId, ref: 'User', required: false })
+  ownerId?: Types.ObjectId;
+
+  @Prop({ enum: ['en', 'sw'], default: 'en' })
+  language: 'en' | 'sw';
+
+  @Prop({ default: false })
+  onboardingComplete: boolean;
+
+  // Timestamps are managed by @Schema({ timestamps: true }); declared so the
+  // document type exposes them (findAll demo-expiry logic reads createdAt).
+  @Prop()
+  createdAt: Date;
+
+  @Prop()
+  updatedAt: Date;
+
   // M-Pesa Configuration - Each shop can have their own M-Pesa credentials
   // Sensitive fields (consumerKey, consumerSecret, passkey) are encrypted using AES-256-GCM
   @Prop({ type: Object, default: {} })
@@ -55,21 +75,21 @@ export class Shop {
     shortCode?: string;
     // For Paybill: Account number prefix (optional)
     accountPrefix?: string;
-    
+
     // Daraja API credentials (ENCRYPTED)
     consumerKey?: string;
-    consumerKeyIv?: string;  // Initialization vector for decryption
+    consumerKeyIv?: string; // Initialization vector for decryption
     consumerKeyTag?: string; // Auth tag for decryption
-    
+
     consumerSecret?: string;
     consumerSecretIv?: string;
     consumerSecretTag?: string;
-    
+
     // Passkey for STK Push (ENCRYPTED)
     passkey?: string;
     passkeyIv?: string;
     passkeyTag?: string;
-    
+
     // Callback URL for this shop (optional - defaults to platform callback)
     callbackUrl?: string;
     // Whether M-Pesa is enabled for this shop
@@ -123,8 +143,17 @@ export class Shop {
     connectedByUserId?: Types.ObjectId;
   };
 
-  @Prop({ enum: ['pending', 'verified', 'active', 'suspended', 'rejected', 'flagged'], default: 'pending' })
-  status: 'pending' | 'verified' | 'active' | 'suspended' | 'rejected' | 'flagged';
+  @Prop({
+    enum: ['pending', 'verified', 'active', 'suspended', 'rejected', 'flagged'],
+    default: 'pending',
+  })
+  status:
+    | 'pending'
+    | 'verified'
+    | 'active'
+    | 'suspended'
+    | 'rejected'
+    | 'flagged';
 
   // Verification fields
   @Prop({ required: false, type: Types.ObjectId })
@@ -253,4 +282,3 @@ ShopSchema.index(
     name: 'unique_stripe_connect_account',
   },
 );
-

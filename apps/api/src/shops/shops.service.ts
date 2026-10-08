@@ -1,47 +1,20 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Shop, ShopDocument } from './shop.schema';
+import { Shop, ShopDocument } from './schemas/shop.schema';
+import { CreateShopDto } from './dto/create-shop.dto';
+import { UpdateShopDto } from './dto/update-shop.dto';
 import { generateShopId } from './utils/shop-id-generator';
 
-export interface CreateShopDto {
-  name: string;
-  email: string;
-  phone: string;
-  tillNumber?: string;
-  address?: string;
-  county?: string;
-  city?: string;
-  country?: string;
-  businessType?: string;
-  kraPin?: string;
-  currency?: string;
-  language?: 'en' | 'sw';
-}
-
-export interface UpdateShopDto {
-  name?: string;
-  tillNumber?: string;
-  phone?: string;
-  email?: string;
-  address?: string;
-  county?: string;
-  city?: string;
-  country?: string;
-  businessType?: string;
-  kraPin?: string;
-  currency?: string;
-  language?: 'en' | 'sw';
-  status?: 'pending' | 'verified' | 'active' | 'suspended';
-  settings?: Record<string, any>;
-  onboardingComplete?: boolean;
-}
+export type { CreateShopDto, UpdateShopDto };
 
 @Injectable()
 export class ShopsService {
   private readonly logger = new Logger(ShopsService.name);
 
-  constructor(@InjectModel(Shop.name) private readonly shopModel: Model<ShopDocument>) {}
+  constructor(
+    @InjectModel(Shop.name) private readonly shopModel: Model<ShopDocument>,
+  ) {}
 
   async create(ownerId: string, dto: CreateShopDto): Promise<ShopDocument> {
     // Check if shop email already exists
@@ -72,26 +45,36 @@ export class ShopsService {
         }
       }
 
-      // Remove kraPin from dto to avoid it being spread with wrong value
-      const { kraPin: _ignoredKraPin, ...restDto } = dto;
-
+      // P0-11B: explicit allowlist — no property spread of caller input.
+      // status is SERVER-OWNED ('pending'); privileged counters are
+      // server-initialized; unknown fields can never reach MongoDB.
       const shopData: any = {
-        ...restDto,
-        shopId,  // Add human-readable shop ID
+        name: dto.name,
+        email: dto.email,
+        phone: dto.phone,
+        businessType: dto.businessType,
+        country: dto.country,
+        county: dto.county,
+        city: dto.city,
+        currency: dto.currency,
+        shopId, // Add human-readable shop ID
         ownerId: ownerId ? new Types.ObjectId(ownerId) : undefined,
-        language: dto.language || 'en',
+        language: dto.language === 'sw' ? 'sw' : 'en',
         status: 'pending',
         cashierCount: 0,
         totalSales: 0,
         totalOrders: 0,
         onboardingComplete: false,
       };
+      if (dto.address !== undefined) shopData.address = dto.address;
+      if (dto.description !== undefined) shopData.description = dto.description;
+      if (dto.tillNumber !== undefined) shopData.tillNumber = dto.tillNumber;
 
       // Only add kraPin if it has a valid value
       if (normalizedKraPin) {
         shopData.kraPin = normalizedKraPin;
       }
-      
+
       const shop = new this.shopModel(shopData);
       return await shop.save();
     } catch (error: any) {
@@ -103,7 +86,9 @@ export class ShopsService {
         } else if (field === 'phone') {
           throw new BadRequestException('Shop phone number already registered');
         } else if (field === 'shopId') {
-          throw new BadRequestException('Shop ID generation conflict, please try again');
+          throw new BadRequestException(
+            'Shop ID generation conflict, please try again',
+          );
         } else {
           throw new BadRequestException(`${field} already registered`);
         }
@@ -117,23 +102,41 @@ export class ShopsService {
   }
 
   async findByOwner(ownerId: string): Promise<ShopDocument | null> {
-    return this.shopModel.findOne({ ownerId: new Types.ObjectId(ownerId) }).exec();
+    return this.shopModel
+      .findOne({ ownerId: new Types.ObjectId(ownerId) })
+      .exec();
   }
 
-  async update(shopId: string, dto: UpdateShopDto): Promise<ShopDocument | null> {
+  async update(
+    shopId: string,
+    dto: UpdateShopDto,
+  ): Promise<ShopDocument | null> {
     try {
-      // Remove kraPin from dto to handle separately
-      const { kraPin: dtoKraPin, ...restDto } = dto;
+      // P0-11B DEFENSE-IN-DEPTH ALLOWLIST — the update document is built from
+      // known mutable properties ONLY. No spread of caller input: even if a
+      // DTO were ever bypassed, privileged fields (status, verification*,
+      // ownerId, cashierCount, totalSales, totalOrders, onboardingComplete)
+      // and unknown properties can never reach MongoDB through this path.
+      // kraPin keeps its normalize/unset semantics (sparse unique index).
+      const updateData: any = { updatedAt: new Date() };
+      if (dto.name !== undefined) updateData.name = dto.name;
+      if (dto.phone !== undefined) updateData.phone = dto.phone;
+      if (dto.email !== undefined) updateData.email = dto.email;
+      if (dto.address !== undefined) updateData.address = dto.address;
+      if (dto.county !== undefined) updateData.county = dto.county;
+      if (dto.city !== undefined) updateData.city = dto.city;
+      if (dto.country !== undefined) updateData.country = dto.country;
+      if (dto.businessType !== undefined)
+        updateData.businessType = dto.businessType;
+      if (dto.currency !== undefined) updateData.currency = dto.currency;
+      if (dto.tillNumber !== undefined) updateData.tillNumber = dto.tillNumber;
+      if (dto.description !== undefined)
+        updateData.description = dto.description;
 
-      const updateData: any = {
-        ...restDto,
-        updatedAt: new Date(),
-      };
-      
       // Handle kraPin separately - only update if explicitly provided
-      if (dtoKraPin !== undefined) {
-        if (dtoKraPin && typeof dtoKraPin === 'string') {
-          const trimmed = dtoKraPin.trim().toUpperCase();
+      if (dto.kraPin !== undefined) {
+        if (dto.kraPin && typeof dto.kraPin === 'string') {
+          const trimmed = dto.kraPin.trim().toUpperCase();
           if (trimmed.length > 0) {
             updateData.kraPin = trimmed;
           } else {
@@ -145,13 +148,12 @@ export class ShopsService {
           updateData.$unset = { kraPin: 1 };
         }
       }
-      
+
       return await this.shopModel
-        .findByIdAndUpdate(
-          new Types.ObjectId(shopId),
-          updateData,
-          { new: true },
-        )
+        .findByIdAndUpdate(new Types.ObjectId(shopId), updateData, {
+          new: true,
+          runValidators: true,
+        })
         .exec();
     } catch (error: any) {
       // Handle MongoDB duplicate key errors
@@ -162,7 +164,9 @@ export class ShopsService {
         } else if (field === 'phone') {
           throw new BadRequestException('Shop phone number already registered');
         } else if (field === 'kraPin') {
-          throw new BadRequestException('KRA PIN already registered to another shop');
+          throw new BadRequestException(
+            'KRA PIN already registered to another shop',
+          );
         } else {
           throw new BadRequestException(`${field} already registered`);
         }
@@ -181,7 +185,10 @@ export class ShopsService {
       .exec();
   }
 
-  async updateSettings(shopId: string, settings: Record<string, any>): Promise<ShopDocument | null> {
+  async updateSettings(
+    shopId: string,
+    settings: Record<string, any>,
+  ): Promise<ShopDocument | null> {
     return this.shopModel
       .findByIdAndUpdate(
         new Types.ObjectId(shopId),
@@ -191,7 +198,10 @@ export class ShopsService {
       .exec();
   }
 
-  async updateLanguage(shopId: string, language: 'en' | 'sw'): Promise<ShopDocument | null> {
+  async updateLanguage(
+    shopId: string,
+    language: 'en' | 'sw',
+  ): Promise<ShopDocument | null> {
     return this.shopModel
       .findByIdAndUpdate(
         new Types.ObjectId(shopId),
@@ -211,7 +221,13 @@ export class ShopsService {
 
   async updateStatus(
     shopId: string,
-    status: 'pending' | 'verified' | 'active' | 'suspended',
+    status:
+      | 'pending'
+      | 'verified'
+      | 'active'
+      | 'suspended'
+      | 'rejected'
+      | 'flagged',
     notes?: string,
   ): Promise<ShopDocument | null> {
     return this.shopModel
@@ -219,7 +235,10 @@ export class ShopsService {
         new Types.ObjectId(shopId),
         {
           status,
-          verificationDate: status === 'verified' || status === 'active' ? new Date() : undefined,
+          verificationDate:
+            status === 'verified' || status === 'active'
+              ? new Date()
+              : undefined,
           verificationNotes: notes,
           updatedAt: new Date(),
         },

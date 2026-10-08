@@ -1,10 +1,23 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return, @typescript-eslint/require-await, @typescript-eslint/no-unused-vars */
-import { Controller, Post, Body, Get, UseGuards, Req, Res, Query, Delete, Param } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Get,
+  UseGuards,
+  Req,
+  Res,
+  Query,
+  Delete,
+  Param,
+} from '@nestjs/common';
 import type { Response, Request } from 'express';
 import { AuthService } from './auth.service';
 import { TokenService } from './token.service';
 import { OtpService } from './services/otp.service';
-import { RegisterShopDto } from './dto/register-shop.dto';
+import {
+  RegisterShopDto,
+  RegisterShopGoogleDto,
+} from './dto/register-shop.dto';
 import { LoginDto } from './dto/login.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { JwtCookieAuthGuard, Public } from './guards/jwt-cookie-auth.guard';
@@ -32,9 +45,12 @@ export class AuthController {
 
   @Post('register-shop')
   @SkipCsrf()
-  async registerShop(@Body() dto: RegisterShopDto, @Res({ passthrough: true }) res: Response) {
+  async registerShop(
+    @Body() dto: RegisterShopDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const result = await this.authService.registerShopWithTokens(dto);
-    
+
     // Set secure httpOnly cookies
     if (result.tokens) {
       this.cookieService.setAuthCookies(
@@ -44,7 +60,7 @@ export class AuthController {
         result.tokens.csrfToken,
       );
     }
-    
+
     // Return response without sensitive tokens in body (cookies handle it)
     return {
       shop: result.shop,
@@ -62,11 +78,19 @@ export class AuthController {
 
   @Post('login')
   @SkipCsrf()
-  async login(@Body() dto: LoginDto, @Req() req: any, @Res({ passthrough: true }) res: Response) {
+  async login(
+    @Body() dto: LoginDto,
+    @Req() req: any,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const ipAddress = req.ip || req.connection.remoteAddress;
     const userAgent = req.get('user-agent');
-    const result: any = await this.authService.loginWithTokens(dto, ipAddress, userAgent);
-    
+    const result: any = await this.authService.loginWithTokens(
+      dto,
+      ipAddress,
+      userAgent,
+    );
+
     // If email verification is required, return OTP requirement (no tokens)
     if (result.requiresEmailVerification) {
       return {
@@ -89,7 +113,7 @@ export class AuthController {
         result.tokens.csrfToken,
       );
     }
-    
+
     return {
       user: result.user,
       shop: result.shop,
@@ -113,8 +137,13 @@ export class AuthController {
   ) {
     const ipAddress = req.ip || req.connection.remoteAddress;
     const userAgent = req.get('user-agent');
-    const result = await this.authService.loginWithPinAndTokens(body.pin, body.shopId, ipAddress, userAgent);
-    
+    const result = await this.authService.loginWithPinAndTokens(
+      body.pin,
+      body.shopId,
+      ipAddress,
+      userAgent,
+    );
+
     // If email verification is required, return OTP requirement (no tokens)
     if (result.requiresEmailVerification) {
       return {
@@ -127,7 +156,7 @@ export class AuthController {
         tokens: null,
       };
     }
-    
+
     if (result.tokens) {
       this.cookieService.setAuthCookies(
         res,
@@ -136,7 +165,7 @@ export class AuthController {
         result.tokens.csrfToken,
       );
     }
-    
+
     return {
       user: result.user,
       shop: result.shop,
@@ -152,10 +181,7 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @Post('set-pin')
-  async setPin(
-    @Body() body: { pin: string },
-    @CurrentUser() user: any,
-  ) {
+  async setPin(@Body() body: { pin: string }, @CurrentUser() user: any) {
     await this.authService.setPin(user.sub, body.pin);
     return { message: 'PIN set successfully' };
   }
@@ -172,11 +198,16 @@ export class AuthController {
   async refreshToken(
     @Req() req: any,
     @Res({ passthrough: true }) res: Response,
-    @Body() body: { deviceId?: string; deviceFingerprint?: string; refreshToken?: string },
+    @Body()
+    body: {
+      deviceId?: string;
+      deviceFingerprint?: string;
+      refreshToken?: string;
+    },
   ) {
     const refreshToken = req.refreshToken || body.refreshToken;
     const ipAddress = req.ip || req.connection.remoteAddress;
-    
+
     const result = await this.authService.refreshTokenWithRotation(
       refreshToken,
       {
@@ -185,7 +216,7 @@ export class AuthController {
         ipAddress,
       },
     );
-    
+
     if (result.tokens) {
       this.cookieService.setAuthCookies(
         res,
@@ -194,7 +225,7 @@ export class AuthController {
         result.tokens.csrfToken,
       );
     }
-    
+
     return {
       user: result.user,
       shop: result.shop,
@@ -214,16 +245,16 @@ export class AuthController {
     // Extract the access token from cookie or header to return to frontend
     // This allows the frontend to store it in localStorage for client-side use
     let accessToken: string | null = null;
-    
+
     if (req.cookies && req.cookies['smartduka_access']) {
       accessToken = req.cookies['smartduka_access'];
     } else if (req.headers.authorization?.startsWith('Bearer ')) {
       accessToken = req.headers.authorization.substring(7);
     }
-    
+
     // Get CSRF token from cookie
     const csrfToken = req.cookies?.['smartduka_csrf'] || null;
-    
+
     return {
       ...user,
       // Include tokens for frontend storage (needed after OAuth callback)
@@ -260,25 +291,33 @@ export class AuthController {
    */
   @Get('google/cashier')
   async googleAuthCashier(@Res() res: Response) {
-    const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'https://www.smartduka.org';
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') ||
+      'https://www.smartduka.org';
 
     // CRITICAL: Check if Google OAuth is configured before redirecting to Google
     if (!GoogleStrategy.isConfigured()) {
-      res.redirect(`${frontendUrl}/login?error=${encodeURIComponent('Google login is not configured yet. Please set up Google OAuth credentials or contact your administrator.')}`);
+      res.redirect(
+        `${frontendUrl}/login?error=${encodeURIComponent('Google login is not configured yet. Please set up Google OAuth credentials or contact your administrator.')}`,
+      );
       return;
     }
 
     const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID') || '';
-    
+
     const isDev = process.env.NODE_ENV !== 'production';
-    const defaultCallbackUrl = isDev 
+    const defaultCallbackUrl = isDev
       ? 'http://localhost:5000/api/v1/auth/google/callback'
       : 'https://smartduka-91q6.onrender.com/api/v1/auth/google/callback';
-    const callbackUrl = this.configService.get<string>('GOOGLE_CALLBACK_URL') || defaultCallbackUrl;
-    
+    const callbackUrl =
+      this.configService.get<string>('GOOGLE_CALLBACK_URL') ||
+      defaultCallbackUrl;
+
     // Build Google OAuth URL with state parameter
     const state = encodeURIComponent(JSON.stringify({ role: 'cashier' }));
-    const googleAuthUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+    const googleAuthUrl = new URL(
+      'https://accounts.google.com/o/oauth2/v2/auth',
+    );
     googleAuthUrl.searchParams.set('client_id', clientId);
     googleAuthUrl.searchParams.set('redirect_uri', callbackUrl);
     googleAuthUrl.searchParams.set('response_type', 'code');
@@ -286,17 +325,23 @@ export class AuthController {
     googleAuthUrl.searchParams.set('state', state);
     googleAuthUrl.searchParams.set('access_type', 'offline');
     googleAuthUrl.searchParams.set('prompt', 'select_account');
-    
+
     res.redirect(googleAuthUrl.toString());
   }
 
   @Get('google/callback')
   @UseGuards(GoogleAuthGuard)
-  async googleAuthCallback(@Req() req: any, @Res() res: Response, @Query('state') state?: string) {
+  async googleAuthCallback(
+    @Req() req: any,
+    @Res() res: Response,
+    @Query('state') state?: string,
+  ) {
     const ipAddress = req.ip || req.connection.remoteAddress;
     const userAgent = req.get('user-agent');
-    const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'https://www.smartduka.org';
-    
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') ||
+      'https://www.smartduka.org';
+
     // Parse state to check if this is a cashier signup flow
     let isCashierSignup = false;
     if (state) {
@@ -307,72 +352,95 @@ export class AuthController {
         // Invalid state, ignore
       }
     }
-    
+
     try {
-      const result = await this.authService.googleLoginWithTokens(req.user, ipAddress, userAgent);
-      
+      const result = await this.authService.googleLoginWithTokens(
+        req.user,
+        ipAddress,
+        userAgent,
+      );
+
       if (result.isNewUser) {
         // SECURITY: For cashier signup, they MUST have a PIN from their admin
         // Redirect to PIN verification page where they must prove they're a registered cashier
         if (isCashierSignup) {
-          const profileData = encodeURIComponent(JSON.stringify(result.googleProfile));
-          res.redirect(`${frontendUrl}/auth/cashier-google-signup?google=${profileData}`);
+          const profileData = encodeURIComponent(
+            JSON.stringify(result.googleProfile),
+          );
+          res.redirect(
+            `${frontendUrl}/auth/cashier-google-signup?google=${profileData}`,
+          );
         } else {
           // For admin/shop registration - redirect to shop registration page
           // This is intentional: admins can register new shops with Google
-          const profileData = encodeURIComponent(JSON.stringify(result.googleProfile));
+          const profileData = encodeURIComponent(
+            JSON.stringify(result.googleProfile),
+          );
           res.redirect(`${frontendUrl}/register-shop?google=${profileData}`);
         }
       } else {
         // Existing user - verify they have the correct role if this is a cashier flow
         if (isCashierSignup && result.user?.role !== 'cashier') {
           // User exists but is not a cashier - reject with clear message
-          const errorMsg = 'This Google account is linked to an admin account, not a cashier account. Please use the Admin login instead.';
-          res.redirect(`${frontendUrl}/login?error=${encodeURIComponent(errorMsg)}`);
+          const errorMsg =
+            'This Google account is linked to an admin account, not a cashier account. Please use the Admin login instead.';
+          res.redirect(
+            `${frontendUrl}/login?error=${encodeURIComponent(errorMsg)}`,
+          );
           return;
         }
-        
+
         // Existing user with valid role - check if OTP verification is required
         if (result.requiresEmailVerification) {
           // Redirect to OTP verification page with user info
-          const otpData = encodeURIComponent(JSON.stringify({
-            email: result.email,
-            userName: result.userName,
-            shopName: result.shopName,
-            isGoogleLogin: true,
-          }));
+          const otpData = encodeURIComponent(
+            JSON.stringify({
+              email: result.email,
+              userName: result.userName,
+              shopName: result.shopName,
+              isGoogleLogin: true,
+            }),
+          );
           res.redirect(`${frontendUrl}/login?otp=true&data=${otpData}`);
         } else if (result.tokens) {
           // Pass tokens via URL for cross-origin support
-          const tokens = result.tokens as any;
+          const tokens = result.tokens;
           const tokenParam = `token=${encodeURIComponent(tokens.accessToken)}&csrf=${encodeURIComponent(tokens.csrfToken)}&refresh=${encodeURIComponent(tokens.refreshToken)}`;
-          res.redirect(`${frontendUrl}/auth/callback?success=true&${tokenParam}`);
+          res.redirect(
+            `${frontendUrl}/auth/callback?success=true&${tokenParam}`,
+          );
         } else {
-          res.redirect(`${frontendUrl}/login?error=${encodeURIComponent('Failed to generate authentication tokens')}`);
+          res.redirect(
+            `${frontendUrl}/login?error=${encodeURIComponent('Failed to generate authentication tokens')}`,
+          );
         }
       }
     } catch (error: any) {
-      res.redirect(`${frontendUrl}/login?error=${encodeURIComponent(error.message || 'Google login failed')}`);
+      res.redirect(
+        `${frontendUrl}/login?error=${encodeURIComponent(error.message || 'Google login failed')}`,
+      );
     }
   }
 
   @Post('register-shop-google')
   async registerShopWithGoogle(
-    @Body() body: {
-      googleProfile: { googleId: string; email: string; name: string; avatarUrl?: string; phone?: string };
-      shop: { shopName: string; businessType: string; country: string; county: string; city: string; currency: string; address?: string; kraPin?: string; description?: string; phone?: string };
-    },
+    @Body() dto: RegisterShopGoogleDto,
     @Req() req: any,
   ) {
     const ipAddress = req.ip || req.connection.remoteAddress;
     const userAgent = req.get('user-agent');
-    return this.authService.registerShopWithGoogle(body.googleProfile, body.shop, ipAddress, userAgent);
+    return this.authService.registerShopWithGoogle(
+      dto.googleProfile,
+      dto.shop,
+      ipAddress,
+      userAgent,
+    );
   }
 
   /**
    * Link Google account to existing cashier using PIN verification
    * POST /auth/link-google-cashier
-   * 
+   *
    * Flow:
    * 1. Cashier clicks "Sign up with Google" on login page
    * 2. Google OAuth returns profile to frontend
@@ -385,8 +453,14 @@ export class AuthController {
   @Post('link-google-cashier')
   @SkipCsrf()
   async linkGoogleToCashier(
-    @Body() body: {
-      googleProfile: { googleId: string; email: string; name: string; avatarUrl?: string };
+    @Body()
+    body: {
+      googleProfile: {
+        googleId: string;
+        email: string;
+        name: string;
+        avatarUrl?: string;
+      };
       pin: string;
       shopId: string;
     },
@@ -402,7 +476,7 @@ export class AuthController {
       ipAddress,
       userAgent,
     );
-    
+
     if (result.tokens) {
       this.cookieService.setAuthCookies(
         res,
@@ -411,7 +485,7 @@ export class AuthController {
         result.tokens.csrfToken,
       );
     }
-    
+
     return {
       user: result.user,
       shop: result.shop,
@@ -431,22 +505,21 @@ export class AuthController {
    * Request password reset - sends email with reset link
    */
   @Post('forgot-password')
-  async forgotPassword(
-    @Body() body: { email: string },
-    @Req() req: any,
-  ) {
+  async forgotPassword(@Body() body: { email: string }, @Req() req: any) {
     const ipAddress = req.ip || req.connection.remoteAddress;
     const userAgent = req.get('user-agent');
-    return this.authService.requestPasswordReset(body.email, ipAddress, userAgent);
+    return this.authService.requestPasswordReset(
+      body.email,
+      ipAddress,
+      userAgent,
+    );
   }
 
   /**
    * Reset password using token
    */
   @Post('reset-password')
-  async resetPassword(
-    @Body() body: { token: string; newPassword: string },
-  ) {
+  async resetPassword(@Body() body: { token: string; newPassword: string }) {
     return this.authService.resetPassword(body.token, body.newPassword);
   }
 
@@ -460,7 +533,7 @@ export class AuthController {
   async getSessions(@CurrentUser() user: any) {
     const sessions = await this.tokenService.getUserSessions(user.sub);
     return {
-      sessions: sessions.map(s => ({
+      sessions: sessions.map((s) => ({
         id: s.sessionId,
         deviceId: s.deviceId,
         deviceName: s.deviceName,
@@ -484,7 +557,10 @@ export class AuthController {
     @Param('sessionId') sessionId: string,
     @CurrentUser() user: any,
   ) {
-    await this.tokenService.terminateSession(sessionId, 'User requested termination');
+    await this.tokenService.terminateSession(
+      sessionId,
+      'User requested termination',
+    );
     return { message: 'Session terminated successfully' };
   }
 
@@ -494,8 +570,11 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Post('logout-all')
   async logoutAll(@CurrentUser() user: any) {
-    const count = await this.tokenService.revokeAllUserTokens(user.sub, 'User logged out from all devices');
-    return { 
+    const count = await this.tokenService.revokeAllUserTokens(
+      user.sub,
+      'User logged out from all devices',
+    );
+    return {
       message: 'Logged out from all devices',
       sessionsTerminated: count,
     };
@@ -506,14 +585,17 @@ export class AuthController {
    */
   @UseGuards(JwtAuthGuard)
   @Post('logout')
-  async logout(@CurrentUser() user: any, @Res({ passthrough: true }) res: Response) {
+  async logout(
+    @CurrentUser() user: any,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     if (user.sessionId) {
       await this.tokenService.terminateSession(user.sessionId, 'User logout');
     }
-    
+
     // Clear all auth cookies
     this.cookieService.clearAuthCookies(res);
-    
+
     return { message: 'Logged out successfully' };
   }
 
@@ -534,13 +616,19 @@ export class AuthController {
    */
   @UseGuards(JwtAuthGuard)
   @Post('logout-all')
-  async logoutAllDevices(@CurrentUser() user: any, @Res({ passthrough: true }) res: Response) {
-    const count = await this.tokenService.revokeAllUserTokens(user.sub, 'User logged out from all devices');
-    
+  async logoutAllDevices(
+    @CurrentUser() user: any,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const count = await this.tokenService.revokeAllUserTokens(
+      user.sub,
+      'User logged out from all devices',
+    );
+
     // Clear all auth cookies
     this.cookieService.clearAuthCookies(res);
-    
-    return { 
+
+    return {
       message: 'Logged out from all devices',
       sessionsTerminated: count,
     };
@@ -588,7 +676,12 @@ export class AuthController {
   @Post('verify-otp')
   @SkipCsrf()
   async verifyOtp(
-    @Body() body: { email: string; code: string; type?: 'registration' | 'password_reset' | 'email_verification' | 'login' },
+    @Body()
+    body: {
+      email: string;
+      code: string;
+      type?: 'registration' | 'password_reset' | 'email_verification' | 'login';
+    },
   ) {
     return this.otpService.verifyOtp(
       body.email,
@@ -670,7 +763,12 @@ export class AuthController {
   @Post('resend-otp')
   @SkipCsrf()
   async resendOtp(
-    @Body() body: { email: string; shopName: string; type?: 'registration' | 'password_reset' | 'email_verification' | 'login' },
+    @Body()
+    body: {
+      email: string;
+      shopName: string;
+      type?: 'registration' | 'password_reset' | 'email_verification' | 'login';
+    },
     @Req() req: any,
   ) {
     const ipAddress = req.ip || req.connection.remoteAddress;
@@ -689,10 +787,11 @@ export class AuthController {
    */
   @Post('check-email-verified')
   @SkipCsrf()
-  async checkEmailVerified(
-    @Body() body: { email: string },
-  ) {
-    const isVerified = await this.otpService.isEmailRecentlyVerified(body.email, 'registration');
+  async checkEmailVerified(@Body() body: { email: string }) {
+    const isVerified = await this.otpService.isEmailRecentlyVerified(
+      body.email,
+      'registration',
+    );
     return { verified: isVerified };
   }
 }
