@@ -219,33 +219,12 @@ export class ShopsService {
     return this.shopModel.findOne({ phone }).exec();
   }
 
-  async updateStatus(
-    shopId: string,
-    status:
-      | 'pending'
-      | 'verified'
-      | 'active'
-      | 'suspended'
-      | 'rejected'
-      | 'flagged',
-    notes?: string,
-  ): Promise<ShopDocument | null> {
-    return this.shopModel
-      .findByIdAndUpdate(
-        new Types.ObjectId(shopId),
-        {
-          status,
-          verificationDate:
-            status === 'verified' || status === 'active'
-              ? new Date()
-              : undefined,
-          verificationNotes: notes,
-          updatedAt: new Date(),
-        },
-        { new: true },
-      )
-      .exec();
-  }
+  // P0-11B1: ShopsService.updateStatus and getPendingShops were REMOVED —
+  // their only callers were the removed legacy ShopsController routes, and
+  // cross-shop verification authority must exist in exactly one place: the
+  // canonical super-admin workflow (SuperAdminService.verifyShop et al.),
+  // which owns state-transition validation, verificationBy/verificationDate,
+  // audit logging and email notification.
 
   async incrementCashierCount(shopId: string): Promise<void> {
     const shop = await this.findById(shopId);
@@ -280,10 +259,6 @@ export class ShopsService {
       createdAt: shop.createdAt,
       onboardingComplete: shop.onboardingComplete,
     };
-  }
-
-  async getPendingShops(): Promise<ShopDocument[]> {
-    return this.shopModel.find({ status: 'pending' }).exec();
   }
 
   async getActiveShops(): Promise<ShopDocument[]> {

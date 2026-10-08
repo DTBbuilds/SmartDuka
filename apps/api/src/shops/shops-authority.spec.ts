@@ -10,12 +10,9 @@ import {
 import { Reflector } from '@nestjs/core';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { ROLES_KEY } from '../auth/decorators/roles.decorator';
-import {
-  ShopsController,
-  UpdateShopLanguageDto,
-  VerifyShopDto,
-} from './shops.controller';
+import { ShopsController, UpdateShopLanguageDto } from './shops.controller';
 import { ShopsService } from './shops.service';
+import { SuperAdminService } from '../super-admin/super-admin.service';
 import { UpdateShopDto } from './dto/update-shop.dto';
 import { CreateShopDto } from './dto/create-shop.dto';
 import {
@@ -339,8 +336,6 @@ describe('P0-11B shop authority', () => {
         completeOnboarding: jest.fn(),
         updateLanguage: jest.fn(),
         getStats: jest.fn(),
-        getPendingShops: jest.fn(async () => []),
-        updateStatus: jest.fn(async () => ({})),
       } as any;
       controller = new ShopsController(service, undefined);
     });
@@ -348,22 +343,23 @@ describe('P0-11B shop authority', () => {
     const rolesOf = (handler: () => any): string[] | undefined =>
       reflector.get(ROLES_KEY, handler as () => any);
 
-    it('verification, pending listing and shop creation require super_admin', () => {
-      expect(rolesOf(controller.verifyShop)).toEqual(['super_admin']);
-      expect(rolesOf(controller.getPendingShops)).toEqual(['super_admin']);
+    it('shop creation requires super_admin; no legacy verify/pending handlers exist', () => {
       expect(rolesOf(controller.create)).toEqual(['super_admin']);
+      // P0-11B1: the duplicate cross-shop surfaces were REMOVED — the
+      // controller prototype must not expose them at all.
+      const proto = Object.getOwnPropertyNames(ShopsController.prototype);
+      expect(proto).not.toContain('verifyShop');
+      expect(proto).not.toContain('getPendingShops');
+    });
+
+    it('complete-onboarding and language are SHOP-WIDE mutations — admin only', () => {
+      expect(rolesOf(controller.completeOnboarding)).toEqual(['admin']);
+      expect(rolesOf(controller.updateLanguage)).toEqual(['admin']);
     });
 
     it('ordinary shop updates require admin (never cashier)', () => {
       expect(rolesOf(controller.updateMyShop)).toEqual(['admin']);
       expect(rolesOf(controller.updateShop)).toEqual(['admin']);
-    });
-
-    it('GET /shops/pending is declared BEFORE GET /shops/:id (not shadowed)', () => {
-      const order = Object.getOwnPropertyNames(ShopsController.prototype);
-      expect(order.indexOf('getPendingShops')).toBeLessThan(
-        order.indexOf('getShop'),
-      );
     });
 
     it('RolesGuard: cashier cannot satisfy admin/super_admin routes; super_admin can', () => {
@@ -381,15 +377,19 @@ describe('P0-11B shop authority', () => {
         false,
       );
       expect(guard.canActivate(ctx('admin', controller.updateShop))).toBe(true);
-      expect(guard.canActivate(ctx('admin', controller.verifyShop))).toBe(
+      expect(
+        guard.canActivate(ctx('cashier', controller.completeOnboarding)),
+      ).toBe(false);
+      expect(
+        guard.canActivate(ctx('admin', controller.completeOnboarding)),
+      ).toBe(true);
+      expect(guard.canActivate(ctx('cashier', controller.updateLanguage))).toBe(
         false,
       );
-      expect(guard.canActivate(ctx('super_admin', controller.verifyShop))).toBe(
+      expect(guard.canActivate(ctx('admin', controller.updateLanguage))).toBe(
         true,
       );
-      expect(guard.canActivate(ctx(undefined, controller.verifyShop))).toBe(
-        false,
-      );
+      expect(guard.canActivate(ctx(undefined, controller.create))).toBe(false);
     });
 
     it('cashier shop mutation through PUT /shops/:id is blocked (403 via guard chain)', () => {
@@ -420,16 +420,13 @@ describe('P0-11B shop authority', () => {
       ).rejects.toBeInstanceOf(ForbiddenException);
     });
 
-    it('legacy verify route delegates to the single updateStatus primitive', async () => {
-      await controller.verifyShop('shopB', {
-        status: 'verified',
-        notes: 'n',
-      });
-      expect(service.updateStatus).toHaveBeenCalledWith(
-        'shopB',
-        'verified',
-        'n',
-      );
+    it('complete-onboarding and language target ONLY the JWT shop (route id never trusted)', async () => {
+      await controller.completeOnboarding({ shopId: 'shopA' } as any);
+      expect(service.completeOnboarding).toHaveBeenCalledWith('shopA');
+      await controller.updateLanguage({ language: 'sw' }, {
+        shopId: 'shopA',
+      } as any);
+      expect(service.updateLanguage).toHaveBeenCalledWith('shopA', 'sw');
     });
 
     it('language update uses a validated DTO class', async () => {
@@ -443,6 +440,77 @@ describe('P0-11B shop authority', () => {
           { language: 'fr' },
           { type: 'body', metatype: UpdateShopLanguageDto },
         ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+  });
+
+  describe('P0-11B1 canonical super-admin verification regression', () => {
+    it('canonical verifyShop: pending→active transition, verificationBy/Date, audit event', async () => {
+      const shopId = '507f1f77bcf86cd799439011';
+      const superAdminId = '507f1f77bcf86cd799439022';
+      const auditCreate = jest.fn(async () => ({}));
+      const capturedUpdate: any = {};
+      const shopModel: any = {
+        findById: jest.fn(() => ({
+          exec: async () => ({
+            _id: shopId,
+            status: 'pending',
+            email: 'a@x.co',
+          }),
+        })),
+        findByIdAndUpdate: jest.fn((_id: any, update: any) => {
+          Object.assign(capturedUpdate, update);
+          return {
+            exec: async () => ({ _id: shopId, ...update, email: 'a@x.co' }),
+          };
+        }),
+      };
+      const svc = new SuperAdminService(
+        shopModel,
+        {} as any, // userModel
+        { findOne: jest.fn(() => ({ exec: async () => null })) } as any, // subscriptionModel
+        {} as any, // planModel
+        {} as any, // connection
+        { create: auditCreate } as any, // auditLogService
+        undefined, // emailService (optional)
+        undefined, // cacheService (optional)
+      );
+
+      const result = await svc.verifyShop(shopId, superAdminId, 'looks good');
+
+      expect(result.status).toBe('active');
+      expect(capturedUpdate.status).toBe('active');
+      expect(capturedUpdate.verificationBy).toBeInstanceOf(Object);
+      expect(capturedUpdate.verificationDate).toBeInstanceOf(Date);
+      expect(auditCreate).toHaveBeenCalledTimes(1);
+      expect(auditCreate.mock.calls[0][0]).toMatchObject({
+        shopId,
+        performedBy: superAdminId,
+        action: 'verify',
+        oldValue: { status: 'pending' },
+        newValue: { status: 'active' },
+        notes: 'looks good',
+      });
+    });
+
+    it('canonical verifyShop rejects non-pending shops (state-transition validation)', async () => {
+      const shopId = '507f1f77bcf86cd799439011';
+      const svc = new SuperAdminService(
+        {
+          findById: jest.fn(() => ({
+            exec: async () => ({ _id: shopId, status: 'suspended' }),
+          })),
+        } as any,
+        {} as any,
+        { findOne: jest.fn(() => ({ exec: async () => null })) } as any,
+        {} as any,
+        {} as any,
+        { create: jest.fn() } as any,
+        undefined,
+        undefined,
+      );
+      await expect(
+        svc.verifyShop(shopId, '507f1f77bcf86cd799439022', undefined),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
   });

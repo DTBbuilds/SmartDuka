@@ -18,27 +18,11 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsIn } from 'class-validator';
 
 export class UpdateShopLanguageDto {
   @IsIn(['en', 'sw'])
   language: 'en' | 'sw';
-}
-
-export class VerifyShopDto {
-  @IsIn(['pending', 'verified', 'active', 'suspended', 'rejected', 'flagged'])
-  status:
-    | 'pending'
-    | 'verified'
-    | 'active'
-    | 'suspended'
-    | 'rejected'
-    | 'flagged';
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(500)
-  notes?: string;
 }
 
 @Controller('shops')
@@ -73,15 +57,13 @@ export class ShopsController {
     return this.shopsService.create(user.sub, dto);
   }
 
-  // P0-11B: must be declared BEFORE GET :id so 'pending' is not shadowed.
-  // Cross-tenant verification queues belong to super_admin only (canonical
-  // workflow: GET /super-admin/shops/pending).
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('super_admin')
-  @Get('pending')
-  async getPendingShops() {
-    return this.shopsService.getPendingShops();
-  }
+  // P0-11B1: the legacy GET /shops/pending and PUT /shops/:id/verify routes
+  // were REMOVED — cross-shop verification/queue authority is held by exactly
+  // ONE workflow: the canonical super-admin controller
+  // (GET /super-admin/shops/pending, PUT /super-admin/shops/:id/verify|
+  // reject|suspend|reactivate|flag|unflag) with state-transition validation,
+  // verificationBy/verificationDate, audit logging and email notification.
+  // ShopsController exposes no cross-shop administrative surface.
 
   @UseGuards(JwtAuthGuard)
   @Get('my-shop')
@@ -157,13 +139,24 @@ export class ShopsController {
     return result;
   }
 
-  @UseGuards(JwtAuthGuard)
+  // P0-11B1: complete-onboarding is a SHOP-WIDE configuration mutation — the
+  // intended actor is the shop admin who just registered the shop. Cashiers
+  // are denied; the target shop is always the JWT shop (route id never
+  // trusted), so an admin can never complete onboarding for another shop.
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   @Post(':id/complete-onboarding')
   async completeOnboarding(@CurrentUser() user: Record<string, any>) {
     return this.shopsService.completeOnboarding(user.shopId);
   }
 
-  @UseGuards(JwtAuthGuard)
+  // P0-11B1: language on the Shop document is SHOP-WIDE configuration (it
+  // drives receipts/invoices/emails for the whole shop), not a per-user
+  // preference — admin-only. Per-cashier language preference, if product
+  // requirements later demand it, must be a separate user-level setting
+  // (P1 design work), never a Shop-record write from a cashier session.
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   @Put(':id/language')
   async updateLanguage(
     @Body() dto: UpdateShopLanguageDto,
@@ -185,18 +178,5 @@ export class ShopsController {
       );
     }
     return this.shopsService.getStats(id);
-  }
-
-  // P0-11B: legacy verification route retained for compatibility only.
-  // Verification authority is EXCLUSIVELY super_admin — the canonical
-  // workflow lives at PUT /super-admin/shops/:id/verify|reject|suspend|
-  // reactivate (with audit history). Ordinary shop admins can never verify,
-  // activate, or alter the verification state of any shop — including their
-  // own — through this route.
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('super_admin')
-  @Put(':id/verify')
-  async verifyShop(@Param('id') id: string, @Body() body: VerifyShopDto) {
-    return this.shopsService.updateStatus(id, body.status, body.notes);
   }
 }
