@@ -139,7 +139,7 @@ function AuthCallbackContent() {
       }
 
       if (decoded.shopId) {
-        await fetchShopAndRedirect(token, decoded.shopId);
+        await fetchShopAndRedirect(token);
       } else {
         setStatus('success');
         setMessage('Login successful! Redirecting...');
@@ -157,9 +157,9 @@ function AuthCallbackContent() {
     }
   };
 
-  const fetchShopAndRedirect = async (token: string, shopId: string) => {
+  const fetchShopAndRedirect = async (token: string) => {
     try {
-      const res = await fetch(`${config.apiUrl}/shops/${shopId}`, {
+      const res = await fetch(`${config.apiUrl}/shops/my-shop`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },

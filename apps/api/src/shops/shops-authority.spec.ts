@@ -350,6 +350,9 @@ describe('P0-11B shop authority', () => {
       const proto = Object.getOwnPropertyNames(ShopsController.prototype);
       expect(proto).not.toContain('verifyShop');
       expect(proto).not.toContain('getPendingShops');
+      // P0-11B2: the catch-all GET /shops/:id was REMOVED — it let removed
+      // admin paths fall through into a generic single-segment route.
+      expect(proto).not.toContain('getShop');
     });
 
     it('complete-onboarding and language are SHOP-WIDE mutations — admin only', () => {

@@ -549,7 +549,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!token || !shop?.id) return null;
     
     try {
-      const res = await fetch(`${config.apiUrl}/shops/${shop.id}`, {
+      const res = await fetch(`${config.apiUrl}/shops/my-shop`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,

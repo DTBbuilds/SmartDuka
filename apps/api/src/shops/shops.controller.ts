@@ -76,11 +76,11 @@ export class ShopsController {
     return this.shopsService.findByOwner(user.sub);
   }
 
-  @UseGuards(JwtAuthGuard)
-  @Get(':id')
-  async getShop(@CurrentUser() user: Record<string, any>) {
-    return this.shopsService.findById(user.shopId);
-  }
+  // P0-11B2: the generic GET /shops/:id route was REMOVED — it captured any
+  // single-segment path (including removed admin routes like /shops/pending)
+  // and silently returned the caller's own shop. The canonical self-shop
+  // read is GET /shops/my-shop above; cross-shop reads belong exclusively to
+  // the super-admin controller (GET /super-admin/shops/:id).
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
