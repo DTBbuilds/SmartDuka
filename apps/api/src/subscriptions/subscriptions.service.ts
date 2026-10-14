@@ -1556,54 +1556,13 @@ export class SubscriptionsService {
     return invoice;
   }
 
-  /**
-   * Mark invoice as paid
-   */
-  async markInvoicePaid(
-    invoiceId: string,
-    paymentMethod: string,
-    paymentReference: string,
-    mpesaReceiptNumber?: string,
-  ): Promise<void> {
-    const invoice = await this.invoiceModel.findById(invoiceId);
-    if (!invoice) {
-      throw new NotFoundException('Invoice not found');
-    }
-
-    invoice.status = InvoiceStatus.PAID;
-    invoice.paidAt = new Date();
-    invoice.paymentMethod = paymentMethod;
-    invoice.paymentReference = paymentReference;
-    invoice.mpesaReceiptNumber = mpesaReceiptNumber;
-
-    await invoice.save();
-
-    // Update subscription payment tracking
-    const subscription = await this.subscriptionModel.findById(invoice.subscriptionId);
-    if (subscription) {
-      subscription.lastPaymentDate = new Date();
-      subscription.lastPaymentAmount = invoice.totalAmount;
-      subscription.lastPaymentMethod = paymentMethod;
-      subscription.lastPaymentReference = paymentReference;
-      subscription.failedPaymentAttempts = 0;
-
-      // If this was a setup payment, mark setup as paid
-      if (invoice.type === InvoiceType.SETUP) {
-        subscription.setupPaid = true;
-        subscription.setupPaidAt = new Date();
-        subscription.setupAmount = invoice.totalAmount;
-      }
-
-      // If subscription was past due, reactivate it
-      if (subscription.status === SubscriptionStatus.PAST_DUE) {
-        subscription.status = SubscriptionStatus.ACTIVE;
-      }
-
-      await subscription.save();
-    }
-
-    this.logger.log(`Invoice ${invoice.invoiceNumber} marked as paid`);
-  }
+  // P0-11C: markInvoicePaid was REMOVED — its only caller was the legacy
+  // POST /subscriptions/payments/confirm/:invoiceId endpoint, which let any
+  // shop admin settle an arbitrary invoice with a client-supplied reference.
+  // Every invoice-paid transition now has channel-appropriate provenance:
+  // M-Pesa STK callback (provider truth), super-admin manual verification
+  // (verifyAndActivatePayment, PENDING_VERIFICATION-gated), or canonical
+  // Stripe settlement (InvoicePaymentAuthorityService.settleStripeSuccess).
 
   /**
    * Record failed payment attempt

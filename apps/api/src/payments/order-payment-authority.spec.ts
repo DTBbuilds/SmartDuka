@@ -1014,6 +1014,12 @@ describe('P0-10C external payment initiation authority', () => {
         orderModel as any,
         paymentTxns,
         authority,
+        {
+          // P0-11C dependency — POS-order tests never hit the subscription
+          // invoice settlement path; provide an inert stub.
+          settleStripeSuccess: jest.fn(async () => null),
+          releaseInvoiceAttempt: jest.fn(async () => undefined),
+        } as any,
       );
     });
 

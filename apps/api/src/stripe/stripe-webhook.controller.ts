@@ -19,11 +19,14 @@ import { StripePaymentService } from './services/stripe-payment.service';
 import { StripeSubscriptionService } from './services/stripe-subscription.service';
 import { StripeCustomerService } from './services/stripe-customer.service';
 import { StripeConnectService } from './services/stripe-connect.service';
-import { StripeWebhookEvent, StripeWebhookEventDocument } from './schemas/stripe-webhook-event.schema';
+import {
+  StripeWebhookEvent,
+  StripeWebhookEventDocument,
+} from './schemas/stripe-webhook-event.schema';
 
 /**
  * Stripe Webhook Controller
- * 
+ *
  * Handles all Stripe webhook events for real-time payment updates.
  * Ensures idempotent processing and proper database sync.
  */
@@ -45,7 +48,7 @@ export class StripeWebhookController {
 
   /**
    * Handle Stripe webhook events
-   * 
+   *
    * This endpoint receives all Stripe webhook events and routes them
    * to appropriate handlers. It ensures idempotent processing by
    * storing event IDs and checking for duplicates.
@@ -82,7 +85,9 @@ export class StripeWebhookController {
         this.webhookSecret,
       );
     } catch (err: any) {
-      this.logger.error(`Webhook signature verification failed: ${err.message}`);
+      this.logger.error(
+        `Webhook signature verification failed: ${err.message}`,
+      );
       return { received: true };
     }
 
@@ -92,7 +97,9 @@ export class StripeWebhookController {
     });
 
     if (existingEvent?.processed) {
-      this.logger.log(`Duplicate event ${event.id} already processed, skipping`);
+      this.logger.log(
+        `Duplicate event ${event.id} already processed, skipping`,
+      );
       return { received: true };
     }
 
@@ -121,9 +128,13 @@ export class StripeWebhookController {
         },
       );
 
-      this.logger.log(`Successfully processed webhook event: ${event.type} (${event.id})`);
+      this.logger.log(
+        `Successfully processed webhook event: ${event.type} (${event.id})`,
+      );
     } catch (err: any) {
-      this.logger.error(`Error processing webhook event ${event.id}: ${err.message}`);
+      this.logger.error(
+        `Error processing webhook event ${event.id}: ${err.message}`,
+      );
 
       // Store error for retry
       await this.webhookEventModel.updateOne(
@@ -133,6 +144,13 @@ export class StripeWebhookController {
           $inc: { retryCount: 1 },
         },
       );
+
+      // P0-11C: rethrow → non-2xx → Stripe redelivers the event. The durable
+      // event record (processed:false) plus the idempotent handlers make a
+      // redelivery safe, and authenticated status retrieval is the secondary
+      // convergence path. A swallowed error here would leave settlement
+      // permanently unrecoverable after a DB crash.
+      throw err;
     }
 
     return { received: true };
@@ -214,7 +232,9 @@ export class StripeWebhookController {
   private async handleInvoicePaid(event: Stripe.Event): Promise<void> {
     const invoice = event.data.object as Stripe.Invoice;
 
-    this.logger.log(`Invoice ${invoice.id} paid for subscription ${(invoice as any).subscription}`);
+    this.logger.log(
+      `Invoice ${invoice.id} paid for subscription ${(invoice as any).subscription}`,
+    );
 
     // The subscription service will handle updating the subscription status
     // when it receives the subscription.updated event
@@ -240,13 +260,16 @@ export class StripeWebhookController {
     const charge = event.data.object as Stripe.Charge;
 
     if (charge.payment_intent) {
-      const paymentIntentId = typeof charge.payment_intent === 'string'
-        ? charge.payment_intent
-        : charge.payment_intent.id;
+      const paymentIntentId =
+        typeof charge.payment_intent === 'string'
+          ? charge.payment_intent
+          : charge.payment_intent.id;
 
       // Update payment with receipt URL
       // This is handled in the payment service when syncing status
-      this.logger.log(`Charge ${charge.id} succeeded for payment intent ${paymentIntentId}`);
+      this.logger.log(
+        `Charge ${charge.id} succeeded for payment intent ${paymentIntentId}`,
+      );
     }
   }
 
@@ -278,7 +301,9 @@ export class StripeWebhookController {
         `Connect account ${account.id} updated: charges_enabled=${account.charges_enabled}, payouts_enabled=${account.payouts_enabled}`,
       );
     } catch (err: any) {
-      this.logger.error(`Failed to apply account.updated for ${account.id}: ${err.message}`);
+      this.logger.error(
+        `Failed to apply account.updated for ${account.id}: ${err.message}`,
+      );
     }
   }
 
@@ -290,14 +315,20 @@ export class StripeWebhookController {
     const data = event.data.object as any;
     const accountId: string = event.account || data?.id || '';
     if (!accountId) {
-      this.logger.warn('Received account.application.deauthorized without an account ID');
+      this.logger.warn(
+        'Received account.application.deauthorized without an account ID',
+      );
       return;
     }
     try {
       await this.connectService.applyDeauthorization(accountId);
-      this.logger.log(`Connect account ${accountId} deauthorized from their dashboard`);
+      this.logger.log(
+        `Connect account ${accountId} deauthorized from their dashboard`,
+      );
     } catch (err: any) {
-      this.logger.error(`Failed to handle deauthorization for ${accountId}: ${err.message}`);
+      this.logger.error(
+        `Failed to handle deauthorization for ${accountId}: ${err.message}`,
+      );
     }
   }
 }

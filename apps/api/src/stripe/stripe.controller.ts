@@ -19,6 +19,7 @@ import { StripePaymentService } from './services/stripe-payment.service';
 import { StripeSubscriptionService } from './services/stripe-subscription.service';
 import { StripeAnalyticsService } from './services/stripe-analytics.service';
 import { OrderPaymentAuthorityService } from '../payments/services/order-payment-authority.service';
+import { CreateSubscriptionInvoicePaymentDto } from './dto/subscription-invoice-payment.dto';
 import { toMinorUnits } from '../common/currency';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -332,7 +333,11 @@ export class StripeController {
   // ============================================
 
   /**
-   * Create payment intent for subscription invoice
+   * Create payment intent for subscription invoice.
+   *
+   * P0-11C: invoice-authoritative. The client submits only the canonical
+   * invoiceId (plus optional consistency assertions); amount/currency are
+   * derived from the stored tenant-owned invoice and never from the request.
    */
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
@@ -342,20 +347,14 @@ export class StripeController {
   @ApiOperation({ summary: 'Create payment intent for subscription' })
   async createSubscriptionPayment(
     @CurrentUser() user: JwtPayload,
-    @Body()
-    dto: {
-      invoiceId: string;
-      invoiceNumber: string;
-      amount: number;
-      currency?: string;
-      description?: string;
-    },
+    @Body() dto: CreateSubscriptionInvoicePaymentDto,
   ): Promise<{
     success: boolean;
     paymentIntentId: string;
     clientSecret: string;
     amount: number;
     currency: string;
+    invoiceNumber: string;
   }> {
     if (!this.stripeService.isStripeConfigured()) {
       throw new BadRequestException('Stripe is not configured');
@@ -364,11 +363,13 @@ export class StripeController {
     const result = await this.paymentService.createSubscriptionPayment({
       shopId: user.shopId,
       invoiceId: dto.invoiceId,
-      invoiceNumber: dto.invoiceNumber,
-      amount: dto.amount,
-      currency: dto.currency,
       customerEmail: user.email,
-      description: dto.description,
+      client: {
+        amount: dto.amount,
+        currency: dto.currency,
+        invoiceNumber: dto.invoiceNumber,
+        description: dto.description,
+      },
     });
 
     return {

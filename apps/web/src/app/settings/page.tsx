@@ -2612,6 +2612,9 @@ function SubscriptionSettingsTab() {
                                 setStripePublishableKey(stripeConfig.publishableKey);
 
                                 // Create payment intent for subscription
+                                // P0-11C: the browser only submits the canonical
+                                // invoice identity — amount/currency are derived
+                                // server-side from the stored invoice.
                                 const res = await fetch(`${config.apiUrl}/stripe/subscription/create-payment`, {
                                   method: 'POST',
                                   headers: {
@@ -2620,10 +2623,7 @@ function SubscriptionSettingsTab() {
                                   },
                                   body: JSON.stringify({
                                     invoiceId: selectedInvoiceData.id,
-                                    invoiceNumber: selectedInvoiceData.invoiceNumber || 'SUB',
-                                    amount: Math.round(selectedInvoiceData.totalAmount * 100),
-                                    currency: 'kes',
-                                    description: selectedInvoiceData.description,
+                                    invoiceNumber: selectedInvoiceData.invoiceNumber,
                                   }),
                                 });
                                 const data = await res.json();

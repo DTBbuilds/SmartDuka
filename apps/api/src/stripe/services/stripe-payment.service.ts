@@ -3,6 +3,7 @@ import {
   Logger,
   NotFoundException,
   BadRequestException,
+  HttpException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
@@ -14,6 +15,7 @@ import { StripeConnectService } from './stripe-connect.service';
 import { Order, OrderDocument } from '../../sales/schemas/order.schema';
 import { PaymentTransactionService } from '../../payments/services/payment-transaction.service';
 import { OrderPaymentAuthorityService } from '../../payments/services/order-payment-authority.service';
+import { InvoicePaymentAuthorityService } from '../../subscriptions/services/invoice-payment-authority.service';
 import { fromMinorUnits } from '../../common/currency';
 import {
   StripePayment,
@@ -48,6 +50,7 @@ export class StripePaymentService {
     private readonly orderModel: Model<OrderDocument>,
     private readonly paymentTransactionService: PaymentTransactionService,
     private readonly orderPaymentAuthority: OrderPaymentAuthorityService,
+    private readonly invoicePaymentAuthority: InvoicePaymentAuthorityService,
   ) {}
 
   /**
@@ -202,132 +205,226 @@ export class StripePaymentService {
   }
 
   /**
-   * Create a payment intent for subscription/invoice payment
+   * Create a payment intent for a subscription invoice.
    *
-   * ACID Properties:
-   * - Atomicity: Payment intent and local record created together
-   * - Consistency: Validates amount and customer before creating payment
-   * - Isolation: Uses idempotency keys to prevent duplicate payments
-   * - Durability: Saved to local DB with Stripe as source of truth
+   * P0-11C — INVOICE-AUTHORITATIVE, DURABLY IDEMPOTENT.
+   *
+   * The invoice is the only payment authority: identity is resolved as
+   * {_id: invoiceId, shopId: caller's JWT shopId} and amount/currency are
+   * derived from the stored invoice (totalAmount → toMinorUnits(currency)).
+   * Client-supplied amount/currency/invoiceNumber are optional consistency
+   * assertions; a mismatch rejects before any provider call.
+   *
+   * Attempt lifecycle (InvoicePaymentAuthorityService):
+   *  - atomic claim on the invoice document → exactly one active attempt;
+   *  - deterministic idempotency key `subpay_<invoiceId>_<seq>` — retried
+   *    HTTP requests, lost responses and provider timeouts all converge on
+   *    the same PaymentIntent instead of minting a new chargeable identity;
+   *  - a bound attempt reuses its intent ONLY after provider re-verification
+   *    (status usable + amount/currency/invoice/tenant match);
+   *  - provider-terminal outcomes (canceled/failed) release the slot so a
+   *    retry claims a fresh attempt; ambiguous errors leave the claim intact.
    */
   async createSubscriptionPayment(params: {
     shopId: string;
-    invoiceId?: string; // Optional - may not exist for pending upgrades
-    invoiceNumber: string;
-    amount: number;
-    currency?: string;
+    invoiceId: string;
     customerEmail: string;
-    description?: string;
+    client?: {
+      amount?: number;
+      currency?: string;
+      invoiceNumber?: string;
+      description?: string;
+    };
   }): Promise<{
     paymentIntentId: string;
     clientSecret: string;
     amount: number;
     currency: string;
+    invoiceNumber: string;
   }> {
-    const currency = params.currency || 'kes';
+    return this.initiateInvoicePaymentAttempt(params, 0);
+  }
 
-    // Validate minimum amount
-    const validation = this.stripeService.validateMinimumAmount(
-      params.amount,
-      currency,
-    );
-    if (!validation.valid) {
-      throw new BadRequestException(validation.message);
-    }
-
-    // Check for existing payment intent for this invoice to ensure idempotency
-    const existingPayment = await this.paymentModel.findOne({
-      shopId: new Types.ObjectId(params.shopId),
-      'metadata.invoiceNumber': params.invoiceNumber,
-      status: {
-        $in: [
-          StripePaymentStatus.REQUIRES_PAYMENT_METHOD,
-          StripePaymentStatus.REQUIRES_ACTION,
-        ],
-      },
-    });
-
-    if (existingPayment) {
-      this.logger.log(
-        `Returning existing payment intent ${existingPayment.stripePaymentIntentId} for invoice ${params.invoiceNumber}`,
-      );
-      return {
-        paymentIntentId: existingPayment.stripePaymentIntentId,
-        clientSecret: existingPayment.clientSecret!,
-        amount: existingPayment.amount,
-        currency: existingPayment.currency,
+  private async initiateInvoicePaymentAttempt(
+    params: {
+      shopId: string;
+      invoiceId: string;
+      customerEmail: string;
+      client?: {
+        amount?: number;
+        currency?: string;
+        invoiceNumber?: string;
+        description?: string;
       };
+    },
+    depth: number,
+  ): Promise<{
+    paymentIntentId: string;
+    clientSecret: string;
+    amount: number;
+    currency: string;
+    invoiceNumber: string;
+  }> {
+    if (depth > 2) {
+      throw new BadRequestException(
+        'Unable to establish a payment attempt for this invoice',
+      );
     }
 
-    // Get or create customer
+    const claim = await this.invoicePaymentAuthority.authorizeStripeInitiation(
+      params.shopId,
+      params.invoiceId,
+      params.client,
+    );
+    const { invoice, amountMinor, currency } = claim;
+    const currencyLower = currency.toLowerCase();
+
+    // Existing attempt already bound to a provider intent → reuse only after
+    // provider re-verification (retry / lost-response recovery path).
+    if (claim.boundPaymentIntentId) {
+      const intent = await this.stripeService.retrievePaymentIntent(
+        claim.boundPaymentIntentId,
+      );
+      const bindingOk =
+        intent.amount === amountMinor &&
+        intent.currency === currencyLower &&
+        intent.metadata?.invoiceId === params.invoiceId &&
+        intent.metadata?.shopId === params.shopId;
+
+      if (intent.status === 'succeeded' && bindingOk) {
+        // Already paid at the provider — converge the invoice and report.
+        await this.invoicePaymentAuthority.settleStripeSuccess({
+          invoiceId: params.invoiceId,
+          shopId: params.shopId,
+          paymentIntentId: intent.id,
+          stripeChargeId: intent.latest_charge as string | undefined,
+          amountMinor: intent.amount,
+          currency: intent.currency,
+        });
+        throw new BadRequestException('Invoice is already paid');
+      }
+
+      if (
+        bindingOk &&
+        [
+          'requires_payment_method',
+          'requires_confirmation',
+          'requires_action',
+          'processing',
+        ].includes(intent.status) &&
+        intent.client_secret
+      ) {
+        return {
+          paymentIntentId: intent.id,
+          clientSecret: intent.client_secret,
+          amount: intent.amount,
+          currency: intent.currency,
+          invoiceNumber: invoice.invoiceNumber,
+        };
+      }
+
+      // Provider-terminal or foreign/mismatched intent — never reuse it.
+      await this.invoicePaymentAuthority.releaseStripeAttempt(
+        params.invoiceId,
+        claim.attemptSeq,
+        intent.status === 'canceled' ? 'cancelled' : 'failed',
+        bindingOk
+          ? `provider status ${intent.status}`
+          : 'provider intent binding mismatch',
+      );
+      return this.initiateInvoicePaymentAttempt(params, depth + 1);
+    }
+
+    // Fresh claim (or an unbound attempt recovered after a lost response):
+    // the deterministic key makes Stripe return the SAME intent if this
+    // attempt already reached the provider.
     const customer = await this.customerService.getOrCreateCustomer({
       shopId: params.shopId,
       email: params.customerEmail,
     });
 
-    // Check if invoiceId is a valid ObjectId (24 hex chars)
-    const isValidObjectId =
-      params.invoiceId && /^[a-fA-F0-9]{24}$/.test(params.invoiceId);
+    try {
+      const paymentIntent = await this.stripeService.createPaymentIntent({
+        amount: amountMinor,
+        currency: currencyLower,
+        customerId: customer.stripeCustomerId,
+        description:
+          params.client?.description ||
+          `Subscription Payment - Invoice ${invoice.invoiceNumber}`,
+        receiptEmail: params.customerEmail,
+        metadata: {
+          shopId: params.shopId,
+          invoiceId: params.invoiceId,
+          invoiceNumber: invoice.invoiceNumber,
+          type: StripePaymentType.SUBSCRIPTION,
+          source: 'smartduka_subscription',
+          attemptSeq: String(claim.attemptSeq),
+        },
+        idempotencyKey: claim.idempotencyKey,
+      });
 
-    // Generate idempotency key
-    const idempotencyKey = this.generateIdempotencyKey(
-      params.shopId,
-      params.invoiceNumber,
-      'subscription',
-    );
-
-    // Create payment intent with idempotency
-    const paymentIntent = await this.stripeService.createPaymentIntent({
-      amount: params.amount,
-      currency,
-      customerId: customer.stripeCustomerId,
-      description:
-        params.description ||
-        `Subscription Payment - Invoice ${params.invoiceNumber}`,
-      receiptEmail: params.customerEmail,
-      metadata: {
-        shopId: params.shopId,
-        invoiceId: params.invoiceId || '',
-        invoiceNumber: params.invoiceNumber,
-        type: StripePaymentType.SUBSCRIPTION,
-        source: 'smartduka_subscription',
-      },
-      idempotencyKey,
-    });
-
-    // Save to local database
-    const payment = new this.paymentModel({
-      stripePaymentIntentId: paymentIntent.id,
-      stripeCustomerId: customer.stripeCustomerId,
-      shopId: new Types.ObjectId(params.shopId),
-      ...(isValidObjectId && {
+      // Persist the provider identity BEFORE binding so webhook/status
+      // convergence can always resolve the canonical invoice.
+      const payment = new this.paymentModel({
+        stripePaymentIntentId: paymentIntent.id,
+        stripeCustomerId: customer.stripeCustomerId,
+        shopId: new Types.ObjectId(params.shopId),
         invoiceId: new Types.ObjectId(params.invoiceId),
-      }),
-      paymentType: StripePaymentType.SUBSCRIPTION,
-      amount: params.amount,
-      currency,
-      status: this.mapStripeStatus(paymentIntent.status),
-      description: params.description,
-      clientSecret: paymentIntent.client_secret,
-      receiptEmail: params.customerEmail,
-      metadata: {
-        invoiceNumber: params.invoiceNumber,
-        idempotencyKey,
-      },
-    });
+        paymentType: StripePaymentType.SUBSCRIPTION,
+        amount: amountMinor,
+        currency: currencyLower,
+        status: this.mapStripeStatus(paymentIntent.status),
+        description: params.client?.description,
+        clientSecret: paymentIntent.client_secret,
+        receiptEmail: params.customerEmail,
+        metadata: {
+          invoiceNumber: invoice.invoiceNumber,
+          idempotencyKey: claim.idempotencyKey,
+          attemptSeq: String(claim.attemptSeq),
+        },
+      });
+      // A retry may return the pre-existing intent → the row may already
+      // exist (stripePaymentIntentId is unique) — upsert rather than fail.
+      await this.paymentModel
+        .updateOne(
+          { stripePaymentIntentId: paymentIntent.id },
+          { $setOnInsert: payment.toObject() },
+          { upsert: true },
+        )
+        .exec();
 
-    await payment.save();
+      await this.invoicePaymentAuthority.bindStripeIntent(
+        params.invoiceId,
+        claim.attemptSeq,
+        paymentIntent.id,
+      );
 
-    this.logger.log(
-      `Created subscription payment intent ${paymentIntent.id} for invoice ${params.invoiceNumber} (shop: ${params.shopId})`,
-    );
+      this.logger.log(
+        `Created subscription payment intent ${paymentIntent.id} for invoice ${invoice.invoiceNumber} ` +
+          `(shop: ${params.shopId}, attempt ${claim.attemptSeq})`,
+      );
 
-    return {
-      paymentIntentId: paymentIntent.id,
-      clientSecret: paymentIntent.client_secret!,
-      amount: params.amount,
-      currency,
-    };
+      return {
+        paymentIntentId: paymentIntent.id,
+        clientSecret: paymentIntent.client_secret!,
+        amount: amountMinor,
+        currency: currencyLower,
+        invoiceNumber: invoice.invoiceNumber,
+      };
+    } catch (err) {
+      // Definitive pre-provider rejection → release the claim so a retry may
+      // claim a fresh attempt. Ambiguous failures (network/5xx — the intent
+      // may exist) keep the claim: the deterministic key recovers it.
+      if (err instanceof HttpException && err.getStatus() < 500) {
+        await this.invoicePaymentAuthority.releaseStripeAttempt(
+          params.invoiceId,
+          claim.attemptSeq,
+          'failed',
+          err.message,
+        );
+      }
+      throw err;
+    }
   }
 
   /**
@@ -384,6 +481,11 @@ export class StripePaymentService {
       paymentIntent.status,
       paymentIntent.latest_charge as string | undefined,
     );
+
+    // P0-11C: the same trusted provider truth settles a subscription invoice
+    // — this is the durable reconciliation path when a webhook delivery was
+    // lost or its processing failed.
+    await this.convergeInvoiceFromProviderTruth(payment, paymentIntent);
 
     return payment;
   }
@@ -551,6 +653,101 @@ export class StripePaymentService {
         paymentIntent.status,
         paymentIntent.latest_charge as string | undefined,
       );
+      // P0-11C: converge a bound subscription invoice (or release the attempt
+      // slot on provider-terminal failure).
+      await this.convergeInvoiceFromProviderTruth(payment, paymentIntent);
+    } else if (
+      paymentIntent.metadata?.type === StripePaymentType.SUBSCRIPTION &&
+      paymentIntent.metadata?.invoiceId &&
+      paymentIntent.metadata?.shopId
+    ) {
+      // Lost-local-record recovery: the intent metadata still carries the
+      // canonical binding — settle directly from provider truth.
+      await this.convergeInvoiceFromProviderTruth(null, paymentIntent);
+    }
+  }
+
+  /**
+   * P0-11C — PROVIDER-TRUTH INVOICE CONVERGENCE
+   *
+   * Called from the verified webhook handler AND authenticated server-side
+   * retrieval (syncPaymentStatus). Only Stripe-observed truth mutates the
+   * canonical invoice — a browser success callback never settles billing.
+   *   - 'succeeded' → canonical settlement primitive: binding, amount and
+   *     currency are re-verified against the stored invoice before the
+   *     atomic PAID transition; side effects run exactly once.
+   *   - 'canceled' / 'payment_failed' → provider-terminal → the invoice's
+   *     active card attempt is released so a retry may claim a fresh one.
+   *   - anything else → unresolved: the attempt stays active.
+   * When the persisted StripePayment row is missing (lost local response),
+   * the provider metadata binding is used as the recovery path — settlement
+   * still re-verifies amount/currency/tenant against the invoice.
+   */
+  private async convergeInvoiceFromProviderTruth(
+    payment: StripePaymentDocument | null,
+    paymentIntent: Stripe.PaymentIntent,
+  ): Promise<void> {
+    try {
+      const isSubscription =
+        payment?.paymentType === StripePaymentType.SUBSCRIPTION ||
+        paymentIntent.metadata?.type === StripePaymentType.SUBSCRIPTION;
+      if (!isSubscription) return;
+
+      const rowInvoiceId = payment?.invoiceId?.toString();
+      const rowShopId = payment?.shopId?.toString();
+      const metaInvoiceId = paymentIntent.metadata?.invoiceId;
+      const metaShopId = paymentIntent.metadata?.shopId;
+
+      // Binding agreement: when both the persisted payment row and the
+      // provider metadata carry the binding they MUST agree — metadata alone
+      // is never permission to settle a different invoice/tenant.
+      if (
+        (rowInvoiceId && metaInvoiceId && rowInvoiceId !== metaInvoiceId) ||
+        (rowShopId && metaShopId && rowShopId !== metaShopId)
+      ) {
+        this.logger.error(
+          `Refusing invoice convergence for intent ${paymentIntent.id}: ` +
+            `payment-row binding (${rowShopId}/${rowInvoiceId}) disagrees with ` +
+            `provider metadata (${metaShopId}/${metaInvoiceId})`,
+        );
+        return;
+      }
+
+      const invoiceId = rowInvoiceId || metaInvoiceId;
+      const shopId = rowShopId || metaShopId;
+      if (!invoiceId || !shopId) return;
+
+      if (paymentIntent.status === 'succeeded') {
+        await this.invoicePaymentAuthority.settleStripeSuccess({
+          invoiceId,
+          shopId,
+          paymentIntentId: paymentIntent.id,
+          stripeChargeId: paymentIntent.latest_charge as string | undefined,
+          amountMinor: paymentIntent.amount,
+          currency: paymentIntent.currency,
+        });
+        return;
+      }
+
+      if (
+        paymentIntent.status === 'canceled' ||
+        (paymentIntent.last_payment_error &&
+          paymentIntent.status === 'requires_payment_method')
+      ) {
+        await this.invoicePaymentAuthority.releaseStripeAttemptByIntent(
+          paymentIntent.id,
+          paymentIntent.status === 'canceled' ? 'cancelled' : 'failed',
+          paymentIntent.last_payment_error?.message,
+        );
+      }
+    } catch (error: any) {
+      // Convergence failure must not fail webhook ack handling upstream —
+      // the durable webhook-event record + authenticated retrieval are the
+      // retry/convergence path. Logged loudly for reconciliation.
+      this.logger.error(
+        `Invoice convergence failed for Stripe intent ${paymentIntent.id}: ${error?.message}`,
+      );
+      throw error;
     }
   }
 

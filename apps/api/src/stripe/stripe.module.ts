@@ -14,6 +14,7 @@ import { Shop, ShopSchema } from '../shops/schemas/shop.schema';
 import { Order, OrderSchema } from '../sales/schemas/order.schema';
 import { OrderPaymentAuthorityService } from '../payments/services/order-payment-authority.service';
 import { PaymentsModule } from '../payments/payments.module';
+import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 import {
   StripeCustomer,
   StripeCustomerSchema,
@@ -42,6 +43,11 @@ export class StripeModule {
         // PaymentTransactionService (canonical order convergence on trusted
         // provider truth) is provided + exported by PaymentsModule.
         PaymentsModule,
+        // P0-11C: InvoicePaymentAuthorityService (tenant-bound invoice
+        // authority, durable attempt claims, canonical settlement) is
+        // provided + exported by SubscriptionsModule. One-directional:
+        // SubscriptionsModule does not import StripeModule.
+        SubscriptionsModule,
         MongooseModule.forFeature([
           { name: StripeCustomer.name, schema: StripeCustomerSchema },
           { name: StripePayment.name, schema: StripePaymentSchema },

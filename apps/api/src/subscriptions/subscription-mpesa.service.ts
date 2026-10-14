@@ -14,6 +14,10 @@ import {
   PaymentAttemptType,
 } from './schemas/payment-attempt.schema';
 import { Subscription, SubscriptionDocument, SubscriptionStatus } from './schemas/subscription.schema';
+import {
+  SubscriptionPlan,
+  SubscriptionPlanDocument,
+} from './schemas/subscription-plan.schema';
 import { SystemConfig, SystemConfigDocument, SystemConfigType } from '../super-admin/schemas/system-config.schema';
 import { Shop, ShopDocument } from '../shops/schemas/shop.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
@@ -95,6 +99,8 @@ export class SubscriptionMpesaService implements OnModuleInit {
     private readonly shopModel: Model<ShopDocument>,
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
+    @InjectModel(SubscriptionPlan.name)
+    private readonly planModel: Model<SubscriptionPlanDocument>,
     private readonly configService: ConfigService,
     private readonly encryptionService: MpesaEncryptionService,
     private readonly emailService: EmailService,
@@ -370,6 +376,27 @@ export class SubscriptionMpesaService implements OnModuleInit {
         };
       }
 
+      // P0-11C: an invoice may never enter conflicting charge paths — refuse
+      // non-payable states and a live card-payment attempt.
+      if (
+        ['pending_verification', 'cancelled', 'refunded', 'draft'].includes(
+          invoice.status,
+        )
+      ) {
+        return {
+          success: false,
+          message: `Invoice cannot be paid in status '${invoice.status}'`,
+          error: 'INVOICE_NOT_PAYABLE',
+        };
+      }
+      if (invoice.stripeAttempt?.status === 'active') {
+        return {
+          success: false,
+          message: 'A card payment is already in progress for this invoice',
+          error: 'PAYMENT_IN_PROGRESS',
+        };
+      }
+
       const formattedPhone = this.formatPhoneNumber(phoneNumber);
       this.logger.log(`Formatted phone: ${formattedPhone}`);
       
@@ -544,9 +571,36 @@ export class SubscriptionMpesaService implements OnModuleInit {
     shopId: string,
     planCode: string,
     billingCycle: 'monthly' | 'annual',
-    amount: number,
+    clientAmount?: number,
   ): Promise<StkPushResult> {
     try {
+      // P0-11C: the charge amount is derived from the canonical plan price —
+      // a client-supplied amount is only a consistency assertion, never the
+      // authority for the STK push.
+      const plan = await this.planModel
+        .findOne({ code: planCode })
+        .lean()
+        .exec();
+      if (!plan) {
+        return {
+          success: false,
+          message: `Unknown subscription plan '${planCode}'`,
+          error: 'UNKNOWN_PLAN',
+        };
+      }
+      const amount =
+        billingCycle === 'annual' ? plan.annualPrice : plan.monthlyPrice;
+      if (
+        typeof clientAmount === 'number' &&
+        Math.abs(clientAmount - amount) > 0.001
+      ) {
+        return {
+          success: false,
+          message: `Declared amount ${clientAmount} does not match plan price ${amount}`,
+          error: 'AMOUNT_MISMATCH',
+        };
+      }
+
       this.logger.log(`=== INITIATING UPGRADE PAYMENT (NO PLAN CHANGE YET) ===`);
       this.logger.log(`Shop ID: ${shopId}`);
       this.logger.log(`Target Plan: ${planCode}`);
@@ -1069,8 +1123,37 @@ export class SubscriptionMpesaService implements OnModuleInit {
         const amount = getMetaValue('Amount');
         const transactionDate = getMetaValue('TransactionDate');
 
-        await this.invoiceModel.updateOne(
-          { _id: invoice._id },
+        // P0-11C: provider-reported amount must cover the authoritative
+        // invoice total before the invoice may settle. An STK push charges
+        // exactly the requested amount, so any shortfall is anomalous —
+        // record the evidence and hold the invoice instead of marking paid.
+        if (
+          invoice.status === 'paid' ||
+          typeof amount !== 'number' ||
+          amount < invoice.totalAmount
+        ) {
+          if (invoice.status !== 'paid') {
+            this.logger.error(
+              `STK callback amount mismatch for invoice ${invoice.invoiceNumber}: ` +
+                `provider=${amount} expected=${invoice.totalAmount} ` +
+                `(receipt=${mpesaReceiptNumber}) — NOT settling`,
+            );
+            await this.invoiceModel.updateOne(
+              { _id: invoice._id, status: { $ne: 'paid' } },
+              {
+                $set: {
+                  'paymentAttempt.amountMismatch': true,
+                  'paymentAttempt.providerAmount': amount,
+                  'paymentAttempt.mismatchAt': new Date(),
+                },
+              },
+            );
+          }
+          return;
+        }
+
+        const settleResult = await this.invoiceModel.updateOne(
+          { _id: invoice._id, status: { $ne: 'paid' } },
           {
             $set: {
               status: 'paid',
@@ -1089,6 +1172,15 @@ export class SubscriptionMpesaService implements OnModuleInit {
             },
           },
         );
+
+        // Exactly-once: if a concurrent/duplicate callback already settled
+        // this invoice, this claim matched nothing — run no side effects.
+        if (!settleResult?.modifiedCount) {
+          this.logger.log(
+            `Invoice ${invoice.invoiceNumber} already settled — skipping duplicate STK callback ${CheckoutRequestID}`,
+          );
+          return;
+        }
 
         // Activate subscription after successful payment
         await this.activateSubscriptionAfterPayment(invoice.shopId.toString(), invoice._id.toString());

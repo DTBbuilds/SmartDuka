@@ -20,6 +20,7 @@ import { PaymentAttempt, PaymentAttemptSchema } from './schemas/payment-attempt.
 import { ActivityLog, ActivityLogSchema } from './schemas/activity-log.schema';
 import { PaymentAttemptService } from './services/payment-attempt.service';
 import { ActivityLogService } from './services/activity-log.service';
+import { InvoicePaymentAuthorityService } from './services/invoice-payment-authority.service';
 import { Shop, ShopSchema } from '../shops/schemas/shop.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { Product, ProductSchema } from '../inventory/schemas/product.schema';
@@ -56,6 +57,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     SubscriptionAuditService,
     PaymentAttemptService,
     ActivityLogService,
+    InvoicePaymentAuthorityService,
   ],
   exports: [
     SubscriptionsService, 
@@ -67,6 +69,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     SubscriptionAuditService,
     PaymentAttemptService, 
     ActivityLogService,
+    InvoicePaymentAuthorityService,
   ],
 })
 export class SubscriptionsModule implements OnModuleInit {

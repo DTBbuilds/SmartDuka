@@ -321,38 +321,14 @@ export class SubscriptionPaymentController {
   }
 
   /**
-   * Manual payment confirmation (for bank transfers, etc.)
-   * Only accessible by super admin
+   * P0-11C: the legacy POST /subscriptions/payments/confirm/:invoiceId
+   * endpoint was REMOVED. It allowed any shop admin to mark an arbitrary
+   * invoice paid with a caller-supplied reference — no tenant binding, no
+   * payment evidence. Manual verification lives exclusively in the
+   * super-admin workflow: POST /subscriptions/payments/verify/:invoiceId
+   * (approved) and POST /super-admin/payments/verify/:invoiceId, which
+   * require PENDING_VERIFICATION state and record verifiedBy provenance.
    */
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
-  @Post('confirm/:invoiceId')
-  @HttpCode(HttpStatus.OK)
-  async confirmPayment(
-    @CurrentUser() user: JwtPayload,
-    @Param('invoiceId') invoiceId: string,
-    @Body() dto: { paymentMethod: string; paymentReference: string },
-  ): Promise<{ success: boolean; message: string }> {
-    this.logger.log(`Confirming payment for invoice ${invoiceId}`);
-
-    try {
-      await this.subscriptionsService.markInvoicePaid(
-        invoiceId,
-        dto.paymentMethod,
-        dto.paymentReference,
-      );
-
-      return {
-        success: true,
-        message: 'Payment confirmed successfully',
-      };
-    } catch (error: any) {
-      return {
-        success: false,
-        message: error.message,
-      };
-    }
-  }
 
   /**
    * Query STK Push transaction status

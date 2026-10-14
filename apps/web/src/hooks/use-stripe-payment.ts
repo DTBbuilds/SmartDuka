@@ -158,15 +158,15 @@ export function useStripePayment(options?: {
   );
 
   /**
-   * Create payment intent for subscription
+   * Create payment intent for subscription invoice.
+   * P0-11C: invoice-authoritative — the client submits only the canonical
+   * invoiceId (+ optional invoiceNumber consistency assertion); amount and
+   * currency are derived server-side from the stored invoice.
    */
   const createSubscriptionPayment = useCallback(
     async (params: {
       invoiceId: string;
-      invoiceNumber: string;
-      amount: number;
-      currency?: string;
-      description?: string;
+      invoiceNumber?: string;
     }): Promise<PaymentIntentResponse | null> => {
       if (!token) {
         setError('Authentication required');

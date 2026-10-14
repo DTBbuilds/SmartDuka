@@ -187,6 +187,22 @@ export class SubscriptionInvoice {
     completedAt?: Date;
   };
 
+  // P0-11C: durable card-charge attempt claim. Exactly one 'active' attempt
+  // may exist; its deterministic idempotencyKey gives Stripe a stable retry
+  // identity so retries/crashes never mint a second chargeable intent.
+  @Prop({ type: Object, required: false })
+  stripeAttempt?: {
+    seq?: number;
+    idempotencyKey?: string;
+    paymentIntentId?: string;
+    status?: 'active' | 'succeeded' | 'failed' | 'cancelled';
+    claimedAt?: Date;
+    boundAt?: Date;
+    releasedAt?: Date;
+    releaseReason?: string;
+    settledAt?: Date;
+  };
+
   // Timestamps
   createdAt?: Date;
   updatedAt?: Date;
