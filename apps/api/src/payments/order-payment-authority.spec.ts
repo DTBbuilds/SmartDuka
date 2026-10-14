@@ -1095,7 +1095,7 @@ describe('P0-10C external payment initiation authority', () => {
       });
       // Browser closed before success — the client status poll (or webhook)
       // still settles the canonical order.
-      await stripePaymentSvc.syncPaymentStatus(PI);
+      await stripePaymentSvc.syncPaymentStatus(PI, SHOP_A);
       expect(docs[0].status).toBe('completed');
       expect(docs[0].paymentStatus).toBe('paid');
       // Webhook arriving later is a deduped no-op

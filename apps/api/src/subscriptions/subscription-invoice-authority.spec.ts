@@ -530,7 +530,7 @@ describe('P0-11C subscription invoice payment authority', () => {
     await initiate();
     s.intents.get('pi_1').status = 'succeeded';
     s.intents.get('pi_1').latest_charge = 'ch_9';
-    await paymentService.syncPaymentStatus('pi_1');
+    await paymentService.syncPaymentStatus('pi_1', SHOP_A);
     expect(inv.status).toBe('paid');
     expect(inv.paymentReference).toBe('pi_1');
   });
@@ -542,7 +542,7 @@ describe('P0-11C subscription invoice payment authority', () => {
     s.intents.get('pi_1').status = 'succeeded';
     await Promise.all([
       fireWebhook(succeededIntent()),
-      paymentService.syncPaymentStatus('pi_1'),
+      paymentService.syncPaymentStatus('pi_1', SHOP_A),
     ]);
     expect(inv.status).toBe('paid');
     // second converge sees paid → returns alreadyPaid, no transition write
@@ -598,8 +598,8 @@ describe('P0-11C subscription invoice payment authority', () => {
 
   // ---------- O: M-Pesa preserved + conflict gate ----------
 
-  const mpesaService = (invoiceModel: any, planModel?: any) =>
-    new SubscriptionMpesaService(
+  const mpesaService = (invoiceModel: any, planModel?: any) => {
+    const svc = new SubscriptionMpesaService(
       invoiceModel,
       {
         findOne: jest.fn(() => chain(null)),
@@ -616,6 +616,9 @@ describe('P0-11C subscription invoice payment authority', () => {
       {} as any,
       {} as any,
     );
+    (svc as any).environment = 'production';
+    return svc;
+  };
 
   it('M-Pesa initiation denied on non-payable invoice states', async () => {
     for (const status of [
@@ -716,6 +719,9 @@ describe('P0-11C subscription invoice payment authority', () => {
     });
     local.invoices.set(INV_A, inv);
     const svc = mpesaService(local.invoiceModel);
+    jest
+      .spyOn(svc as any, 'verifyStkSuccessWithProvider')
+      .mockResolvedValue(true);
     await svc.handleStkCallback({
       Body: {
         stkCallback: {
@@ -748,6 +754,9 @@ describe('P0-11C subscription invoice payment authority', () => {
       }),
     );
     const svc = mpesaService(local.invoiceModel);
+    jest
+      .spyOn(svc as any, 'verifyStkSuccessWithProvider')
+      .mockResolvedValue(true);
     const cb = () =>
       svc.handleStkCallback({
         Body: {

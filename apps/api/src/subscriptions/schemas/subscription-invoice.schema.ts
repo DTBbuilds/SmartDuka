@@ -22,7 +22,7 @@ export enum InvoiceType {
 
 /**
  * Subscription Invoice Schema
- * 
+ *
  * Tracks all billing invoices for subscriptions
  * Supports M-Pesa payment tracking for Kenyan market
  */
@@ -172,6 +172,13 @@ export class SubscriptionInvoice {
     failed?: boolean;
     failedAt?: Date;
     failureReason?: string;
+    // P0-11C1: callback trust evidence — the callback is a signal only;
+    // provider reconciliation is the truth boundary.
+    callbackReceived?: Date;
+    providerVerified?: boolean;
+    amountMismatch?: boolean;
+    providerAmount?: number;
+    mismatchAt?: Date;
   };
 
   // Stripe payment tracking
@@ -203,12 +210,27 @@ export class SubscriptionInvoice {
     settledAt?: Date;
   };
 
+  // P0-11C1: durable billing-effect marker. 'pending' is written atomically
+  // with the PAID transition; 'applied' is written ONLY after subscription
+  // effects are durable. A paid invoice with status !== 'applied' remains
+  // eligible for effect reconciliation — a crash can never permanently lose
+  // the entitlement, and retries can never duplicate it.
+  @Prop({ type: Object, required: false })
+  billingEffects?: {
+    status?: 'pending' | 'applied';
+    channel?: string;
+    appliedAt?: Date;
+    attempts?: number;
+    lastError?: string;
+  };
+
   // Timestamps
   createdAt?: Date;
   updatedAt?: Date;
 }
 
-export const SubscriptionInvoiceSchema = SchemaFactory.createForClass(SubscriptionInvoice);
+export const SubscriptionInvoiceSchema =
+  SchemaFactory.createForClass(SubscriptionInvoice);
 
 // Indexes
 // Note: invoiceNumber already has unique index from @Prop({ unique: true })

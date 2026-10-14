@@ -344,7 +344,12 @@ export class InvoicePaymentAuthorityService {
     }
 
     if (invoice.status === InvoiceStatus.PAID) {
-      return { settled: false, alreadyPaid: true };
+      // P0-11C1: an already-paid invoice may still carry PENDING billing
+      // effects (crash between the atomic transition and the subscription
+      // mutation). Resume them — payment truth is established, only the
+      // effects may be missing.
+      const fx = await this.ensureBillingEffects(invoiceId, shopId);
+      return { settled: false, alreadyPaid: true, effectsApplied: fx };
     }
     if (!SETTLEABLE_STATUSES.includes(invoice.status)) {
       return { settled: false, reason: `status:${invoice.status}` };
@@ -396,24 +401,88 @@ export class InvoicePaymentAuthorityService {
           'stripePayment.completedAt': new Date(),
           'stripeAttempt.status': 'succeeded',
           'stripeAttempt.settledAt': new Date(),
+          // P0-11C1: the pending effects marker is committed atomically WITH
+          // the paid transition — a crash can never produce paid-without-
+          // pending-effects under this primitive.
+          'billingEffects.status': 'pending',
+          'billingEffects.channel': 'stripe',
         },
       },
       { new: true },
     );
 
     if (!transitioned) {
-      return { settled: false, alreadyPaid: true };
+      // Another caller won the transition — effects may still be pending.
+      const fx = await this.ensureBillingEffects(invoiceId, shopId);
+      return { settled: false, alreadyPaid: true, effectsApplied: fx };
     }
 
-    // Exactly-once billing side effects — only the request that performed the
-    // atomic PAID transition runs these.
-    await this.applyInvoicePaidEffects(transitioned, 'stripe', paymentIntentId);
+    // Exactly-once billing side effects — idempotent application + durable
+    // completion marker. A crash here leaves status 'pending' and the next
+    // webhook redelivery or authenticated reconciliation resumes the work.
+    const fx = await this.ensureBillingEffects(invoiceId, shopId);
 
     this.logger.log(
       `Invoice ${transitioned.invoiceNumber} settled by Stripe intent ${paymentIntentId} ` +
         `(${input.amountMinor} ${input.currency})`,
     );
-    return { settled: true, effectsApplied: true };
+    return { settled: true, effectsApplied: fx };
+  }
+
+  /**
+   * P0-11C1 — DURABLE BILLING-EFFECT EXECUTION
+   *
+   * Applies subscription effects for a PAID invoice whose billingEffects
+   * marker is not yet 'applied', then records completion. Every effect in
+   * applyInvoicePaidEffects is an idempotent fixed-value write, so resuming
+   * after a crash (or racing another reconciler) can never duplicate the
+   * entitlement. The 'applied' marker is written only AFTER the effects are
+   * durable; on failure the marker stays 'pending' and lastError is recorded
+   * so webhook redelivery / authenticated reconciliation retries the work.
+   * Returns true when this call applied the effects.
+   */
+  async ensureBillingEffects(
+    invoiceId: string,
+    shopId: string,
+  ): Promise<boolean> {
+    const invoice = await this.invoiceModel.findOne({
+      _id: new Types.ObjectId(invoiceId),
+      shopId: new Types.ObjectId(shopId),
+    });
+    if (!invoice || invoice.status !== InvoiceStatus.PAID) return false;
+    if (invoice.billingEffects?.status === 'applied') return false;
+
+    try {
+      await this.applyInvoicePaidEffects(
+        invoice,
+        invoice.paymentMethod || 'stripe',
+        invoice.paymentReference || '',
+      );
+      await this.invoiceModel.updateOne(
+        { _id: invoice._id },
+        {
+          $set: {
+            'billingEffects.status': 'applied',
+            'billingEffects.appliedAt': new Date(),
+          },
+          $inc: { 'billingEffects.attempts': 1 },
+        },
+      );
+      return true;
+    } catch (error: any) {
+      await this.invoiceModel
+        .updateOne(
+          { _id: invoice._id },
+          {
+            $set: {
+              'billingEffects.lastError':
+                error?.message || 'billing effects failed',
+            },
+          },
+        )
+        .catch(() => undefined);
+      throw error;
+    }
   }
 
   /**

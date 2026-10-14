@@ -307,13 +307,18 @@ export class StripeController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get payment status' })
   async getPaymentStatus(
+    @CurrentUser() user: JwtPayload,
     @Param('paymentIntentId') paymentIntentId: string,
   ): Promise<{
     success: boolean;
     payment: any;
   }> {
-    const payment =
-      await this.paymentService.syncPaymentStatus(paymentIntentId);
+    // P0-11C1: tenant-bound — resolves the local StripePayment under the
+    // caller's shopId before any provider retrieval or reconciliation.
+    const payment = await this.paymentService.syncPaymentStatus(
+      paymentIntentId,
+      user.shopId,
+    );
 
     return {
       success: true,

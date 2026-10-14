@@ -336,13 +336,16 @@ export class SubscriptionPaymentController {
   @UseGuards(JwtAuthGuard)
   @Get('stk-status/:checkoutRequestId')
   async queryStkStatus(
+    @CurrentUser() user: JwtPayload,
     @Param('checkoutRequestId') checkoutRequestId: string,
   ): Promise<{
     success: boolean;
     resultCode?: number;
     resultDesc?: string;
   }> {
-    return this.mpesaService.queryStkStatus(checkoutRequestId);
+    // P0-11C1: tenant-bound — the checkout must resolve to an invoice owned
+    // by the caller's shop before any provider query or simulation runs.
+    return this.mpesaService.queryStkStatus(checkoutRequestId, user.shopId);
   }
 
   /**

@@ -1116,74 +1116,81 @@ export class SubscriptionMpesaService implements OnModuleInit {
       if (ResultCode === 0) {
         // Payment successful
         const metadata = stkCallback.CallbackMetadata?.Item || [];
-        const getMetaValue = (name: string) => 
+        const getMetaValue = (name: string) =>
           metadata.find((m: any) => m.Name === name)?.Value;
 
         const mpesaReceiptNumber = getMetaValue('MpesaReceiptNumber');
         const amount = getMetaValue('Amount');
         const transactionDate = getMetaValue('TransactionDate');
 
-        // P0-11C: provider-reported amount must cover the authoritative
-        // invoice total before the invoice may settle. An STK push charges
-        // exactly the requested amount, so any shortfall is anomalous —
-        // record the evidence and hold the invoice instead of marking paid.
-        if (
-          invoice.status === 'paid' ||
-          typeof amount !== 'number' ||
-          amount < invoice.totalAmount
-        ) {
-          if (invoice.status !== 'paid') {
-            this.logger.error(
-              `STK callback amount mismatch for invoice ${invoice.invoiceNumber}: ` +
-                `provider=${amount} expected=${invoice.totalAmount} ` +
-                `(receipt=${mpesaReceiptNumber}) — NOT settling`,
-            );
-            await this.invoiceModel.updateOne(
-              { _id: invoice._id, status: { $ne: 'paid' } },
-              {
-                $set: {
-                  'paymentAttempt.amountMismatch': true,
-                  'paymentAttempt.providerAmount': amount,
-                  'paymentAttempt.mismatchAt': new Date(),
-                },
-              },
-            );
-          }
+        // Already settled — resume any pending billing effects (crash
+        // recovery) and finish. A duplicate callback never re-activates.
+        if (invoice.status === 'paid') {
+          await this.ensureStkBillingEffects(invoice._id.toString());
           return;
         }
 
-        const settleResult = await this.invoiceModel.updateOne(
+        // P0-11C1 TRUST BOUNDARY: the callback is only a signal. Daraja
+        // provides no callback signature, so payment truth is established by
+        // server-to-provider reconciliation (backend credentials) — a forged
+        // callback can never settle an invoice by itself.
+        const verified = await this.verifyStkSuccessWithProvider(
+          invoice,
+          CheckoutRequestID,
+        );
+        await this.invoiceModel.updateOne(
           { _id: invoice._id, status: { $ne: 'paid' } },
           {
             $set: {
-              status: 'paid',
-              paidAt: new Date(),
-              paymentMethod: 'mpesa_stk',
-              mpesaReceiptNumber,
-              paidAmount: amount,
-              'stkPayment': {
-                merchantRequestId: MerchantRequestID,
-                checkoutRequestId: CheckoutRequestID,
-                receiptNumber: mpesaReceiptNumber,
-                amount,
-                transactionDate,
-                completedAt: new Date(),
-              },
+              'paymentAttempt.callbackReceived': new Date(),
+              'paymentAttempt.providerVerified': verified,
             },
           },
         );
+        if (!verified) {
+          this.logger.warn(
+            `STK callback for ${CheckoutRequestID} NOT confirmed by provider reconciliation ` +
+              `(invoice ${invoice.invoiceNumber}) — holding settlement`,
+          );
+          return;
+        }
 
-        // Exactly-once: if a concurrent/duplicate callback already settled
-        // this invoice, this claim matched nothing — run no side effects.
-        if (!settleResult?.modifiedCount) {
+        // P0-11C: provider-reported amount must cover the authoritative
+        // invoice total before the invoice may settle. Overpayment is
+        // accepted and recorded at the actual confirmed amount; any
+        // shortfall is anomalous — record evidence, hold the invoice.
+        if (typeof amount !== 'number' || amount < invoice.totalAmount) {
+          this.logger.error(
+            `STK callback amount mismatch for invoice ${invoice.invoiceNumber}: ` +
+              `provider=${amount} expected=${invoice.totalAmount} ` +
+              `(receipt=${mpesaReceiptNumber}) — NOT settling`,
+          );
+          await this.invoiceModel.updateOne(
+            { _id: invoice._id, status: { $ne: 'paid' } },
+            {
+              $set: {
+                'paymentAttempt.amountMismatch': true,
+                'paymentAttempt.providerAmount': amount,
+                'paymentAttempt.mismatchAt': new Date(),
+              },
+            },
+          );
+          return;
+        }
+
+        const claimed = await this.settleInvoiceFromVerifiedStk(invoice, {
+          merchantRequestId: MerchantRequestID,
+          checkoutRequestId: CheckoutRequestID,
+          receiptNumber: mpesaReceiptNumber,
+          amount,
+          transactionDate,
+        });
+        if (!claimed) {
           this.logger.log(
             `Invoice ${invoice.invoiceNumber} already settled — skipping duplicate STK callback ${CheckoutRequestID}`,
           );
           return;
         }
-
-        // Activate subscription after successful payment
-        await this.activateSubscriptionAfterPayment(invoice.shopId.toString(), invoice._id.toString());
 
         // Emit refresh events for real-time UI updates
         this.emitRefreshEvents(invoice.shopId.toString(), invoice._id.toString());
@@ -1234,22 +1241,189 @@ export class SubscriptionMpesaService implements OnModuleInit {
   }
 
   /**
+   * P0-11C1 — provider confirmation for a "success" callback.
+   *
+   * Daraja signs nothing: a POST body is not payment evidence. Truth is
+   * established server-to-provider — in production via stkpushquery with
+   * backend credentials, in sandbox via the configured simulation (the
+   * sandbox IS the provider). Returns true only when the provider confirms
+   * the checkout completed; any error or ambiguity fails closed.
+   */
+  private async verifyStkSuccessWithProvider(
+    invoice: any,
+    checkoutRequestId: string,
+  ): Promise<boolean> {
+    if (this.environment === 'sandbox') {
+      const phone = invoice.paymentAttempt?.phoneNumber || '';
+      const sim = getSimulationResponse(phone);
+      return !!sim.shouldSucceed;
+    }
+    try {
+      const status = await this.queryDarajaStkStatus(checkoutRequestId);
+      return status.resultCode === 0 || status.resultCode === '0';
+    } catch (error: any) {
+      this.logger.error(
+        `Provider reconciliation failed for ${checkoutRequestId}: ${error.message}`,
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Server-to-provider STK query (extracted so callback verification and
+   * status polling share one authenticated provider read).
+   */
+  private async queryDarajaStkStatus(checkoutRequestId: string): Promise<{
+    success: boolean;
+    resultCode?: number | string;
+    resultDesc?: string;
+  }> {
+    const accessToken = await this.getAccessToken();
+    const timestamp = this.getTimestamp();
+    const password = this.generatePassword(timestamp);
+
+    const response = await axios.post(
+      `${this.getBaseUrl()}/mpesa/stkpushquery/v1/query`,
+      {
+        BusinessShortCode: this.shortCode,
+        Password: password,
+        Timestamp: timestamp,
+        CheckoutRequestID: checkoutRequestId,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 30000,
+      },
+    );
+
+    return {
+      success: response.data.ResultCode === '0',
+      resultCode: response.data.ResultCode,
+      resultDesc: response.data.ResultDesc,
+    };
+  }
+
+  /**
+   * P0-11C1 — canonical M-Pesa invoice settlement after VERIFIED provider
+   * success. The atomic claim writes the pending billing-effects marker in
+   * the same update, then effects are applied/resumed via
+   * ensureStkBillingEffects. Returns true when THIS call won the claim.
+   */
+  private async settleInvoiceFromVerifiedStk(
+    invoice: any,
+    fields: {
+      merchantRequestId?: string;
+      checkoutRequestId: string;
+      receiptNumber?: string;
+      amount: number;
+      transactionDate?: string;
+    },
+  ): Promise<boolean> {
+    const settleResult = await this.invoiceModel.updateOne(
+      { _id: invoice._id, status: { $ne: 'paid' } },
+      {
+        $set: {
+          status: 'paid',
+          paidAt: new Date(),
+          paymentMethod: 'mpesa_stk',
+          mpesaReceiptNumber: fields.receiptNumber,
+          paidAmount: fields.amount,
+          stkPayment: {
+            merchantRequestId: fields.merchantRequestId,
+            checkoutRequestId: fields.checkoutRequestId,
+            receiptNumber: fields.receiptNumber,
+            amount: fields.amount,
+            transactionDate: fields.transactionDate,
+            completedAt: new Date(),
+          },
+          'billingEffects.status': 'pending',
+          'billingEffects.channel': 'mpesa_stk',
+        },
+      },
+    );
+    const claimed = !!settleResult?.modifiedCount;
+
+    // Effects run whether this call won the claim or is recovering an
+    // earlier crash — ensureStkBillingEffects is idempotent.
+    await this.ensureStkBillingEffects(invoice._id.toString());
+    return claimed;
+  }
+
+  /**
+   * P0-11C1 — durable, resumable M-Pesa billing effects. Applies subscription
+   * activation for a PAID invoice whose effects marker is not yet 'applied',
+   * then records completion. activateSubscriptionAfterPayment is
+   * CAS-guarded (metadata.lastSettledInvoiceId) so retries can never extend
+   * the subscription twice; the 'applied' marker is written only after the
+   * subscription mutation is durable.
+   */
+  private async ensureStkBillingEffects(invoiceId: string): Promise<void> {
+    const invoice = await this.invoiceModel.findById(invoiceId);
+    if (!invoice || invoice.status !== 'paid') return;
+    if (invoice.billingEffects?.status === 'applied') return;
+
+    try {
+      await this.activateSubscriptionAfterPayment(
+        invoice.shopId.toString(),
+        invoice._id.toString(),
+      );
+      await this.invoiceModel.updateOne(
+        { _id: invoice._id },
+        {
+          $set: {
+            'billingEffects.status': 'applied',
+            'billingEffects.appliedAt': new Date(),
+          },
+          $inc: { 'billingEffects.attempts': 1 },
+        },
+      );
+    } catch (error: any) {
+      await this.invoiceModel
+        .updateOne(
+          { _id: invoice._id },
+          { $set: { 'billingEffects.lastError': error?.message || 'failed' } },
+        )
+        .catch(() => undefined);
+      throw error;
+    }
+  }
+
+  /**
    * Query STK Push transaction status
    * 
    * In SANDBOX mode: Simulates successful payment after a short delay
    * In PRODUCTION mode: Queries M-Pesa API for actual status
    */
-  async queryStkStatus(checkoutRequestId: string): Promise<{
+  async queryStkStatus(
+    checkoutRequestId: string,
+    shopId: string,
+  ): Promise<{
     success: boolean;
     resultCode?: number;
     resultDesc?: string;
   }> {
+    // P0-11C1: tenant scope. The checkout request must resolve to a local
+    // invoice owned by the caller's shop BEFORE any provider query or
+    // sandbox simulation — a foreign shop can neither read nor trigger
+    // another shop's transaction status.
+    if (!shopId || !Types.ObjectId.isValid(shopId)) {
+      return { success: false, resultDesc: 'Transaction not found' };
+    }
+    const scopedInvoice = await this.invoiceModel.findOne({
+      'paymentAttempt.checkoutRequestId': checkoutRequestId,
+      shopId: new Types.ObjectId(shopId),
+    });
+    if (!scopedInvoice) {
+      return { success: false, resultDesc: 'Transaction not found' };
+    }
+
     // SANDBOX SIMULATION: Simulate different payment scenarios
     if (this.environment === 'sandbox') {
       // Check if we have a pending payment attempt for this checkout
-      const invoice = await this.invoiceModel.findOne({
-        'paymentAttempt.checkoutRequestId': checkoutRequestId,
-      });
+      const invoice = scopedInvoice;
 
       if (invoice) {
         const initiatedAt = invoice.paymentAttempt?.initiatedAt;
@@ -1334,31 +1508,39 @@ export class SubscriptionMpesaService implements OnModuleInit {
 
     // PRODUCTION: Query actual M-Pesa API
     try {
-      const accessToken = await this.getAccessToken();
-      const timestamp = this.getTimestamp();
-      const password = this.generatePassword(timestamp);
+      const status = await this.queryDarajaStkStatus(checkoutRequestId);
 
-      const response = await axios.post(
-        `${this.getBaseUrl()}/mpesa/stkpushquery/v1/query`,
-        {
-          BusinessShortCode: this.shortCode,
-          Password: password,
-          Timestamp: timestamp,
-          CheckoutRequestID: checkoutRequestId,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-          },
-          timeout: 30000,
-        },
-      );
+      // P0-11C1: authenticated status reconciliation is a second settlement
+      // path — provider-confirmed success on a still-unpaid invoice settles
+      // it (and resumes pending effects). The STK query returns no amount or
+      // receipt, so the invoice total — the amount WE requested Daraja to
+      // collect — is the confirmed value; the receipt reconciles when the
+      // callback arrives.
+      if (status.success && scopedInvoice.status !== 'paid') {
+        try {
+          await this.settleInvoiceFromVerifiedStk(scopedInvoice, {
+            checkoutRequestId,
+            receiptNumber: undefined,
+            amount: scopedInvoice.totalAmount,
+          });
+        } catch (fxErr: any) {
+          this.logger.error(
+            `STK reconciliation settlement failed for ${checkoutRequestId}: ${fxErr.message}`,
+          );
+        }
+      } else if (scopedInvoice.status === 'paid') {
+        await this.ensureStkBillingEffects(
+          scopedInvoice._id.toString(),
+        ).catch(() => undefined);
+      }
 
       return {
-        success: response.data.ResultCode === '0',
-        resultCode: parseInt(response.data.ResultCode),
-        resultDesc: response.data.ResultDesc,
+        success: status.success,
+        resultCode:
+          typeof status.resultCode === 'string'
+            ? parseInt(status.resultCode)
+            : status.resultCode,
+        resultDesc: status.resultDesc,
       };
     } catch (error: any) {
       // Handle rate limiting (429) gracefully
@@ -1388,79 +1570,91 @@ export class SubscriptionMpesaService implements OnModuleInit {
     shopId: string,
     invoiceId: string,
   ): Promise<void> {
-    try {
-      // Get the subscription for this shop
-      const subscription = await this.subscriptionModel.findOne({
-        shopId: new Types.ObjectId(shopId),
-      });
+    // Get the subscription for this shop — no try/catch here: a transient
+    // failure must propagate to ensureStkBillingEffects so the effects
+    // marker stays 'pending' and the next reconciliation retries.
+    const subscription = await this.subscriptionModel.findOne({
+      shopId: new Types.ObjectId(shopId),
+    });
 
-      if (!subscription) {
-        this.logger.warn(`No subscription found for shop ${shopId}`);
-        return;
-      }
-
-      // Get the invoice to retrieve payment details
-      const invoice = await this.invoiceModel.findById(invoiceId);
-
-      // Check if this payment is for a pending upgrade
-      if (subscription.pendingUpgrade && 
-          (subscription.pendingUpgrade.invoiceId === invoiceId || 
-           invoice?.type === 'upgrade')) {
-        
-        this.logger.log(`Activating pending upgrade for shop ${shopId} after payment confirmation`);
-        
-        // Use the subscriptions service to activate the upgrade
-        const result = await this.subscriptionsService.activatePendingUpgrade(shopId, invoiceId);
-        
-        if (result) {
-          this.logger.log(`✅ Pending upgrade activated for shop ${shopId}: ${result.planCode}`);
-        } else {
-          this.logger.warn(`Failed to activate pending upgrade for shop ${shopId}`);
-        }
-        return;
-      }
-
-      // No pending upgrade - just activate/renew the subscription
-      const now = new Date();
-      const periodEnd = new Date(now);
-      
-      if (subscription.billingCycle === 'annual') {
-        periodEnd.setFullYear(periodEnd.getFullYear() + 1);
-      } else if (subscription.billingCycle === 'daily') {
-        // Daily billing - default to 1 day if numberOfDays not set
-        const days = subscription.numberOfDays || 1;
-        periodEnd.setDate(periodEnd.getDate() + days);
-      } else {
-        // Monthly billing (default)
-        periodEnd.setMonth(periodEnd.getMonth() + 1);
-      }
-
-      const updateData: any = {
-        status: SubscriptionStatus.ACTIVE,
-        currentPeriodStart: now,
-        currentPeriodEnd: periodEnd,
-        nextBillingDate: periodEnd,
-        lastPaymentDate: now,
-        failedPaymentAttempts: 0,
-        gracePeriodEndDate: null,
-      };
-
-      // Add payment details from invoice if available
-      if (invoice) {
-        updateData.lastPaymentAmount = invoice.totalAmount;
-        updateData.lastPaymentMethod = invoice.paymentMethod;
-        updateData.lastPaymentReference = invoice.mpesaReceiptNumber || invoice.paymentReference;
-      }
-
-      await this.subscriptionModel.updateOne(
-        { _id: subscription._id },
-        { $set: updateData },
-      );
-
-      this.logger.log(`Subscription activated for shop ${shopId} until ${periodEnd}`);
-    } catch (error: any) {
-      this.logger.error(`Failed to activate subscription for shop ${shopId}:`, error.message);
+    if (!subscription) {
+      this.logger.warn(`No subscription found for shop ${shopId}`);
+      return;
     }
+
+    // Get the invoice to retrieve payment details
+    const invoice = await this.invoiceModel.findById(invoiceId);
+
+    // Check if this payment is for a pending upgrade
+    if (subscription.pendingUpgrade &&
+        (subscription.pendingUpgrade.invoiceId === invoiceId ||
+         invoice?.type === 'upgrade')) {
+
+      this.logger.log(`Activating pending upgrade for shop ${shopId} after payment confirmation`);
+
+      // Use the subscriptions service to activate the upgrade
+      const result = await this.subscriptionsService.activatePendingUpgrade(shopId, invoiceId);
+
+      if (result) {
+        this.logger.log(`✅ Pending upgrade activated for shop ${shopId}: ${result.planCode}`);
+      } else {
+        this.logger.warn(`Failed to activate pending upgrade for shop ${shopId}`);
+      }
+      return;
+    }
+
+    // No pending upgrade - just activate/renew the subscription
+    const now = new Date();
+    const periodEnd = new Date(now);
+
+    if (subscription.billingCycle === 'annual') {
+      periodEnd.setFullYear(periodEnd.getFullYear() + 1);
+    } else if (subscription.billingCycle === 'daily') {
+      // Daily billing - default to 1 day if numberOfDays not set
+      const days = subscription.numberOfDays || 1;
+      periodEnd.setDate(periodEnd.getDate() + days);
+    } else {
+      // Monthly billing (default)
+      periodEnd.setMonth(periodEnd.getMonth() + 1);
+    }
+
+    const updateData: any = {
+      status: SubscriptionStatus.ACTIVE,
+      currentPeriodStart: now,
+      currentPeriodEnd: periodEnd,
+      nextBillingDate: periodEnd,
+      lastPaymentDate: now,
+      failedPaymentAttempts: 0,
+      gracePeriodEndDate: null,
+      // P0-11C1: exactly-once activation — the CAS below makes this write
+      // fire only for the first reconciler; a duplicate callback or a
+      // post-crash retry can never extend the period a second time.
+      'metadata.lastSettledInvoiceId': invoiceId,
+    };
+
+    // Add payment details from invoice if available
+    if (invoice) {
+      updateData.lastPaymentAmount = invoice.totalAmount;
+      updateData.lastPaymentMethod = invoice.paymentMethod;
+      updateData.lastPaymentReference = invoice.mpesaReceiptNumber || invoice.paymentReference;
+    }
+
+    const activation = await this.subscriptionModel.updateOne(
+      {
+        _id: subscription._id,
+        'metadata.lastSettledInvoiceId': { $ne: invoiceId },
+      },
+      { $set: updateData },
+    );
+
+    if (!activation?.modifiedCount) {
+      this.logger.log(
+        `Subscription for shop ${shopId} already activated for invoice ${invoiceId} — skipping duplicate activation`,
+      );
+      return;
+    }
+
+    this.logger.log(`Subscription activated for shop ${shopId} until ${periodEnd}`);
   }
 
   /**

@@ -439,16 +439,32 @@ export class StripePaymentService {
   }
 
   /**
-   * Get payment status from Stripe and sync
+   * Get payment status from Stripe and sync — P0-11C1: tenant-bound.
+   *
+   * The caller's JWT shopId is resolved against the local StripePayment row
+   * BEFORE any provider retrieval: a foreign or unknown intent is a plain
+   * 404 (no existence leak, no cross-shop reconciliation trigger), and the
+   * provider is never contacted for a payment the caller does not own.
    */
   async syncPaymentStatus(
     paymentIntentId: string,
+    shopId: string,
   ): Promise<StripePaymentDocument> {
-    // Look up the local record first so we know which connected account (if any) to scope against.
+    if (!shopId || !Types.ObjectId.isValid(shopId)) {
+      throw new NotFoundException('Payment not found');
+    }
+
+    // Tenant-scoped local resolution gates the provider call.
     const existing = await this.paymentModel
-      .findOne({ stripePaymentIntentId: paymentIntentId })
+      .findOne({
+        stripePaymentIntentId: paymentIntentId,
+        shopId: new Types.ObjectId(shopId),
+      })
       .select('connectedAccountId')
       .lean();
+    if (!existing) {
+      throw new NotFoundException('Payment not found');
+    }
 
     const paymentIntent = await this.stripeService.retrievePaymentIntent(
       paymentIntentId,
@@ -458,7 +474,10 @@ export class StripePaymentService {
     );
 
     const payment = await this.paymentModel.findOneAndUpdate(
-      { stripePaymentIntentId: paymentIntentId },
+      {
+        stripePaymentIntentId: paymentIntentId,
+        shopId: new Types.ObjectId(shopId),
+      },
       {
         $set: {
           status: this.mapStripeStatus(paymentIntent.status),
