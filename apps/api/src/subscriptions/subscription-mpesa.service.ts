@@ -1570,6 +1570,29 @@ export class SubscriptionMpesaService implements OnModuleInit {
   }
 
   /**
+   * P0-11C — upgrade crash gate: complete a suspended-shop reactivation
+   * that a crashed activation left unfinished. Idempotent — only acts on
+   * shops still suspended, using the subscription's CURRENT durable state
+   * (plan + period end), so retries can never regress or duplicate.
+   */
+  private async reactivateSuspendedShop(subscription: any): Promise<void> {
+    const shop = await this.shopModel.findById(subscription.shopId);
+    if (
+      shop &&
+      (shop.status === 'suspended' || shop.subscriptionStatus === 'suspended')
+    ) {
+      shop.status = 'active';
+      shop.subscriptionStatus = 'active';
+      shop.subscriptionPlan = subscription.planCode;
+      shop.subscriptionExpiresAt = subscription.currentPeriodEnd;
+      await shop.save();
+      this.logger.log(
+        `Shop ${subscription.shopId} reactivated after billing effects recovery`,
+      );
+    }
+  }
+
+  /**
    * Activate subscription after successful payment
    * 
    * If there's a pending upgrade, activates that instead of just updating status.
@@ -1600,6 +1623,23 @@ export class SubscriptionMpesaService implements OnModuleInit {
     const alreadyApplied = (
       subscription.metadata?.appliedEntitlementInvoiceIds || []
     ).some((id: any) => id?.toString() === invoiceId);
+
+    if (alreadyApplied) {
+      // Entitlement is durable — but a crash may have landed between the
+      // subscription write and the shop reactivation. Complete it.
+      await this.reactivateSuspendedShop(subscription);
+      await applyNewestPaymentTracking(
+        this.subscriptionModel,
+        subscription._id,
+        invoice,
+        {
+          paymentMethod: invoice?.paymentMethod,
+          paymentReference:
+            invoice?.mpesaReceiptNumber || invoice?.paymentReference,
+        },
+      );
+      return;
+    }
 
     // Check if this payment is for a pending upgrade
     if (
@@ -1636,8 +1676,10 @@ export class SubscriptionMpesaService implements OnModuleInit {
 
     // An upgrade invoice whose entitlement was already consumed (marker
     // present, or pendingUpgrade cleared by a crashed-then-recovered
-    // activation) must not silently become a renewal extension.
+    // activation) must not silently become a renewal extension — and the
+    // crashed activation's shop reactivation must still complete.
     if (invoice?.type === 'upgrade') {
+      await this.reactivateSuspendedShop(subscription);
       await applyNewestPaymentTracking(
         this.subscriptionModel,
         subscription._id,
