@@ -153,10 +153,13 @@ export class Subscription {
   // Metadata
   @Prop({ type: Object, default: {} })
   metadata: {
-    // P0-11C2: monotonic settled-invoice ledger — the newest invoice id
-    // whose billing effects have been durably applied (ObjectId ordering;
-    // C1-era rows may hold the string form).
+    // P0-11C2/C3: informational newest-paid marker — the invoice id of the
+    // most recently PAID invoice (paidAt ordering). NOT a dedup authority:
+    // the per-invoice billingEffects claim is the once-guard.
     lastSettledInvoiceId?: Types.ObjectId | string;
+    // paidAt of the invoice whose tracking fields were last written —
+    // newest-payment-wins CAS guard for lastPayment* display fields.
+    lastPaymentInvoicePaidAt?: Date;
     upgradedFrom?: string; // Previous plan code
     upgradedAt?: Date;
     downgradedFrom?: string;

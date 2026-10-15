@@ -25,6 +25,13 @@ import { MpesaEncryptionService } from '../payments/services/mpesa-encryption.se
 import { EmailService } from '../notifications/email.service';
 import type { SubscriptionsService } from './subscriptions.service';
 import {
+  claimBillingEffects,
+  markBillingEffectsApplied,
+  failBillingEffects,
+  applyRenewalExtension,
+  applyNewestPaymentTracking,
+} from './services/invoice-effects.helper';
+import {
   isSandboxTestNumber,
   getSimulationScenario,
   getSimulationResponse,
@@ -1375,33 +1382,19 @@ export class SubscriptionMpesaService implements OnModuleInit {
     if (!invoice || invoice.status !== 'paid') return;
     if (invoice.billingEffects?.status === 'applied') return;
 
+    // P0-11C3: per-invoice durable claim — pending → applying. Exactly one
+    // applier per invoice regardless of channel replay or worker overlap.
+    const claimed = await claimBillingEffects(this.invoiceModel, invoiceId);
+    if (!claimed) return;
+
     try {
       await this.activateSubscriptionAfterPayment(
         invoice.shopId.toString(),
         invoice._id.toString(),
       );
-      await this.invoiceModel.updateOne(
-        { _id: invoice._id },
-        {
-          $set: {
-            'billingEffects.status': 'applied',
-            'billingEffects.appliedAt': new Date(),
-          },
-          $inc: { 'billingEffects.attempts': 1 },
-        },
-      );
+      await markBillingEffectsApplied(this.invoiceModel, invoiceId);
     } catch (error: any) {
-      await this.invoiceModel
-        .updateOne(
-          { _id: invoice._id },
-          {
-            $set: {
-              'billingEffects.lastError': error?.message || 'failed',
-            },
-            $inc: { 'billingEffects.attempts': 1 },
-          },
-        )
-        .catch(() => undefined);
+      await failBillingEffects(this.invoiceModel, invoiceId, error);
       throw error;
     }
   }
@@ -1619,71 +1612,39 @@ export class SubscriptionMpesaService implements OnModuleInit {
       return;
     }
 
-    // No pending upgrade - just activate/renew the subscription
-    const now = new Date();
-    const periodEnd = new Date(now);
-
-    if (subscription.billingCycle === 'annual') {
-      periodEnd.setFullYear(periodEnd.getFullYear() + 1);
-    } else if (subscription.billingCycle === 'daily') {
-      // Daily billing - default to 1 day if numberOfDays not set
-      const days = subscription.numberOfDays || 1;
-      periodEnd.setDate(periodEnd.getDate() + days);
-    } else {
-      // Monthly billing (default)
-      periodEnd.setMonth(periodEnd.getMonth() + 1);
+    // No pending upgrade — activate/renew the subscription.
+    // P0-11C3: the per-invoice claim is the once-guard, so EVERY legitimately
+    // paid invoice applies its own entitlement exactly once — the renewal
+    // extension is a CAS-retry on currentPeriodEnd (extend from
+    // max(now, periodEnd)) and payment tracking is a newest-paidAt-wins CAS,
+    // so settlement order, replay and concurrency cannot regress or
+    // duplicate entitlements.
+    const extended = await applyRenewalExtension(
+      this.subscriptionModel,
+      subscription._id,
+      invoice,
+    );
+    if (!extended) {
+      this.logger.warn(
+        `Renewal extension CAS exhausted for shop ${shopId} invoice ${invoiceId} — will retry via effects recovery`,
+      );
+      throw new Error('renewal extension CAS conflict — retry later');
     }
 
-    const updateData: any = {
-      status: SubscriptionStatus.ACTIVE,
-      currentPeriodStart: now,
-      currentPeriodEnd: periodEnd,
-      nextBillingDate: periodEnd,
-      lastPaymentDate: now,
-      failedPaymentAttempts: 0,
-      gracePeriodEndDate: null,
-      // P0-11C2: monotonic per-invoice ledger — the CAS below applies this
-      // activation ONLY if this invoice is newer than the last settled one
-      // (ObjectId ordering). A replayed older invoice can never extend the
-      // period a second time or overwrite newer payment tracking; a retried
-      // same-invoice application is a no-op because the stored id is not
-      // less than itself.
-      'metadata.lastSettledInvoiceId': new Types.ObjectId(invoiceId),
-    };
-
-    // Add payment details from invoice if available
-    if (invoice) {
-      updateData.lastPaymentAmount = invoice.totalAmount;
-      updateData.lastPaymentMethod = invoice.paymentMethod;
-      updateData.lastPaymentReference = invoice.mpesaReceiptNumber || invoice.paymentReference;
-    }
-
-    const activation = await this.subscriptionModel.updateOne(
-      {
-        _id: subscription._id,
-        // $ne covers legacy string markers AND this invoice already settled;
-        // $or enforces monotonic per-invoice ordering (P0-11C2).
-        'metadata.lastSettledInvoiceId': { $ne: invoiceId },
-        $or: [
-          { 'metadata.lastSettledInvoiceId': { $exists: false } },
+    await applyNewestPaymentTracking(
+      this.subscriptionModel,
+      subscription._id,
+      invoice,
           {
-            'metadata.lastSettledInvoiceId': {
-              $lt: new Types.ObjectId(invoiceId),
-            },
+        paymentMethod: invoice?.paymentMethod,
+        paymentReference:
+          invoice?.mpesaReceiptNumber || invoice?.paymentReference,
           },
-        ],
-      },
-      { $set: updateData },
     );
 
-    if (!activation?.modifiedCount) {
       this.logger.log(
-        `Subscription for shop ${shopId} already activated for a newer-or-equal invoice — skipping replay of ${invoiceId}`,
+      `Subscription activated for shop ${shopId} (invoice ${invoiceId})`,
       );
-      return;
-    }
-
-    this.logger.log(`Subscription activated for shop ${shopId} until ${periodEnd}`);
   }
 
   /**

@@ -72,6 +72,10 @@ const matches = (doc: any, filter: any): boolean => {
       if (!(cond as any[]).some((f: any) => matches(doc, f))) return false;
       continue;
     }
+    if (k === '$and') {
+      if (!(cond as any[]).every((f: any) => matches(doc, f))) return false;
+      continue;
+    }
     const val = k.split('.').reduce((o: any, p) => o?.[p], doc);
     if (k === '_id' || k === 'shopId') {
       if (val?.toString() !== cond?.toString()) return false;
@@ -100,7 +104,15 @@ const matches = (doc: any, filter: any): boolean => {
         continue;
       }
     }
-    if (val !== cond) return false;
+    if (cond === null) {
+      if (val !== null && val !== undefined) return false;
+      continue;
+    }
+    if (val instanceof Date || cond instanceof Date) {
+      if (new Date(val).getTime() !== new Date(cond).getTime()) return false;
+      continue;
+    }
+    if (val?.toString() !== cond?.toString()) return false;
   }
   return true;
 };
@@ -489,11 +501,14 @@ describe('P0-11C subscription invoice payment authority', () => {
     expect(sub.status).toBe('active'); // PAST_DUE recovered
     expect(sub.failedPaymentAttempts).toBe(0);
     expect(sub.lastPaymentReference).toBe('pi_1');
-    expect(s.subscriptionModel.updateOne).toHaveBeenCalledTimes(1);
+    // Effects = entitlement + newest-payment tracking + status recovery.
+    const writesAfterSettle = s.subscriptionModel.updateOne.mock.calls.length;
 
     // Duplicate delivery → no second transition, no second effects run.
     await fireWebhook(succeededIntent());
-    expect(s.subscriptionModel.updateOne).toHaveBeenCalledTimes(1);
+    expect(s.subscriptionModel.updateOne).toHaveBeenCalledTimes(
+      writesAfterSettle,
+    );
   });
 
   it.each([

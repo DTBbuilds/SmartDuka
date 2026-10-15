@@ -224,11 +224,16 @@ export class SubscriptionInvoice {
   // the entitlement, and retries can never duplicate it.
   @Prop({ type: Object, required: false })
   billingEffects?: {
-    status?: 'pending' | 'applied' | 'failed';
+    // P0-11C3: pending → applying → applied is the per-invoice durable
+    // application contract (the once-guard); 'failed' = terminal, surfaced
+    // for operator action. 'applying' carries a claimedAt lease so a
+    // crashed application is reclaimable.
+    status?: 'pending' | 'applying' | 'applied' | 'failed';
     channel?: string;
     appliedAt?: Date;
     attempts?: number;
     lastError?: string;
+    claimedAt?: Date;
     // P0-11C2: reconciliation-worker lease — set when a worker claims the
     // record; a stale lease expires so crashed workers never wedge it.
     recoveringAt?: Date;

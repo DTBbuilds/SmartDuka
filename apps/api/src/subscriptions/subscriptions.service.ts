@@ -27,6 +27,13 @@ import {
 import { SystemConfig, SystemConfigDocument, SystemConfigType } from '../super-admin/schemas/system-config.schema';
 import { EmailService } from '../notifications/email.service';
 import { EMAIL_TEMPLATES } from '../notifications/email-templates';
+import {
+  claimBillingEffects,
+  markBillingEffectsApplied,
+  failBillingEffects,
+  applyRenewalExtension,
+  applyNewestPaymentTracking,
+} from './services/invoice-effects.helper';
 
 // Grace period in days before suspension
 const GRACE_PERIOD_DAYS = 7;
@@ -1654,6 +1661,16 @@ export class SubscriptionsService {
     };
     await invoice.save();
 
+    // P0-11C3: acquire the per-invoice application claim before mutating —
+    // if the reconciler already claimed this invoice it owns the effects.
+    const claimed = await claimBillingEffects(this.invoiceModel, invoiceId);
+    if (!claimed) {
+      this.logger.log(
+        `Billing effects for invoice ${invoiceId} already claimed — deferring to reconciler`,
+      );
+      return;
+    }
+
     // Activate subscription
     const subscription = await this.subscriptionModel.findById(invoice.subscriptionId);
     if (subscription) {
@@ -1693,16 +1710,9 @@ export class SubscriptionsService {
       };
 
       await subscription.save();
-      this.logger.log(`Subscription activated for shop ${subscription.shopId} after payment verification, period ends: ${periodEnd.toISOString()}`);
-
-      // Effects are durable — mark them applied; a crash before this line
-      // leaves 'pending' and the reconciler finishes the work idempotently.
-      invoice.billingEffects = {
-        ...invoice.billingEffects,
-        status: 'applied',
-        appliedAt: new Date(),
-      };
-      await invoice.save().catch(() => undefined);
+      this.logger.log(
+        `Subscription activated for shop ${subscription.shopId} after payment verification, period ends: ${periodEnd.toISOString()}`,
+      );
 
       // Reactivate the shop if it was suspended
       const shop = await this.shopModel.findById(subscription.shopId);
@@ -1711,8 +1721,96 @@ export class SubscriptionsService {
         shop.subscriptionStatus = 'active';
         shop.subscriptionExpiresAt = periodEnd;
         await shop.save();
-        this.logger.log(`Shop ${shop.shopId} reactivated after payment verification`);
+        this.logger.log(
+          `Shop ${shop.shopId} reactivated after payment verification`,
+        );
       }
+
+      // Effects are durable — mark them applied; a crash before this line
+      // leaves the claim lease to expire and the reconciler finishes the
+      // work idempotently.
+      await markBillingEffectsApplied(this.invoiceModel, invoiceId).catch(
+        () => undefined,
+      );
+    }
+  }
+
+  /**
+   * P0-11C3 — MANUAL-VERIFICATION EFFECTS RECOVERY
+   *
+   * Resumes durable billing effects for a manually verified invoice whose
+   * paid transition committed but whose subscription effects were lost to
+   * a crash. Mirrors verifyAndActivatePayment exactly — period extension,
+   * setupPaid flags, tracking, shop reactivation — under the per-invoice
+   * pending → applying → applied claim so retries can never double-apply.
+   * No provider payment is fabricated: tracking records the invoice's own
+   * method/receipt.
+   */
+  async ensureManualBillingEffects(invoiceId: string): Promise<void> {
+    const invoice = await this.invoiceModel.findById(invoiceId);
+    if (!invoice || invoice.status !== InvoiceStatus.PAID) return;
+    if (invoice.billingEffects?.status === 'applied') return;
+
+    const claimed = await claimBillingEffects(this.invoiceModel, invoiceId);
+    if (!claimed) return;
+
+    try {
+      const subscription = await this.subscriptionModel.findById(
+        invoice.subscriptionId,
+      );
+      if (subscription) {
+        const extended = await applyRenewalExtension(
+          this.subscriptionModel,
+          subscription._id,
+          invoice,
+        );
+        if (!extended) {
+          throw new Error('renewal extension CAS conflict — retry later');
+        }
+
+        // Manual verification semantics: setup flags are always completed.
+        await this.subscriptionModel.updateOne(
+          { _id: subscription._id },
+          {
+            $set: {
+              setupPaid: true,
+              setupPaidAt: new Date(),
+            },
+          },
+        );
+
+        await applyNewestPaymentTracking(
+          this.subscriptionModel,
+          subscription._id,
+          invoice,
+          {
+            paymentMethod: invoice.paymentMethod,
+            paymentReference:
+              invoice.mpesaReceiptNumber || invoice.paymentReference,
+          },
+        );
+
+        // Reactivate the shop if it was suspended — same as verify path.
+        // currentPeriodEnd was mutated by the CAS above — re-read it.
+        const shop = await this.shopModel.findById(subscription.shopId);
+        if (
+          shop &&
+          (shop.status === 'suspended' ||
+            shop.subscriptionStatus === 'suspended')
+        ) {
+          const fresh = await this.subscriptionModel.findById(subscription._id);
+          shop.status = 'active';
+          shop.subscriptionStatus = 'active';
+          shop.subscriptionExpiresAt =
+            fresh?.currentPeriodEnd ?? subscription.currentPeriodEnd;
+          await shop.save();
+        }
+      }
+
+      await markBillingEffectsApplied(this.invoiceModel, invoiceId);
+    } catch (error: any) {
+      await failBillingEffects(this.invoiceModel, invoiceId, error);
+      throw error;
     }
   }
 

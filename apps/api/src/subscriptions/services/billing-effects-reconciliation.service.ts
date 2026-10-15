@@ -9,6 +9,8 @@ import {
 } from '../schemas/subscription-invoice.schema';
 import { InvoicePaymentAuthorityService } from './invoice-payment-authority.service';
 import { SubscriptionMpesaService } from '../subscription-mpesa.service';
+import { SubscriptionsService } from '../subscriptions.service';
+import { EFFECT_CLAIM_LEASE_MS } from './invoice-effects.helper';
 
 export interface ReconcileReport {
   scanned: number;
@@ -50,6 +52,7 @@ export class BillingEffectsReconciliationService {
     private readonly invoiceModel: Model<SubscriptionInvoiceDocument>,
     private readonly invoicePaymentAuthority: InvoicePaymentAuthorityService,
     private readonly mpesaService: SubscriptionMpesaService,
+    private readonly subscriptionsService: SubscriptionsService,
   ) {}
 
   private readonly BATCH_LIMIT = 25;
@@ -102,16 +105,31 @@ export class BillingEffectsReconciliationService {
     const candidates = await this.invoiceModel
       .find({
         status: InvoiceStatus.PAID,
-        'billingEffects.status': 'pending',
+        // 'pending' = awaiting application; 'applying' = a crashed
+        // application whose per-invoice lease may have expired (P0-11C3).
+        'billingEffects.status': { $in: ['pending', 'applying'] },
       })
       .limit(batchLimit)
       .exec();
     report.scanned = candidates.length;
 
+    const staleClaim = new Date(Date.now() - EFFECT_CLAIM_LEASE_MS);
+
     const now = Date.now();
     const staleLease = new Date(now - this.LEASE_MS);
 
     for (const invoice of candidates) {
+      // An 'applying' record with a LIVE claim is being applied by another
+      // reconciler — skip; only a stale claim (crashed applier) is retried.
+      if (
+        invoice.billingEffects?.status === 'applying' &&
+        invoice.billingEffects?.claimedAt &&
+        new Date(invoice.billingEffects.claimedAt) > staleClaim
+      ) {
+        report.skippedBackoff += 1;
+        continue;
+      }
+
       const attempts = invoice.billingEffects?.attempts || 0;
       if (attempts >= maxAttempts) {
         // Exhausted — surface for operator action; stop auto-retry.
@@ -139,7 +157,7 @@ export class BillingEffectsReconciliationService {
         {
           _id: invoice._id,
           status: InvoiceStatus.PAID,
-          'billingEffects.status': 'pending',
+          'billingEffects.status': { $in: ['pending', 'applying'] },
           $or: [
             { 'billingEffects.recoveringAt': { $exists: false } },
             { 'billingEffects.recoveringAt': { $lte: staleLease } },
@@ -160,14 +178,25 @@ export class BillingEffectsReconciliationService {
 
       report.processed += 1;
       try {
-        if (claimed.billingEffects?.channel === 'stripe') {
+        // P0-11C3: dispatch on the recorded settlement channel — never
+        // assume every non-Stripe invoice is an STK payment.
+        const channel = claimed.billingEffects?.channel;
+        if (channel === 'stripe') {
           await this.invoicePaymentAuthority.ensureBillingEffects(
             claimed._id.toString(),
             claimed.shopId.toString(),
           );
-        } else {
+        } else if (channel === 'mpesa_stk') {
           await this.mpesaService.ensureStkBillingEffects(
             claimed._id.toString(),
+          );
+        } else if (channel === 'manual') {
+          await this.subscriptionsService.ensureManualBillingEffects(
+            claimed._id.toString(),
+          );
+        } else {
+          throw new Error(
+            `unknown billing-effects channel '${channel}' — operator review required`,
           );
         }
         report.recovered += 1;

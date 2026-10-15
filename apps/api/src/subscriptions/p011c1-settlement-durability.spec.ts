@@ -79,6 +79,10 @@ const matches = (doc: any, filter: any): boolean => {
       if (!(cond as any[]).some((f: any) => matches(doc, f))) return false;
       continue;
     }
+    if (k === '$and') {
+      if (!(cond as any[]).every((f: any) => matches(doc, f))) return false;
+      continue;
+    }
     const val = k.split('.').reduce((o: any, p) => o?.[p], doc);
     if (
       cond &&
@@ -118,11 +122,19 @@ const matches = (doc: any, filter: any): boolean => {
         continue;
       }
     }
+    if (cond === null) {
+      if (val !== null && val !== undefined) return false;
+      continue;
+    }
     if (k === '_id' || k === 'shopId' || k.endsWith('Id')) {
       if (cond instanceof Types.ObjectId || val instanceof Types.ObjectId) {
         if (val?.toString() !== cond?.toString()) return false;
         continue;
       }
+    }
+    if (val instanceof Date || cond instanceof Date) {
+      if (new Date(val).getTime() !== new Date(cond).getTime()) return false;
+      continue;
     }
     if (val !== cond) return false;
   }

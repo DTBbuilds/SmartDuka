@@ -88,6 +88,10 @@ const matches = (doc: any, filter: any): boolean => {
       if (!(cond as any[]).some((f: any) => matches(doc, f))) return false;
       continue;
     }
+    if (k === '$and') {
+      if (!(cond as any[]).every((f: any) => matches(doc, f))) return false;
+      continue;
+    }
     const val = k.split('.').reduce((o: any, p) => o?.[p], doc);
     if (
       cond &&
@@ -202,7 +206,9 @@ const buildStores = () => {
       for (const d of subscriptions.values()) {
         if (matches(d, filter)) {
           if (update.$set) {
-            if ('currentPeriodStart' in update.$set) activationWrites();
+            // Every period extension writes currentPeriodEnd — count those
+            // as entitlement applications (tracking writes don't carry it).
+            if ('currentPeriodEnd' in update.$set) activationWrites();
             applySet(d, update.$set);
           }
           return { modifiedCount: 1 };
@@ -270,7 +276,7 @@ describe('P0-11C2 — historical settlement idempotency', () => {
 
   // ---------- B/C: A/B/A M-Pesa replay ----------
 
-  it('M-Pesa A/B/A replay — crashed A effects finish safely WITHOUT regressing B state', async () => {
+  it('M-Pesa A/B/A replay — crashed A effects apply ONCE; tracking stays newest', async () => {
     const invA = makeInvoice(INV_A, {
       paymentAttempt: { checkoutRequestId: 'ws_A' },
     });
@@ -313,20 +319,21 @@ describe('P0-11C2 — historical settlement idempotency', () => {
     expect(sub.lastPaymentReference).toBe('RECEIPT_B');
     const writesAfterB = s.subscriptionModel.activationWrites.mock.calls.length;
 
-    // A's settlement retries — effects must finish but may NOT regress B.
+    // A's settlement retries — P0-11C3: A was legitimately PAID, so its own
+    // entitlement applies exactly once (one additional extension), while
+    // newer payment tracking is NEVER regressed.
     await svc2.handleStkCallback(stkSuccess('ws_A', 'RECEIPT_A'));
     expect(invA.billingEffects?.status).toBe('applied');
-    expect(sub.lastPaymentReference).toBe('RECEIPT_B'); // NOT 'RECEIPT_A'
-    // No second period extension for the older invoice.
+    expect(sub.lastPaymentReference).toBe('RECEIPT_B'); // newest paid wins
     expect(s.subscriptionModel.activationWrites).toHaveBeenCalledTimes(
-      writesAfterB,
+      writesAfterB + 1, // A's own extension — once
     );
     expect(sub.metadata.lastSettledInvoiceId?.toString()).toBe(INV_B);
 
     // B replay is a pure no-op.
     await svc2.handleStkCallback(stkSuccess('ws_B', 'RECEIPT_B'));
     expect(s.subscriptionModel.activationWrites).toHaveBeenCalledTimes(
-      writesAfterB,
+      writesAfterB + 1,
     );
     expect(sub.lastPaymentReference).toBe('RECEIPT_B');
   });
@@ -454,6 +461,7 @@ describe('P0-11C2 — historical settlement idempotency', () => {
       s.invoiceModel,
       authority,
       mpesa,
+      {} as any,
     );
 
     const report = await worker.reconcilePendingBillingEffects();
@@ -489,6 +497,7 @@ describe('P0-11C2 — historical settlement idempotency', () => {
       s.invoiceModel,
       authority,
       mpesa,
+      {} as any,
     );
     const opts = { maxAttempts: 2, backoffMs: () => 0 };
 

@@ -19,6 +19,12 @@ import {
   SubscriptionStatus,
 } from '../schemas/subscription.schema';
 import { toMinorUnits } from '../../common/currency';
+import {
+  claimBillingEffects,
+  markBillingEffectsApplied,
+  failBillingEffects,
+  applyNewestPaymentTracking,
+} from './invoice-effects.helper';
 
 /**
  * P0-11C — SUBSCRIPTION INVOICE PAYMENT AUTHORITY
@@ -452,51 +458,34 @@ export class InvoicePaymentAuthorityService {
     if (!invoice || invoice.status !== InvoiceStatus.PAID) return false;
     if (invoice.billingEffects?.status === 'applied') return false;
 
+    // P0-11C3: per-invoice durable claim — pending → applying. Exactly one
+    // applier per invoice regardless of webhook replay or worker overlap.
+    const claimed = await claimBillingEffects(this.invoiceModel, invoiceId);
+    if (!claimed) return false;
+
     try {
       await this.applyInvoicePaidEffects(
         invoice,
         invoice.paymentMethod || 'stripe',
         invoice.paymentReference || '',
       );
-      await this.invoiceModel.updateOne(
-        { _id: invoice._id },
-        {
-          $set: {
-            'billingEffects.status': 'applied',
-            'billingEffects.appliedAt': new Date(),
-          },
-          $inc: { 'billingEffects.attempts': 1 },
-        },
-      );
+      await markBillingEffectsApplied(this.invoiceModel, invoiceId);
       return true;
     } catch (error: any) {
-      await this.invoiceModel
-        .updateOne(
-          { _id: invoice._id },
-          {
-            $set: {
-              'billingEffects.lastError':
-                error?.message || 'billing effects failed',
-            },
-            $inc: { 'billingEffects.attempts': 1 },
-          },
-        )
-        .catch(() => undefined);
+      await failBillingEffects(this.invoiceModel, invoiceId, error);
       throw error;
     }
   }
 
   /**
    * Billing side effects for a settled invoice — the same effects the former
-   * markInvoicePaid applied: last-payment tracking, setup completion for
-   * SETUP invoices, and PAST_DUE → ACTIVE recovery.
+   * markInvoicePaid applied: setup completion for SETUP invoices,
+   * PAST_DUE → ACTIVE recovery, and last-payment tracking.
    *
-   * P0-11C2: applied through a MONOTONIC per-invoice CAS — the update only
-   * lands if this invoice is newer than `metadata.lastSettledInvoiceId`
-   * (ObjectId ordering). A replayed older invoice can never overwrite a
-   * newer invoice's payment tracking or re-run effects; the subscription
-   * read is only used to build the fixed-value write set, never trusted as
-   * the guard.
+   * P0-11C3: entitlement fields are idempotent fixed-value writes; tracking
+   * fields go through the newest-paidAt-wins CAS so a replayed older
+   * settlement can never overwrite a newer payment's display fields. The
+   * per-invoice claim (not a subscription marker) is the once-guard.
    */
   private async applyInvoicePaidEffects(
     invoice: SubscriptionInvoiceDocument,
@@ -508,44 +497,41 @@ export class InvoicePaymentAuthorityService {
     );
     if (!subscription) return;
 
-    const updateData: Record<string, any> = {
-      lastPaymentDate: new Date(),
-      lastPaymentAmount: invoice.totalAmount,
-      lastPaymentMethod: paymentMethod,
-      lastPaymentReference: paymentReference,
+    const entitlement: Record<string, any> = {
       failedPaymentAttempts: 0,
-      'metadata.lastSettledInvoiceId': new Types.ObjectId(
-        invoice._id.toString(),
-      ),
     };
 
     if (invoice.type === InvoiceType.SETUP) {
-      updateData.setupPaid = true;
-      updateData.setupPaidAt = new Date();
-      updateData.setupAmount = invoice.totalAmount;
-    }
-
-    if (subscription.status === SubscriptionStatus.PAST_DUE) {
-      updateData.status = SubscriptionStatus.ACTIVE;
+      entitlement.setupPaid = true;
+      entitlement.setupPaidAt = new Date();
+      entitlement.setupAmount = invoice.totalAmount;
     }
 
     await this.subscriptionModel.updateOne(
+      { _id: subscription._id },
+      { $set: entitlement },
+    );
+
+    // Newest-payment-wins tracking — an older replayed settlement never
+    // overwrites a newer payment's display fields.
+    await applyNewestPaymentTracking(
+      this.subscriptionModel,
+      subscription._id,
+      invoice,
+      { paymentMethod, paymentReference },
+    );
+
+    // PAST_DUE → ACTIVE recovery only when THIS invoice's payment is the
+    // newest tracked one (the tracking CAS wrote this invoice's id as the
+    // newest-paid marker) — an older replay must not reactivate a
+    // subscription that went past-due on a newer unpaid invoice.
+    await this.subscriptionModel.updateOne(
       {
         _id: subscription._id,
-        // $ne covers same-invoice replay incl. legacy string markers.
-        'metadata.lastSettledInvoiceId': {
-          $ne: invoice._id.toString(),
-        },
-        $or: [
-          { 'metadata.lastSettledInvoiceId': { $exists: false } },
-          {
-            'metadata.lastSettledInvoiceId': {
-              $lt: invoice._id,
-            },
-          },
-        ],
+        status: SubscriptionStatus.PAST_DUE,
+        'metadata.lastSettledInvoiceId': invoice._id,
       },
-      { $set: updateData },
+      { $set: { status: SubscriptionStatus.ACTIVE } },
     );
   }
 }
