@@ -112,9 +112,17 @@ export async function applyRenewalExtension(
   subscriptionId: any,
   invoice: any,
 ): Promise<boolean> {
+  const invoiceKey = invoice._id.toString();
   for (let i = 0; i < EFFECT_CAS_MAX_RETRIES; i++) {
     const sub = await subscriptionModel.findById(subscriptionId);
     if (!sub) return false;
+
+    // Per-invoice entitlement dedup: this invoice's extension was already
+    // durably granted (e.g. post-write crash retry) — idempotent success.
+    const appliedIds = sub.metadata?.appliedEntitlementInvoiceIds || [];
+    if (appliedIds.some((id: any) => id?.toString() === invoiceKey)) {
+      return true;
+    }
 
     const now = new Date();
     const currentEnd = sub.currentPeriodEnd
@@ -156,16 +164,26 @@ export async function applyRenewalExtension(
       updateData.currentPeriodStart = now;
     }
 
-    // CAS on currentPeriodEnd — a concurrent extension by another invoice
-    // invalidates the read; retry from the new state.
+    // Atomic write: CAS on currentPeriodEnd (a concurrent extension by
+    // another invoice invalidates the read — retry from the new state)
+    // AND $addToSet the durable per-invoice entitlement identity in the
+    // SAME update, so a crash after this commit can never re-extend.
     const res = await subscriptionModel.updateOne(
       {
         _id: sub._id,
         currentPeriodEnd: sub.currentPeriodEnd ?? null,
+        'metadata.appliedEntitlementInvoiceIds': { $ne: invoice._id },
       },
-      { $set: updateData },
+      {
+        $set: updateData,
+        $addToSet: {
+          'metadata.appliedEntitlementInvoiceIds': invoice._id,
+        },
+      },
     );
     if (res?.modifiedCount) return true;
+    // CAS miss — the next loop iteration re-reads: if the marker is now
+    // present this invoice is already applied; otherwise retry.
   }
   return false;
 }

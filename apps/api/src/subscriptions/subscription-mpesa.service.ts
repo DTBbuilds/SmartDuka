@@ -1594,10 +1594,20 @@ export class SubscriptionMpesaService implements OnModuleInit {
     // Get the invoice to retrieve payment details
     const invoice = await this.invoiceModel.findById(invoiceId);
 
+    // P0-11C3-FINAL: durable per-invoice entitlement dedup — if this
+    // invoice's entitlement already committed (post-write crash retry),
+    // only refresh tracking; never grant the entitlement twice.
+    const alreadyApplied = (
+      subscription.metadata?.appliedEntitlementInvoiceIds || []
+    ).some((id: any) => id?.toString() === invoiceId);
+
     // Check if this payment is for a pending upgrade
-    if (subscription.pendingUpgrade &&
-        (subscription.pendingUpgrade.invoiceId === invoiceId ||
-         invoice?.type === 'upgrade')) {
+    if (
+      !alreadyApplied &&
+      subscription.pendingUpgrade &&
+      (subscription.pendingUpgrade.invoiceId === invoiceId ||
+        invoice?.type === 'upgrade')
+    ) {
 
       this.logger.log(`Activating pending upgrade for shop ${shopId} after payment confirmation`);
 
@@ -1605,10 +1615,39 @@ export class SubscriptionMpesaService implements OnModuleInit {
       const result = await this.subscriptionsService.activatePendingUpgrade(shopId, invoiceId);
 
       if (result) {
+        // Record the durable entitlement identity so a post-write crash
+        // retry can never fall through to a spurious renewal extension.
+        await this.subscriptionModel.updateOne(
+          { _id: subscription._id },
+          {
+            $addToSet: {
+              'metadata.appliedEntitlementInvoiceIds': new Types.ObjectId(
+                invoiceId,
+              ),
+            },
+          },
+        );
         this.logger.log(`✅ Pending upgrade activated for shop ${shopId}: ${result.planCode}`);
       } else {
         this.logger.warn(`Failed to activate pending upgrade for shop ${shopId}`);
       }
+      return;
+    }
+
+    // An upgrade invoice whose entitlement was already consumed (marker
+    // present, or pendingUpgrade cleared by a crashed-then-recovered
+    // activation) must not silently become a renewal extension.
+    if (invoice?.type === 'upgrade') {
+      await applyNewestPaymentTracking(
+        this.subscriptionModel,
+        subscription._id,
+        invoice,
+        {
+          paymentMethod: invoice.paymentMethod,
+          paymentReference:
+            invoice.mpesaReceiptNumber || invoice.paymentReference,
+        },
+      );
       return;
     }
 

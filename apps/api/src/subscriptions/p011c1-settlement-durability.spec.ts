@@ -73,6 +73,21 @@ const applySet = (doc: any, set: Record<string, any>) => {
   }
 };
 
+const applyAddToSet = (doc: any, add: Record<string, any>) => {
+  for (const [k, v] of Object.entries(add)) {
+    const parts = k.split('.');
+    let cur = doc;
+    for (let i = 0; i < parts.length - 1; i++) {
+      cur[parts[i]] = cur[parts[i]] || {};
+      cur = cur[parts[i]];
+    }
+    const key = parts[parts.length - 1];
+    cur[key] = Array.isArray(cur[key]) ? cur[key] : [];
+    if (!cur[key].some((x: any) => x?.toString() === v?.toString()))
+      cur[key].push(v);
+  }
+};
+
 const matches = (doc: any, filter: any): boolean => {
   for (const [k, cond] of Object.entries(filter)) {
     if (k === '$or') {
@@ -96,7 +111,14 @@ const matches = (doc: any, filter: any): boolean => {
         continue;
       }
       if ('$ne' in (cond as any)) {
-        if (val?.toString() === (cond as any).$ne?.toString()) return false;
+        if (
+          Array.isArray(val)
+            ? val.some(
+                (v: any) => v?.toString() === (cond as any).$ne?.toString(),
+              )
+            : val?.toString() === (cond as any).$ne?.toString()
+        )
+          return false;
         continue;
       }
       if ('$exists' in (cond as any)) {
@@ -165,6 +187,7 @@ const buildStores = () => {
       for (const d of invoices.values()) {
         if (matches(d, filter)) {
           if (update.$set) applySet(d, update.$set);
+          if (update.$addToSet) applyAddToSet(d, update.$addToSet);
           if (update.$inc) {
             for (const [k, v] of Object.entries(update.$inc)) {
               const parts = k.split('.');
@@ -187,6 +210,7 @@ const buildStores = () => {
       for (const d of invoices.values()) {
         if (matches(d, filter)) {
           if (update.$set) applySet(d, update.$set);
+          if (update.$addToSet) applyAddToSet(d, update.$addToSet);
           if (update.$inc) {
             for (const [k, v] of Object.entries(update.$inc)) {
               const parts = k.split('.');
@@ -242,6 +266,7 @@ const buildStores = () => {
       for (const d of payments.values()) {
         if (matches(d, filter)) {
           if (update.$set) applySet(d, update.$set);
+          if (update.$addToSet) applyAddToSet(d, update.$addToSet);
           return chain(d);
         }
       }
@@ -252,6 +277,7 @@ const buildStores = () => {
       for (const d of payments.values()) {
         if (matches(d, filter)) {
           if (update.$set) applySet(d, update.$set);
+          if (update.$addToSet) applyAddToSet(d, update.$addToSet);
           n++;
         }
       }

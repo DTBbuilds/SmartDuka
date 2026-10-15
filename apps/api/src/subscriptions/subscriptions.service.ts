@@ -1690,26 +1690,49 @@ export class SubscriptionsService {
         periodEnd.setMonth(periodEnd.getMonth() + 1);
       }
 
-      subscription.status = SubscriptionStatus.ACTIVE;
-      subscription.setupPaid = true;
-      subscription.setupPaidAt = now;
-      subscription.currentPeriodStart = now;
-      subscription.currentPeriodEnd = periodEnd;
-      subscription.nextBillingDate = periodEnd;
-      subscription.lastPaymentDate = now;
-      subscription.lastPaymentAmount = invoice.totalAmount;
-      subscription.lastPaymentMethod = invoice.paymentMethod;
-      subscription.lastPaymentReference = invoice.mpesaReceiptNumber || invoice.paymentReference;
-      subscription.failedPaymentAttempts = 0;
-      // Monotonic settled-invoice marker — same ledger the CAS-guarded
-      // activation paths use, so a replayed older invoice cannot regress
-      // this manually verified state.
-      subscription.metadata = {
-        ...(subscription.metadata || {}),
-        lastSettledInvoiceId: invoice._id,
-      };
-
-      await subscription.save();
+      // P0-11C3-FINAL: the entitlement write and the durable per-invoice
+      // application identity commit in ONE updateOne. A crash after this
+      // write but before billingEffects.applied is retried by the
+      // reconciler through ensureManualBillingEffects → the marker makes
+      // the retry a no-op instead of a second extension.
+      const appliedWrite = await this.subscriptionModel.updateOne(
+        {
+          _id: subscription._id,
+          'metadata.appliedEntitlementInvoiceIds': { $ne: invoice._id },
+        },
+        {
+          $set: {
+            status: SubscriptionStatus.ACTIVE,
+            setupPaid: true,
+            setupPaidAt: now,
+            currentPeriodStart: now,
+            currentPeriodEnd: periodEnd,
+            nextBillingDate: periodEnd,
+            lastPaymentDate: now,
+            lastPaymentAmount: invoice.totalAmount,
+            lastPaymentMethod: invoice.paymentMethod,
+            lastPaymentReference:
+              invoice.mpesaReceiptNumber || invoice.paymentReference,
+            failedPaymentAttempts: 0,
+            'metadata.lastSettledInvoiceId': invoice._id,
+          },
+          $addToSet: {
+            'metadata.appliedEntitlementInvoiceIds': invoice._id,
+          },
+        },
+      );
+      if (!appliedWrite?.modifiedCount) {
+        // Marker already present → entitlement already durable (retry).
+        const cur = await this.subscriptionModel.findById(subscription._id);
+        const done = (cur?.metadata?.appliedEntitlementInvoiceIds || []).some(
+          (id: any) => id?.toString() === invoice._id.toString(),
+        );
+        if (!done) {
+          throw new Error(
+            'manual verification effects CAS conflict — retry later',
+          );
+        }
+      }
       this.logger.log(
         `Subscription activated for shop ${subscription.shopId} after payment verification, period ends: ${periodEnd.toISOString()}`,
       );

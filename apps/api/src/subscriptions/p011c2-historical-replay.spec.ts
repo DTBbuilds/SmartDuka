@@ -63,6 +63,21 @@ const applySet = (doc: any, set: Record<string, any>) => {
   }
 };
 
+const applyAddToSet = (doc: any, add: Record<string, any>) => {
+  for (const [k, v] of Object.entries(add)) {
+    const parts = k.split('.');
+    let cur = doc;
+    for (let i = 0; i < parts.length - 1; i++) {
+      cur[parts[i]] = cur[parts[i]] || {};
+      cur = cur[parts[i]];
+    }
+    const key = parts[parts.length - 1];
+    cur[key] = Array.isArray(cur[key]) ? cur[key] : [];
+    if (!cur[key].some((x: any) => x?.toString() === v?.toString()))
+      cur[key].push(v);
+  }
+};
+
 const applyInc = (doc: any, inc: Record<string, any>) => {
   for (const [k, v] of Object.entries(inc)) {
     const parts = k.split('.');
@@ -104,7 +119,12 @@ const matches = (doc: any, filter: any): boolean => {
       const c = cond as any;
       if ('$ne' in c) {
         handled = true;
-        if (val?.toString() === c.$ne?.toString()) return false;
+        if (
+          Array.isArray(val)
+            ? val.some((v: any) => v?.toString() === c.$ne?.toString())
+            : val?.toString() === c.$ne?.toString()
+        )
+          return false;
       }
       if ('$in' in c) {
         handled = true;
@@ -174,7 +194,9 @@ const buildStores = () => {
       for (const d of invoices.values()) {
         if (matches(d, filter)) {
           if (update.$set) applySet(d, update.$set);
+          if (update.$addToSet) applyAddToSet(d, update.$addToSet);
           if (update.$inc) applyInc(d, update.$inc);
+          if (update.$addToSet) applyAddToSet(d, update.$addToSet);
           return chain(d);
         }
       }
@@ -185,7 +207,9 @@ const buildStores = () => {
       for (const d of invoices.values()) {
         if (matches(d, filter)) {
           if (update.$set) applySet(d, update.$set);
+          if (update.$addToSet) applyAddToSet(d, update.$addToSet);
           if (update.$inc) applyInc(d, update.$inc);
+          if (update.$addToSet) applyAddToSet(d, update.$addToSet);
           n++;
         }
       }

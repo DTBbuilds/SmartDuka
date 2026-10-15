@@ -160,6 +160,13 @@ export class Subscription {
     // paidAt of the invoice whose tracking fields were last written —
     // newest-payment-wins CAS guard for lastPayment* display fields.
     lastPaymentInvoicePaidAt?: Date;
+    // P0-11C3-FINAL: durable per-invoice entitlement ledger — written
+    // atomically ($addToSet) inside the same updateOne that grants the
+    // period extension / manual-verify effects, so a crash AFTER the
+    // subscription write but BEFORE the invoice 'applied' marker can be
+    // retried without ever double-granting. Bounded by invoice volume
+    // (one ObjectId per settled invoice, ~12B each).
+    appliedEntitlementInvoiceIds?: Types.ObjectId[];
     upgradedFrom?: string; // Previous plan code
     upgradedAt?: Date;
     downgradedFrom?: string;
