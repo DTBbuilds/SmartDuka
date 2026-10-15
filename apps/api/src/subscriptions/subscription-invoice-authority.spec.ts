@@ -90,6 +90,15 @@ const matches = (doc: any, filter: any): boolean => {
         if ((val !== undefined) !== (cond as any).$exists) return false;
         continue;
       }
+      if ('$lt' in (cond as any)) {
+        const l = val instanceof Types.ObjectId ? val.toString() : val;
+        const r =
+          (cond as any).$lt instanceof Types.ObjectId
+            ? (cond as any).$lt.toString()
+            : (cond as any).$lt;
+        if (!(l < r)) return false;
+        continue;
+      }
     }
     if (val !== cond) return false;
   }
@@ -147,6 +156,15 @@ const buildStores = () => {
     findById: jest.fn(
       async (id: any) => subscriptions.get(id.toString()) || null,
     ),
+    updateOne: jest.fn(async (filter: any, update: any) => {
+      for (const d of subscriptions.values()) {
+        if (matches(d, filter)) {
+          if (update.$set) applySet(d, update.$set);
+          return { modifiedCount: 1 };
+        }
+      }
+      return { modifiedCount: 0 };
+    }),
   };
 
   const intents = new Map<string, any>();
@@ -471,11 +489,11 @@ describe('P0-11C subscription invoice payment authority', () => {
     expect(sub.status).toBe('active'); // PAST_DUE recovered
     expect(sub.failedPaymentAttempts).toBe(0);
     expect(sub.lastPaymentReference).toBe('pi_1');
-    expect(sub.save).toHaveBeenCalledTimes(1);
+    expect(s.subscriptionModel.updateOne).toHaveBeenCalledTimes(1);
 
     // Duplicate delivery → no second transition, no second effects run.
     await fireWebhook(succeededIntent());
-    expect(sub.save).toHaveBeenCalledTimes(1);
+    expect(s.subscriptionModel.updateOne).toHaveBeenCalledTimes(1);
   });
 
   it.each([

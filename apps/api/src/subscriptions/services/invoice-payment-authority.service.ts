@@ -478,6 +478,7 @@ export class InvoicePaymentAuthorityService {
               'billingEffects.lastError':
                 error?.message || 'billing effects failed',
             },
+            $inc: { 'billingEffects.attempts': 1 },
           },
         )
         .catch(() => undefined);
@@ -489,6 +490,13 @@ export class InvoicePaymentAuthorityService {
    * Billing side effects for a settled invoice — the same effects the former
    * markInvoicePaid applied: last-payment tracking, setup completion for
    * SETUP invoices, and PAST_DUE → ACTIVE recovery.
+   *
+   * P0-11C2: applied through a MONOTONIC per-invoice CAS — the update only
+   * lands if this invoice is newer than `metadata.lastSettledInvoiceId`
+   * (ObjectId ordering). A replayed older invoice can never overwrite a
+   * newer invoice's payment tracking or re-run effects; the subscription
+   * read is only used to build the fixed-value write set, never trusted as
+   * the guard.
    */
   private async applyInvoicePaidEffects(
     invoice: SubscriptionInvoiceDocument,
@@ -500,22 +508,44 @@ export class InvoicePaymentAuthorityService {
     );
     if (!subscription) return;
 
-    subscription.lastPaymentDate = new Date();
-    subscription.lastPaymentAmount = invoice.totalAmount;
-    subscription.lastPaymentMethod = paymentMethod;
-    subscription.lastPaymentReference = paymentReference;
-    subscription.failedPaymentAttempts = 0;
+    const updateData: Record<string, any> = {
+      lastPaymentDate: new Date(),
+      lastPaymentAmount: invoice.totalAmount,
+      lastPaymentMethod: paymentMethod,
+      lastPaymentReference: paymentReference,
+      failedPaymentAttempts: 0,
+      'metadata.lastSettledInvoiceId': new Types.ObjectId(
+        invoice._id.toString(),
+      ),
+    };
 
     if (invoice.type === InvoiceType.SETUP) {
-      subscription.setupPaid = true;
-      subscription.setupPaidAt = new Date();
-      subscription.setupAmount = invoice.totalAmount;
+      updateData.setupPaid = true;
+      updateData.setupPaidAt = new Date();
+      updateData.setupAmount = invoice.totalAmount;
     }
 
     if (subscription.status === SubscriptionStatus.PAST_DUE) {
-      subscription.status = SubscriptionStatus.ACTIVE;
+      updateData.status = SubscriptionStatus.ACTIVE;
     }
 
-    await subscription.save();
+    await this.subscriptionModel.updateOne(
+      {
+        _id: subscription._id,
+        // $ne covers same-invoice replay incl. legacy string markers.
+        'metadata.lastSettledInvoiceId': {
+          $ne: invoice._id.toString(),
+        },
+        $or: [
+          { 'metadata.lastSettledInvoiceId': { $exists: false } },
+          {
+            'metadata.lastSettledInvoiceId': {
+              $lt: invoice._id,
+            },
+          },
+        ],
+      },
+      { $set: updateData },
+    );
   }
 }

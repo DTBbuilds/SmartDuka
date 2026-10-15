@@ -1184,6 +1184,7 @@ export class SubscriptionMpesaService implements OnModuleInit {
           receiptNumber: mpesaReceiptNumber,
           amount,
           transactionDate,
+          amountSource: 'callback',
         });
         if (!claimed) {
           this.logger.log(
@@ -1320,6 +1321,12 @@ export class SubscriptionMpesaService implements OnModuleInit {
       receiptNumber?: string;
       amount: number;
       transactionDate?: string;
+      // P0-11C2: provenance — 'callback' = unsigned provider callback data;
+      // 'requested' = the amount WE asked Daraja to collect (stkpushquery
+      // confirms the checkout outcome but reports no amount). Neither is an
+      // independently observed amount; receiptSource marks unverified
+      // callback receipt claims.
+      amountSource: 'callback' | 'requested';
     },
   ): Promise<boolean> {
     const settleResult = await this.invoiceModel.updateOne(
@@ -1335,7 +1342,10 @@ export class SubscriptionMpesaService implements OnModuleInit {
             merchantRequestId: fields.merchantRequestId,
             checkoutRequestId: fields.checkoutRequestId,
             receiptNumber: fields.receiptNumber,
+            receiptSource: fields.receiptNumber ? 'callback' : undefined,
             amount: fields.amount,
+            amountSource: fields.amountSource,
+            providerVerified: true,
             transactionDate: fields.transactionDate,
             completedAt: new Date(),
           },
@@ -1360,7 +1370,7 @@ export class SubscriptionMpesaService implements OnModuleInit {
    * the subscription twice; the 'applied' marker is written only after the
    * subscription mutation is durable.
    */
-  private async ensureStkBillingEffects(invoiceId: string): Promise<void> {
+  async ensureStkBillingEffects(invoiceId: string): Promise<void> {
     const invoice = await this.invoiceModel.findById(invoiceId);
     if (!invoice || invoice.status !== 'paid') return;
     if (invoice.billingEffects?.status === 'applied') return;
@@ -1384,7 +1394,12 @@ export class SubscriptionMpesaService implements OnModuleInit {
       await this.invoiceModel
         .updateOne(
           { _id: invoice._id },
-          { $set: { 'billingEffects.lastError': error?.message || 'failed' } },
+          {
+            $set: {
+              'billingEffects.lastError': error?.message || 'failed',
+            },
+            $inc: { 'billingEffects.attempts': 1 },
+          },
         )
         .catch(() => undefined);
       throw error;
@@ -1522,6 +1537,7 @@ export class SubscriptionMpesaService implements OnModuleInit {
             checkoutRequestId,
             receiptNumber: undefined,
             amount: scopedInvoice.totalAmount,
+            amountSource: 'requested',
           });
         } catch (fxErr: any) {
           this.logger.error(
@@ -1626,10 +1642,13 @@ export class SubscriptionMpesaService implements OnModuleInit {
       lastPaymentDate: now,
       failedPaymentAttempts: 0,
       gracePeriodEndDate: null,
-      // P0-11C1: exactly-once activation — the CAS below makes this write
-      // fire only for the first reconciler; a duplicate callback or a
-      // post-crash retry can never extend the period a second time.
-      'metadata.lastSettledInvoiceId': invoiceId,
+      // P0-11C2: monotonic per-invoice ledger — the CAS below applies this
+      // activation ONLY if this invoice is newer than the last settled one
+      // (ObjectId ordering). A replayed older invoice can never extend the
+      // period a second time or overwrite newer payment tracking; a retried
+      // same-invoice application is a no-op because the stored id is not
+      // less than itself.
+      'metadata.lastSettledInvoiceId': new Types.ObjectId(invoiceId),
     };
 
     // Add payment details from invoice if available
@@ -1642,14 +1661,24 @@ export class SubscriptionMpesaService implements OnModuleInit {
     const activation = await this.subscriptionModel.updateOne(
       {
         _id: subscription._id,
+        // $ne covers legacy string markers AND this invoice already settled;
+        // $or enforces monotonic per-invoice ordering (P0-11C2).
         'metadata.lastSettledInvoiceId': { $ne: invoiceId },
+        $or: [
+          { 'metadata.lastSettledInvoiceId': { $exists: false } },
+          {
+            'metadata.lastSettledInvoiceId': {
+              $lt: new Types.ObjectId(invoiceId),
+            },
+          },
+        ],
       },
       { $set: updateData },
     );
 
     if (!activation?.modifiedCount) {
       this.logger.log(
-        `Subscription for shop ${shopId} already activated for invoice ${invoiceId} — skipping duplicate activation`,
+        `Subscription for shop ${shopId} already activated for a newer-or-equal invoice — skipping replay of ${invoiceId}`,
       );
       return;
     }

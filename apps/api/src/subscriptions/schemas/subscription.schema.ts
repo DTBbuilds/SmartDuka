@@ -153,6 +153,10 @@ export class Subscription {
   // Metadata
   @Prop({ type: Object, default: {} })
   metadata: {
+    // P0-11C2: monotonic settled-invoice ledger — the newest invoice id
+    // whose billing effects have been durably applied (ObjectId ordering;
+    // C1-era rows may hold the string form).
+    lastSettledInvoiceId?: Types.ObjectId | string;
     upgradedFrom?: string; // Previous plan code
     upgradedAt?: Date;
     downgradedFrom?: string;

@@ -156,6 +156,13 @@ export class SubscriptionInvoice {
     merchantRequestId?: string;
     checkoutRequestId?: string;
     receiptNumber?: string;
+    // P0-11C2 provenance: receipt supplied by an unsigned callback (never
+    // verified receipt evidence); 'callback'/'requested' distinguish
+    // reported vs requested amount; providerVerified records that the
+    // checkout OUTCOME was confirmed server-to-provider.
+    receiptSource?: 'callback';
+    amountSource?: 'callback' | 'requested';
+    providerVerified?: boolean;
     amount?: number;
     transactionDate?: string;
     completedAt?: Date;
@@ -217,11 +224,14 @@ export class SubscriptionInvoice {
   // the entitlement, and retries can never duplicate it.
   @Prop({ type: Object, required: false })
   billingEffects?: {
-    status?: 'pending' | 'applied';
+    status?: 'pending' | 'applied' | 'failed';
     channel?: string;
     appliedAt?: Date;
     attempts?: number;
     lastError?: string;
+    // P0-11C2: reconciliation-worker lease — set when a worker claims the
+    // record; a stale lease expires so crashed workers never wedge it.
+    recoveringAt?: Date;
   };
 
   // Timestamps

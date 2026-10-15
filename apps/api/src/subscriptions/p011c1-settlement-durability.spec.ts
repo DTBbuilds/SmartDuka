@@ -80,23 +80,47 @@ const matches = (doc: any, filter: any): boolean => {
       continue;
     }
     const val = k.split('.').reduce((o: any, p) => o?.[p], doc);
-    if (k === '_id' || k === 'shopId' || k.endsWith('Id')) {
-      if (cond instanceof Types.ObjectId || val instanceof Types.ObjectId) {
-        if (val?.toString() !== cond?.toString()) return false;
-        continue;
-      }
-    }
-    if (cond && typeof cond === 'object' && !Array.isArray(cond)) {
+    if (
+      cond &&
+      typeof cond === 'object' &&
+      !Array.isArray(cond) &&
+      !(cond instanceof Types.ObjectId) &&
+      !(cond instanceof Date)
+    ) {
       if ('$in' in (cond as any)) {
         if (!(cond as any).$in.includes(val)) return false;
         continue;
       }
       if ('$ne' in (cond as any)) {
-        if (val === (cond as any).$ne) return false;
+        if (val?.toString() === (cond as any).$ne?.toString()) return false;
         continue;
       }
       if ('$exists' in (cond as any)) {
         if ((val !== undefined) !== (cond as any).$exists) return false;
+        continue;
+      }
+      if ('$lt' in (cond as any)) {
+        const l = val instanceof Types.ObjectId ? val.toString() : val;
+        const r =
+          (cond as any).$lt instanceof Types.ObjectId
+            ? (cond as any).$lt.toString()
+            : (cond as any).$lt;
+        if (!(l < r)) return false;
+        continue;
+      }
+      if ('$lte' in (cond as any)) {
+        const l = val instanceof Types.ObjectId ? val.toString() : val;
+        const r =
+          (cond as any).$lte instanceof Types.ObjectId
+            ? (cond as any).$lte.toString()
+            : (cond as any).$lte;
+        if (!(l <= r)) return false;
+        continue;
+      }
+    }
+    if (k === '_id' || k === 'shopId' || k.endsWith('Id')) {
+      if (cond instanceof Types.ObjectId || val instanceof Types.ObjectId) {
+        if (val?.toString() !== cond?.toString()) return false;
         continue;
       }
     }

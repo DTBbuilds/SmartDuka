@@ -1636,7 +1636,9 @@ export class SubscriptionsService {
       throw new BadRequestException('Invoice is not pending verification');
     }
 
-    // Mark invoice as paid
+    // Mark invoice as paid — with the P0-11C2 durable effects marker so a
+    // crash between the paid transition and the subscription mutation can
+    // be recovered by the billing-effects reconciler (channel 'manual').
     invoice.status = InvoiceStatus.PAID;
     invoice.paidAt = new Date();
     invoice.manualPayment = {
@@ -1644,6 +1646,11 @@ export class SubscriptionsService {
       pendingVerification: false,
       verifiedAt: new Date(),
       verifiedBy,
+    };
+    invoice.billingEffects = {
+      ...(invoice.billingEffects || {}),
+      status: 'pending',
+      channel: 'manual',
     };
     await invoice.save();
 
@@ -1677,9 +1684,25 @@ export class SubscriptionsService {
       subscription.lastPaymentMethod = invoice.paymentMethod;
       subscription.lastPaymentReference = invoice.mpesaReceiptNumber || invoice.paymentReference;
       subscription.failedPaymentAttempts = 0;
+      // Monotonic settled-invoice marker — same ledger the CAS-guarded
+      // activation paths use, so a replayed older invoice cannot regress
+      // this manually verified state.
+      subscription.metadata = {
+        ...(subscription.metadata || {}),
+        lastSettledInvoiceId: invoice._id,
+      };
 
       await subscription.save();
       this.logger.log(`Subscription activated for shop ${subscription.shopId} after payment verification, period ends: ${periodEnd.toISOString()}`);
+
+      // Effects are durable — mark them applied; a crash before this line
+      // leaves 'pending' and the reconciler finishes the work idempotently.
+      invoice.billingEffects = {
+        ...invoice.billingEffects,
+        status: 'applied',
+        appliedAt: new Date(),
+      };
+      await invoice.save().catch(() => undefined);
 
       // Reactivate the shop if it was suspended
       const shop = await this.shopModel.findById(subscription.shopId);

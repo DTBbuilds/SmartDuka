@@ -10,6 +10,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { SubscriptionsService } from './subscriptions.service';
+import { BillingEffectsReconciliationService } from './services/billing-effects-reconciliation.service';
 import { SubscriptionMpesaService } from './subscription-mpesa.service';
 import { PaymentAttemptService } from './services/payment-attempt.service';
 import { PaymentMethod, PaymentAttemptType } from './schemas/payment-attempt.schema';
@@ -38,6 +39,7 @@ export class SubscriptionPaymentController {
     private readonly subscriptionsService: SubscriptionsService,
     private readonly mpesaService: SubscriptionMpesaService,
     private readonly paymentAttemptService: PaymentAttemptService,
+    private readonly billingEffectsReconciliation: BillingEffectsReconciliationService,
   ) {}
 
   /**
@@ -420,6 +422,23 @@ export class SubscriptionPaymentController {
       success: true,
       payments,
     };
+  }
+
+  /**
+   * P0-11C2 — read-only operational report: PAID invoices whose durable
+   * billing effects are still pending (recoverable) or failed (operator
+   * action required). Super admin only.
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('super_admin')
+  @Get('billing-effects/stuck')
+  async listStuckBillingEffects(): Promise<{
+    success: boolean;
+    invoices: any[];
+  }> {
+    const invoices =
+      await this.billingEffectsReconciliation.listStuckBillingEffects();
+    return { success: true, invoices };
   }
 
   /**

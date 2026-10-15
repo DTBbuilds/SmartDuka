@@ -21,6 +21,7 @@ import { ActivityLog, ActivityLogSchema } from './schemas/activity-log.schema';
 import { PaymentAttemptService } from './services/payment-attempt.service';
 import { ActivityLogService } from './services/activity-log.service';
 import { InvoicePaymentAuthorityService } from './services/invoice-payment-authority.service';
+import { BillingEffectsReconciliationService } from './services/billing-effects-reconciliation.service';
 import { Shop, ShopSchema } from '../shops/schemas/shop.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { Product, ProductSchema } from '../inventory/schemas/product.schema';
@@ -58,6 +59,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     PaymentAttemptService,
     ActivityLogService,
     InvoicePaymentAuthorityService,
+    BillingEffectsReconciliationService,
   ],
   exports: [
     SubscriptionsService, 
