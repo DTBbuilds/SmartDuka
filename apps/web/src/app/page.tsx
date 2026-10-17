@@ -200,7 +200,7 @@ export default function Home() {
               </div>
               <div className="flex items-center gap-2">
                 <CheckCircle className="h-5 w-5 text-primary" />
-                No data collected
+                Your business data stays yours
               </div>
               <div className="flex items-center gap-2">
                 <CheckCircle className="h-5 w-5 text-primary" />
@@ -248,7 +248,7 @@ export default function Home() {
               { value: '500+', label: 'Active Shops' },
               { value: '10K+', label: 'Daily Transactions' },
               { value: '99.9%', label: 'Uptime' },
-              { value: '24/7', label: 'Support' },
+              { value: 'EN & SW', label: 'Interface languages' },
             ].map((stat, index) => (
               <div key={index} className="text-center">
                 <div className="text-3xl md:text-4xl font-bold text-primary mb-1">
@@ -290,8 +290,8 @@ export default function Home() {
               <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center mx-auto mb-4">
                 <Lock className="h-6 w-6 text-primary" />
               </div>
-              <h3 className="text-lg font-semibold text-foreground mb-2">No Data Collected</h3>
-              <p className="text-sm text-muted-foreground">Your business data stays yours. We collect zero user data at any level. Complete privacy.</p>
+              <h3 className="text-lg font-semibold text-foreground mb-2">Shop Data Isolation</h3>
+              <p className="text-sm text-muted-foreground">Your business data stays in your shop. See our Privacy Policy for how accounts and shop records are handled.</p>
             </div>
             <div className="text-center p-6 bg-card rounded-2xl border border-border">
               <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center mx-auto mb-4">
@@ -373,7 +373,7 @@ export default function Home() {
             Ready to Transform Your Business?
           </h2>
           <p className="text-lg text-primary-foreground/80 mb-10 max-w-2xl mx-auto">
-            Join thousands of businesses worldwide already using SmartDuka for free to streamline operations and boost sales.
+            Start using SmartDuka for free to streamline operations and boost sales.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link 
@@ -507,7 +507,7 @@ export default function Home() {
               </p>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Clock className="h-4 w-4" />
-                <span>24/7 Support Available</span>
+                <span>In-app support available</span>
               </div>
             </div>
             

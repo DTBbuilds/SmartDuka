@@ -116,38 +116,18 @@ const features = [
 const benefits = [
   'No hardware lock-in - works on any device',
   'Offline mode - keep selling even without internet',
-  'Free training and 24/7 support',
+  'Free training resources and in-app help',
   'Data backup and security included',
   'Regular updates with new features',
   'Swahili and English language support',
 ];
 
-const testimonials = [
-  {
-    name: 'Mary Wanjiku',
-    business: 'Mama Mary Supermarket, Nairobi',
-    quote: 'SmartDuka transformed how I manage my supermarket. M-Pesa integration is seamless!',
-    rating: 5,
-  },
-  {
-    name: 'John Ochieng',
-    business: 'Quick Mart Electronics, Kisumu',
-    quote: 'The inventory tracking saved me from stockouts. My customers are always happy now.',
-    rating: 5,
-  },
-  {
-    name: 'Fatuma Hassan',
-    business: 'Coastal Fashion, Mombasa',
-    quote: 'Easy to use and my staff learned it in just one day. Great support team!',
-    rating: 5,
-  },
-];
 
 const stats = [
   { value: '5,000+', label: 'Active Businesses' },
   { value: 'KES 2B+', label: 'Transactions Processed' },
   { value: '99.9%', label: 'Uptime Guarantee' },
-  { value: '24/7', label: 'Customer Support' },
+  { value: 'EN & SW', label: 'Interface languages' },
 ];
 
 const homepageFaqs = [
@@ -460,26 +440,32 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
-              Trusted by Businesses Across Kenya
+              Built for Kenyan Retail
             </h2>
             <p className="text-xl text-gray-600">
-              See what our customers have to say about SmartDuka
+              Everything a shop needs to sell, track stock, and serve customers
             </p>
           </div>
-          
+
           <div className="grid md:grid-cols-3 gap-8">
-            {testimonials.map((testimonial, index) => (
-              <div key={index} className="bg-gray-50 p-8 rounded-2xl">
-                <div className="flex gap-1 mb-4">
-                  {[...Array(testimonial.rating)].map((_, i) => (
-                    <Star key={i} className="h-5 w-5 text-yellow-400 fill-current" />
-                  ))}
-                </div>
-                <p className="text-gray-700 mb-6 italic">&quot;{testimonial.quote}&quot;</p>
-                <div>
-                  <p className="font-bold text-gray-900">{testimonial.name}</p>
-                  <p className="text-gray-500 text-sm">{testimonial.business}</p>
-                </div>
+            {[
+              {
+                title: 'Sell everywhere, online or off',
+                body: 'Fast checkout with M-Pesa STK push, cash, and card \u2014 and an offline mode that keeps selling when the internet drops.',
+              },
+              {
+                title: 'Know your stock, always',
+                body: 'Real-time inventory with low-stock alerts, barcode scanning, adjustments with reasons, and multi-branch transfers.',
+              },
+              {
+                title: 'See what your business is doing',
+                body: 'Daily sales, product performance, profit reports, and per-cashier accountability built in.',
+              },
+            ].map((item) => (
+              <div key={item.title} className="bg-gray-50 p-8 rounded-2xl">
+                <CheckCircle className="h-8 w-8 text-orange-600 mb-4" />
+                <h3 className="font-bold text-gray-900 text-lg mb-2">{item.title}</h3>
+                <p className="text-gray-600">{item.body}</p>
               </div>
             ))}
           </div>
@@ -493,8 +479,7 @@ export default function HomePage() {
             Ready to Transform Your Business?
           </h2>
           <p className="text-xl text-orange-100 mb-8">
-            Join thousands of businesses worldwide using SmartDuka to grow their sales 
-            and manage their inventory efficiently.
+            Start using SmartDuka to grow your sales and manage your inventory efficiently.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link 

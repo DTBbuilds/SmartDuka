@@ -716,7 +716,7 @@ function RegisterShopContent() {
               <span className="text-primary">Digital Journey</span>
             </h1>
             <p className="mt-4 text-slate-300">
-              Join thousands of retailers worldwide using SmartDuka to grow their business.
+              Start using SmartDuka to grow your business.
             </p>
           </div>
           

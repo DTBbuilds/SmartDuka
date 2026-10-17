@@ -119,7 +119,7 @@ export default function ContactPage() {
               <a href="https://wa.me/61450275013" className="text-orange-600 font-semibold hover:underline">
                 0450 275 013
               </a>
-              <p className="text-sm text-gray-500 mt-2">Available 24/7</p>
+              <p className="text-sm text-gray-500 mt-2">Message us anytime</p>
             </div>
           </div>
 

@@ -450,7 +450,7 @@ function InboxContent() {
                             <p className="font-medium">Live Chat</p>
                             <ExternalLink className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                           </div>
-                          <p className="text-sm text-muted-foreground">Available 24/7</p>
+                          <p className="text-sm text-muted-foreground">Message us anytime</p>
                         </div>
                       </div>
                     </Card>

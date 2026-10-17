@@ -53,7 +53,7 @@ const allFeatures = [
   'Unlimited Shops',
   'Unlimited Staff',
   'Unlimited Products',
-  '24/7 Support',
+  'In-app support',
 ];
 
 const faqs = [
@@ -231,9 +231,9 @@ export default function PricingPage() {
               <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center mb-4">
                 <HeadphonesIcon className="h-6 w-6 text-amber-600" />
               </div>
-              <h3 className="font-semibold text-lg mb-2">24/7 Support</h3>
+              <h3 className="font-semibold text-lg mb-2">Support</h3>
               <p className="text-gray-600 text-sm">
-                Our team is always ready to help you succeed via phone, email, and chat.
+                Get help through our in-app support page and email support.
               </p>
             </div>
           </div>
@@ -265,7 +265,7 @@ export default function PricingPage() {
             Ready to Transform Your Business?
           </h2>
           <p className="text-orange-100 text-lg mb-8">
-            Join thousands of businesses worldwide using SmartDuka to grow their sales.
+            Start using SmartDuka to grow your sales.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link

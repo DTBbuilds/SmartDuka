@@ -355,7 +355,7 @@ export default function SelectPlanPage() {
         {/* Features Note */}
         <div className="mt-12 text-center">
           <p className="text-sm text-gray-500">
-            All plans include: M-Pesa Integration • Inventory Management • Sales Reports • 24/7 Support
+            All plans include: M-Pesa Integration • Inventory Management • Sales Reports • In-app support
           </p>
         </div>
       </main>
