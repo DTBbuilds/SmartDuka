@@ -1,8 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { Request } from 'express';
+import { TokenService } from '../token.service';
 
 export type JwtPayload = {
   sub: string;
@@ -38,7 +39,15 @@ function extractJwtFromCookieOrHeader(req: Request): string | null {
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
-  constructor(cfg: ConfigService) {
+  constructor(
+    cfg: ConfigService,
+    // P1-13B: session-revocation enforcement — after a password reset
+    // (or any session termination), previously issued access tokens must
+    // stop working immediately, not merely until their 15-minute expiry.
+    // Tokens without a sessionId (legacy/other flows) skip the check so
+    // existing login flows are not unintentionally broken.
+    @Optional() private readonly tokenService?: TokenService,
+  ) {
     super({
       jwtFromRequest: extractJwtFromCookieOrHeader,
       ignoreExpiration: false,
@@ -47,6 +56,12 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   }
 
   async validate(payload: JwtPayload) {
+    if (payload.sessionId && this.tokenService) {
+      const isActive = await this.tokenService.isSessionActive(payload.sessionId);
+      if (!isActive) {
+        throw new UnauthorizedException('Session has been terminated');
+      }
+    }
     return payload;
   }
 }

@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unused-vars */
-import { Injectable, UnauthorizedException, BadRequestException, Optional, Inject, Logger } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException, ServiceUnavailableException, Optional, Inject, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -1167,16 +1167,16 @@ export class AuthService {
     const resetLink = `${frontendUrl}/reset-password?token=${resetToken}`;
 
     if (!this.emailService) {
-      // No provider configured: do NOT record a successful delivery.
-      // The public response stays generic (enumeration-safe); the token
-      // remains valid so an operator with DB access can still assist.
+      // P1-13B: a GLOBAL capability outage (no provider configured) is
+      // safe to signal — it applies to every request regardless of the
+      // email, so it discloses nothing about any account. Per-email
+      // delivery outcomes are NEVER in public responses.
       this.logger.error(
         'Password reset email NOT sent: no email provider configured',
       );
-      return {
-        message: 'If an account exists with this email, a password reset link has been sent.',
-        delivered: false,
-      };
+      throw new ServiceUnavailableException(
+        'The password reset service is temporarily unavailable. Please try again shortly.',
+      );
     }
 
     const sent = await this.emailService.sendEmail({
@@ -1186,6 +1186,11 @@ export class AuthService {
       text: 'Reset your SmartDuka password: ' + resetLink + '\n' + '\n' + 'If you did not request this, you can ignore this email.',
       category: 'password_reset',
       triggeredBy: 'user_request',
+      // P1-13B: single-provider send for password reset — the default
+      // parallel mode (SMTP + Resend simultaneously) would deliver the
+      // reset email TWICE. Resend is preferred for reliability; SMTP
+      // remains the fallback when Resend is not configured.
+      preferredProvider: 'resend',
       redactPatterns: [
         // token in query strings and bare token material
         /token=[A-Za-z0-9_\-]+/g,
@@ -1194,12 +1199,15 @@ export class AuthService {
     });
 
     if (!sent.success) {
+      // P1-13B: a per-email provider failure is NOT disclosed — the
+      // public response is IDENTICAL to the nonexistent-account and
+      // successful-delivery cases (same status, same body shape). The
+      // outcome is recorded here for authorized internal monitoring.
       this.logger.error(
         `Password reset email FAILED for a registered account (provider error: ${sent.error || 'unknown'})`,
       );
       return {
         message: 'If an account exists with this email, a password reset link has been sent.',
-        delivered: false,
       };
     }
 
@@ -1209,7 +1217,6 @@ export class AuthService {
 
     return {
       message: 'If an account exists with this email, a password reset link has been sent.',
-      delivered: true,
     };
   }
 

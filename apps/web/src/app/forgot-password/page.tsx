@@ -17,7 +17,6 @@ export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const [deliveryFailed, setDeliveryFailed] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -34,14 +33,13 @@ export default function ForgotPasswordPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim() }),
       });
-      const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        // P1-13A: distinguish an ACCEPTED request (the backend dispatched
-        // the email) from a provider failure — the backend returns
-        // `delivered: false` when the email could not be sent. Either
-        // way the response stays enumeration-safe (same message).
+        // P1-13B: the public response is IDENTICAL for existing and
+        // nonexistent accounts and never carries per-email delivery
+        // status (that would leak account existence). Only global
+        // conditions are distinguishable: 429 rate limits and
+        // service outages (non-OK).
         setSubmitted(true);
-        setDeliveryFailed(data?.delivered === false);
       } else if (res.status === 429) {
         setError('Too many reset requests. Please wait a minute and try again.');
       } else {
@@ -82,9 +80,8 @@ export default function ForgotPasswordPage() {
                 <div className="space-y-4 text-center" role="status">
                   <CheckCircle2 className="h-10 w-10 text-green-600 mx-auto" />
                   <p className="text-sm text-muted-foreground">
-                    {deliveryFailed
-                      ? 'Your request was received, but the email could not be sent right now. Please try again in a few minutes.'
-                      : 'If an account exists with this email, a password reset link has been sent. Check your inbox — the link expires after a short time.'}
+                    If an account exists with this email, a password reset link has been sent.
+                    Check your inbox — the link expires after a short time.
                   </p>
                   <Button asChild variant="outline" className="w-full">
                     <Link href="/login">Back to login</Link>

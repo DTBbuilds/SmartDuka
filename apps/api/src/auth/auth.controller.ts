@@ -504,7 +504,7 @@ export class AuthController {
   /**
    * Request password reset - sends email with reset link
    */
-  @Throttle({ default: { limit: 3, ttl: 60000 } }) // P1-13A: abuse protection on reset requests
+  @Throttle({ medium: { limit: 3, ttl: 60000 } }) // P1-13B: abuse protection on reset requests (named throttler)
   @Post('forgot-password')
   async forgotPassword(@Body() body: { email: string }, @Req() req: any) {
     const ipAddress = req.ip || req.connection.remoteAddress;
@@ -519,7 +519,7 @@ export class AuthController {
   /**
    * Reset password using token
    */
-  @Throttle({ default: { limit: 5, ttl: 60000 } }) // P1-13A: brute-force protection on token redemption
+  @Throttle({ medium: { limit: 5, ttl: 60000 } }) // P1-13B: brute-force protection on token redemption (named throttler)
   @Post('reset-password')
   async resetPassword(@Body() body: { token: string; newPassword: string }) {
     return this.authService.resetPassword(body.token, body.newPassword);
