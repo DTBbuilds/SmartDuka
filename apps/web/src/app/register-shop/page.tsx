@@ -8,6 +8,7 @@ import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Inpu
 import { useAuth, GoogleProfile } from "@/lib/auth-context";
 import { config } from "@/lib/config";
 import { CURRENCY_OPTIONS, getDefaultCurrencyForCountry, SUPPORTED_COUNTRIES } from "@/lib/currency";
+import { validatePhoneForCountry } from "@/lib/phone-validation";
 import { CartLoader } from "@/components/ui/cart-loader";
 import { ThemeToggleOutline } from "@/components/theme-toggle";
 import { api } from "@/lib/api-client";
@@ -495,12 +496,10 @@ function RegisterShopContent() {
       setError("Phone number is required");
       return false;
     }
-    // Validate phone format (supports AU and KE formats)
-    const phoneClean = adminData.phone.replace(/\s/g, '');
-    const kePhoneRegex = /^(?:\+254|254|0)?[17]\d{8}$/;
-    const auPhoneRegex = /^(?:\+61|61|0)?4\d{8}$/;
-    if (!kePhoneRegex.test(phoneClean) && !auPhoneRegex.test(phoneClean)) {
-      setError("Please enter a valid phone number (e.g., 0712345678 for KE or 0450275013 for AU)");
+    // P1-13: country-aware phone validation (all supported countries)
+    const phoneCheck = validatePhoneForCountry(shopData.country, adminData.phone);
+    if (!phoneCheck.valid) {
+      setError(phoneCheck.error || "Please enter a valid phone number");
       return false;
     }
     // Password validation only for non-Google flow

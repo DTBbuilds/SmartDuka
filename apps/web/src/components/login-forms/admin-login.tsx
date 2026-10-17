@@ -140,13 +140,20 @@ export function AdminLoginForm({
         {isLoading ? 'Signing in...' : 'Sign In'}
       </Button>
 
+      {/* P1-13: self-service password recovery */}
+      <div className="text-center">
+        <a href="/forgot-password" className="text-xs text-primary hover:underline">
+          Forgot your password?
+        </a>
+      </div>
+
       {/* Help Text */}
       <div className="p-3 bg-muted/50 rounded-lg">
         <div className="flex items-start gap-2">
           <Info className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
           <div className="text-xs text-muted-foreground space-y-1">
             <p><strong>Not registered?</strong> Ask your shop admin to create an account for you, or <a href="/register-shop" className="text-primary hover:underline">register a new shop</a>.</p>
-            <p><strong>Forgot password?</strong> Contact your shop administrator to reset it.</p>
+            <p><strong>Forgot password?</strong> Use the reset link above — a reset email will be sent to the account address.</p>
           </div>
         </div>
       </div>
