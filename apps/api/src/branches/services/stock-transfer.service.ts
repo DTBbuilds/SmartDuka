@@ -231,14 +231,21 @@ export class StockTransferService {
         throw new BadRequestException(`Product ${item.productId} not found`);
       }
 
-      // Check stock availability at source branch
-      // Use branchInventory object or fall back to main stock
+      // Check stock availability at the SOURCE location.
+      // FIX1A: a branch transfer must validate against the BRANCH's own
+      // inventory — falling back to the main store's global stock let a
+      // branch transfer stock that exists only at the main store, driving
+      // branch stock negative at shipment (shipment deducts from
+      // branchInventory only). The global-stock fallback is valid ONLY
+      // when the source IS the main store (isFromMain).
       const branchInventory = product.branchInventory?.[dto.fromBranchId];
-      const availableStock = branchInventory?.stock ?? product.stock ?? 0;
+      const availableStock = isFromMain
+        ? (branchInventory?.stock ?? product.stock ?? 0)
+        : (branchInventory?.stock ?? 0);
 
       if (availableStock < item.quantity) {
         throw new BadRequestException(
-          `Insufficient stock for ${product.name}. Available: ${availableStock}, Requested: ${item.quantity}`,
+          `Insufficient stock for ${product.name} at ${fromBranch.name}. Available: ${availableStock}, Requested: ${item.quantity}`,
         );
       }
 
