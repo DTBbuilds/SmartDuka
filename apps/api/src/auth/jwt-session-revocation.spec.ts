@@ -53,12 +53,22 @@ describe('P1-13B — JwtStrategy session-revocation enforcement', () => {
     expect(svc.isSessionActive).not.toHaveBeenCalled();
   });
 
-  it('tokenService unavailable → check skipped (no crash, backward compatible)', async () => {
+  it('P1-13C FAIL-CLOSED: tokenService unavailable → session-bound token REJECTED', async () => {
     const strategy = makeStrategy(null);
     const payload = {
       sub: 'u1', email: 'a@b.c', role: 'admin', shopId: 's1',
       sessionId: 'whatever',
     } as any;
-    expect(await strategy.validate(payload)).toBe(payload);
+    await expect(strategy.validate(payload)).rejects.toThrow(UnauthorizedException);
+  });
+
+  it('P1-13C FAIL-CLOSED: session LOOKUP FAILURE → token REJECTED', async () => {
+    const svc = { isSessionActive: jest.fn(async () => { throw new Error('db down'); }) };
+    const strategy = makeStrategy(svc);
+    const payload = {
+      sub: 'u1', email: 'a@b.c', role: 'admin', shopId: 's1',
+      sessionId: 'live-session',
+    } as any;
+    await expect(strategy.validate(payload)).rejects.toThrow(UnauthorizedException);
   });
 });
