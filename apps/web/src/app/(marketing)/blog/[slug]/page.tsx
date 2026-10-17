@@ -49,6 +49,20 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       publishedTime: post.date,
       authors: [post.author],
       locale: 'en_KE',
+      images: [
+        {
+          url: `https://www.smartduka.org${post.ogImage}`,
+          width: 1200,
+          height: 630,
+          alt: post.imageAlt,
+        },
+      ],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: post.title,
+      description: post.excerpt,
+      images: [`https://www.smartduka.org${post.ogImage}`],
     },
     alternates: {
       canonical: `https://www.smartduka.org/blog/${slug}`,
@@ -78,7 +92,7 @@ export default async function BlogPostPage({ params }: Props) {
         article={{
           title: post.title,
           description: post.excerpt,
-          image: `https://www.smartduka.org${post.image}`,
+          image: `https://www.smartduka.org${post.ogImage}`,
           datePublished: post.date,
           author: post.author,
           url: `https://www.smartduka.org/blog/${slug}`,

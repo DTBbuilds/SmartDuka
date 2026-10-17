@@ -25,6 +25,9 @@ export interface BlogPostMeta {
   featured: boolean;
   image: string;
   imageAlt: string;
+  // Social-preview asset (PNG 1200x630 — SVG is not accepted as og:image
+  // by major platforms). Page graphics remain SVG.
+  ogImage: string;
 }
 
 export interface BlogPost extends BlogPostMeta {
@@ -34,15 +37,16 @@ export interface BlogPost extends BlogPostMeta {
 export const blogPosts: BlogPost[] = [
   {
     slug: 'complete-guide-pos-system-kenya',
-    title: 'The Complete Guide to Choosing a POS System in Kenya (2025)',
+    title: 'The Complete Guide to Choosing a POS System in Kenya',
     excerpt: 'Everything you need to know about selecting the right point of sale system for your Kenyan retail business. Compare features, pricing, and find your perfect match.',
     category: 'Guides',
     author: 'SmartDuka Team',
-    date: '2025-01-10',
+    date: '2026-02-15',
     readTime: '12 min read',
     featured: true,
     image: '/blog/pos-guide.svg',
     imageAlt: 'Illustration of a point of sale terminal with a receipt and shopping basket',
+    ogImage: '/blog/pos-guide.png',
     content: `
 ## Introduction
 
@@ -119,15 +123,16 @@ Ready to try SmartDuka? Start using it free today—no credit card required.
   },
   {
     slug: 'mpesa-integration-retail-business',
-    title: 'How M-Pesa Integration Can Increase Your Retail Sales by 30%',
+    title: 'How M-Pesa Integration Can Grow Your Retail Sales',
     excerpt: 'Discover how accepting M-Pesa payments through your POS can boost sales, reduce cash handling risks, and improve customer satisfaction.',
     category: 'M-Pesa',
     author: 'SmartDuka Team',
-    date: '2025-01-08',
+    date: '2026-02-15',
     readTime: '8 min read',
     featured: true,
     image: '/blog/mpesa-retail.svg',
     imageAlt: 'Illustration of a mobile phone confirming an M-Pesa payment at a shop counter',
+    ogImage: '/blog/mpesa-retail.png',
     content: `
 ## The M-Pesa Revolution in Kenyan Retail
 
@@ -198,11 +203,12 @@ Ready to integrate M-Pesa with your POS? SmartDuka includes M-Pesa integration a
     excerpt: 'Learn proven strategies to reduce stockouts, minimize waste, and optimize your inventory levels for maximum profitability.',
     category: 'Inventory',
     author: 'SmartDuka Team',
-    date: '2025-01-05',
+    date: '2026-10-17',
     readTime: '10 min read',
     featured: false,
     image: '/blog/inventory-tips.svg',
     imageAlt: 'Illustration of organized shop shelves with stock level labels',
+    ogImage: '/blog/inventory-tips.png',
     content: `
 ## Why Inventory Discipline Matters
 
@@ -255,11 +261,12 @@ Inventory management is a habit, not a one-time project. Start with tracking and
     excerpt: 'How to leverage your POS data to identify trends, optimize pricing, and make data-driven decisions that grow your business.',
     category: 'Analytics',
     author: 'SmartDuka Team',
-    date: '2025-01-03',
+    date: '2026-10-17',
     readTime: '7 min read',
     featured: false,
     image: '/blog/analytics-guide.svg',
     imageAlt: 'Illustration of a sales dashboard with charts and rising trend lines',
+    ogImage: '/blog/analytics-guide.png',
     content: `
 ## Your POS Is Already Collecting the Answers
 
@@ -309,11 +316,12 @@ Start with one report and one weekly habit. The goal isn't dashboards—it's dec
     excerpt: 'Tips for hiring, training, and retaining great cashiers and staff. Plus, how to use technology to improve productivity.',
     category: 'Management',
     author: 'SmartDuka Team',
-    date: '2024-12-28',
+    date: '2026-10-17',
     readTime: '9 min read',
     featured: false,
     image: '/blog/employee-management.svg',
     imageAlt: 'Illustration of a shop owner training a cashier at a point of sale terminal',
+    ogImage: '/blog/employee-management.png',
     content: `
 ## Your Team Is the Shop
 
@@ -370,11 +378,12 @@ Hire carefully, train properly, give people the tools to be accountable, and tre
     excerpt: 'Practical strategies to minimize losses from theft, employee fraud, and inventory errors. Protect your profits with these proven methods.',
     category: 'Security',
     author: 'SmartDuka Team',
-    date: '2024-12-25',
+    date: '2026-10-17',
     readTime: '8 min read',
     featured: false,
     image: '/blog/reduce-theft.svg',
     imageAlt: 'Illustration of a secured shop counter with a lock and stock checklist',
+    ogImage: '/blog/reduce-theft.png',
     content: `
 ## Shrinkage Is a Silent Margin Killer
 
