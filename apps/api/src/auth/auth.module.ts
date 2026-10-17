@@ -8,7 +8,7 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { TokenService } from './token.service';
 import { OAuthExchangeService } from './services/oauth-exchange.service';
-import { OAuthExchangeTicket, OAuthExchangeTicketSchema } from './schemas/oauth-exchange-ticket.schema';
+import { OAuthExchangeTicket, OAuthExchangeTicketSchema, OAuthState, OAuthStateSchema } from './schemas/oauth-exchange-ticket.schema';
 import { OtpService } from './services/otp.service';
 import { DeviceFingerprintService } from './services/device-fingerprint.service';
 import { UsersModule } from '../users/users.module';
@@ -79,6 +79,7 @@ import { JwtCookieAuthGuard } from './guards/jwt-cookie-auth.guard';
         schema: DeviceFingerprintSchema,
       },
     { name: OAuthExchangeTicket.name, schema: OAuthExchangeTicketSchema },
+    { name: OAuthState.name, schema: OAuthStateSchema },
   ]),
     JwtModule.registerAsync({
       inject: [ConfigService],

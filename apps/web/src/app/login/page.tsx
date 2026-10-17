@@ -60,26 +60,38 @@ export default function LoginPage() {
     }
   }, [isAuthenticated, user, authLoading, router, searchParams]);
 
-  // Handle Google OAuth OTP redirect: /login?otp=true&data=<encoded-json>
+  // Handle Google OAuth OTP redirect — OAUTH-SEC2: the user/shop
+  // details arrive via a one-time exchange ticket (no personal
+  // information in the URL).
   useEffect(() => {
     const otpFlag = searchParams.get('otp');
-    const dataParam = searchParams.get('data');
-    if (otpFlag === 'true' && dataParam) {
-      try {
-        const parsed = JSON.parse(decodeURIComponent(dataParam));
-        if (parsed?.email) {
-          setOtpEmail(parsed.email);
-          setOtpUserName(parsed.userName || '');
-          setOtpShopName(parsed.shopName || '');
+    const otpTicket = searchParams.get('otp_ticket');
+    if (otpFlag === 'true' && otpTicket) {
+      (async () => {
+        try {
+          const res = await fetch(`${config.apiUrl}/auth/oauth/exchange`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ ticket: otpTicket }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || !data?.email) {
+            setError('Your sign-in session has expired. Please sign in again.');
+            return;
+          }
+          setOtpEmail(data.email);
+          setOtpUserName(data.userName || '');
+          setOtpShopName(data.shopName || '');
           setOtpCode(['', '', '', '', '', '']);
           setOtpError('');
           setShowOtpVerification(true);
           setOtpResendCooldown(60);
           setTimeout(() => otpInputRefs.current[0]?.focus(), 100);
+        } catch {
+          setError('Could not reach the server. Please sign in again.');
         }
-      } catch (err) {
-        console.error('Failed to parse OTP data from URL:', err);
-      }
+      })();
     }
   }, []); // run once on mount
 

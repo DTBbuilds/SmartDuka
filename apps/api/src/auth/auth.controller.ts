@@ -315,8 +315,11 @@ export class AuthController {
       this.configService.get<string>('GOOGLE_CALLBACK_URL') ||
       defaultCallbackUrl;
 
-    // Build Google OAuth URL with state parameter
-    const state = encodeURIComponent(JSON.stringify({ role: 'cashier' }));
+    // OAUTH-SEC2: transaction-bound state — a cryptographically random
+    // value stored server-side with the flow purpose (replaces the
+    // predictable {"role":"cashier"} state). The callback classifies the
+    // flow from the STORED purpose, never from client metadata.
+    const state = await this.oauthExchangeService.issueState('cashier_login');
     const googleAuthUrl = new URL(
       'https://accounts.google.com/o/oauth2/v2/auth',
     );
@@ -337,8 +340,13 @@ export class AuthController {
    */
   @Throttle({ medium: { limit: 10, ttl: 60000 } })
   @Post('oauth/exchange')
-  async oauthExchange(@Body() body: { ticket?: string }) {
-    const payload = await this.oauthExchangeService.redeemTicket(body?.ticket);
+  async oauthExchange(@Body() body: { ticket?: string }, @Req() req: any) {
+    const browserNonce = req.cookies?.['oauth_bind'];
+    const payload = await this.oauthExchangeService.redeemTicket(
+      body?.ticket,
+      undefined,
+      browserNonce,
+    );
     return payload;
   }
 
@@ -360,15 +368,16 @@ export class AuthController {
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Referrer-Policy', 'no-referrer');
 
-    // Parse state to check if this is a cashier signup flow
+    // OAUTH-SEC2: classify the flow from the SERVER-STORED state
+    // purpose (single-use, expiry-enforced). The admin flow's state is
+    // generated and validated by passport (session-backed) and has no
+    // entry in the state store — a missing entry classifies as admin.
+    // Client-supplied state metadata is never trusted for flow
+    // classification.
     let isCashierSignup = false;
     if (state) {
-      try {
-        const stateData = JSON.parse(decodeURIComponent(state));
-        isCashierSignup = stateData.role === 'cashier';
-      } catch {
-        // Invalid state, ignore
-      }
+      const stateCheck = await this.oauthExchangeService.validateState(state);
+      isCashierSignup = stateCheck.valid && stateCheck.purpose === 'cashier_login';
     }
 
     try {
@@ -384,21 +393,29 @@ export class AuthController {
         if (isCashierSignup) {
           // OAUTH-SEC1: profile handoff via one-time ticket (no profile
           // JSON in the URL).
-          const ticket = await this.oauthExchangeService.issueTicket(
-            { googleProfile: result.googleProfile },
-            'cashier_signup',
-          );
+          const { ticket: cashierTicket, bindNonce: cashierNonce } =
+            await this.oauthExchangeService.issueTicket(
+              { googleProfile: result.googleProfile },
+              'cashier_signup',
+            );
+          res.cookie('oauth_bind', cashierNonce, {
+            httpOnly: true, secure: true, sameSite: 'none', maxAge: 120_000,
+          });
           res.redirect(
-            `${frontendUrl}/auth/cashier-google-signup?google_ticket=${ticket}`,
+            `${frontendUrl}/auth/cashier-google-signup?google_ticket=${cashierTicket}`,
           );
         } else {
           // For admin/shop registration - redirect to shop registration page
           // This is intentional: admins can register new shops with Google
-          const ticket = await this.oauthExchangeService.issueTicket(
-            { googleProfile: result.googleProfile },
-            'shop_registration',
-          );
-          res.redirect(`${frontendUrl}/register-shop?google_ticket=${ticket}`);
+          const { ticket: regTicket, bindNonce: regNonce } =
+            await this.oauthExchangeService.issueTicket(
+              { googleProfile: result.googleProfile },
+              'shop_registration',
+            );
+          res.cookie('oauth_bind', regNonce, {
+            httpOnly: true, secure: true, sameSite: 'none', maxAge: 120_000,
+          });
+          res.redirect(`${frontendUrl}/register-shop?google_ticket=${regTicket}`);
         }
       } else {
         // Existing user - verify they have the correct role if this is a cashier flow
@@ -414,30 +431,46 @@ export class AuthController {
 
         // Existing user with valid role - check if OTP verification is required
         if (result.requiresEmailVerification) {
-          // Redirect to OTP verification page with user info
-          const otpData = encodeURIComponent(
-            JSON.stringify({
-              email: result.email,
-              userName: result.userName,
-              shopName: result.shopName,
-              isGoogleLogin: true,
-            }),
-          );
-          res.redirect(`${frontendUrl}/login?otp=true&data=${otpData}`);
+          // OAUTH-SEC2: the OTP handoff carries NO personal information
+          // in the URL — the user/shop details live server-side behind
+          // a purpose-bound one-time ticket.
+          const { ticket: otpTicket, bindNonce: otpNonce } =
+            await this.oauthExchangeService.issueTicket(
+              {
+                email: result.email,
+                userName: result.userName,
+                shopName: result.shopName,
+                isGoogleLogin: true,
+              },
+              'otp_verification',
+            );
+          res.cookie('oauth_bind', otpNonce, {
+            httpOnly: true, secure: true, sameSite: 'none', maxAge: 120_000,
+          });
+          res.redirect(`${frontendUrl}/login?otp=true&otp_ticket=${otpTicket}`);
         } else if (result.tokens) {
           // OAUTH-SEC1: no credentials in redirect URLs. The token pair
           // is stored server-side against a ~90s single-use ticket; the
           // frontend exchanges it via POST /auth/oauth/exchange.
-          const ticket = await this.oauthExchangeService.issueTicket(
-            {
-              accessToken: result.tokens.accessToken,
-              refreshToken: result.tokens.refreshToken,
-              csrfToken: result.tokens.csrfToken,
-              user: result.user,
-              shop: result.shop,
-            },
-            'admin_login',
-          );
+          const { ticket, bindNonce } =
+            await this.oauthExchangeService.issueTicket(
+              {
+                accessToken: result.tokens.accessToken,
+                refreshToken: result.tokens.refreshToken,
+                csrfToken: result.tokens.csrfToken,
+                user: result.user,
+                shop: result.shop,
+              },
+              'admin_login',
+            );
+          // OAUTH-SEC2: browser transaction binding cookie (the exchange
+          // must come from the same browser that received this redirect).
+          res.cookie('oauth_bind', bindNonce, {
+            httpOnly: true,
+            secure: true,
+            sameSite: 'none',
+            maxAge: 120_000,
+          });
           res.redirect(`${frontendUrl}/auth/callback?success=true&ticket=${ticket}`);
         } else {
           res.redirect(
