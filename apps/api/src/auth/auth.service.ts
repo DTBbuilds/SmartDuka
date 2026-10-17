@@ -16,6 +16,7 @@ import { OtpService } from './services/otp.service';
 import { LoginAttemptService } from './services/login-attempt.service';
 import { DeviceFingerprintService } from './services/device-fingerprint.service';
 import { EmailService } from '../notifications/email.service';
+import { validatePhoneForCountry } from '../common/phone-validation';
 import { LoginHistory, LoginHistoryDocument } from './schemas/login-history.schema';
 import * as bcryptjs from 'bcryptjs';
 
@@ -50,6 +51,13 @@ export class AuthService {
     const isVerified = await this.otpService.isEmailRecentlyVerified(dto.admin.email, 'registration');
     if (!isVerified) {
       throw new BadRequestException('Email not verified. Please verify your email with OTP before registering.');
+    }
+
+    // P1-13A: authoritative country-aware phone validation (mirrors the
+    // frontend rules; the backend never relies on the frontend alone).
+    const phoneCheck = validatePhoneForCountry(dto.shop.country, dto.admin.phone);
+    if (!phoneCheck.valid) {
+      throw new BadRequestException(phoneCheck.error || 'Please enter a valid phone number');
     }
 
     // Create shop with proper shop name and admin contact info
@@ -874,6 +882,11 @@ export class AuthService {
     if (!shopData.phone) {
       throw new BadRequestException('Phone number is required');
     }
+    // P1-13A: authoritative country-aware phone validation (Google path)
+    const phoneCheck = validatePhoneForCountry(shopData.country, shopData.phone);
+    if (!phoneCheck.valid) {
+      throw new BadRequestException(phoneCheck.error || 'Please enter a valid phone number');
+    }
 
     // Create shop
     const shopPayload: any = {
@@ -1143,21 +1156,86 @@ export class AuthService {
       userAgent,
     );
 
-    // TODO: Send email with reset link
-    // For now, log the token (in production, this would be sent via email)
-    const frontendUrl = process.env.FRONTEND_URL || 'https://www.smartduka.org';
+    // P1-13A: deliver the reset email through the configured provider.
+    // The raw token and the complete reset URL are NEVER logged, never
+    // returned in any environment's response, and are redacted from the
+    // stored email log (redactPatterns) — the email log stays an audit
+    // record, not a credential store.
+    const frontendUrl = (
+      process.env.FRONTEND_URL || 'https://www.smartduka.org'
+    ).replace(/\/+$/, '');
     const resetLink = `${frontendUrl}/reset-password?token=${resetToken}`;
-    
-    this.logger.log(`Password reset link for ${email}: ${resetLink}`);
 
-    // In production, send email here:
-    // await this.emailService.sendPasswordResetEmail(user.email, resetLink);
+    if (!this.emailService) {
+      // No provider configured: do NOT record a successful delivery.
+      // The public response stays generic (enumeration-safe); the token
+      // remains valid so an operator with DB access can still assist.
+      this.logger.error(
+        'Password reset email NOT sent: no email provider configured',
+      );
+      return {
+        message: 'If an account exists with this email, a password reset link has been sent.',
+        delivered: false,
+      };
+    }
 
-    return { 
+    const sent = await this.emailService.sendEmail({
+      to: user.email,
+      subject: 'Reset your SmartDuka password',
+      html: this.buildPasswordResetEmailHtml(resetLink),
+      text: 'Reset your SmartDuka password: ' + resetLink + '\n' + '\n' + 'If you did not request this, you can ignore this email.',
+      category: 'password_reset',
+      triggeredBy: 'user_request',
+      redactPatterns: [
+        // token in query strings and bare token material
+        /token=[A-Za-z0-9_\-]+/g,
+        new RegExp(resetToken.replace(/[\.\*\+\?\$\(\)\{\}\(\)\|\[\]\\]/g, '\\$&'), 'g'),
+      ],
+    });
+
+    if (!sent.success) {
+      this.logger.error(
+        `Password reset email FAILED for a registered account (provider error: ${sent.error || 'unknown'})`,
+      );
+      return {
+        message: 'If an account exists with this email, a password reset link has been sent.',
+        delivered: false,
+      };
+    }
+
+    this.logger.log(
+      `Password reset email dispatched successfully (messageId: ${sent.messageId || 'n/a'})`,
+    );
+
+    return {
       message: 'If an account exists with this email, a password reset link has been sent.',
-      // Only include in development for testing
-      ...(process.env.NODE_ENV === 'development' && { resetLink }),
+      delivered: true,
     };
+  }
+
+  /**
+   * P1-13A: password-reset email template. The reset link is the ONLY
+   * sensitive material; it is embedded in the delivered email only.
+   */
+  private buildPasswordResetEmailHtml(resetLink: string): string {
+    const safeLink = resetLink.replace(/&/g, '&');
+    return `<!doctype html><html><body style="margin:0;padding:0;background:#f6f7f9;font-family:Arial,Helvetica,sans-serif">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px">
+<table role="presentation" width="100%" style="max-width:520px;background:#ffffff;border-radius:12px;padding:32px">
+<tr><td style="font-size:20px;font-weight:bold;color:#111827;padding-bottom:8px">Reset your password</td></tr>
+<tr><td style="font-size:14px;color:#4b5563;line-height:1.6;padding-bottom:20px">
+You requested a password reset for your SmartDuka account. Click the button below to choose a new password. This link expires after a short time and can be used once.
+</td></tr>
+<tr><td style="padding-bottom:24px">
+<a href="${safeLink}" style="display:inline-block;background:#ea580c;color:#ffffff;text-decoration:none;font-size:14px;font-weight:bold;padding:12px 24px;border-radius:8px">Choose a new password</a>
+</td></tr>
+<tr><td style="font-size:12px;color:#6b7280;line-height:1.6;padding-bottom:12px">
+Or paste this link into your browser:<br><span style="word-break:break-all">${safeLink}</span>
+</td></tr>
+<tr><td style="font-size:12px;color:#9ca3af;line-height:1.6">
+If you did not request a password reset, you can safely ignore this email — your password will not change.
+</td></tr>
+</table></td></tr></table></body></html>`;
   }
 
   /**
@@ -1173,14 +1251,26 @@ export class AuthService {
       throw new BadRequestException('Password must be at least 8 characters');
     }
 
-    // Verify token and get user ID
+    // Verify and atomically consume the token (single-use)
     const userId = await this.tokenService.verifyPasswordResetToken(token);
 
     // Hash new password (bcrypt cost 12 - OWASP 2024 minimum)
     const hashedPassword = await bcryptjs.hash(newPassword, 12);
 
-    // Update user password
-    await this.usersService.updatePassword(userId, hashedPassword);
+    // P1-13A: a failed password update must not leave the account in a
+    // misleading state — the old password still works (nothing was
+    // changed) and the consumed token simply means the user requests a
+    // fresh reset email. Sessions are NOT revoked on failure.
+    try {
+      await this.usersService.updatePassword(userId, hashedPassword);
+    } catch (err) {
+      this.logger.error(
+        `Password update FAILED after token consumption for user ${userId} — the old password remains valid; the user must request a new reset email`,
+      );
+      throw new BadRequestException(
+        'Could not update the password right now. Your old password still works — please request a new reset email.',
+      );
+    }
 
     // Revoke all existing tokens for security
     await this.tokenService.revokeAllUserTokens(userId, 'Password reset');
