@@ -121,6 +121,7 @@ export default function StockTransfersPage() {
   });
   const [selectedItems, setSelectedItems] = useState<{ productId: string; quantity: number }[]>([]);
   const [productSearch, setProductSearch] = useState('');
+  const [productNotice, setProductNotice] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   // View transfer dialog
@@ -212,21 +213,45 @@ export default function StockTransfersPage() {
 
   const fetchProducts = useCallback(async (branchId?: string) => {
     if (!token) return;
-    
+
     try {
       // Filter products by source branch if specified
       const params = new URLSearchParams({ status: 'active', limit: '200' });
       if (branchId && branchId !== 'main') {
         params.set('branchId', branchId);
       }
-      
+
       const res = await fetch(`${config.apiUrl}/inventory/products?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      
+
       if (res.ok) {
         const data = await res.json();
-        setProducts(data.products || data.data || data || []);
+        const list = data.products || data.data || data || [];
+        if (Array.isArray(list) && list.length > 0) {
+          setProducts(list);
+          return;
+        }
+        // Branch-scoped filter returned nothing (products may not be
+        // linked to this branch yet) — fall back to the shop-wide list
+        // so product search still works, and tell the user why.
+        if (branchId && branchId !== 'main') {
+          const fallback = await fetch(
+            `${config.apiUrl}/inventory/products?status=active&limit=200`,
+            { headers: { Authorization: `Bearer ${token}` } },
+          );
+          if (fallback.ok) {
+            const fd = await fallback.json();
+            const fl = fd.products || fd.data || fd || [];
+            setProducts(Array.isArray(fl) ? fl : []);
+            setProductNotice(
+              'No products are linked to this branch yet — showing all shop products.',
+            );
+            return;
+          }
+        }
+        setProducts(Array.isArray(list) ? list : []);
+        setProductNotice(null);
       }
     } catch (err) {
       console.error('Failed to fetch products:', err);
@@ -771,6 +796,11 @@ export default function StockTransfersPage() {
             {/* Product Selection */}
             <div className="space-y-2">
               <Label>Add Products *</Label>
+              {productNotice && (
+                <p role="status" className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-md px-3 py-2">
+                  {productNotice}
+                </p>
+              )}
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input

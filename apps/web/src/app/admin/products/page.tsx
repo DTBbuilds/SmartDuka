@@ -419,11 +419,11 @@ function ProductsContent() {
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => setIsCSVImportOpen(true)} className="gap-2">
-              <Upload className="h-4 w-4" />
+              <Download className="h-4 w-4" aria-hidden="true" />
               Import
             </Button>
             <Button variant="outline" onClick={handleCSVExport} className="gap-2">
-              <Download className="h-4 w-4" />
+              <Upload className="h-4 w-4" aria-hidden="true" />
               Export
             </Button>
             <Button onClick={() => setIsQuickAddExpanded(!isQuickAddExpanded)} className="gap-2">

@@ -88,6 +88,7 @@ export default function StockAdjustmentsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [reasonFilter, setReasonFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -169,6 +170,7 @@ export default function StockAdjustmentsPage() {
   }, [fetchAdjustments, fetchProducts, fetchSummary]);
 
   const handleAdd = () => {
+    setFormError(null);
     setFormData({ productId: "", adjustmentType: "increase", quantity: 1, reason: "", description: "", reference: "" });
     // P0-9: one stable identity per logical adjustment — survives submit retries
     idempotencyKeyRef.current = crypto.randomUUID();
@@ -176,8 +178,17 @@ export default function StockAdjustmentsPage() {
   };
 
   const handleSubmit = async () => {
-    if (!formData.productId || formData.quantity <= 0 || !formData.reason) {
-      alert("Please fill in all required fields");
+    setFormError(null);
+    if (!formData.productId) {
+      setFormError("Select a product to adjust.");
+      return;
+    }
+    if (formData.quantity <= 0) {
+      setFormError("Quantity must be at least 1.");
+      return;
+    }
+    if (!formData.reason) {
+      setFormError("Choose a reason for this adjustment — it is recorded in the stock audit trail.");
       return;
     }
     setIsSaving(true);
@@ -208,7 +219,7 @@ export default function StockAdjustmentsPage() {
         throw new Error(err.message || "Failed to create adjustment");
       }
     } catch (e: any) {
-      alert(e.message || "Failed to create adjustment");
+      setFormError(e.message || "Failed to create adjustment — try again.");
     } finally {
       setIsSaving(false);
     }
@@ -433,7 +444,7 @@ export default function StockAdjustmentsPage() {
       )}
 
       {/* Modal */}
-      <FormModal open={isModalOpen} onOpenChange={setIsModalOpen} title="New Stock Adjustment" description="Adjust inventory levels for a product" onSubmit={handleSubmit} loading={isSaving} submitLabel="Create Adjustment">
+      <FormModal open={isModalOpen} onOpenChange={setIsModalOpen} title="New Stock Adjustment" description="Adjust inventory levels for a product" onSubmit={handleSubmit} loading={isSaving} submitLabel="Create Adjustment" error={formError ?? undefined}>
         <div className="space-y-4">
           <div>
             <Label>Product <span className="text-destructive">*</span></Label>

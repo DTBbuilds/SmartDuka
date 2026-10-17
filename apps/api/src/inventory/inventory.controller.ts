@@ -86,6 +86,33 @@ export class InventoryController {
     );
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Get('products/export')
+  async exportProducts(
+    @Response() res: any,
+    @Query('categoryId') categoryId: string,
+    @CurrentUser() user: any,
+  ) {
+    try {
+      if (!user?.shopId) {
+        return res
+          .status(401)
+          .json({ message: 'Unauthorized: Shop ID not found' });
+      }
+      await this.inventoryService.exportProducts(user.shopId, res, categoryId);
+    } catch (error) {
+      console.error('Export products error:', error);
+      // Ensure response hasn't already been sent
+      if (!res.headersSent) {
+        res.status(500).json({
+          message: 'Failed to export products',
+          error: error?.message || 'Unknown error occurred',
+        });
+      }
+    }
+  }
+
   @UseGuards(JwtAuthGuard)
   @Get('products/:id')
   getProduct(@Param('id') productId: string, @CurrentUser() user: any) {
@@ -297,33 +324,6 @@ export class InventoryController {
     @CurrentUser() user: any,
   ) {
     return this.inventoryService.analyzeImport(user.shopId, dto.products);
-  }
-
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
-  @Get('products/export')
-  async exportProducts(
-    @Response() res: any,
-    @Query('categoryId') categoryId: string,
-    @CurrentUser() user: any,
-  ) {
-    try {
-      if (!user?.shopId) {
-        return res
-          .status(401)
-          .json({ message: 'Unauthorized: Shop ID not found' });
-      }
-      await this.inventoryService.exportProducts(user.shopId, res, categoryId);
-    } catch (error) {
-      console.error('Export products error:', error);
-      // Ensure response hasn't already been sent
-      if (!res.headersSent) {
-        res.status(500).json({
-          message: 'Failed to export products',
-          error: error?.message || 'Unknown error occurred',
-        });
-      }
-    }
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
