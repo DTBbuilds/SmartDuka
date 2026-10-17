@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { blogPosts } from '@/lib/blog-posts';
 import { 
   Store, 
   Calendar,
@@ -32,75 +33,6 @@ export const metadata: Metadata = {
     canonical: 'https://www.smartduka.org/blog',
   },
 };
-
-const blogPosts = [
-  {
-    slug: 'complete-guide-pos-system-kenya',
-    title: 'The Complete Guide to Choosing a POS System in Kenya (2025)',
-    excerpt: 'Everything you need to know about selecting the right point of sale system for your Kenyan retail business. Compare features, pricing, and find your perfect match.',
-    category: 'Guides',
-    author: 'SmartDuka Team',
-    date: '2025-01-10',
-    readTime: '12 min read',
-    featured: true,
-    image: '/blog/pos-guide.jpg',
-  },
-  {
-    slug: 'mpesa-integration-retail-business',
-    title: 'How M-Pesa Integration Can Increase Your Retail Sales by 30%',
-    excerpt: 'Discover how accepting M-Pesa payments through your POS can boost sales, reduce cash handling risks, and improve customer satisfaction.',
-    category: 'M-Pesa',
-    author: 'SmartDuka Team',
-    date: '2025-01-08',
-    readTime: '8 min read',
-    featured: true,
-    image: '/blog/mpesa-retail.jpg',
-  },
-  {
-    slug: 'inventory-management-best-practices',
-    title: '10 Inventory Management Best Practices for Retailers',
-    excerpt: 'Learn proven strategies to reduce stockouts, minimize waste, and optimize your inventory levels for maximum profitability.',
-    category: 'Inventory',
-    author: 'SmartDuka Team',
-    date: '2025-01-05',
-    readTime: '10 min read',
-    featured: false,
-    image: '/blog/inventory-tips.jpg',
-  },
-  {
-    slug: 'retail-analytics-data-driven-decisions',
-    title: 'Using Sales Analytics to Make Smarter Business Decisions',
-    excerpt: 'How to leverage your POS data to identify trends, optimize pricing, and make data-driven decisions that grow your business.',
-    category: 'Analytics',
-    author: 'SmartDuka Team',
-    date: '2025-01-03',
-    readTime: '7 min read',
-    featured: false,
-    image: '/blog/analytics-guide.jpg',
-  },
-  {
-    slug: 'employee-management-retail-tips',
-    title: 'Managing Retail Employees: A Guide for Shop Owners',
-    excerpt: 'Tips for hiring, training, and retaining great cashiers and staff. Plus, how to use technology to improve productivity.',
-    category: 'Management',
-    author: 'SmartDuka Team',
-    date: '2024-12-28',
-    readTime: '9 min read',
-    featured: false,
-    image: '/blog/employee-management.jpg',
-  },
-  {
-    slug: 'reduce-theft-shrinkage-retail',
-    title: 'How to Reduce Theft and Shrinkage in Your Retail Store',
-    excerpt: 'Practical strategies to minimize losses from theft, employee fraud, and inventory errors. Protect your profits with these proven methods.',
-    category: 'Security',
-    author: 'SmartDuka Team',
-    date: '2024-12-25',
-    readTime: '8 min read',
-    featured: false,
-    image: '/blog/reduce-theft.jpg',
-  },
-];
 
 const categories = [
   { name: 'All', count: blogPosts.length },
@@ -191,8 +123,14 @@ export default function BlogPage() {
                 href={`/blog/${post.slug}`}
                 className="group bg-gray-50 rounded-2xl overflow-hidden hover:shadow-lg transition-all"
               >
-                <div className="aspect-video bg-gradient-to-br from-orange-100 to-orange-200 flex items-center justify-center">
-                  <Store className="h-16 w-16 text-orange-400" />
+                <div className="aspect-video overflow-hidden">
+                  { }
+                  <img
+                    src={post.image}
+                    alt={post.imageAlt}
+                    className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    loading="lazy"
+                  />
                 </div>
                 <div className="p-6">
                   <div className="flex items-center gap-3 mb-3">
@@ -241,8 +179,14 @@ export default function BlogPage() {
                 href={`/blog/${post.slug}`}
                 className="group bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all"
               >
-                <div className="aspect-video bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
-                  <Tag className="h-10 w-10 text-gray-400" />
+                <div className="aspect-video overflow-hidden">
+                  { }
+                  <img
+                    src={post.image}
+                    alt={post.imageAlt}
+                    className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    loading="lazy"
+                  />
                 </div>
                 <div className="p-5">
                   <div className="flex items-center gap-2 mb-2">

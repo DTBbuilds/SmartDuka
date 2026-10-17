@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { notFound } from 'next/navigation';
+import { blogPosts, getBlogPost } from '@/lib/blog-posts';
 import { 
   Store, 
   Calendar,
@@ -11,180 +13,10 @@ import {
 } from 'lucide-react';
 import { ArticleJsonLd, BreadcrumbJsonLd } from '@/components/seo';
 
-interface BlogPost {
-  slug: string;
-  title: string;
-  excerpt: string;
-  content: string;
-  category: string;
-  author: string;
-  date: string;
-  readTime: string;
-  image: string;
-}
-
-const blogPosts: Record<string, BlogPost> = {
-  'complete-guide-pos-system-kenya': {
-    slug: 'complete-guide-pos-system-kenya',
-    title: 'The Complete Guide to Choosing a POS System in Kenya (2025)',
-    excerpt: 'Everything you need to know about selecting the right point of sale system for your Kenyan retail business.',
-    content: `
-## Introduction
-
-Choosing the right Point of Sale (POS) system is one of the most important decisions you'll make for your retail business in Kenya. A good POS system does much more than process transactions—it helps you manage inventory, track sales, understand customer behavior, and grow your business.
-
-## What is a POS System?
-
-A POS (Point of Sale) system is the combination of hardware and software that allows you to process sales transactions. Modern POS systems go far beyond simple cash registers, offering features like:
-
-- **Sales processing** - Ring up products, apply discounts, and accept multiple payment methods
-- **Inventory management** - Track stock levels in real-time
-- **Employee management** - Monitor staff performance and manage shifts
-- **Customer data** - Build customer profiles and loyalty programs
-- **Reporting** - Get insights into your business performance
-
-## Key Features to Look For
-
-### 1. M-Pesa Integration
-In Kenya, M-Pesa is the most popular payment method. Your POS should integrate seamlessly with M-Pesa, allowing customers to pay via STK push for instant, hassle-free transactions.
-
-### 2. Offline Capability
-Internet connectivity can be unreliable. A good POS should work offline and sync data when connection is restored, ensuring you never miss a sale.
-
-### 3. Inventory Management
-Real-time stock tracking with low-stock alerts helps prevent stockouts and overstocking—both of which hurt your bottom line.
-
-### 4. Multi-Branch Support
-If you have or plan to have multiple locations, choose a POS that can manage all branches from a single dashboard.
-
-### 5. User-Friendly Interface
-Your cashiers should be able to learn the system quickly. A complicated interface leads to errors and slower checkout times.
-
-## Types of POS Systems
-
-### Cloud-Based POS
-- Data stored online
-- Accessible from anywhere
-- Automatic updates
-- Lower upfront costs
-
-### Traditional POS
-- Data stored locally
-- Works without internet
-- One-time purchase
-- May require manual updates
-
-## Pricing Considerations
-
-When evaluating POS pricing, consider:
-
-1. **Monthly subscription fees** - Ongoing costs for software
-2. **Hardware costs** - Tablets, receipt printers, barcode scanners
-3. **Setup fees** - Installation and training
-4. **Transaction fees** - Percentage of each sale (for payment processing)
-5. **Support costs** - Ongoing technical support
-
-## Why SmartDuka?
-
-SmartDuka is designed for modern retailers with:
-
-- Native M-Pesa integration with STK push
-- Full offline capability
-- Real-time inventory management
-- Multi-branch support
-- Affordable pricing starting at KES 2,500/month
-- Local 24/7 support in English and Swahili
-
-## Conclusion
-
-The right POS system can transform your business operations. Take time to evaluate your needs, compare options, and choose a system that will grow with your business.
-
-Ready to try SmartDuka? Start your free 14-day trial today!
-    `,
-    category: 'Guides',
-    author: 'SmartDuka Team',
-    date: '2025-01-10',
-    readTime: '12 min read',
-    image: '/blog/pos-guide.jpg',
-  },
-  'mpesa-integration-retail-business': {
-    slug: 'mpesa-integration-retail-business',
-    title: 'How M-Pesa Integration Can Increase Your Retail Sales by 30%',
-    excerpt: 'Discover how accepting M-Pesa payments through your POS can boost sales and improve customer satisfaction.',
-    content: `
-## The M-Pesa Revolution in Kenyan Retail
-
-M-Pesa has transformed how Kenyans transact. With over 30 million active users, it's no longer optional for retailers—it's essential. But simply having a till number isn't enough. True M-Pesa integration with your POS system can dramatically improve your business.
-
-## Benefits of M-Pesa POS Integration
-
-### 1. Faster Checkout Times
-With STK push integration, customers receive a payment prompt on their phone. No dialing, no typing till numbers—just enter PIN and done. This can reduce checkout time by 50%.
-
-### 2. Reduced Cash Handling
-Less cash means:
-- Lower risk of theft
-- Fewer counting errors
-- Less time spent on cash reconciliation
-- Safer work environment
-
-### 3. Automatic Reconciliation
-Every M-Pesa transaction is automatically recorded in your POS. No manual entry, no errors, no disputes about whether payment was received.
-
-### 4. Better Customer Experience
-Customers appreciate the convenience. Many prefer M-Pesa because:
-- No need to carry cash
-- Instant confirmation
-- Transaction history for their records
-
-### 5. Detailed Transaction Records
-Every payment is logged with:
-- Customer phone number
-- Transaction code
-- Exact timestamp
-- Items purchased
-
-## How to Integrate M-Pesa with Your POS
-
-### Option 1: Till Number Only
-Basic setup where customers manually enter your till number. Works but slow and error-prone.
-
-### Option 2: QR Code
-Customers scan a QR code to pay. Faster than manual but still requires customer action.
-
-### Option 3: STK Push Integration (Recommended)
-The cashier enters the customer's phone number, and they receive an automatic payment prompt. This is the gold standard.
-
-## SmartDuka M-Pesa Integration
-
-SmartDuka offers seamless STK push integration:
-
-1. Add products to cart
-2. Select M-Pesa as payment method
-3. Enter customer phone number
-4. Customer confirms with PIN
-5. Payment confirmed instantly
-6. Receipt printed with M-Pesa confirmation code
-
-## Real Results
-
-Businesses using SmartDuka's M-Pesa integration report:
-- **30% increase** in average transaction value
-- **50% faster** checkout times
-- **Zero** reconciliation errors
-- **Higher** customer satisfaction scores
-
-## Getting Started
-
-Ready to integrate M-Pesa with your POS? SmartDuka includes M-Pesa integration in all plans at no extra cost. Start your free trial today and experience the difference.
-    `,
-    category: 'M-Pesa',
-    author: 'SmartDuka Team',
-    date: '2025-01-08',
-    readTime: '8 min read',
-    image: '/blog/mpesa-retail.jpg',
-  },
-};
+// Only the six prerendered articles exist; unknown slugs must return a
+// genuine HTTP 404 at the routing level (a static shell would flush 200
+// before the streamed notFound() could change the status).
+export const dynamicParams = false;
 
 type Props = {
   params: Promise<{ slug: string }>;
@@ -192,11 +24,12 @@ type Props = {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const post = blogPosts[slug];
-  
+  const post = getBlogPost(slug);
+
   if (!post) {
     return {
       title: 'Article Not Found | SmartDuka Blog',
+      robots: { index: false, follow: false },
     };
   }
   
@@ -224,26 +57,19 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export async function generateStaticParams() {
-  return Object.keys(blogPosts).map((slug) => ({
-    slug,
+  return blogPosts.map((p) => ({
+    slug: p.slug,
   }));
 }
 
 export default async function BlogPostPage({ params }: Props) {
   const { slug } = await params;
-  const post = blogPosts[slug];
-  
+  const post = getBlogPost(slug);
+
+  // Unknown slugs must be a genuine HTTP 404 — never a 200 error page
+  // (soft-404s get crawled as thin duplicate content).
   if (!post) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Article Not Found</h1>
-          <Link href="/blog" className="text-orange-600 hover:underline">
-            Back to Blog
-          </Link>
-        </div>
-      </div>
-    );
+    notFound();
   }
 
   return (
@@ -397,7 +223,7 @@ export default async function BlogPostPage({ params }: Props) {
             Ready to Transform Your Business?
           </h2>
           <p className="text-orange-100 mb-6">
-            Start your free 14-day trial of SmartDuka today. No credit card required.
+            Start using SmartDuka free today. No credit card required.
           </p>
           <Link 
             href="/register-shop" 
