@@ -22,7 +22,7 @@ import { FAQJsonLd, WebPageJsonLd } from '@/components/seo';
 
 export const metadata: Metadata = {
   title: 'SmartDuka \u2013 Free Open Source Point of Sale & Inventory Management',
-  description: 'SmartDuka is a 100% free, open source point of sale and inventory management system. No subscriptions, no hidden fees, no user data collected. M-Pesa integration, barcode scanning, analytics \u2014 all free forever.',
+  description: 'SmartDuka is a free, open source point of sale and inventory management system. Free to use during our introductory period. M-Pesa integration, barcode scanning, analytics and more. No payment required now.',
   keywords: [
     'SmartDuka',
     'Smart Duka',
@@ -46,7 +46,7 @@ export const metadata: Metadata = {
   ],
   openGraph: {
     title: 'SmartDuka \u2013 Free Open Source Point of Sale & Inventory Management',
-    description: '100% free, open source POS and inventory management. No subscriptions, no hidden fees, no user data collected. Built for modern businesses everywhere.',
+    description: 'Free, open source POS and inventory management \u2014 free during our introductory period. Built for modern businesses everywhere.',
     type: 'website',
     locale: 'en_KE',
     siteName: 'SmartDuka',
@@ -55,7 +55,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'SmartDuka \u2013 Free Open Source POS System',
-    description: '100% free, open source POS and inventory management. No subscriptions, no data collection. Built for modern businesses everywhere.',
+    description: 'Free, open source POS and inventory management. No payment required during our introductory period. Built for modern businesses everywhere.',
     creator: '@smartduka',
     site: '@smartduka',
   },
@@ -179,7 +179,7 @@ export default function HomePage() {
       <FAQJsonLd faqs={homepageFaqs} />
       <WebPageJsonLd 
         name="SmartDuka \u2013 Free Open Source Point of Sale & Inventory Management"
-        description="SmartDuka is a 100% free, open source point of sale and inventory management system by DTB Technologies. No subscriptions, no user data collected."
+        description="SmartDuka is a free, open source point of sale and inventory management system by DTB Technologies \u2014 free to use during our introductory period."
         url="https://www.smartduka.org"
       />
       
@@ -223,7 +223,7 @@ export default function HomePage() {
             <div>
               <div className="inline-flex items-center gap-2 px-4 py-2 bg-green-100 rounded-full text-green-700 text-sm font-medium mb-6">
                 <Zap className="h-4 w-4" />
-                100% Free &amp; Open Source
+                Free &amp; Open Source
               </div>
               
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900 leading-tight mb-6">
@@ -272,11 +272,11 @@ export default function HomePage() {
               <div className="flex items-center gap-6 text-sm text-gray-500">
                 <div className="flex items-center gap-2">
                   <CheckCircle className="h-5 w-5 text-green-500" />
-                  Free forever
+                  Free during our introductory period
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle className="h-5 w-5 text-green-500" />
-                  No data collected
+                  Your business data stays yours
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle className="h-5 w-5 text-green-500" />

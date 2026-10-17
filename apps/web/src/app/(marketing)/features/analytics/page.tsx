@@ -338,7 +338,7 @@ export default function AnalyticsFeaturePage() {
             Ready to Unlock Your Business Insights?
           </h2>
           <p className="text-xl text-purple-100 mb-8">
-            Start your free trial and see how analytics can transform your decision-making.
+            Start using SmartDuka free and see how analytics can transform your decision-making.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link 

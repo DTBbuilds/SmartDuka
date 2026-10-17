@@ -3,11 +3,11 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { CartLoader } from '@/components/ui/cart-loader';
-import { 
-  Check, 
-  Store, 
-  Users, 
-  Package, 
+import {
+  Check,
+  Store,
+  Users,
+  Package,
   ArrowRight,
   Crown,
   Loader2,
@@ -17,9 +17,9 @@ import { useAuth } from '@/lib/auth-context';
 import { useSubscription, useSubscriptionPlans, type BillingCycle } from '@/hooks/use-subscription';
 
 // Plan color themes - high contrast
-const planColors: Record<string, { 
-  gradient: string; 
-  border: string; 
+const planColors: Record<string, {
+  gradient: string;
+  border: string;
   button: string;
   buttonHover: string;
   badge: string;
@@ -28,8 +28,8 @@ const planColors: Record<string, {
   iconColor: string;
   cardBg: string;
 }> = {
-  blue: { 
-    gradient: 'from-blue-600 to-blue-700', 
+  blue: {
+    gradient: 'from-blue-600 to-blue-700',
     border: 'border-blue-300',
     button: 'bg-blue-600',
     buttonHover: 'hover:bg-blue-700',
@@ -39,8 +39,8 @@ const planColors: Record<string, {
     iconColor: 'text-blue-700',
     cardBg: 'bg-white',
   },
-  green: { 
-    gradient: 'from-emerald-600 to-emerald-700', 
+  green: {
+    gradient: 'from-emerald-600 to-emerald-700',
     border: 'border-emerald-300',
     button: 'bg-emerald-600',
     buttonHover: 'hover:bg-emerald-700',
@@ -50,8 +50,8 @@ const planColors: Record<string, {
     iconColor: 'text-emerald-700',
     cardBg: 'bg-white',
   },
-  purple: { 
-    gradient: 'from-violet-600 to-violet-700', 
+  purple: {
+    gradient: 'from-violet-600 to-violet-700',
     border: 'border-violet-300',
     button: 'bg-violet-600',
     buttonHover: 'hover:bg-violet-700',
@@ -61,8 +61,8 @@ const planColors: Record<string, {
     iconColor: 'text-violet-700',
     cardBg: 'bg-white',
   },
-  gold: { 
-    gradient: 'from-amber-500 to-orange-600', 
+  gold: {
+    gradient: 'from-amber-500 to-orange-600',
     border: 'border-amber-400',
     button: 'bg-amber-600',
     buttonHover: 'hover:bg-amber-700',
@@ -82,7 +82,7 @@ export default function SelectPlanPage() {
   const { user, shop, token } = useAuth();
   const { subscription, createSubscription } = useSubscription();
   const { plans, loading: plansLoading } = useSubscriptionPlans();
-  
+
   const [billingCycle, setBillingCycle] = useState<BillingCycle>('monthly');
   const [selectedPlanCode, setSelectedPlanCode] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
@@ -111,10 +111,10 @@ export default function SelectPlanPage() {
 
   const handleSelectPlan = async () => {
     if (!selectedPlanCode || !token) return;
-    
+
     setProcessing(true);
     setError('');
-    
+
     try {
       await createSubscription(selectedPlanCode, billingCycle);
       // Redirect to dashboard after successful subscription
@@ -182,8 +182,8 @@ export default function SelectPlanPage() {
             Choose Your Plan
           </h1>
           <p className="text-gray-600 max-w-2xl mx-auto">
-            Select the plan that best fits your business needs. All plans include a 3-month free trial 
-            with setup, training, and support.
+            Select the plan that best fits your business needs. During our introductory period,
+            no payment is required.
           </p>
         </div>
 
@@ -200,8 +200,8 @@ export default function SelectPlanPage() {
             <button
               onClick={() => setBillingCycle('monthly')}
               className={`px-6 py-2 rounded-full text-sm font-medium transition-all ${
-                billingCycle === 'monthly' 
-                  ? 'bg-white shadow text-gray-900' 
+                billingCycle === 'monthly'
+                  ? 'bg-white shadow text-gray-900'
                   : 'text-gray-600 hover:text-gray-900'
               }`}
             >
@@ -210,8 +210,8 @@ export default function SelectPlanPage() {
             <button
               onClick={() => setBillingCycle('annual')}
               className={`px-6 py-2 rounded-full text-sm font-medium transition-all ${
-                billingCycle === 'annual' 
-                  ? 'bg-white shadow text-gray-900' 
+                billingCycle === 'annual'
+                  ? 'bg-white shadow text-gray-900'
                   : 'text-gray-600 hover:text-gray-900'
               }`}
             >
@@ -234,8 +234,8 @@ export default function SelectPlanPage() {
                 key={plan.code}
                 onClick={() => setSelectedPlanCode(plan.code)}
                 className={`relative ${colors.cardBg} rounded-2xl border-2 cursor-pointer transition-all duration-200 overflow-hidden shadow-lg hover:shadow-xl ${
-                  isSelected 
-                    ? `${colors.border} ring-4 ${colors.ring} ring-offset-2 scale-[1.02]` 
+                  isSelected
+                    ? `${colors.border} ring-4 ${colors.ring} ring-offset-2 scale-[1.02]`
                     : `${colors.border} hover:scale-[1.01]`
                 } ${isPopular ? 'lg:scale-105 z-10' : ''}`}
               >

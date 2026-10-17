@@ -270,7 +270,7 @@ export default function InventoryManagementSoftwarePage() {
             Try SmartDuka Inventory Management
           </h2>
           <p className="text-xl text-orange-100 mb-8">
-            Start your free trial today. No credit card required.
+            Start using SmartDuka free today. No credit card required.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link

@@ -50,7 +50,7 @@ export default function SettingsPage() {
     { id: 'security', label: 'Security', icon: Lock, description: 'Password & access' },
     { id: 'shortcuts', label: 'Shortcuts', icon: Keyboard, description: 'Keyboard shortcuts' },
   ];
-  
+
   // Role-based access control - only admin can access settings
   const isAdmin = user?.role === 'admin';
   const isCashier = user?.role === 'cashier';
@@ -438,8 +438,8 @@ export default function SettingsPage() {
                   key={item.id}
                   onClick={() => setActiveTab(item.id)}
                   className={`flex flex-col items-center justify-center p-2 rounded-lg border transition-all ${
-                    isActive 
-                      ? 'bg-primary text-primary-foreground border-primary shadow-sm' 
+                    isActive
+                      ? 'bg-primary text-primary-foreground border-primary shadow-sm'
                       : 'bg-card border-border hover:bg-muted/50'
                   }`}
                 >
@@ -458,9 +458,9 @@ export default function SettingsPage() {
           {settingsNavItems.map((item) => {
             const Icon = item.icon;
             return (
-              <TabsTrigger 
-                key={item.id} 
-                value={item.id} 
+              <TabsTrigger
+                key={item.id}
+                value={item.id}
                 className="flex items-center gap-2 px-4 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-sm"
               >
                 <Icon className="h-4 w-4" />
@@ -669,7 +669,7 @@ function SubscriptionSettingsTab() {
             </div>
             <div>
               <CardTitle className="text-lg">Free Plan — Full Access</CardTitle>
-              <CardDescription>SmartDuka is 100% free and open source</CardDescription>
+              <CardDescription>SmartDuka is free and open source</CardDescription>
             </div>
           </div>
         </CardHeader>
@@ -689,7 +689,7 @@ function SubscriptionSettingsTab() {
               <span className="text-sm font-medium text-foreground">Open Source & Privacy-First</span>
             </div>
             <p className="text-sm text-muted-foreground">
-              No subscriptions, no hidden fees, no user data collected at any level. 
+              Free during our introductory period. Your business data stays yours.
               Your business data stays completely private.
             </p>
           </div>
@@ -699,7 +699,7 @@ function SubscriptionSettingsTab() {
               SmartDuka is built by a small team. If you find it valuable, consider supporting us with a voluntary donation.
             </p>
             <div className="flex flex-col sm:flex-row gap-3">
-              <a 
+              <a
                 href="https://wa.me/61450275013?text=Hello%20SmartDuka%2C%20I%20would%20like%20to%20make%20a%20donation%20to%20support%20the%20project"
                 target="_blank"
                 rel="noopener noreferrer"
@@ -726,16 +726,16 @@ function SubscriptionSettingsTab() {
 
   // Note: Refresh events are handled internally by useSubscription and useBillingHistory hooks
   // Do NOT add useRefreshEvent here as it causes duplicate refreshes and UI flickering
-  
+
   // Stripe payment hook
-  const { 
-    isConfigured: stripeConfigured, 
-    createSubscriptionPayment, 
+  const {
+    isConfigured: stripeConfigured,
+    createSubscriptionPayment,
     clientSecret: stripeClientSecret,
     reset: resetStripe,
-    isLoading: stripeLoading 
+    isLoading: stripeLoading
   } = useStripePayment();
-  
+
   const [billingCycle, setBillingCycle] = useState<BillingCycle>('monthly');
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -758,20 +758,20 @@ function SubscriptionSettingsTab() {
   const [senderPhone, setSenderPhone] = useState('');
   const [verifyingCode, setVerifyingCode] = useState(false);
   const [autoRenewLoading, setAutoRenewLoading] = useState(false);
-  
+
   // M-Pesa payment phase tracking
   const [mpesaPhase, setMpesaPhase] = useState<'sending' | 'waiting_prompt' | 'waiting_pin' | 'processing' | 'verifying'>('sending');
   const [mpesaTimeRemaining, setMpesaTimeRemaining] = useState(120); // 2 minutes
-  const [mpesaError, setMpesaError] = useState<{ 
-    title: string; 
-    message: string; 
+  const [mpesaError, setMpesaError] = useState<{
+    title: string;
+    message: string;
     suggestion: string;
     icon: 'wallet' | 'phone' | 'cancel' | 'pin' | 'clock' | 'error';
-    code?: number; 
-    canRetry: boolean 
+    code?: number;
+    canRetry: boolean
   } | null>(null);
   const [stkSentTime, setStkSentTime] = useState<number | null>(null);
-  
+
   // Stripe payment state
   const [stripePaymentClientSecret, setStripePaymentClientSecret] = useState<string | null>(null);
   const [stripePublishableKey, setStripePublishableKey] = useState<string>('');
@@ -832,13 +832,13 @@ function SubscriptionSettingsTab() {
       // For daily plans, use 'daily' billing cycle; otherwise use selected cycle
       const effectiveBillingCycle = plan.code === 'daily' ? 'daily' : billingCycle;
       const result = await changePlan(plan.code, effectiveBillingCycle);
-      
+
       // Check if payment is required (upgrade to paid plan)
       if (result.requiresPayment && result.pendingUpgrade) {
         // Close upgrade modal and show payment modal
         setShowUpgradeModal(false);
         setSelectedPlan(null);
-        
+
         // Set up payment for the upgrade invoice
         setSelectedInvoiceData({
           id: result.invoiceId,
@@ -850,7 +850,7 @@ function SubscriptionSettingsTab() {
         setSelectedInvoice(result.invoiceId || null);
         setShowPaymentModal(true);
         setPaymentStep('phone');
-        
+
         // Fetch payment summary for the upgrade invoice
         if (result.invoiceId) {
           try {
@@ -878,7 +878,7 @@ function SubscriptionSettingsTab() {
     setSelectedInvoice(invoice.id);
     setShowInvoiceDetails(true);
     setPaymentStep('details');
-    
+
     // Fetch payment summary
     try {
       const summary = await getPaymentSummary(invoice.id);
@@ -903,38 +903,38 @@ function SubscriptionSettingsTab() {
     setMpesaPhase('sending');
     setMpesaError(null);
     setMpesaTimeRemaining(120);
-    
+
     try {
       const result = await initiatePayment(selectedInvoice, phoneNumber);
       if (result.success) {
         setCheckoutRequestId(result.checkoutRequestId || null);
         setStkSentTime(Date.now());
         setMpesaPhase('waiting_prompt');
-        
+
         // Start countdown timer
         startMpesaCountdown();
-        
+
         // Poll for status
         if (result.checkoutRequestId) {
           pollPaymentStatus(result.checkoutRequestId);
         }
       } else {
-        setMpesaError({ 
+        setMpesaError({
           title: 'Could Not Send Request',
           message: result.message || 'We couldn\'t send the payment request to your phone.',
           suggestion: 'Check your phone number and try again',
           icon: 'phone',
-          canRetry: true 
+          canRetry: true
         });
         setPaymentStep('phone');
       }
     } catch (error: any) {
-      setMpesaError({ 
+      setMpesaError({
         title: 'Connection Problem',
         message: 'We couldn\'t connect to M-Pesa right now.',
         suggestion: 'Check your internet connection and try again',
         icon: 'error',
-        canRetry: true 
+        canRetry: true
       });
       setPaymentStep('phone');
     } finally {
@@ -946,12 +946,12 @@ function SubscriptionSettingsTab() {
   const startMpesaCountdown = () => {
     const startTime = Date.now();
     const duration = 120; // 2 minutes
-    
+
     const updateCountdown = () => {
       const elapsed = Math.floor((Date.now() - startTime) / 1000);
       const remaining = Math.max(0, duration - elapsed);
       setMpesaTimeRemaining(remaining);
-      
+
       // Update phase based on elapsed time
       if (elapsed < 10) {
         setMpesaPhase('waiting_prompt');
@@ -960,38 +960,38 @@ function SubscriptionSettingsTab() {
       } else {
         setMpesaPhase('processing');
       }
-      
+
       if (remaining > 0 && paymentStep === 'processing') {
         setTimeout(updateCountdown, 1000);
       }
     };
-    
+
     updateCountdown();
   };
 
   // Get user-friendly M-Pesa error message from result code
-  const getMpesaErrorInfo = (resultCode: number, resultDesc?: string): { 
-    title: string; 
-    message: string; 
+  const getMpesaErrorInfo = (resultCode: number, resultDesc?: string): {
+    title: string;
+    message: string;
     suggestion: string;
     icon: 'wallet' | 'phone' | 'cancel' | 'pin' | 'clock' | 'error';
-    code: number; 
-    canRetry: boolean 
+    code: number;
+    canRetry: boolean
   } => {
     const errorMap: Record<number, { title: string; message: string; suggestion: string; icon: 'wallet' | 'phone' | 'cancel' | 'pin' | 'clock' | 'error'; canRetry: boolean }> = {
-      1: { 
+      1: {
         title: 'Not Enough Balance',
         message: 'Your M-Pesa account doesn\'t have enough money for this payment.',
         suggestion: 'Top up your M-Pesa and try again',
         icon: 'wallet',
-        canRetry: true 
+        canRetry: true
       },
-      1001: { 
+      1001: {
         title: 'Please Wait a Moment',
         message: 'You have another M-Pesa transaction in progress.',
         suggestion: 'Wait 2-3 minutes, then try again',
         icon: 'clock',
-        canRetry: true 
+        canRetry: true
       },
       1019: {
         title: 'Request Expired',
@@ -1007,37 +1007,37 @@ function SubscriptionSettingsTab() {
         icon: 'phone',
         canRetry: true
       },
-      1032: { 
+      1032: {
         title: 'Payment Cancelled',
         message: 'You cancelled the payment or didn\'t respond in time.',
         suggestion: 'Try again when you\'re ready',
         icon: 'cancel',
-        canRetry: true 
+        canRetry: true
       },
-      1037: { 
+      1037: {
         title: 'Phone Not Reachable',
         message: 'We couldn\'t reach your phone. It may be off or have no signal.',
         suggestion: 'Make sure your phone is on with network, then try again',
         icon: 'phone',
-        canRetry: true 
+        canRetry: true
       },
-      2001: { 
+      2001: {
         title: 'Wrong PIN Entered',
         message: 'The M-Pesa PIN you entered was incorrect.',
         suggestion: 'Try again and enter the correct 4-digit PIN',
         icon: 'pin',
-        canRetry: true 
+        canRetry: true
       },
     };
-    
-    const info = errorMap[resultCode] || { 
+
+    const info = errorMap[resultCode] || {
       title: 'Payment Unsuccessful',
       message: 'Something went wrong with your payment.',
       suggestion: 'Please try again or use a different payment method',
       icon: 'error' as const,
-      canRetry: true 
+      canRetry: true
     };
-    
+
     return { ...info, code: resultCode };
   };
 
@@ -1047,27 +1047,27 @@ function SubscriptionSettingsTab() {
     let attempts = 0;
     const maxAttempts = 24; // 2 minutes with 5-second intervals
     const pollInterval = 5000; // 5 seconds between polls
-    
+
     const poll = async () => {
       if (attempts >= maxAttempts) {
-        setMpesaError({ 
+        setMpesaError({
           title: 'Request Timed Out',
           message: 'We didn\'t receive a response in time.',
           suggestion: 'Check your M-Pesa messages. If you paid, contact support. Otherwise, try again.',
           icon: 'clock',
-          canRetry: true 
+          canRetry: true
         });
         setPaymentStep('phone');
         return;
       }
-      
+
       try {
         // Only show verifying phase after initial waiting period
         if (attempts > 2) {
           setMpesaPhase('verifying');
         }
         const status = await checkStkStatus(checkoutId);
-        
+
         if (status.success && status.resultCode === 0) {
           setPaymentStep('success');
           return;
@@ -1080,11 +1080,11 @@ function SubscriptionSettingsTab() {
       } catch (error) {
         // Continue polling on network errors
       }
-      
+
       attempts++;
       setTimeout(poll, pollInterval);
     };
-    
+
     // Start polling after initial delay (give M-Pesa time to process)
     setTimeout(poll, 3000);
   };
@@ -1288,7 +1288,7 @@ function SubscriptionSettingsTab() {
                   </div>
                   <p className="text-white/80 text-[10px] sm:text-sm font-medium mb-1.5 sm:mb-2">Shops</p>
                   <div className="h-1.5 sm:h-2 bg-white/20 rounded-full overflow-hidden">
-                    <div 
+                    <div
                       className="h-full bg-white rounded-full transition-all duration-500"
                       style={{ width: `${Math.min((subscription.usage.shops.current / subscription.usage.shops.limit) * 100, 100)}%` }}
                     />
@@ -1304,7 +1304,7 @@ function SubscriptionSettingsTab() {
                   </div>
                   <p className="text-white/80 text-[10px] sm:text-sm font-medium mb-1.5 sm:mb-2">Staff</p>
                   <div className="h-1.5 sm:h-2 bg-white/20 rounded-full overflow-hidden">
-                    <div 
+                    <div
                       className="h-full bg-white rounded-full transition-all duration-500"
                       style={{ width: `${Math.min((subscription.usage.employees.current / subscription.usage.employees.limit) * 100, 100)}%` }}
                     />
@@ -1320,7 +1320,7 @@ function SubscriptionSettingsTab() {
                   </div>
                   <p className="text-white/80 text-[10px] sm:text-sm font-medium mb-1.5 sm:mb-2">Items</p>
                   <div className="h-1.5 sm:h-2 bg-white/20 rounded-full overflow-hidden">
-                    <div 
+                    <div
                       className="h-full bg-white rounded-full transition-all duration-500"
                       style={{ width: `${Math.min((subscription.usage.products.current / subscription.usage.products.limit) * 100, 100)}%` }}
                     />
@@ -1331,7 +1331,7 @@ function SubscriptionSettingsTab() {
 
             {/* Actions - Mobile optimized */}
             <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 pt-4 sm:pt-6 border-t">
-              <Button 
+              <Button
                 onClick={() => setShowUpgradeModal(true)}
                 className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg shadow-primary/25 h-11 sm:h-10 text-sm sm:text-base touch-manipulation"
               >
@@ -1344,8 +1344,8 @@ function SubscriptionSettingsTab() {
                   Reactivate
                 </Button>
               ) : (
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="text-muted-foreground hover:text-destructive hover:border-destructive h-11 sm:h-10 text-sm sm:text-base touch-manipulation"
                   onClick={() => {
                     if (confirm('Are you sure you want to cancel your subscription? You will lose access to premium features.')) {
@@ -1396,12 +1396,12 @@ function SubscriptionSettingsTab() {
                 <p className="text-2xl font-bold text-amber-900 dark:text-amber-100">KES {totalPendingAmount.toLocaleString()}</p>
               </div>
             </div>
-            
+
             {/* Show first 3 invoices as preview */}
             {pendingInvoices.length > 0 && (
               <div className="mt-4 space-y-2">
                 {pendingInvoices.slice(0, 3).map((invoice) => (
-                  <div 
+                  <div
                     key={invoice.id}
                     className="flex items-center justify-between p-3 bg-white/60 dark:bg-white/10 rounded-lg cursor-pointer hover:bg-white/80 dark:hover:bg-white/20 transition-colors"
                     onClick={() => openInvoiceDetails(invoice)}
@@ -1420,16 +1420,16 @@ function SubscriptionSettingsTab() {
                 )}
               </div>
             )}
-            
+
             <div className="mt-4 flex gap-3">
-              <Button 
+              <Button
                 className="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-semibold"
                 onClick={() => openInvoiceDetails(pendingInvoices[0])}
               >
                 <Banknote className="h-4 w-4 mr-2" />
                 Pay Now
               </Button>
-              <Button 
+              <Button
                 variant="outline"
                 className="border-amber-300 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/30"
                 onClick={() => router.push('/settings/invoices')}
@@ -1516,7 +1516,7 @@ function SubscriptionSettingsTab() {
                   </p>
                 </div>
               </div>
-              <button 
+              <button
                 onClick={() => { setShowUpgradeModal(false); setSelectedPlan(null); setUpgradeStep('plans'); }}
                 className="p-2 hover:bg-muted rounded-lg transition-colors"
               >
@@ -1571,27 +1571,27 @@ function SubscriptionSettingsTab() {
                       const isFlexible = plan.badge === 'Flexible';
                       const isTrial = plan.code === 'trial';
                       const isDaily = plan.code === 'daily';
-                      
+
                       // Check if current subscription is a trial (used or expired)
                       const isCurrentTrial = subscription?.planCode === 'trial';
                       const hasUsedTrial = subscription?.isTrialUsed || isCurrentTrial;
-                      
+
                       // Hide trial plan if user has already used their trial
                       if (isTrial && hasUsedTrial) {
                         return null; // Don't render trial plan for users who used it
                       }
-                      
+
                       // Check if subscription needs renewal (expired, suspended, cancelled)
                       // BUT trial plans can NEVER be renewed - only upgrades allowed
                       const needsRenewal = !isTrial && (
-                        subscription?.status === 'expired' || 
-                        subscription?.status === 'suspended' || 
+                        subscription?.status === 'expired' ||
+                        subscription?.status === 'suspended' ||
                         subscription?.status === 'cancelled'
                       );
-                      
+
                       // Allow selecting current plan if subscription needs renewal (not for trial)
                       const canSelectCurrentPlan = isCurrentPlan && needsRenewal && !isTrial;
-                      
+
                       // Calculate price based on plan type
                       let price: number;
                       let priceLabel: string;
@@ -1614,8 +1614,8 @@ function SubscriptionSettingsTab() {
                             selectedPlan?.code === plan.code ? 'ring-2 ring-primary border-primary bg-primary/5' :
                             isCurrentPlan && !needsRenewal ? 'border-emerald-300 bg-emerald-50/50 dark:bg-emerald-900/10' :
                             isCurrentPlan && needsRenewal ? 'border-orange-300 bg-orange-50/50 dark:bg-orange-900/10' :
-                            isPopular ? 'border-primary/50' : 
-                            isBestValue ? 'border-amber-300' : 
+                            isPopular ? 'border-primary/50' :
+                            isBestValue ? 'border-amber-300' :
                             isFlexible ? 'border-orange-300' :
                             'border-border hover:border-primary/30'
                           } ${isCurrentPlan && !needsRenewal ? 'cursor-default' : ''}`}
@@ -1643,7 +1643,7 @@ function SubscriptionSettingsTab() {
                           </button>
 
                           <h4 className="font-bold text-sm sm:text-base mt-1">{plan.name}</h4>
-                          
+
                           <div className="mt-1 mb-2">
                             {isTrial ? (
                               <span className="text-lg sm:text-xl font-bold text-emerald-600">FREE</span>
@@ -1687,12 +1687,12 @@ function SubscriptionSettingsTab() {
                     <Button variant="outline" className="flex-1" onClick={() => { setShowUpgradeModal(false); setSelectedPlan(null); }}>
                       Cancel
                     </Button>
-                    <Button 
-                      className="flex-1" 
+                    <Button
+                      className="flex-1"
                       disabled={!selectedPlan || (
-                        subscription?.planCode === selectedPlan?.code && 
-                        subscription?.status !== 'expired' && 
-                        subscription?.status !== 'suspended' && 
+                        subscription?.planCode === selectedPlan?.code &&
+                        subscription?.status !== 'expired' &&
+                        subscription?.status !== 'suspended' &&
                         subscription?.status !== 'cancelled'
                       ) || (
                         // Disable if trying to select trial plan when already used
@@ -1702,7 +1702,7 @@ function SubscriptionSettingsTab() {
                     >
                       {/* For expired trial users, always show 'Upgrade' not 'Renew' */}
                       {subscription?.planCode === 'trial' ? 'Upgrade' :
-                       selectedPlan && subscription?.planCode === selectedPlan?.code && 
+                       selectedPlan && subscription?.planCode === selectedPlan?.code &&
                        (subscription?.status === 'expired' || subscription?.status === 'suspended' || subscription?.status === 'cancelled')
                         ? 'Renew Plan' : 'Continue'}
                       <ChevronRight className="h-4 w-4 ml-1" />
@@ -1725,17 +1725,17 @@ function SubscriptionSettingsTab() {
                       </div>
                       <div className="sm:text-right">
                         <div className={`text-2xl sm:text-3xl font-bold ${selectedPlan.code === 'daily' ? 'text-orange-600' : 'text-primary'}`}>
-                          {selectedPlan.monthlyPrice === 0 ? 'FREE' : 
+                          {selectedPlan.monthlyPrice === 0 ? 'FREE' :
                            selectedPlan.code === 'daily' ? `KES ${(selectedPlan.dailyPrice || 99).toLocaleString()}` :
                            `KES ${(billingCycle === 'annual' ? selectedPlan.annualPrice : selectedPlan.monthlyPrice).toLocaleString()}`}
                         </div>
                         <p className="text-xs sm:text-sm text-muted-foreground">
-                          {selectedPlan.code === 'daily' ? 'per day' : 
+                          {selectedPlan.code === 'daily' ? 'per day' :
                            selectedPlan.monthlyPrice > 0 && (billingCycle === 'annual' ? 'per year' : 'per month')}
                         </p>
                       </div>
                     </div>
-                    
+
                     <div className="grid grid-cols-3 gap-2 sm:gap-4 mt-4 pt-4 border-t">
                       <div className="text-center p-2 sm:p-3 bg-background rounded-lg">
                         <Store className="h-5 w-5 sm:h-6 sm:w-6 mx-auto text-primary" />
@@ -1757,17 +1757,17 @@ function SubscriptionSettingsTab() {
 
                   {/* Downgrade Notice - Show when switching to a lower-tier plan on an active subscription */}
                   {subscription && selectedPlan && (() => {
-                    const currentPrice = subscription.billingCycle === 'annual' 
+                    const currentPrice = subscription.billingCycle === 'annual'
                       ? (plans.find(p => p.code === subscription.planCode)?.annualPrice || 0)
                       : (plans.find(p => p.code === subscription.planCode)?.monthlyPrice || 0);
                     const newPrice = billingCycle === 'annual' ? selectedPlan.annualPrice : selectedPlan.monthlyPrice;
                     const isDowngrade = newPrice < currentPrice || selectedPlan.monthlyPrice === 0;
                     const isActiveSubscription = ['active', 'trial'].includes(subscription.status);
-                    
+
                     if (isDowngrade) {
                       return (
-                        <div className={`rounded-lg p-4 border ${isActiveSubscription 
-                          ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800' 
+                        <div className={`rounded-lg p-4 border ${isActiveSubscription
+                          ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'
                           : 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800'}`}>
                           <div className="flex items-start gap-3">
                             <Info className={`h-5 w-5 flex-shrink-0 mt-0.5 ${isActiveSubscription ? 'text-amber-600' : 'text-emerald-600'}`} />
@@ -1776,7 +1776,7 @@ function SubscriptionSettingsTab() {
                                 {isActiveSubscription ? 'Changes Take Effect After Current Period' : 'Changes Apply Immediately'}
                               </h5>
                               <p className={`text-xs mt-1 ${isActiveSubscription ? 'text-amber-700 dark:text-amber-300' : 'text-emerald-700 dark:text-emerald-300'}`}>
-                                {isActiveSubscription 
+                                {isActiveSubscription
                                   ? `Your current ${subscription.planName} plan is active until ${new Date(subscription.currentPeriodEnd).toLocaleDateString()}. The new plan will activate after this date.`
                                   : 'Your subscription has expired. The new plan will be activated immediately upon confirmation.'}
                               </p>
@@ -1847,18 +1847,18 @@ function SubscriptionSettingsTab() {
 
                   {/* Action Buttons - Fixed at bottom on mobile for better UX */}
                   <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 pt-4 sm:pt-3 border-t sm:border-t-0 mt-auto">
-                    <Button 
+                    <Button
                       type="button"
-                      variant="outline" 
-                      className="flex-1 h-12 sm:h-11 text-base sm:text-sm touch-manipulation" 
+                      variant="outline"
+                      className="flex-1 h-12 sm:h-11 text-base sm:text-sm touch-manipulation"
                       onClick={() => setUpgradeStep('plans')}
                     >
                       <ChevronLeft className="h-5 w-5 sm:h-4 sm:w-4 mr-1" />
                       Back
                     </Button>
-                    <Button 
+                    <Button
                       type="button"
-                      className="flex-1 h-14 sm:h-11 text-base sm:text-sm font-semibold bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 active:from-emerald-700 active:to-emerald-800 text-white shadow-lg shadow-emerald-500/25 touch-manipulation" 
+                      className="flex-1 h-14 sm:h-11 text-base sm:text-sm font-semibold bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 active:from-emerald-700 active:to-emerald-800 text-white shadow-lg shadow-emerald-500/25 touch-manipulation"
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
@@ -1897,7 +1897,7 @@ function SubscriptionSettingsTab() {
                   <h3 className="text-lg font-bold">{detailPlan.name} Plan</h3>
                   <p className="text-white/80 text-sm">{detailPlan.description || 'Full plan details'}</p>
                 </div>
-                <button 
+                <button
                   onClick={() => { setShowPlanDetails(false); setDetailPlan(null); }}
                   className="p-2 hover:bg-white/20 rounded-lg transition-colors"
                 >
@@ -2005,7 +2005,7 @@ function SubscriptionSettingsTab() {
               )}
 
               {/* Select Button */}
-              <Button 
+              <Button
                 className="w-full"
                 onClick={() => {
                   setSelectedPlan(detailPlan);
@@ -2039,7 +2039,7 @@ function SubscriptionSettingsTab() {
                     <p className="text-white/80 text-sm font-mono">{selectedInvoiceData.invoiceNumber}</p>
                   </div>
                 </div>
-                <button 
+                <button
                   onClick={resetPaymentModal}
                   className="p-2.5 hover:bg-white/20 rounded-xl transition-colors"
                 >
@@ -2072,8 +2072,8 @@ function SubscriptionSettingsTab() {
                     <div className="flex justify-between items-center">
                       <span className="text-muted-foreground">Status</span>
                       <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold ${
-                        selectedInvoiceData.status === 'paid' 
-                          ? 'bg-emerald-100 text-emerald-800' 
+                        selectedInvoiceData.status === 'paid'
+                          ? 'bg-emerald-100 text-emerald-800'
                           : 'bg-amber-100 text-amber-800'
                       }`}>
                         {selectedInvoiceData.status === 'paid' && <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />}
@@ -2094,7 +2094,7 @@ function SubscriptionSettingsTab() {
                           <span className="text-emerald-700">M-Pesa Receipt</span>
                           <div className="flex items-center gap-2">
                             <span className="font-mono font-bold text-base">{selectedInvoiceData.mpesaReceiptNumber}</span>
-                            <button 
+                            <button
                               onClick={() => copyToClipboard(selectedInvoiceData.mpesaReceiptNumber)}
                               className="p-1.5 hover:bg-emerald-200 rounded-lg transition-colors"
                             >
@@ -2166,7 +2166,7 @@ function SubscriptionSettingsTab() {
                         <Button variant="outline" className="flex-1 h-10" onClick={resetPaymentModal}>
                           Cancel
                         </Button>
-                        <Button 
+                        <Button
                           className="flex-1 h-10 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-semibold"
                           onClick={startPaymentFlow}
                         >
@@ -2205,7 +2205,7 @@ function SubscriptionSettingsTab() {
                     </p>
                   </div>
                 </div>
-                <button 
+                <button
                   onClick={resetPaymentModal}
                   className="p-2 hover:bg-white/20 rounded-lg transition-colors"
                   disabled={paymentStep === 'processing'}
@@ -2310,7 +2310,7 @@ function SubscriptionSettingsTab() {
                               {mpesaError.icon === 'clock' && <Clock className="h-6 w-6 text-orange-600" />}
                               {mpesaError.icon === 'error' && <AlertCircle className="h-6 w-6 text-red-600" />}
                             </div>
-                            
+
                             <div className="flex-1 min-w-0">
                               <h4 className="font-bold text-base text-gray-900 dark:text-gray-100">
                                 {mpesaError.title}
@@ -2323,8 +2323,8 @@ function SubscriptionSettingsTab() {
                                 <span className="text-emerald-700 dark:text-emerald-300">{mpesaError.suggestion}</span>
                               </div>
                             </div>
-                            
-                            <button 
+
+                            <button
                               onClick={() => setMpesaError(null)}
                               className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1"
                               aria-label="Dismiss"
@@ -2374,7 +2374,7 @@ function SubscriptionSettingsTab() {
                         <p className="text-blue-700 dark:text-blue-300 mt-1 text-sm">You'll receive a prompt on your phone. Enter your M-Pesa PIN to complete.</p>
                       </div>
 
-                      <Button 
+                      <Button
                         className="w-full h-12 text-base bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-semibold"
                         onClick={handlePayment}
                         disabled={processing || phoneNumber.length < 9}
@@ -2425,8 +2425,8 @@ function SubscriptionSettingsTab() {
                             <p className="mt-1 text-sm">After sending, you'll receive an M-Pesa confirmation SMS with a transaction code. You'll need this code to verify your payment.</p>
                           </div>
 
-                          <Button 
-                            className="w-full h-12 text-base bg-emerald-600 hover:bg-emerald-700 text-white font-semibold" 
+                          <Button
+                            className="w-full h-12 text-base bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
                             onClick={() => setSendMoneyStep('verify')}
                           >
                             I've Sent the Money
@@ -2484,7 +2484,7 @@ function SubscriptionSettingsTab() {
                           </div>
 
                           <div className="space-y-2">
-                            <Button 
+                            <Button
                               className="w-full h-12 text-base bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
                               onClick={async () => {
                                 if (referenceCode.length < 8) {
@@ -2496,12 +2496,12 @@ function SubscriptionSettingsTab() {
                                   return;
                                 }
                                 setVerifyingCode(true);
-                                
+
                                 try {
                                   // Call API to submit payment reference for verification
                                   const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ''}/api/v1/subscriptions/payments/manual/confirm`, {
                                     method: 'POST',
-                                    headers: { 
+                                    headers: {
                                       'Content-Type': 'application/json',
                                       'Authorization': `Bearer ${token}`,
                                     },
@@ -2512,7 +2512,7 @@ function SubscriptionSettingsTab() {
                                       paidAmount: selectedInvoiceData.totalAmount,
                                     }),
                                   });
-                                  
+
                                   if (response.ok) {
                                     setVerifyingCode(false);
                                     alert('Payment verification submitted! We will verify your payment and activate your subscription within 1-5 minutes. You will receive a confirmation email.');
@@ -2541,9 +2541,9 @@ function SubscriptionSettingsTab() {
                                 <><Check className="h-5 w-5 mr-2" /> Verify Payment</>
                               )}
                             </Button>
-                            <Button 
-                              variant="ghost" 
-                              className="w-full h-10 text-sm text-muted-foreground" 
+                            <Button
+                              variant="ghost"
+                              className="w-full h-10 text-sm text-muted-foreground"
                               onClick={() => setSendMoneyStep('instructions')}
                               disabled={verifyingCode}
                             >
@@ -2596,7 +2596,7 @@ function SubscriptionSettingsTab() {
                             </div>
                           )}
 
-                          <Button 
+                          <Button
                             className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-white font-semibold"
                             onClick={async () => {
                               if (!selectedInvoiceData) return;
@@ -2727,7 +2727,7 @@ function SubscriptionSettingsTab() {
                   {/* Progress Bar */}
                   <div className="space-y-2">
                     <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-                      <div 
+                      <div
                         className="h-full bg-gradient-to-r from-emerald-500 to-blue-500 rounded-full transition-all duration-1000"
                         style={{ width: `${Math.max(10, Math.min(90, ((120 - mpesaTimeRemaining) / 120) * 100))}%` }}
                       />
@@ -2800,7 +2800,7 @@ function SubscriptionSettingsTab() {
                     <h4 className="text-lg font-bold text-emerald-800 dark:text-emerald-400">Payment Successful!</h4>
                     <p className="text-muted-foreground mt-1 text-sm">Your subscription has been activated</p>
                   </div>
-                  
+
                   {/* Receipt Download */}
                   <div className="bg-muted/50 rounded-lg p-3 border">
                     <p className="text-xs text-muted-foreground mb-2">Transaction Details</p>
@@ -2808,9 +2808,9 @@ function SubscriptionSettingsTab() {
                       <p className="text-sm font-mono">{selectedInvoiceData.invoiceNumber}</p>
                     )}
                     <div className="flex gap-2 mt-3">
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
+                      <Button
+                        variant="outline"
+                        size="sm"
                         className="flex-1"
                         onClick={async () => {
                           try {
@@ -2824,9 +2824,9 @@ function SubscriptionSettingsTab() {
                         <Download className="h-3.5 w-3.5 mr-1" />
                         Receipt
                       </Button>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
+                      <Button
+                        variant="outline"
+                        size="sm"
                         className="flex-1"
                         onClick={async () => {
                           try {
@@ -2843,7 +2843,7 @@ function SubscriptionSettingsTab() {
                     </div>
                   </div>
 
-                  <Button 
+                  <Button
                     className="w-full"
                     onClick={() => {
                       resetPaymentModal();

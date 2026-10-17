@@ -57,10 +57,17 @@ export default function TermsOfServicePage() {
           </p>
 
           <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">4. Subscription and Payments</h2>
+          <p className="text-gray-600 mb-3">
+            <strong>Current access:</strong> SmartDuka is currently provided free of charge
+            during our introductory period. No payment is required and no charges apply to
+            features you use today. If paid plans are introduced in the future, the pricing
+            page will describe them before any charge applies.
+          </p>
           <p className="text-gray-600 mb-6">
-            SmartDuka offers various subscription plans. By subscribing, you agree to pay the 
-            applicable fees. Fees are non-refundable except as required by law. We may change 
-            our fees upon 30 days&apos; notice.
+            <strong>Future subscriptions:</strong> SmartDuka may offer subscription plans in
+            the future. If you subscribe to a paid plan, you agree to pay the applicable fees
+            shown at the time of subscription. Fees are non-refundable except as required by
+            law. We may change our fees upon 30 days&apos; notice.
           </p>
 
           <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">5. Acceptable Use</h2>

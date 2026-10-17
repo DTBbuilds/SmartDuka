@@ -728,7 +728,7 @@ function RegisterShopContent() {
             </div>
             <div className="flex items-center gap-3 bg-white/10 rounded-lg p-3">
               <Shield className="h-5 w-5 text-primary" />
-              <span className="text-sm text-white">100% free &amp; open source</span>
+              <span className="text-sm text-white">Free &amp; open source</span>
             </div>
             <div className="flex items-center gap-3 bg-white/10 rounded-lg p-3">
               <BarChart3 className="h-5 w-5 text-primary" />
@@ -973,11 +973,11 @@ function RegisterShopContent() {
                 </div>
               )}
 
-              {/* 14-day trial notice + Selected Plan */}
+              {/* Free-access notice + Selected Plan */}
               <div className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg mt-4">
                 <div className="flex items-center gap-2">
                   <Sparkles className="h-4 w-4 text-green-600 flex-shrink-0" />
-                  <span className="text-sm font-medium text-green-800 dark:text-green-200">14-Day Free Trial</span>
+                  <span className="text-sm font-medium text-green-800 dark:text-green-200">Free during our introductory period</span>
                 </div>
                 {selectedPlan && (
                   <div className="text-right">

@@ -157,7 +157,7 @@ export default function Home() {
             {/* Badge */}
             <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-primary/10 border border-primary/20 rounded-full text-primary text-sm font-medium mb-8">
               <Sparkles className="h-4 w-4" />
-              100% Free &amp; Open Source
+              Free &amp; Open Source
             </div>
             
             {/* Main Heading */}
@@ -172,7 +172,7 @@ export default function Home() {
             {/* Subheading */}
             <p className="text-lg md:text-xl text-muted-foreground mb-10 leading-relaxed max-w-2xl mx-auto">
               Complete Point of Sale system with M-Pesa integration, AI-powered analytics, 
-              and real-time inventory tracking. 100% free, open source, and no user data collected.
+              and real-time inventory tracking. Free, open source, and free during our introductory period.
             </p>
             
             {/* CTA Buttons */}
@@ -196,7 +196,7 @@ export default function Home() {
             <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-muted-foreground">
               <div className="flex items-center gap-2">
                 <CheckCircle className="h-5 w-5 text-primary" />
-                Free forever
+                Free during our introductory period
               </div>
               <div className="flex items-center gap-2">
                 <CheckCircle className="h-5 w-5 text-primary" />
@@ -270,7 +270,7 @@ export default function Home() {
               Completely Free
             </div>
             <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
-              100% Free. No Catch.
+              Free. No Catch.
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
               SmartDuka is open source and free for everyone. No subscriptions, no hidden fees, 
@@ -297,7 +297,7 @@ export default function Home() {
               <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center mx-auto mb-4">
                 <Globe className="h-6 w-6 text-primary" />
               </div>
-              <h3 className="text-lg font-semibold text-foreground mb-2">Free Forever</h3>
+              <h3 className="text-lg font-semibold text-foreground mb-2">Free Now</h3>
               <p className="text-sm text-muted-foreground">No trials, no limits, no upgrades. Full access to all features, always.</p>
             </div>
           </div>
@@ -503,7 +503,7 @@ export default function Home() {
                 <span className="text-xl font-bold text-foreground">SmartDuka</span>
               </Link>
               <p className="text-muted-foreground text-sm max-w-xs mb-4">
-                The world&apos;s smartest free Point of Sale system. 100% free, open source, and privacy-first. Built for modern businesses everywhere.
+                The world&apos;s smartest free Point of Sale system. Free, open source, and privacy-first. Built for modern businesses everywhere.
               </p>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Clock className="h-4 w-4" />

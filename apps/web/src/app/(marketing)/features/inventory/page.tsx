@@ -357,7 +357,7 @@ export default function InventoryFeaturePage() {
             Take Control of Your Inventory Today
           </h2>
           <p className="text-xl text-green-100 mb-8">
-            Start your free trial and see how SmartDuka can transform your inventory management.
+            Start using SmartDuka free and see how SmartDuka can transform your inventory management.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link 

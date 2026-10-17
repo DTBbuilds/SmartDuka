@@ -99,7 +99,7 @@ SmartDuka is designed for modern retailers with:
 
 The right POS system can transform your business operations. Take time to evaluate your needs, compare options, and choose a system that will grow with your business.
 
-Ready to try SmartDuka? Start your free 14-day trial today!
+Ready to try SmartDuka? Start using it free today!
     `,
     category: 'Guides',
     author: 'SmartDuka Team',
@@ -176,7 +176,7 @@ Businesses using SmartDuka's M-Pesa integration report:
 
 ## Getting Started
 
-Ready to integrate M-Pesa with your POS? SmartDuka includes M-Pesa integration in all plans at no extra cost. Start your free trial today and experience the difference.
+Ready to integrate M-Pesa with your POS? SmartDuka includes M-Pesa integration in all plans at no extra cost. Start using SmartDuka free today and experience the difference.
     `,
     category: 'M-Pesa',
     author: 'SmartDuka Team',
@@ -397,7 +397,7 @@ export default async function BlogPostPage({ params }: Props) {
             Ready to Transform Your Business?
           </h2>
           <p className="text-orange-100 mb-6">
-            Start your free 14-day trial of SmartDuka today. No credit card required.
+            Start using SmartDuka free today. No credit card required.
           </p>
           <Link 
             href="/register-shop" 

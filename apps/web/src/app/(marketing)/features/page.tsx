@@ -183,7 +183,7 @@ export default function FeaturesPage() {
             Ready to Get Started?
           </h2>
           <p className="text-xl text-orange-100 mb-8">
-            Try SmartDuka free for 14 days. No credit card required.
+            Try SmartDuka free — no credit card required.
           </p>
           <Link 
             href="/register-shop" 

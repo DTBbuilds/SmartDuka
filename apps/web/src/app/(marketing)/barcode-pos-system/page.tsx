@@ -172,7 +172,7 @@ export default function BarcodePosSystemPage() {
       <section className="py-20 bg-orange-600">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-3xl font-bold text-white mb-6">Try SmartDuka Barcode POS System</h2>
-          <p className="text-xl text-orange-100 mb-8">Start your free trial today. No credit card required.</p>
+          <p className="text-xl text-orange-100 mb-8">Start using SmartDuka free today. No credit card required.</p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link href="/register-shop" className="px-8 py-4 bg-white text-orange-600 rounded-xl font-bold text-lg hover:bg-orange-50 shadow-lg">Get Started Free</Link>
             <Link href="/" className="px-8 py-4 border-2 border-white text-white rounded-xl font-bold text-lg hover:bg-white/10">Back to Home</Link>

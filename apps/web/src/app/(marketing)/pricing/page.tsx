@@ -1,10 +1,10 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { 
-  Check, 
-  Store, 
-  Users, 
-  Package, 
+import {
+  Check,
+  Store,
+  Users,
+  Package,
   Phone,
   ArrowRight,
   Sparkles,
@@ -15,8 +15,8 @@ import {
 import { FAQJsonLd, ProductJsonLd } from '@/components/seo';
 
 export const metadata: Metadata = {
-  title: 'SmartDuka Pricing - 100% Free POS System | No Subscriptions',
-  description: 'SmartDuka is completely free for all users. No subscriptions, no hidden fees, no limits. Full POS system with M-Pesa integration, inventory management, and analytics — free forever. Open source and privacy-first.',
+  title: 'SmartDuka Pricing - Free POS System (Introductory Period)',
+  description: 'SmartDuka is free to use during our introductory period. No payment required now. Full POS system with M-Pesa integration, inventory management, and analytics. Open source and privacy-first.',
   keywords: [
     'free POS system',
     'free point of sale',
@@ -29,8 +29,8 @@ export const metadata: Metadata = {
     'free M-Pesa POS',
   ],
   openGraph: {
-    title: 'SmartDuka – 100% Free POS System | No Subscriptions Ever',
-    description: 'SmartDuka is completely free. No subscriptions, no hidden fees. Full POS, inventory, analytics — all free forever.',
+    title: 'SmartDuka – Free POS System | Introductory Period',
+    description: 'SmartDuka is free during our introductory period. No payment required now. Full POS, inventory, analytics.',
     type: 'website',
     locale: 'en_KE',
   },
@@ -59,7 +59,7 @@ const allFeatures = [
 const faqs = [
   {
     question: 'Is SmartDuka really free?',
-    answer: 'Yes! SmartDuka is 100% free for all users. There are no subscriptions, no hidden fees, no premium tiers, and no limits. Every feature is available to every user, forever.',
+    answer: 'Yes. SmartDuka is free to use during our introductory period — no payment is required and no credit card is needed. If this ever changes, the pricing page will always show the current terms before anything changes.',
   },
   {
     question: 'Why is SmartDuka free?',
@@ -67,7 +67,7 @@ const faqs = [
   },
   {
     question: 'Will SmartDuka ever start charging?',
-    answer: 'SmartDuka is committed to remaining free. If premium features are added in the future, all current features will remain free forever.',
+    answer: 'SmartDuka is free during our introductory period. We will communicate any changes clearly on this pricing page before anything changes — no surprise charges.',
   },
   {
     question: 'Do you collect any user data?',
@@ -88,13 +88,13 @@ export default function PricingPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       <FAQJsonLd faqs={faqs} />
-      <ProductJsonLd 
+      <ProductJsonLd
         plan={{
           name: 'Free Plan',
-          description: 'SmartDuka is 100% free for all users. No subscriptions, no hidden fees.',
+          description: 'SmartDuka is free during our introductory period. No payment required now.',
           price: 0,
           priceCurrency: 'KES',
-        }} 
+        }}
       />
 
       {/* Header */}
@@ -117,8 +117,8 @@ export default function PricingPage() {
               <Link href="/login" className="text-gray-600 hover:text-gray-900">
                 Login
               </Link>
-              <Link 
-                href="/register-shop" 
+              <Link
+                href="/register-shop"
                 className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
               >
                 Get Started
@@ -136,11 +136,11 @@ export default function PricingPage() {
             Open Source &amp; Privacy-First
           </div>
           <h1 className="text-4xl sm:text-5xl font-bold text-gray-900 mb-6">
-            100% Free. No Catch.
+            Free. No Catch.
           </h1>
           <p className="text-xl text-gray-600 mb-8">
-            SmartDuka is completely free for everyone. No subscriptions, no hidden fees, 
-            no premium tiers. Every feature is available to every user, forever.
+            SmartDuka is free for everyone during our introductory period. No payment
+            required now. Every feature is available to every user.
           </p>
         </div>
       </section>
@@ -150,7 +150,7 @@ export default function PricingPage() {
         <div className="max-w-2xl mx-auto">
           <div className="relative bg-white rounded-2xl border-2 border-green-400 shadow-xl overflow-hidden ring-4 ring-green-500 ring-offset-2">
             <div className="absolute top-0 right-0 bg-green-600 text-white text-xs font-bold px-4 py-1.5 rounded-bl-xl">
-              Free Forever
+              Free Now
             </div>
 
             <div className="bg-gradient-to-br from-green-600 to-emerald-700 p-8 text-center">
@@ -158,7 +158,7 @@ export default function PricingPage() {
               <p className="text-white/90 mt-1">Everything you need — completely free</p>
               <div className="mt-4">
                 <span className="text-6xl font-extrabold text-white">Free</span>
-                <p className="text-white/80 mt-1">No subscriptions. No limits. Forever.</p>
+                <p className="text-white/80 mt-1">No payment required during the introductory period.</p>
               </div>
             </div>
 

@@ -22,7 +22,7 @@ import { BreadcrumbJsonLd } from '@/components/seo';
 
 export const metadata: Metadata = {
   title: 'POS System - Fast Point of Sale Software | SmartDuka',
-  description: 'SmartDuka POS system for retail businesses. Fast checkout, barcode scanning, multiple payment methods, offline mode, and receipt printing. Start your free trial today!',
+  description: 'SmartDuka POS system for retail businesses. Fast checkout, barcode scanning, multiple payment methods, offline mode, and receipt printing. Start using SmartDuka free today!',
   keywords: [
     'POS system',
     'point of sale software',
@@ -323,7 +323,7 @@ export default function POSFeaturePage() {
             Ready to Speed Up Your Checkout?
           </h2>
           <p className="text-xl text-orange-100 mb-8">
-            Start your free trial today and see why thousands of businesses worldwide choose SmartDuka.
+            Start using SmartDuka free today and see what it can do for your business.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link 
