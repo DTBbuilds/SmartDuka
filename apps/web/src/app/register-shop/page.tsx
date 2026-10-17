@@ -426,23 +426,35 @@ function RegisterShopContent() {
     fetchPlans();
   }, []);
 
-  // Check for Google OAuth redirect
+  // Check for Google OAuth redirect — OAUTH-SEC1: the profile arrives
+  // via a one-time exchange ticket (no profile JSON in the URL).
   useEffect(() => {
-    const googleParam = searchParams.get('google');
-    if (googleParam) {
-      try {
-        const profile = JSON.parse(decodeURIComponent(googleParam)) as GoogleProfile;
-        setGoogleProfile(profile);
-        setIsGoogleFlow(true);
-        // Pre-fill admin data from Google profile
-        setAdminData(prev => ({
-          ...prev,
-          name: profile.name || '',
-          email: profile.email || '',
-        }));
-      } catch (err) {
-        console.error('Failed to parse Google profile:', err);
-      }
+    const googleTicket = searchParams.get('google_ticket');
+    if (googleTicket) {
+      (async () => {
+        try {
+          const res = await fetch(`${config.apiUrl}/auth/oauth/exchange`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ticket: googleTicket }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || !data?.googleProfile) {
+            setError('Your Google sign-in session has expired. Please sign in with Google again.');
+            return;
+          }
+          const profile = data.googleProfile as GoogleProfile;
+          setGoogleProfile(profile);
+          setIsGoogleFlow(true);
+          setAdminData(prev => ({
+            ...prev,
+            name: profile.name || '',
+            email: profile.email || '',
+          }));
+        } catch {
+          setError('Could not reach the server. Please sign in with Google again.');
+        }
+      })();
     }
   }, [searchParams]);
 

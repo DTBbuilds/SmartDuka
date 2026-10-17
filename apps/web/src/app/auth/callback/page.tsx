@@ -12,7 +12,7 @@ import { storeToken, storeCsrfToken, storeUser, clearSession } from '@/lib/secur
 function AuthCallbackContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
+  const [status, setStatus] = useState<'loading' | 'processing' | 'success' | 'error'>('loading');
   const [message, setMessage] = useState('Completing sign in...');
   const [hasProcessed, setHasProcessed] = useState(false);
 
@@ -22,15 +22,15 @@ function AuthCallbackContent() {
 
     const success = searchParams.get('success');
     const error = searchParams.get('error');
-    // Token in URL - used for cross-origin OAuth
-    const urlToken = searchParams.get('token');
-    const urlCsrf = searchParams.get('csrf');
-    const urlRefresh = searchParams.get('refresh'); // Refresh token for cross-origin fallback
+    // OAUTH-SEC1: the callback receives a one-time exchange TICKET —
+    // never credentials. The ticket is exchanged via POST for the token
+    // pair (atomic single-use, ~90s expiry).
+    const ticket = searchParams.get('ticket');
 
     // Wait for searchParams to be populated - on initial render they may be empty
     // Only proceed if we have at least one expected parameter OR if URL has no query string
     const urlHasParams = typeof window !== 'undefined' && window.location.search.length > 1;
-    const paramsReady = success !== null || error !== null || urlToken !== null || !urlHasParams;
+    const paramsReady = success !== null || error !== null || ticket !== null || !urlHasParams;
     
     if (!paramsReady) {
       // SearchParams not ready yet, wait for next render
@@ -47,33 +47,25 @@ function AuthCallbackContent() {
       return;
     }
 
-    // OAuth success flow - token is passed via URL for cross-origin support
+    // OAuth success flow - exchange the one-time ticket for the session
     if (success === 'true') {
-      if (urlToken) {
+      if (ticket) {
         setHasProcessed(true);
-        handleTokenFromUrl(urlToken, urlCsrf, urlRefresh);
+        handleTicketExchange(ticket);
         return;
       }
-      // No token in URL - wait a moment in case params are still loading
-      // Use a small delay before showing error
+      // No ticket in URL - wait a moment in case params are still loading
       const timeout = setTimeout(() => {
         if (!hasProcessed) {
           setHasProcessed(true);
           setStatus('error');
-          setMessage('Authentication token not received');
+          setMessage('Authentication ticket not received');
           setTimeout(() => {
             router.push('/login');
           }, 3000);
         }
       }, 500);
       return () => clearTimeout(timeout);
-    }
-
-    // Direct token in URL (legacy or direct API usage)
-    if (urlToken) {
-      setHasProcessed(true);
-      handleTokenFromUrl(urlToken, urlCsrf, urlRefresh);
-      return;
     }
 
     // No success flag or token - but only show error if URL actually has no params
@@ -87,6 +79,43 @@ function AuthCallbackContent() {
       }, 3000);
     }
   }, [searchParams, router, hasProcessed]);
+
+  // OAUTH-SEC1: exchange the one-time ticket for the token pair, then
+  // follow the same session-establishment path as before.
+  const handleTicketExchange = async (ticket: string) => {
+    setStatus('processing');
+    setMessage('Completing sign-in...');
+    try {
+      const res = await fetch(`${config.apiUrl}/auth/oauth/exchange`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ ticket }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.accessToken) {
+        setStatus('error');
+        setMessage(
+          data?.message || 'Your sign-in link has expired. Please sign in again.',
+        );
+        setTimeout(() => {
+          router.push('/login');
+        }, 3000);
+        return;
+      }
+      await handleTokenFromUrl(
+        data.accessToken,
+        data.csrfToken || null,
+        data.refreshToken || null,
+      );
+    } catch {
+      setStatus('error');
+      setMessage('Could not reach the server. Please sign in again.');
+      setTimeout(() => {
+        router.push('/login');
+      }, 3000);
+    }
+  };
 
   const handleTokenFromUrl = async (token: string, csrfToken: string | null, refreshToken: string | null) => {
     try {

@@ -7,6 +7,8 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { TokenService } from './token.service';
+import { OAuthExchangeService } from './services/oauth-exchange.service';
+import { OAuthExchangeTicket, OAuthExchangeTicketSchema } from './schemas/oauth-exchange-ticket.schema';
 import { OtpService } from './services/otp.service';
 import { DeviceFingerprintService } from './services/device-fingerprint.service';
 import { UsersModule } from '../users/users.module';
@@ -76,7 +78,8 @@ import { JwtCookieAuthGuard } from './guards/jwt-cookie-auth.guard';
         name: DeviceFingerprint.name,
         schema: DeviceFingerprintSchema,
       },
-    ]),
+    { name: OAuthExchangeTicket.name, schema: OAuthExchangeTicketSchema },
+  ]),
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
@@ -88,12 +91,14 @@ import { JwtCookieAuthGuard } from './guards/jwt-cookie-auth.guard';
   providers: [
     AuthService,
     TokenService,
+    OAuthExchangeService,
     OtpService,
     DeviceFingerprintService,
     CookieService,
     CsrfService,
     LoginAttemptService,
     JwtStrategy,
+    OAuthExchangeService,
     GoogleStrategy,
     SubscriptionStatusGuard,
     CsrfGuard,
@@ -104,6 +109,8 @@ import { JwtCookieAuthGuard } from './guards/jwt-cookie-auth.guard';
   exports: [
     AuthService,
     TokenService,
+    OAuthExchangeService,
+    OAuthExchangeService,
     OtpService,
     DeviceFingerprintService,
     CookieService,

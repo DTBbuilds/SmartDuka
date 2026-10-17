@@ -24,6 +24,7 @@ import { JwtCookieAuthGuard, Public } from './guards/jwt-cookie-auth.guard';
 import { RefreshTokenGuard } from './guards/refresh-token.guard';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { GoogleStrategy } from './strategies/google.strategy';
+import { OAuthExchangeService } from './services/oauth-exchange.service';
 import { PinRateLimitGuard } from './guards/pin-rate-limit.guard';
 import { SkipCsrf } from './guards/csrf.guard';
 import { SkipSubscriptionCheck } from './guards/subscription-status.guard';
@@ -40,6 +41,7 @@ export class AuthController {
     private readonly tokenService: TokenService,
     private readonly otpService: OtpService,
     private readonly configService: ConfigService,
+    private readonly oauthExchangeService: OAuthExchangeService,
     private readonly cookieService: CookieService,
   ) {}
 
@@ -329,6 +331,17 @@ export class AuthController {
     res.redirect(googleAuthUrl.toString());
   }
 
+  /**
+   * OAUTH-SEC1: exchange a one-time OAuth ticket for its payload
+   * (token pair or Google profile). Atomic single-use; ~90s expiry.
+   */
+  @Throttle({ medium: { limit: 10, ttl: 60000 } })
+  @Post('oauth/exchange')
+  async oauthExchange(@Body() body: { ticket?: string }) {
+    const payload = await this.oauthExchangeService.redeemTicket(body?.ticket);
+    return payload;
+  }
+
   @Get('google/callback')
   @UseGuards(GoogleAuthGuard)
   async googleAuthCallback(
@@ -341,6 +354,11 @@ export class AuthController {
     const frontendUrl =
       this.configService.get<string>('FRONTEND_URL') ||
       'https://www.smartduka.org';
+
+    // OAUTH-SEC1: the redirect URL must not be cached or leaked via
+    // referrers (it carries the one-time ticket).
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Referrer-Policy', 'no-referrer');
 
     // Parse state to check if this is a cashier signup flow
     let isCashierSignup = false;
@@ -364,19 +382,23 @@ export class AuthController {
         // SECURITY: For cashier signup, they MUST have a PIN from their admin
         // Redirect to PIN verification page where they must prove they're a registered cashier
         if (isCashierSignup) {
-          const profileData = encodeURIComponent(
-            JSON.stringify(result.googleProfile),
+          // OAUTH-SEC1: profile handoff via one-time ticket (no profile
+          // JSON in the URL).
+          const ticket = await this.oauthExchangeService.issueTicket(
+            { googleProfile: result.googleProfile },
+            'cashier_signup',
           );
           res.redirect(
-            `${frontendUrl}/auth/cashier-google-signup?google=${profileData}`,
+            `${frontendUrl}/auth/cashier-google-signup?google_ticket=${ticket}`,
           );
         } else {
           // For admin/shop registration - redirect to shop registration page
           // This is intentional: admins can register new shops with Google
-          const profileData = encodeURIComponent(
-            JSON.stringify(result.googleProfile),
+          const ticket = await this.oauthExchangeService.issueTicket(
+            { googleProfile: result.googleProfile },
+            'shop_registration',
           );
-          res.redirect(`${frontendUrl}/register-shop?google=${profileData}`);
+          res.redirect(`${frontendUrl}/register-shop?google_ticket=${ticket}`);
         }
       } else {
         // Existing user - verify they have the correct role if this is a cashier flow
@@ -403,12 +425,20 @@ export class AuthController {
           );
           res.redirect(`${frontendUrl}/login?otp=true&data=${otpData}`);
         } else if (result.tokens) {
-          // Pass tokens via URL for cross-origin support
-          const tokens = result.tokens;
-          const tokenParam = `token=${encodeURIComponent(tokens.accessToken)}&csrf=${encodeURIComponent(tokens.csrfToken)}&refresh=${encodeURIComponent(tokens.refreshToken)}`;
-          res.redirect(
-            `${frontendUrl}/auth/callback?success=true&${tokenParam}`,
+          // OAUTH-SEC1: no credentials in redirect URLs. The token pair
+          // is stored server-side against a ~90s single-use ticket; the
+          // frontend exchanges it via POST /auth/oauth/exchange.
+          const ticket = await this.oauthExchangeService.issueTicket(
+            {
+              accessToken: result.tokens.accessToken,
+              refreshToken: result.tokens.refreshToken,
+              csrfToken: result.tokens.csrfToken,
+              user: result.user,
+              shop: result.shop,
+            },
+            'admin_login',
           );
+          res.redirect(`${frontendUrl}/auth/callback?success=true&ticket=${ticket}`);
         } else {
           res.redirect(
             `${frontendUrl}/login?error=${encodeURIComponent('Failed to generate authentication tokens')}`,
