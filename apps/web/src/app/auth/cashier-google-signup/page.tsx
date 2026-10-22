@@ -51,29 +51,39 @@ export default function CashierGoogleSignupPage() {
 
   // Parse Google profile from URL and check for preselected shop from login page
   useEffect(() => {
-    const googleParam = searchParams.get('google');
-    if (googleParam) {
-      try {
-        const profile = JSON.parse(decodeURIComponent(googleParam)) as GoogleProfile;
-        setGoogleProfile(profile);
-        
-        // Check if shop was preselected on login page (stored in sessionStorage)
-        const preselectedShopId = sessionStorage.getItem('smartduka:cashier_google_shopId');
-        const preselectedName = sessionStorage.getItem('smartduka:cashier_google_shopName');
-        if (preselectedShopId) {
-          setSelectedShopId(preselectedShopId);
-          setPreselectedShopName(preselectedName || '');
-          // Clear the sessionStorage after using
-          sessionStorage.removeItem('smartduka:cashier_google_shopId');
-          sessionStorage.removeItem('smartduka:cashier_google_shopName');
-        }
-      } catch (err) {
-        console.error('Failed to parse Google profile:', err);
-        setError('Invalid Google profile data. Please try again.');
-      }
-    } else {
+    // OAUTH-SEC1: profile arrives via a one-time exchange ticket.
+    const googleTicket = searchParams.get('google_ticket');
+    if (!googleTicket) {
       // No Google profile - redirect to login with error
       router.push('/login?error=' + encodeURIComponent('You must be a registered cashier to sign in. Contact your shop admin to create your account.'));
+      return;
+    }
+    (async () => {
+      try {
+        const res = await fetch(`${config.apiUrl}/auth/oauth/exchange`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ticket: googleTicket }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data?.googleProfile) {
+          setError('Your Google sign-in session has expired. Please start again.');
+          return;
+        }
+        setGoogleProfile(data.googleProfile as GoogleProfile);
+      } catch {
+        setError('Could not reach the server. Please start again.');
+      }
+    })();
+    // Check if shop was preselected on login page (stored in sessionStorage)
+    const preselectedShopId = sessionStorage.getItem('smartduka:cashier_google_shopId');
+    const preselectedName = sessionStorage.getItem('smartduka:cashier_google_shopName');
+    if (preselectedShopId) {
+      setSelectedShopId(preselectedShopId);
+      setPreselectedShopName(preselectedName || '');
+      // Clear the sessionStorage after using
+      sessionStorage.removeItem('smartduka:cashier_google_shopId');
+      sessionStorage.removeItem('smartduka:cashier_google_shopName');
     }
   }, [searchParams, router]);
 

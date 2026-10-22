@@ -1,10 +1,19 @@
 import { Injectable, ExecutionContext, Logger } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { OAuthExchangeService } from '../services/oauth-exchange.service';
 import { GoogleStrategy } from '../strategies/google.strategy';
 
 @Injectable()
 export class GoogleAuthGuard extends AuthGuard('google') {
   private readonly logger = new Logger(GoogleAuthGuard.name);
+
+  // RELEASE-INTEGRATION1: transaction-bound state validation happens
+  // HERE, before the code exchange — the app has no express-session, so
+  // passport-oauth2 skips its own state validation silently. The
+  // validated purpose is passed to the handler via the request.
+  constructor(private readonly oauthExchangeService: OAuthExchangeService) {
+    super();
+  }
 
   /**
    * Override canActivate to:
@@ -44,6 +53,22 @@ export class GoogleAuthGuard extends AuthGuard('google') {
       return false;
     }
     
+    // RELEASE-INTEGRATION1: MANDATORY transaction-bound state validation
+    // (before the code exchange). Missing, forged, replayed, expired or
+    // mismatched states are rejected — the flow classification is read
+    // from the server store, never from client metadata.
+    const state = request.query?.state;
+    const stateCheck = await this.oauthExchangeService.validateState(
+      typeof state === 'string' ? state : '',
+    );
+    if (!stateCheck.valid) {
+      response.redirect(
+        `${frontendUrl}/login?error=${encodeURIComponent('Invalid or expired authentication session. Please sign in again.')}`,
+      );
+      return false;
+    }
+    request.oauthStatePurpose = stateCheck.purpose;
+
     // Credentials are configured and no error - proceed with normal OAuth flow
     try {
       return await (super.canActivate(context) as Promise<boolean>);

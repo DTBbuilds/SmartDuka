@@ -158,8 +158,12 @@ export class AdminInfoDto {
   email: string;
 
   @IsString()
-  @MinLength(10, { message: 'Phone number must be at least 10 digits' })
-  @MaxLength(15)
+  // P1-13A: length bounds only here (formatted internationals can exceed
+  // 15 chars with spaces; short national numbers like HK/SG/DK are valid).
+  // Country-aware FORMAT validation is authoritative in the service,
+  // mirroring apps/web/src/lib/phone-validation.ts.
+  @MinLength(7, { message: 'Phone number is too short' })
+  @MaxLength(20, { message: 'Phone number is too long' })
   phone: string;
 
   @IsString()

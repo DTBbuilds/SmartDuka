@@ -12,6 +12,13 @@ export interface EmailOptions {
   subject: string;
   html: string;
   text?: string;
+  /**
+   * P1-13A: patterns redacted from the STORED EMAIL LOG (htmlContent /
+   * textContent / templateVariables) — never from the delivered email.
+   * Used by password-reset mail so reset tokens never persist in the
+   * email-log database.
+   */
+  redactPatterns?: RegExp[];
   from?: string;
   replyTo?: string;
   attachments?: Array<{
@@ -221,14 +228,27 @@ export class EmailService {
     const smtpFrom = this.getFromAddress(options.from, 'smtp');
     const resendFrom = this.getFromAddress(options.from, 'resend');
 
-    // Create email log entry first
+    // Create email log entry first (with secret redaction — the log is
+    // an audit record, not a credential store)
     let emailLog: EmailLogDocument | null = null;
     try {
+      const redact = (v?: string) =>
+        v
+          ? options.redactPatterns?.length
+            ? v.substring(0, 1000).replace(new RegExp(options.redactPatterns.map((p) => p.source).join('|'), 'g'), '[REDACTED]')
+            : v.substring(0, 1000)
+          : v;
+      const redactShort = (v?: string) =>
+        v
+          ? options.redactPatterns?.length
+            ? v.substring(0, 500).replace(new RegExp(options.redactPatterns.map((p) => p.source).join('|'), 'g'), '[REDACTED]')
+            : v.substring(0, 500)
+          : v;
       emailLog = new this.emailLogModel({
         to: toAddress,
         subject: options.subject,
-        htmlContent: options.html?.substring(0, 1000),
-        textContent: options.text?.substring(0, 500),
+        htmlContent: redact(options.html),
+        textContent: redactShort(options.text),
         from: smtpFrom,
         replyTo: replyTo,
         shopId: options.shopId ? new Types.ObjectId(options.shopId) : undefined,
@@ -237,7 +257,14 @@ export class EmailService {
         userName: options.userName,
         category: options.category || 'other',
         templateName: options.templateName,
-        templateVariables: options.templateVariables,
+        templateVariables: options.templateVariables
+          ? options.redactPatterns?.length
+            ? JSON.parse(JSON.stringify(options.templateVariables).replace(
+                new RegExp(options.redactPatterns.map((p) => p.source).join('|'), 'g'),
+                '[REDACTED]',
+              ))
+            : options.templateVariables
+          : undefined,
         triggeredBy: options.triggeredBy || 'system',
         status: 'pending',
         retryCount: 0,

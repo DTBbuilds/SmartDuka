@@ -306,27 +306,45 @@ export class TokenService {
    */
   async verifyPasswordResetToken(token: string): Promise<string> {
     const tokenPrefix = token.substring(0, 16);
-    const storedToken = await this.passwordResetTokenModel.findOne({
-      token: tokenPrefix,
-      isUsed: false,
-      expiresAt: { $gt: new Date() },
-    });
+    // P1-13A: atomic single-use consume (CAS). The previous
+    // findOne→save sequence allowed two concurrent redemptions to both
+    // observe isUsed:false and both succeed. The conditional update
+    // marks the token used exactly once; the loser gets null.
+    const candidates = await this.passwordResetTokenModel
+      .find({ token: tokenPrefix, isUsed: false, expiresAt: { $gt: new Date() } })
+      .exec();
 
-    if (!storedToken) {
+    if (candidates.length === 0) {
       throw new UnauthorizedException('Invalid or expired reset token');
     }
 
-    const isValid = await this.verifyTokenHash(token, storedToken.tokenHash);
-    if (!isValid) {
+    // Verify the hash against the unused candidate(s) first — a wrong
+    // token must not consume anything.
+    let matched: any = null;
+    for (const candidate of candidates) {
+      if (await this.verifyTokenHash(token, candidate.tokenHash)) {
+        matched = candidate;
+        break;
+      }
+    }
+    if (!matched) {
       throw new UnauthorizedException('Invalid reset token');
     }
 
-    // Mark as used
-    storedToken.isUsed = true;
-    storedToken.usedAt = new Date();
-    await storedToken.save();
+    const consumed = await this.passwordResetTokenModel
+      .findOneAndUpdate(
+        { _id: matched._id, isUsed: false },
+        { $set: { isUsed: true, usedAt: new Date() } },
+        { new: false },
+      )
+      .exec();
 
-    return storedToken.userId.toString();
+    if (!consumed || consumed.isUsed) {
+      // Another concurrent redemption won the consume.
+      throw new UnauthorizedException('Reset token already used');
+    }
+
+    return consumed.userId.toString();
   }
 
   /**

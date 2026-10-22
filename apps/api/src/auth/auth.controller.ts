@@ -24,6 +24,7 @@ import { JwtCookieAuthGuard, Public } from './guards/jwt-cookie-auth.guard';
 import { RefreshTokenGuard } from './guards/refresh-token.guard';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { GoogleStrategy } from './strategies/google.strategy';
+import { OAuthExchangeService } from './services/oauth-exchange.service';
 import { PinRateLimitGuard } from './guards/pin-rate-limit.guard';
 import { SkipCsrf } from './guards/csrf.guard';
 import { SkipSubscriptionCheck } from './guards/subscription-status.guard';
@@ -40,6 +41,7 @@ export class AuthController {
     private readonly tokenService: TokenService,
     private readonly otpService: OtpService,
     private readonly configService: ConfigService,
+    private readonly oauthExchangeService: OAuthExchangeService,
     private readonly cookieService: CookieService,
   ) {}
 
@@ -276,13 +278,44 @@ export class AuthController {
   }
 
   // Google OAuth endpoints
+  /**
+   * RELEASE-INTEGRATION1: the admin Google flow now uses
+   * transaction-bound state validation. The app has NO express-session,
+   * so passport-oauth2 silently skipped its state generation AND
+   * validation — the admin flow previously accepted ANY (or a missing)
+   * state. The manual URL build + server-stored random state closes
+   * that CSRF gap; the callback validates the state from the store
+   * before processing.
+   */
   @Get('google')
-  @UseGuards(GoogleAuthGuard)
-  async googleAuth() {
-    // GoogleAuthGuard handles everything:
-    // - Blocks if not configured (prevents invalid_client error)
-    // - Redirects to Google if configured
-    // - Handles OAuth errors gracefully
+  async googleAuth(@Res() res: Response) {
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') ||
+      'https://www.smartduka.org';
+    if (!GoogleStrategy.isConfigured()) {
+      res.redirect(
+        `${frontendUrl}/login?error=${encodeURIComponent('Google login is not configured yet. Please set up Google OAuth credentials or contact your administrator.')}`,
+      );
+      return;
+    }
+    const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID') || '';
+    const isDev = process.env.NODE_ENV !== 'production';
+    const defaultCallbackUrl = isDev
+      ? 'http://localhost:5000/api/v1/auth/google/callback'
+      : 'https://smartduka-91q6.onrender.com/api/v1/auth/google/callback';
+    const callbackUrl =
+      this.configService.get<string>('GOOGLE_CALLBACK_URL') ||
+      defaultCallbackUrl;
+    const state = await this.oauthExchangeService.issueState('admin_login');
+    const googleAuthUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+    googleAuthUrl.searchParams.set('client_id', clientId);
+    googleAuthUrl.searchParams.set('redirect_uri', callbackUrl);
+    googleAuthUrl.searchParams.set('response_type', 'code');
+    googleAuthUrl.searchParams.set('scope', 'email profile');
+    googleAuthUrl.searchParams.set('state', state);
+    googleAuthUrl.searchParams.set('access_type', 'offline');
+    googleAuthUrl.searchParams.set('prompt', 'select_account');
+    res.redirect(googleAuthUrl.toString());
   }
 
   /**
@@ -313,8 +346,11 @@ export class AuthController {
       this.configService.get<string>('GOOGLE_CALLBACK_URL') ||
       defaultCallbackUrl;
 
-    // Build Google OAuth URL with state parameter
-    const state = encodeURIComponent(JSON.stringify({ role: 'cashier' }));
+    // OAUTH-SEC2: transaction-bound state — a cryptographically random
+    // value stored server-side with the flow purpose (replaces the
+    // predictable {"role":"cashier"} state). The callback classifies the
+    // flow from the STORED purpose, never from client metadata.
+    const state = await this.oauthExchangeService.issueState('cashier_login');
     const googleAuthUrl = new URL(
       'https://accounts.google.com/o/oauth2/v2/auth',
     );
@@ -329,12 +365,27 @@ export class AuthController {
     res.redirect(googleAuthUrl.toString());
   }
 
+  /**
+   * OAUTH-SEC1: exchange a one-time OAuth ticket for its payload
+   * (token pair or Google profile). Atomic single-use; ~90s expiry.
+   */
+  @Throttle({ medium: { limit: 10, ttl: 60000 } })
+  @Post('oauth/exchange')
+  async oauthExchange(@Body() body: { ticket?: string }, @Req() req: any) {
+    const browserNonce = req.cookies?.['oauth_bind'];
+    const payload = await this.oauthExchangeService.redeemTicket(
+      body?.ticket,
+      undefined,
+      browserNonce,
+    );
+    return payload;
+  }
+
   @Get('google/callback')
   @UseGuards(GoogleAuthGuard)
   async googleAuthCallback(
     @Req() req: any,
     @Res() res: Response,
-    @Query('state') state?: string,
   ) {
     const ipAddress = req.ip || req.connection.remoteAddress;
     const userAgent = req.get('user-agent');
@@ -342,16 +393,15 @@ export class AuthController {
       this.configService.get<string>('FRONTEND_URL') ||
       'https://www.smartduka.org';
 
-    // Parse state to check if this is a cashier signup flow
-    let isCashierSignup = false;
-    if (state) {
-      try {
-        const stateData = JSON.parse(decodeURIComponent(state));
-        isCashierSignup = stateData.role === 'cashier';
-      } catch {
-        // Invalid state, ignore
-      }
-    }
+    // OAUTH-SEC1: the redirect URL must not be cached or leaked via
+    // referrers (it carries the one-time ticket).
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+
+    // RELEASE-INTEGRATION1: the state was already validated (fail-closed)
+    // by GoogleAuthGuard BEFORE the code exchange; the purpose arrives
+    // from the server store via the request — never from client metadata.
+    const isCashierSignup = req.oauthStatePurpose === 'cashier_login';
 
     try {
       const result = await this.authService.googleLoginWithTokens(
@@ -364,19 +414,31 @@ export class AuthController {
         // SECURITY: For cashier signup, they MUST have a PIN from their admin
         // Redirect to PIN verification page where they must prove they're a registered cashier
         if (isCashierSignup) {
-          const profileData = encodeURIComponent(
-            JSON.stringify(result.googleProfile),
-          );
+          // OAUTH-SEC1: profile handoff via one-time ticket (no profile
+          // JSON in the URL).
+          const { ticket: cashierTicket, bindNonce: cashierNonce } =
+            await this.oauthExchangeService.issueTicket(
+              { googleProfile: result.googleProfile },
+              'cashier_signup',
+            );
+          res.cookie('oauth_bind', cashierNonce, {
+            httpOnly: true, secure: true, sameSite: 'none', maxAge: 120_000,
+          });
           res.redirect(
-            `${frontendUrl}/auth/cashier-google-signup?google=${profileData}`,
+            `${frontendUrl}/auth/cashier-google-signup?google_ticket=${cashierTicket}`,
           );
         } else {
           // For admin/shop registration - redirect to shop registration page
           // This is intentional: admins can register new shops with Google
-          const profileData = encodeURIComponent(
-            JSON.stringify(result.googleProfile),
-          );
-          res.redirect(`${frontendUrl}/register-shop?google=${profileData}`);
+          const { ticket: regTicket, bindNonce: regNonce } =
+            await this.oauthExchangeService.issueTicket(
+              { googleProfile: result.googleProfile },
+              'shop_registration',
+            );
+          res.cookie('oauth_bind', regNonce, {
+            httpOnly: true, secure: true, sameSite: 'none', maxAge: 120_000,
+          });
+          res.redirect(`${frontendUrl}/register-shop?google_ticket=${regTicket}`);
         }
       } else {
         // Existing user - verify they have the correct role if this is a cashier flow
@@ -392,23 +454,47 @@ export class AuthController {
 
         // Existing user with valid role - check if OTP verification is required
         if (result.requiresEmailVerification) {
-          // Redirect to OTP verification page with user info
-          const otpData = encodeURIComponent(
-            JSON.stringify({
-              email: result.email,
-              userName: result.userName,
-              shopName: result.shopName,
-              isGoogleLogin: true,
-            }),
-          );
-          res.redirect(`${frontendUrl}/login?otp=true&data=${otpData}`);
+          // OAUTH-SEC2: the OTP handoff carries NO personal information
+          // in the URL — the user/shop details live server-side behind
+          // a purpose-bound one-time ticket.
+          const { ticket: otpTicket, bindNonce: otpNonce } =
+            await this.oauthExchangeService.issueTicket(
+              {
+                email: result.email,
+                userName: result.userName,
+                shopName: result.shopName,
+                isGoogleLogin: true,
+              },
+              'otp_verification',
+            );
+          res.cookie('oauth_bind', otpNonce, {
+            httpOnly: true, secure: true, sameSite: 'none', maxAge: 120_000,
+          });
+          res.redirect(`${frontendUrl}/login?otp=true&otp_ticket=${otpTicket}`);
         } else if (result.tokens) {
-          // Pass tokens via URL for cross-origin support
-          const tokens = result.tokens;
-          const tokenParam = `token=${encodeURIComponent(tokens.accessToken)}&csrf=${encodeURIComponent(tokens.csrfToken)}&refresh=${encodeURIComponent(tokens.refreshToken)}`;
-          res.redirect(
-            `${frontendUrl}/auth/callback?success=true&${tokenParam}`,
-          );
+          // OAUTH-SEC1: no credentials in redirect URLs. The token pair
+          // is stored server-side against a ~90s single-use ticket; the
+          // frontend exchanges it via POST /auth/oauth/exchange.
+          const { ticket, bindNonce } =
+            await this.oauthExchangeService.issueTicket(
+              {
+                accessToken: result.tokens.accessToken,
+                refreshToken: result.tokens.refreshToken,
+                csrfToken: result.tokens.csrfToken,
+                user: result.user,
+                shop: result.shop,
+              },
+              'admin_login',
+            );
+          // OAUTH-SEC2: browser transaction binding cookie (the exchange
+          // must come from the same browser that received this redirect).
+          res.cookie('oauth_bind', bindNonce, {
+            httpOnly: true,
+            secure: true,
+            sameSite: 'none',
+            maxAge: 120_000,
+          });
+          res.redirect(`${frontendUrl}/auth/callback?success=true&ticket=${ticket}`);
         } else {
           res.redirect(
             `${frontendUrl}/login?error=${encodeURIComponent('Failed to generate authentication tokens')}`,
@@ -504,6 +590,7 @@ export class AuthController {
   /**
    * Request password reset - sends email with reset link
    */
+  @Throttle({ medium: { limit: 3, ttl: 60000 } }) // P1-13B: abuse protection on reset requests (named throttler)
   @Post('forgot-password')
   async forgotPassword(@Body() body: { email: string }, @Req() req: any) {
     const ipAddress = req.ip || req.connection.remoteAddress;
@@ -518,6 +605,7 @@ export class AuthController {
   /**
    * Reset password using token
    */
+  @Throttle({ medium: { limit: 5, ttl: 60000 } }) // P1-13B: brute-force protection on token redemption (named throttler)
   @Post('reset-password')
   async resetPassword(@Body() body: { token: string; newPassword: string }) {
     return this.authService.resetPassword(body.token, body.newPassword);
