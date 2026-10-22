@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
+import { availableFor, clampQuantity, validateSelection, type StockContext } from '@/lib/transfer-stock';
 import { config } from '@/lib/config';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -121,6 +122,14 @@ export default function StockTransfersPage() {
   });
   const [selectedItems, setSelectedItems] = useState<{ productId: string; quantity: number }[]>([]);
   const [productSearch, setProductSearch] = useState('');
+  const [productNotice, setProductNotice] = useState<string | null>(null);
+  // FIX1B: what `product.stock` means for the CURRENT list — 'branch' =
+  // the branch-scoped fetch (the API transforms stock to the branch's
+  // own inventory); 'shop' = main-store/global stock (main source or
+  // the shop-wide fallback). Never show main-store stock as branch
+  // availability.
+  const [stockContext, setStockContext] = useState<StockContext>('shop');
+  const fetchGenRef = useRef(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   // View transfer dialog
@@ -212,21 +221,57 @@ export default function StockTransfersPage() {
 
   const fetchProducts = useCallback(async (branchId?: string) => {
     if (!token) return;
-    
+    // FIX1B: generation guard — a slow branch-scoped response must never
+    // overwrite a newer fetch (stale-request protection on branch switch).
+    const gen = ++fetchGenRef.current;
+    const apply = (list: any[], ctx: 'branch' | 'shop', notice: string | null) => {
+      if (gen !== fetchGenRef.current) return; // superseded
+      setProducts(Array.isArray(list) ? list : []);
+      setStockContext(ctx);
+      setProductNotice(notice);
+    };
+
     try {
       // Filter products by source branch if specified
       const params = new URLSearchParams({ status: 'active', limit: '200' });
       if (branchId && branchId !== 'main') {
         params.set('branchId', branchId);
       }
-      
+
       const res = await fetch(`${config.apiUrl}/inventory/products?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      
+
       if (res.ok) {
         const data = await res.json();
-        setProducts(data.products || data.data || data || []);
+        const list = data.products || data.data || data || [];
+        if (Array.isArray(list) && list.length > 0) {
+          // Branch-scoped fetch: the API transformed stock to the
+          // branch's own inventory.
+          apply(list, branchId && branchId !== 'main' ? 'branch' : 'shop', null);
+          return;
+        }
+        // Branch-scoped filter returned nothing (products may not be
+        // linked to this branch yet) — fall back to the shop-wide list
+        // so discovery still works; those products' stock is MAIN-store
+        // stock and is NOT branch availability.
+        if (branchId && branchId !== 'main') {
+          const fallback = await fetch(
+            `${config.apiUrl}/inventory/products?status=active&limit=200`,
+            { headers: { Authorization: `Bearer ${token}` } },
+          );
+          if (fallback.ok) {
+            const fd = await fallback.json();
+            const fl = fd.products || fd.data || fd || [];
+            apply(
+              Array.isArray(fl) ? fl : [],
+              'shop',
+              'No products are stocked at this branch yet — showing the shop catalog. Items must be stocked at the source branch before they can be transferred.',
+            );
+            return;
+          }
+        }
+        apply(Array.isArray(list) ? list : [], branchId && branchId !== 'main' ? 'branch' : 'shop', null);
       }
     } catch (err) {
       console.error('Failed to fetch products:', err);
@@ -261,7 +306,15 @@ export default function StockTransfersPage() {
       setError('Please add at least one item to transfer');
       return;
     }
-    
+
+    // FIX1B: client-side source-stock validation (the server remains
+    // authoritative — this only prevents obviously invalid submissions).
+    const verdict = validateSelection(selectedItems, products, isBranchSource, stockContext);
+    if (!verdict.ok) {
+      setError(verdict.error);
+      return;
+    }
+
     setIsSubmitting(true);
     setError(null);
     
@@ -519,6 +572,12 @@ export default function StockTransfersPage() {
       minute: '2-digit',
     });
 
+  // FIX1B: source-specific availability logic lives in lib/transfer-stock
+  // (pure + unit-verified). For a BRANCH source, only the branch-scoped
+  // list's stock counts; the shop-wide fallback list carries MAIN-store
+  // stock, which is NOT branch availability.
+  const isBranchSource = !!createForm.fromBranchId && createForm.fromBranchId !== 'main';
+
   const filteredProducts = products.filter(p =>
     p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
     p.sku?.toLowerCase().includes(productSearch.toLowerCase()) ||
@@ -771,6 +830,11 @@ export default function StockTransfersPage() {
             {/* Product Selection */}
             <div className="space-y-2">
               <Label>Add Products *</Label>
+              {productNotice && (
+                <p role="status" className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-md px-3 py-2">
+                  {productNotice}
+                </p>
+              )}
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -783,26 +847,54 @@ export default function StockTransfersPage() {
               
               {productSearch && (
                 <div className="border rounded-md max-h-40 overflow-y-auto">
-                  {filteredProducts.slice(0, 10).map((product) => (
-                    <div
-                      key={product._id}
-                      className="flex items-center justify-between p-2 hover:bg-muted cursor-pointer"
-                      onClick={() => {
-                        if (!selectedItems.find(i => i.productId === product._id)) {
+                  {filteredProducts.slice(0, 10).map((product) => {
+                    const available = availableFor(product, isBranchSource, stockContext);
+                    const eligible = available > 0;
+                    const alreadySelected = selectedItems.find(i => i.productId === product._id);
+                    return (
+                      <div
+                        key={product._id}
+                        role="button"
+                        tabIndex={eligible && !alreadySelected ? 0 : -1}
+                        aria-disabled={!eligible || !!alreadySelected}
+                        className={`flex items-center justify-between p-2 ${
+                          eligible && !alreadySelected
+                            ? 'hover:bg-muted cursor-pointer'
+                            : 'opacity-60 cursor-not-allowed'
+                        }`}
+                        onClick={() => {
+                          if (!eligible || alreadySelected) return;
                           setSelectedItems([...selectedItems, { productId: product._id, quantity: 1 }]);
-                        }
-                        setProductSearch('');
-                      }}
-                    >
-                      <div>
-                        <p className="font-medium">{product.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          SKU: {product.sku || 'N/A'} • Stock: {product.stock || 0}
-                        </p>
+                          setProductSearch('');
+                        }}
+                        onKeyDown={(e) => {
+                          if (!eligible || alreadySelected) return;
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            setSelectedItems([...selectedItems, { productId: product._id, quantity: 1 }]);
+                            setProductSearch('');
+                          }
+                        }}
+                      >
+                        <div>
+                          <p className="font-medium">{product.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            SKU: {product.sku || 'N/A'} •{' '}
+                            {isBranchSource
+                              ? available > 0
+                                ? `Stock at this branch: ${available}`
+                                : 'Not stocked at this branch'
+                              : `Main store stock: ${available}`}
+                          </p>
+                        </div>
+                        {alreadySelected ? (
+                          <span className="text-xs text-muted-foreground">Added</span>
+                        ) : (
+                          <Plus className="h-4 w-4" aria-hidden="true" />
+                        )}
                       </div>
-                      <Plus className="h-4 w-4" />
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -819,18 +911,23 @@ export default function StockTransfersPage() {
                         <div>
                           <p className="font-medium">{product?.name}</p>
                           <p className="text-xs text-muted-foreground">
-                            Available: {product?.stock || 0}
+                            Available: {product ? availableFor(product, isBranchSource, stockContext) : 0}
+                            {isBranchSource && product && availableFor(product, isBranchSource, stockContext) === 0
+                              ? ' — not stocked at this branch (remove this item)'
+                              : ''}
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
                           <Input
                             type="number"
                             min="1"
-                            max={product?.stock || 999}
+                            max={product ? availableFor(product, isBranchSource, stockContext) : 0}
+                            aria-label={`Quantity for ${product?.name || "item"}`}
                             value={item.quantity}
                             onChange={(e) => {
                               const newItems = [...selectedItems];
-                              newItems[index].quantity = parseInt(e.target.value) || 1;
+                              const max = product ? availableFor(product, isBranchSource, stockContext) : 0;
+                              newItems[index].quantity = clampQuantity(parseInt(e.target.value), max);
                               setSelectedItems(newItems);
                             }}
                             className="w-20"

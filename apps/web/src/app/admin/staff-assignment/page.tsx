@@ -285,11 +285,17 @@ export default function StaffAssignmentPage() {
                   <SelectValue placeholder="Select a branch" />
                 </SelectTrigger>
                 <SelectContent>
-                  {branches.map((branch) => (
-                    <SelectItem key={branch._id} value={branch._id}>
-                      {branch.name} ({branch.code})
-                    </SelectItem>
-                  ))}
+                  {branches.length === 0 ? (
+                    <div className="px-3 py-2 text-sm text-muted-foreground">
+                      No branches found — create a branch first (Branches page).
+                    </div>
+                  ) : (
+                    branches.map((branch) => (
+                      <SelectItem key={branch._id} value={branch._id}>
+                        {branch.name} ({branch.code})
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </div>

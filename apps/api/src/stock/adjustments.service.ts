@@ -104,6 +104,15 @@ export class AdjustmentsService {
       throw new NotFoundException(`Product not found: ${dto.productId}`);
     }
 
+    // A reason is REQUIRED for every adjustment — the audit trail depends
+    // on it (frontend enforces this too; the API must not silently map a
+    // missing reason to 'other').
+    if (!dto.reason) {
+      throw new BadRequestException(
+        'reason is required — choose the adjustment reason (damage, loss, recount, correction, return, expired, theft, other)',
+      );
+    }
+
     const previousStock = product.stock || 0;
     const newStock = previousStock + dto.delta;
 

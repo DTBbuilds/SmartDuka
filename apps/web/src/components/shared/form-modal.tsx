@@ -21,6 +21,8 @@ interface FormModalProps {
   cancelLabel?: string;
   loading?: boolean;
   size?: "sm" | "md" | "lg" | "xl";
+  /** Actionable error shown above the form actions (e.g. validation or API failure). */
+  error?: string;
 }
 
 export function FormModal({
@@ -34,6 +36,7 @@ export function FormModal({
   cancelLabel = "Cancel",
   loading = false,
   size = "md",
+  error,
 }: FormModalProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,7 +58,14 @@ export function FormModal({
             <DialogTitle>{title}</DialogTitle>
             {description && <DialogDescription>{description}</DialogDescription>}
           </DialogHeader>
-          <div className="py-4">{children}</div>
+          <div className="py-4">
+            {children}
+            {error && (
+              <p role="alert" className="mt-3 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 rounded-md px-3 py-2">
+                {error}
+              </p>
+            )}
+          </div>
           <DialogFooter>
             <Button
               type="button"
