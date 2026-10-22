@@ -278,13 +278,44 @@ export class AuthController {
   }
 
   // Google OAuth endpoints
+  /**
+   * RELEASE-INTEGRATION1: the admin Google flow now uses
+   * transaction-bound state validation. The app has NO express-session,
+   * so passport-oauth2 silently skipped its state generation AND
+   * validation — the admin flow previously accepted ANY (or a missing)
+   * state. The manual URL build + server-stored random state closes
+   * that CSRF gap; the callback validates the state from the store
+   * before processing.
+   */
   @Get('google')
-  @UseGuards(GoogleAuthGuard)
-  async googleAuth() {
-    // GoogleAuthGuard handles everything:
-    // - Blocks if not configured (prevents invalid_client error)
-    // - Redirects to Google if configured
-    // - Handles OAuth errors gracefully
+  async googleAuth(@Res() res: Response) {
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') ||
+      'https://www.smartduka.org';
+    if (!GoogleStrategy.isConfigured()) {
+      res.redirect(
+        `${frontendUrl}/login?error=${encodeURIComponent('Google login is not configured yet. Please set up Google OAuth credentials or contact your administrator.')}`,
+      );
+      return;
+    }
+    const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID') || '';
+    const isDev = process.env.NODE_ENV !== 'production';
+    const defaultCallbackUrl = isDev
+      ? 'http://localhost:5000/api/v1/auth/google/callback'
+      : 'https://smartduka-91q6.onrender.com/api/v1/auth/google/callback';
+    const callbackUrl =
+      this.configService.get<string>('GOOGLE_CALLBACK_URL') ||
+      defaultCallbackUrl;
+    const state = await this.oauthExchangeService.issueState('admin_login');
+    const googleAuthUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+    googleAuthUrl.searchParams.set('client_id', clientId);
+    googleAuthUrl.searchParams.set('redirect_uri', callbackUrl);
+    googleAuthUrl.searchParams.set('response_type', 'code');
+    googleAuthUrl.searchParams.set('scope', 'email profile');
+    googleAuthUrl.searchParams.set('state', state);
+    googleAuthUrl.searchParams.set('access_type', 'offline');
+    googleAuthUrl.searchParams.set('prompt', 'select_account');
+    res.redirect(googleAuthUrl.toString());
   }
 
   /**
@@ -355,7 +386,6 @@ export class AuthController {
   async googleAuthCallback(
     @Req() req: any,
     @Res() res: Response,
-    @Query('state') state?: string,
   ) {
     const ipAddress = req.ip || req.connection.remoteAddress;
     const userAgent = req.get('user-agent');
@@ -368,17 +398,10 @@ export class AuthController {
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Referrer-Policy', 'no-referrer');
 
-    // OAUTH-SEC2: classify the flow from the SERVER-STORED state
-    // purpose (single-use, expiry-enforced). The admin flow's state is
-    // generated and validated by passport (session-backed) and has no
-    // entry in the state store — a missing entry classifies as admin.
-    // Client-supplied state metadata is never trusted for flow
-    // classification.
-    let isCashierSignup = false;
-    if (state) {
-      const stateCheck = await this.oauthExchangeService.validateState(state);
-      isCashierSignup = stateCheck.valid && stateCheck.purpose === 'cashier_login';
-    }
+    // RELEASE-INTEGRATION1: the state was already validated (fail-closed)
+    // by GoogleAuthGuard BEFORE the code exchange; the purpose arrives
+    // from the server store via the request — never from client metadata.
+    const isCashierSignup = req.oauthStatePurpose === 'cashier_login';
 
     try {
       const result = await this.authService.googleLoginWithTokens(
