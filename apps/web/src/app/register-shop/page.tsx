@@ -436,6 +436,7 @@ function RegisterShopContent() {
           const res = await fetch(`${config.apiUrl}/auth/oauth/exchange`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
             body: JSON.stringify({ ticket: googleTicket }),
           });
           const data = await res.json().catch(() => ({}));
