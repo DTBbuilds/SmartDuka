@@ -73,7 +73,6 @@ export function BarcodeScannerUnified({
       isInAppBrowser: info.isInAppBrowser,
       recommended: info.recommendedScanner,
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [forceScanner]);
 
   // Don't render until browser detection is complete

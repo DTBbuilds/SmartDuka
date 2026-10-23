@@ -152,10 +152,9 @@ export class SalesService {
     }
     // Settings unavailable → fail closed on the default rate; settings present
     // but tax disabled → no tax. (Pre-QUALITY-CORE1 behavior preserved.)
-    const taxEnabled =
-      !!shopSettings?.tax?.enabled || !shopSettings;
+    const taxEnabled = !!shopSettings?.tax?.enabled || !shopSettings;
     const baseTaxRate = taxEnabled
-      ? shopSettings?.tax?.rate ?? DEFAULT_TAX_RATE
+      ? (shopSettings?.tax?.rate ?? DEFAULT_TAX_RATE)
       : 0;
     // Tax-inclusive pricing: shelf prices already contain the tax; nothing is
     // added at checkout and the tax portion is extracted for reporting.
@@ -289,7 +288,9 @@ export class SalesService {
           0,
         ),
       );
-      finalTotal = round2(Math.max(0, round2(subtotal + tax) - loyaltyDiscount));
+      finalTotal = round2(
+        Math.max(0, round2(subtotal + tax) - loyaltyDiscount),
+      );
     }
 
     // STEP 3c: SHIFT ATTRIBUTION — an explicitly supplied shift must be the
