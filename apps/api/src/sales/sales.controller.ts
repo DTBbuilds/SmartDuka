@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Post,
   Query,
@@ -80,6 +82,24 @@ export class SalesController {
       dto,
       user.name,
     );
+  }
+
+  /**
+   * POS-CURRENCY-CHECKOUT-DEPLOY1 — CHECKOUT CAPABILITY PROBE.
+   *
+   * Exists ONLY in releases that accept the `expectedTotal` quote-integrity
+   * field. The POS probes this endpoint to decide whether to send the
+   * confirmed quote: 200 → capable; 404 → legacy API (field must NOT be
+   * sent — the old forbidNonWhitelisted pipe would reject it). Deliberately
+   * NOT reusing an endpoint that predates this release (e.g.
+   * /shops/currency-policy) — that false-positives against the previous
+   * deployment and would break checkout in a web-first deploy order.
+   */
+  @UseGuards(JwtAuthGuard)
+  @Get('checkout-capabilities')
+  @HttpCode(HttpStatus.OK)
+  checkoutCapabilities() {
+    return { quoteIntegrity: true, expectedTotal: true };
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

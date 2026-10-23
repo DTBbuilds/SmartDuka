@@ -1,4 +1,23 @@
 /**
+ * POS-CURRENCY-CHECKOUT-DEPLOY1 — capability-probe decision.
+ *
+ * The probe endpoint (`GET /sales/checkout-capabilities`) exists ONLY in
+ * releases that accept the `expectedTotal` quote-integrity field. Only an
+ * affirmative 200 enables the field:
+ *   - 404 → legacy API: the field MUST NOT be sent (the old
+ *     forbidNonWhitelisted pipe would reject it and break every checkout);
+ *   - 401/403 → auth problem: treat as not-capable (safe legacy mode) —
+ *     checkout requires a valid session anyway;
+ *   - network failure → not-capable.
+ * A probe that treats any non-404 as capable false-positives against the
+ * previous release (whose /shops/currency-policy already exists) and must
+ * never be used.
+ */
+export function probeSupportsQuoteIntegrity(status: number | undefined): boolean {
+  return status === 200;
+}
+
+/**
  * POS-CURRENCY-CHECKOUT-P0 — checkout session validation.
  *
  * The canonical checkout quote is frozen when the cashier starts checkout.

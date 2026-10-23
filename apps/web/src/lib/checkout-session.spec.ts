@@ -1,8 +1,35 @@
 import {
   validateCheckoutSession,
   validateCashTender,
+  probeSupportsQuoteIntegrity,
   type CheckoutQuote,
 } from './checkout-session';
+
+/**
+ * POS-CURRENCY-CHECKOUT-DEPLOY1 — the capability probe MUST only enable
+ * quote integrity on an affirmative 200. A non-404 heuristic false-positives
+ * against the previously deployed release (whose /shops/currency-policy
+ * already exists → 401) and would 400 every checkout in a web-first deploy.
+ */
+describe('probeSupportsQuoteIntegrity', () => {
+  it('200 (new API) enables quote integrity', () => {
+    expect(probeSupportsQuoteIntegrity(200)).toBe(true);
+  });
+
+  it('404 (legacy API) disables it', () => {
+    expect(probeSupportsQuoteIntegrity(404)).toBe(false);
+  });
+
+  it('401/403 (auth problem, possibly new API) degrades to legacy mode', () => {
+    expect(probeSupportsQuoteIntegrity(401)).toBe(false);
+    expect(probeSupportsQuoteIntegrity(403)).toBe(false);
+  });
+
+  it('5xx and undefined (network failure) disable it', () => {
+    expect(probeSupportsQuoteIntegrity(500)).toBe(false);
+    expect(probeSupportsQuoteIntegrity(undefined)).toBe(false);
+  });
+});
 
 /**
  * POS-CURRENCY-CHECKOUT-P0 — checkout session validation (client guards).

@@ -84,7 +84,7 @@ import { useBarcodeScanner } from "@/hooks/use-barcode-scanner";
 import { ScannerStatusIndicator } from "@/components/scanner-status-indicator";
 import { smartCache } from "@/lib/smart-cache-manager";
 import { usePOSProducts } from "@/hooks/use-smart-cache";
-import { validateCheckoutSession, type CheckoutQuote } from "@/lib/checkout-session";
+import { validateCheckoutSession, probeSupportsQuoteIntegrity, type CheckoutQuote } from "@/lib/checkout-session";
 import { CustomerSelect } from "@/components/pos/customer-select";
 import { CustomerWithLoyalty } from "@/hooks/use-customers";
 
@@ -786,19 +786,21 @@ function POSContent() {
             }
           }
         }
-        // POS-CURRENCY-CHECKOUT-P0 — API CAPABILITY PROBE. Render and Vercel
-        // both auto-deploy on a main push, so a combined push does not
+        // POS-CURRENCY-CHECKOUT-DEPLOY1 — API CAPABILITY PROBE. Render and
+        // Vercel both auto-deploy on a main push, so a combined push does not
         // guarantee API-first ordering. The quote-integrity field
         // (expectedTotal) is rejected by the OLD API's forbidNonWhitelisted
-        // pipe, so it is only sent once the API advertises the new surface
-        // (GET /shops/currency-policy exists only in the new build). A
-        // web-first deploy therefore degrades gracefully to legacy mode for
-        // the minutes until the API lands, instead of breaking checkout.
+        // pipe, so it is only sent when the API affirmatively advertises the
+        // capability via GET /sales/checkout-capabilities — an endpoint that
+        // exists ONLY in releases accepting the field. (The earlier probe
+        // used /shops/currency-policy, which already exists in the deployed
+        // previous release — a false positive that would have broken every
+        // checkout in a web-first deploy.) Only a 200 enables the field.
         try {
-          const capRes = await fetch(`${base}/shops/currency-policy`, {
+          const capRes = await fetch(`${base}/sales/checkout-capabilities`, {
             headers: { Authorization: `Bearer ${token}` },
           });
-          setApiSupportsQuoteIntegrity(capRes.status !== 404);
+          setApiSupportsQuoteIntegrity(probeSupportsQuoteIntegrity(capRes.status));
         } catch {
           setApiSupportsQuoteIntegrity(false);
         }
