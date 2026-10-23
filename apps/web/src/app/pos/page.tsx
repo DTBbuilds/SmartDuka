@@ -183,6 +183,10 @@ function POSContent() {
   // cashier starts checkout and validated at every subsequent step. Cart,
   // payment modal, confirmation and submission must all agree with it.
   const [checkoutQuote, setCheckoutQuote] = useState<CheckoutQuote | null>(null);
+  // POS-CURRENCY-CHECKOUT-P0: true only when the API advertises the
+  // quote-integrity surface; gates the expectedTotal field so a web-first
+  // deploy degrades gracefully against the old API.
+  const [apiSupportsQuoteIntegrity, setApiSupportsQuoteIntegrity] = useState(false);
   const [businessTypeConfig, setBusinessTypeConfig] = useState<any>(null);
   const [orderType, setOrderType] = useState<string>('standard');
   const [tableNumber, setTableNumber] = useState<string>('');
@@ -781,6 +785,22 @@ function POSContent() {
               setOrderType(btData.posConfig.defaultOrderType);
             }
           }
+        }
+        // POS-CURRENCY-CHECKOUT-P0 — API CAPABILITY PROBE. Render and Vercel
+        // both auto-deploy on a main push, so a combined push does not
+        // guarantee API-first ordering. The quote-integrity field
+        // (expectedTotal) is rejected by the OLD API's forbidNonWhitelisted
+        // pipe, so it is only sent once the API advertises the new surface
+        // (GET /shops/currency-policy exists only in the new build). A
+        // web-first deploy therefore degrades gracefully to legacy mode for
+        // the minutes until the API lands, instead of breaking checkout.
+        try {
+          const capRes = await fetch(`${base}/shops/currency-policy`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          setApiSupportsQuoteIntegrity(capRes.status !== 404);
+        } catch {
+          setApiSupportsQuoteIntegrity(false);
         }
       } catch (err) {
         console.error('Failed to fetch shop settings:', err);
@@ -1531,8 +1551,10 @@ function POSContent() {
         taxRate: shopSettings?.tax?.enabled ? shopSettings.tax.rate : 0,
         // POS-CURRENCY-CHECKOUT-P0: the confirmed quote travels with the
         // submission; the server rejects the checkout if its authoritative
-        // total diverges (stale cart / pricing change) — unbypassable.
-        expectedTotal: total,
+        // total diverges (stale cart / pricing change) — unbypassable. Sent
+        // only when the API advertises the quote-integrity surface (the old
+        // API's forbidNonWhitelisted pipe would reject the unknown field).
+        ...(apiSupportsQuoteIntegrity ? { expectedTotal: total } : {}),
         payments: [paymentDetails],
         status: "completed" as const,
         isOffline: false,
