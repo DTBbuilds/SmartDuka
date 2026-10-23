@@ -34,7 +34,12 @@ export default function SupportPage() {
 
   const contactInfo = {
     email: 'smartdukainfo@gmail.com',
-    phones: ['0450 275 013 (AU)', '0727 068 107 (KE)'],
+    // QUALITY-CORE1 P1-D: tel: hrefs must be dialable (digits + international
+    // prefix); display text keeps the human-readable form.
+    phones: [
+      { display: '0450 275 013 (AU)', href: 'tel:+61450275013' },
+      { display: '0727 068 107 (KE)', href: 'tel:+254727068107' },
+    ],
     hours: 'Monday - Friday: 8:00 AM - 6:00 PM',
     location: 'Sydney, Australia',
   };
@@ -143,12 +148,12 @@ export default function SupportPage() {
               <CardContent className="space-y-2">
                 {contactInfo.phones.map((phone) => (
                   <a
-                    key={phone}
-                    href={`tel:${phone}`}
-                    className="flex items-center justify-between p-3 rounded-lg bg-muted hover:bg-muted/80 transition-colors"
+                    key={phone.href}
+                    href={phone.href}
+                    className="flex items-center justify-between p-3 rounded-lg bg-muted hover:bg-muted/80 transition-colors min-h-[48px]"
                   >
-                    <span className="font-medium">{phone}</span>
-                    <Phone className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium">{phone.display}</span>
+                    <Phone className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                   </a>
                 ))}
               </CardContent>
