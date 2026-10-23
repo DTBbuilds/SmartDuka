@@ -22,6 +22,17 @@ import {
 } from '../auth/dto/register-shop.dto';
 import { SUPPORTED_CURRENCIES } from '../common/currency';
 
+// QUALITY-CORE1 P1-B: the currency policy is a no-op for the authority tests
+// (they never exercise currency changes); real policy behavior is covered by
+// currency-policy.spec.ts.
+const currencyPolicy = () =>
+  ({
+    assertCurrencyChangeAllowed: jest.fn().mockResolvedValue(undefined),
+    getCurrencyActivityStatus: jest
+      .fn()
+      .mockResolvedValue({ hasActivity: false, evidence: {} }),
+  }) as any;
+
 /**
  * P0-11B — SHOP REGISTRATION + MUTATION AUTHORITY
  *
@@ -245,7 +256,7 @@ describe('P0-11B shop authority', () => {
       });
       model.countDocuments = jest.fn(async () => 0);
       model.findOne = jest.fn(async () => null);
-      model.findById = jest.fn(async () => null);
+      model.findById = jest.fn(() => ({ exec: jest.fn(async () => null) }));
       model.findByIdAndUpdate = jest.fn((_id: any, update: any) => {
         const run = async () => {
           captured = update;
@@ -256,7 +267,7 @@ describe('P0-11B shop authority', () => {
           then: (res: any, rej: any) => run().then(res, rej),
         };
       });
-      service = new ShopsService(model);
+      service = new ShopsService(model, currencyPolicy());
     });
 
     it('update() persists ONLY allowlisted mutable fields — privileged/unknown never reach MongoDB', async () => {
@@ -295,7 +306,7 @@ describe('P0-11B shop authority', () => {
       });
       model.countDocuments = jest.fn(async () => 0);
       model.findOne = jest.fn(async () => null);
-      const svc = new ShopsService(model);
+      const svc = new ShopsService(model, currencyPolicy());
 
       const shop = await svc.create('507f1f77bcf86cd7994390aa', {
         name: 'Duka',
@@ -337,7 +348,7 @@ describe('P0-11B shop authority', () => {
         updateLanguage: jest.fn(),
         getStats: jest.fn(),
       } as any;
-      controller = new ShopsController(service, undefined);
+      controller = new ShopsController(service, currencyPolicy(), undefined);
     });
 
     const rolesOf = (handler: () => any): string[] | undefined =>
@@ -551,7 +562,7 @@ describe('P0-11B shop authority', () => {
           })),
         })),
       };
-      const service = new ShopsService(model);
+      const service = new ShopsService(model, currencyPolicy());
       const shops = await service.findAll();
       expect(shops).toHaveLength(2);
       for (const s of shops) {

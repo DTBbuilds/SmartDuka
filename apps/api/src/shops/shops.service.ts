@@ -5,6 +5,7 @@ import { Shop, ShopDocument } from './schemas/shop.schema';
 import { CreateShopDto } from './dto/create-shop.dto';
 import { UpdateShopDto } from './dto/update-shop.dto';
 import { generateShopId } from './utils/shop-id-generator';
+import { CurrencyPolicyService } from './services/currency-policy.service';
 
 export type { CreateShopDto, UpdateShopDto };
 
@@ -14,6 +15,7 @@ export class ShopsService {
 
   constructor(
     @InjectModel(Shop.name) private readonly shopModel: Model<ShopDocument>,
+    private readonly currencyPolicyService: CurrencyPolicyService,
   ) {}
 
   async create(ownerId: string, dto: CreateShopDto): Promise<ShopDocument> {
@@ -112,6 +114,22 @@ export class ShopsService {
     dto: UpdateShopDto,
   ): Promise<ShopDocument | null> {
     try {
+      // QUALITY-CORE1 P1-B — BASE-CURRENCY IMMUTABILITY. A currency change is
+      // only a change when it differs from the current value; it is allowed
+      // only before the shop has any currency-denominated financial records.
+      if (dto.currency !== undefined) {
+        const current = await this.shopModel
+          .findById(new Types.ObjectId(shopId))
+          .exec();
+        if (current) {
+          await this.currencyPolicyService.assertCurrencyChangeAllowed(
+            shopId,
+            current.currency,
+            dto.currency,
+          );
+        }
+      }
+
       // P0-11B DEFENSE-IN-DEPTH ALLOWLIST — the update document is built from
       // known mutable properties ONLY. No spread of caller input: even if a
       // DTO were ever bypassed, privileged fields (status, verification*,

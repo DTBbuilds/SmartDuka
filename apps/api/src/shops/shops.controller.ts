@@ -13,6 +13,7 @@ import {
 import { CreateShopDto } from './dto/create-shop.dto';
 import { UpdateShopDto } from './dto/update-shop.dto';
 import { ShopsService } from './shops.service';
+import { CurrencyPolicyService } from './services/currency-policy.service';
 import { ShopSettingsService } from '../shop-settings/shop-settings.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -31,6 +32,7 @@ export class ShopsController {
 
   constructor(
     private readonly shopsService: ShopsService,
+    private readonly currencyPolicyService: CurrencyPolicyService,
     @Optional() private readonly shopSettingsService?: ShopSettingsService,
   ) {}
 
@@ -74,6 +76,27 @@ export class ShopsController {
     }
     // Fallback to findByOwner for legacy tokens or shop owners
     return this.shopsService.findByOwner(user.sub);
+  }
+
+  // QUALITY-CORE1 P1-B: base-currency immutability status for the settings UI.
+  // `currencyLocked` is true once ANY currency-denominated financial record
+  // exists (orders, payment transactions, purchases, money-bearing shifts) —
+  // the currency can then no longer be changed through normal interfaces.
+  @UseGuards(JwtAuthGuard)
+  @Get('currency-policy')
+  async getCurrencyPolicy(@CurrentUser() user: Record<string, any>) {
+    if (!user.shopId) {
+      throw new ForbiddenException('No shop associated with this user');
+    }
+    const shop = await this.shopsService.findById(user.shopId);
+    const status = await this.currencyPolicyService.getCurrencyActivityStatus(
+      user.shopId,
+    );
+    return {
+      currency: shop?.currency,
+      currencyLocked: status.hasActivity,
+      evidence: status.evidence,
+    };
   }
 
   // P0-11B2: the generic GET /shops/:id route was REMOVED — it captured any
