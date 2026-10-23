@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { formatMoney } from "@/lib/currency";
 import { useBranch } from "@/lib/branch-context";
 import { config } from "@/lib/config";
 import {
@@ -84,7 +85,7 @@ interface PaginatedResponse {
 }
 
 export default function OrdersPage() {
-  const { token, user } = useAuth();
+  const { token, user, shop } = useAuth();
   const { currentBranch } = useBranch();
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -245,8 +246,12 @@ export default function OrdersPage() {
 
   // Server-side filtering is now used - orders are already filtered by the API
 
+  // POS-CURRENCY-CHECKOUT-P0: display the shop's base currency — a literal
+  // KES label mislabels shops configured (or remediated) to another currency.
+  // Orders created from now on carry their own currency snapshot for
+  // per-record accuracy going forward.
   const formatCurrency = (amount: number) => {
-    return `KES ${amount.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return formatMoney(amount, shop?.currency);
   };
 
   const getStatusBadge = (status: string) => {

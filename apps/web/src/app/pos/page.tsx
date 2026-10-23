@@ -84,6 +84,7 @@ import { useBarcodeScanner } from "@/hooks/use-barcode-scanner";
 import { ScannerStatusIndicator } from "@/components/scanner-status-indicator";
 import { smartCache } from "@/lib/smart-cache-manager";
 import { usePOSProducts } from "@/hooks/use-smart-cache";
+import { validateCheckoutSession, type CheckoutQuote } from "@/lib/checkout-session";
 import { CustomerSelect } from "@/components/pos/customer-select";
 import { CustomerWithLoyalty } from "@/hooks/use-customers";
 
@@ -178,6 +179,10 @@ function POSContent() {
   // QUALITY-CORE1: checkout is blocked until tax settings have resolved —
   // an unresolved/null settings state must never present a pre-tax total.
   const [settingsReady, setSettingsReady] = useState(false);
+  // POS-CURRENCY-CHECKOUT-P0: the canonical checkout quote, captured when the
+  // cashier starts checkout and validated at every subsequent step. Cart,
+  // payment modal, confirmation and submission must all agree with it.
+  const [checkoutQuote, setCheckoutQuote] = useState<CheckoutQuote | null>(null);
   const [businessTypeConfig, setBusinessTypeConfig] = useState<any>(null);
   const [orderType, setOrderType] = useState<string>('standard');
   const [tableNumber, setTableNumber] = useState<string>('');
@@ -1076,6 +1081,10 @@ function POSContent() {
       toast({ type: 'info', title: 'Cart is empty', message: 'Add items before checkout' });
       return;
     }
+    if (total <= 0) {
+      toast({ type: 'error', title: 'Invalid total', message: 'The payable amount must be greater than zero.' });
+      return;
+    }
 
     // QUALITY-CORE1: never check out against an unresolved tax configuration —
     // the quoted total must reflect the same tax rules the server will apply.
@@ -1087,6 +1096,14 @@ function POSContent() {
       });
       return;
     }
+
+    // POS-CURRENCY-CHECKOUT-P0: freeze the canonical quote for this checkout
+    // session. Every later step validates against it.
+    setCheckoutQuote({
+      itemCount: cartItems.reduce((sum, item) => sum + item.quantity, 0),
+      total,
+      currency: shop?.currency,
+    });
 
     // Show payment method modal - user selects payment method after clicking checkout
     setShowPaymentMethodModal(true);
@@ -1437,6 +1454,7 @@ function POSContent() {
       setPendingOrderId(null);
       setMpesaPhoneNumber('');
       setFeedbackType(null);
+      setCheckoutQuote(null);
       clearCheckoutIdempotencyKey();
     }, 800);
   };
@@ -1447,6 +1465,7 @@ function POSContent() {
     setPendingOrderId(null);
     setMpesaPhoneNumber('');
     setMpesaAmount(null);
+    setCheckoutQuote(null);
     clearCheckoutIdempotencyKey();
     toast({ type: 'info', title: 'Payment cancelled', message: 'M-Pesa payment was cancelled' });
   };
@@ -1456,6 +1475,25 @@ function POSContent() {
       if (!token) {
         throw new Error('Authentication token not available. Please log in again.');
       }
+
+      // POS-CURRENCY-CHECKOUT-P0 — SUBMISSION GUARDS. Nothing is submitted,
+      // queued, or cleared unless the checkout session is internally
+      // consistent.
+      const verdict = validateCheckoutSession({
+        cartItemsCount: cartItems.length,
+        cartTotal: total,
+        quote: checkoutQuote,
+      });
+      if (!verdict.ok) {
+        toast({
+          type: 'error',
+          title: 'Checkout refused',
+          message: verdict.message,
+        });
+        resetCheckout();
+        return;
+      }
+
       setIsCheckingOut(true);
       setCheckoutMessage(null);
       setCheckoutError(null);
@@ -1491,6 +1529,10 @@ function POSContent() {
           unitPrice: item.unitPrice,
         })),
         taxRate: shopSettings?.tax?.enabled ? shopSettings.tax.rate : 0,
+        // POS-CURRENCY-CHECKOUT-P0: the confirmed quote travels with the
+        // submission; the server rejects the checkout if its authoritative
+        // total diverges (stale cart / pricing change) — unbypassable.
+        expectedTotal: total,
         payments: [paymentDetails],
         status: "completed" as const,
         isOffline: false,
@@ -1526,7 +1568,13 @@ function POSContent() {
 
       if (!res.ok) {
         if (res.status >= 500 && typeof window !== "undefined" && shopId) {
-          // Save offline with shopId for multi-tenant isolation
+          // Save offline with shopId for multi-tenant isolation.
+          // POS-CURRENCY-CHECKOUT-P0: close the confirmation modal BEFORE
+          // touching the cart — clearing the cart while the modal is open
+          // rendered a 0-item / zero-total confirmation (the reported
+          // desync).
+          setShowPaymentConfirmation(false);
+          setSelectedPaymentMethod(null);
           await addPendingOrder(shopId, {
             createdAt: Date.now(),
             payload: { ...payload, status: "pending", isOffline: true },
@@ -1537,10 +1585,22 @@ function POSContent() {
           setCustomerName("");
           setSelectedCustomer(null);
           setLoyaltyPointsToRedeem(0);
+          setCheckoutQuote(null);
           refreshPendingCount();
           return;
         }
-        throw new Error(order?.message ?? `Checkout failed (${res.status})`);
+        // 4xx (validation/quote-mismatch/stock): definitive rejection —
+        // surface it, KEEP the cart so the cashier can correct it, and close
+        // the confirmation modal. Never queue a definitively rejected sale
+        // offline.
+        setShowPaymentConfirmation(false);
+        setSelectedPaymentMethod(null);
+        setCheckoutQuote(null);
+        const rejection: any = new Error(
+          order?.message ?? `Checkout failed (${res.status})`,
+        );
+        rejection.status = res.status;
+        throw rejection;
       }
       setCheckoutStep(3);
       setFeedbackType('success');
@@ -1642,11 +1702,24 @@ function POSContent() {
         setAmountTendered(0);
         setCheckoutStep(0);
         setFeedbackType(null);
+        setCheckoutQuote(null);
         clearCheckoutIdempotencyKey();
         refreshPendingCount();
       }, 800);
     } catch (err: any) {
-      if (typeof window !== "undefined" && shopId) {
+      // POS-CURRENCY-CHECKOUT-P0 — OFFLINE CLASSIFICATION. Only transport
+      // failures (network drop, timeout, 5xx) may be queued offline. A
+      // definitive 4xx rejection (validation, quote mismatch, insufficient
+      // stock) must surface loudly and KEEP the cart — queueing it would
+      // strand an unsellable payload and clearing the cart would desync the
+      // still-open confirmation modal (the reported 0-item / zero-total case).
+      const isDefinitiveRejection =
+        err?.status >= 400 && err?.status < 500;
+      if (!isDefinitiveRejection && typeof window !== "undefined" && shopId) {
+        // Close the confirmation modal BEFORE touching the cart so the UI
+        // never renders a 0-item confirmation.
+        setShowPaymentConfirmation(false);
+        setSelectedPaymentMethod(null);
         // Save offline with shopId for multi-tenant isolation.
         // The payload carries the SAME idempotency key so the offline replay
         // cannot create a second sale for this logical checkout.
@@ -1683,6 +1756,7 @@ function POSContent() {
         setCartItems([]);
         setOrderNotes("");
         setCustomerName("");
+        setCheckoutQuote(null);
         setTimeout(() => {
           setCheckoutStep(0);
           setFeedbackType(null);
@@ -1693,26 +1767,31 @@ function POSContent() {
         setCheckoutError(errorMsg);
         setFeedbackType('error');
         setFeedbackMessage(errorMsg);
+        setCheckoutQuote(null);
       }
     } finally {
       setIsCheckingOut(false);
     }
   };
 
-  // Reset checkout mode and related states
+  // Reset checkout mode and related states.
+  // POS-CURRENCY-CHECKOUT-P0: cancelling the checkout session must NOT
+  // destroy the cart — the cashier may cancel to fix a customer name, swap
+  // payment method, or correct tender. Cart clearing is an explicit action
+  // (Clear button / F4) or a post-success/post-offline-queue step.
   const resetCheckout = () => {
     setIsCheckoutMode(false);
     setShowPaymentConfirmation(false);
     setCheckoutStep(0);
     setSelectedPaymentMethod(null);
     setAmountTendered(0);
-    setCartItems([]);
     setOrderNotes("");
     setCustomerName("");
     setSelectedCustomer(null);
     setLoyaltyPointsToRedeem(0);
     setFeedbackType(null);
     setShowSuccessAnimation(false);
+    setCheckoutQuote(null);
   };
 
   const handleRemoveItem = (productId: string) => {
@@ -1950,20 +2029,23 @@ function POSContent() {
       {/* Payment Confirmation Modal */}
       <PaymentConfirmationModal
         isOpen={showPaymentConfirmation}
-        data={selectedPaymentMethod ? {
+        data={selectedPaymentMethod && checkoutQuote ? {
           paymentMethod: selectedPaymentMethod,
           paymentMethodLabel: paymentOptions.find(o => o.id === selectedPaymentMethod)?.label || selectedPaymentMethod,
           subtotal,
           tax,
-          total,
+          // POS-CURRENCY-CHECKOUT-P0: the confirmation shows the FROZEN quote,
+          // never a live recomputation that could desync from the cart.
+          total: checkoutQuote.total,
           amountTendered: selectedPaymentMethod === 'cash' ? amountTendered : undefined,
-          change: selectedPaymentMethod === 'cash' ? Math.max(0, amountTendered - total) : undefined,
+          change: selectedPaymentMethod === 'cash' ? Math.max(0, amountTendered - checkoutQuote.total) : undefined,
           customerName: customerName || undefined,
-          itemCount: cartItems.reduce((sum, item) => sum + item.quantity, 0),
+          itemCount: checkoutQuote.itemCount,
         } : null}
         isProcessing={isCheckingOut}
         onConfirm={handleConfirmPayment}
         onCancel={resetCheckout}
+        formatCurrency={formatCurrency}
       />
 
       {/* Transaction Feedback */}
@@ -2129,6 +2211,7 @@ function POSContent() {
               isCheckingOut={isCheckingOut}
               checkoutMessage={checkoutMessage}
               checkoutError={checkoutError}
+              formatCurrency={formatCurrency}
               shopSettings={shopSettings}
               selectedCustomer={selectedCustomer}
               loyaltyPointsToRedeem={loyaltyPointsToRedeem}
@@ -2294,6 +2377,7 @@ function POSContent() {
       <ReceiptPreviewModal
         isOpen={showReceiptPreview}
         receipt={lastReceipt}
+        formatCurrency={formatCurrency}
         onPrint={() => {
           setIsReceiptOpen(true);
           setShowReceiptPreview(false);
@@ -2338,6 +2422,7 @@ function POSContent() {
         isOpen={showMpesaFlow}
         orderId={pendingOrderId || ''}
         amount={mpesaAmount ?? total}
+        formatCurrency={formatCurrency}
         customerName={customerName || undefined}
         phoneNumber={mpesaPhoneNumber || undefined}
         onSuccess={handleMpesaSuccess}
@@ -2358,6 +2443,7 @@ function POSContent() {
       <POSMobileCartSheet
         isOpen={showMobileCart}
         onClose={() => setShowMobileCart(false)}
+        formatCurrency={formatCurrency}
         cartItems={cartItems}
         subtotal={subtotal}
         totalDiscount={totalDiscount}

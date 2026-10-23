@@ -11,6 +11,7 @@ import { InjectModel, InjectConnection } from '@nestjs/mongoose';
 import { Model, Types, ClientSession, Connection } from 'mongoose';
 import { nanoid } from 'nanoid';
 import { Order, OrderDocument } from './schemas/order.schema';
+import { Shop } from '../shops/schemas/shop.schema';
 import { CheckoutDto } from './dto/checkout.dto';
 import { InventoryService } from '../inventory/inventory.service';
 import { ActivityService } from '../activity/activity.service';
@@ -49,6 +50,7 @@ export class SalesService {
 
   constructor(
     @InjectModel(Order.name) private readonly orderModel: Model<OrderDocument>,
+    @InjectModel(Shop.name) private readonly shopModel: Model<any>,
     @InjectConnection() private readonly connection: Connection,
     private readonly inventoryService: InventoryService,
     private readonly activityService: ActivityService,
@@ -262,6 +264,25 @@ export class SalesService {
       rateGroups.set(rate, (rateGroups.get(rate) ?? 0) + item.lineTotal);
     }
 
+    // STEP 3e: CURRENCY SNAPSHOT (POS-CURRENCY-CHECKOUT-P0) — the order
+    // records the shop's base currency AT SALE TIME. Historical orders carry
+    // no currency field; new orders become self-describing so reporting can
+    // always distinguish the currency a transaction was denominated in from
+    // the shop's current configuration.
+    let orderCurrency: string | undefined;
+    try {
+      const shopDoc = (await this.shopModel
+        .findById(new Types.ObjectId(shopId))
+        .select('currency')
+        .lean()
+        .exec()) as { currency?: string } | null;
+      orderCurrency = shopDoc?.currency;
+    } catch (error) {
+      this.logger.warn(
+        `Failed to read shop currency for ${shopId}: ${error?.message}`,
+      );
+    }
+
     // The payable amount after loyalty — the tax base for inclusive pricing
     // and the reconciliation target for tender validation.
     const payableTotal = round2(Math.max(0, subtotal - loyaltyDiscount));
@@ -290,6 +311,22 @@ export class SalesService {
       );
       finalTotal = round2(
         Math.max(0, round2(subtotal + tax) - loyaltyDiscount),
+      );
+    }
+
+    // STEP 3f: CHECKOUT QUOTE INTEGRITY (POS-CURRENCY-CHECKOUT-P0).
+    // The client confirms a quote on the payment modal; the server validates
+    // its OWN authoritative total against that quote before creating anything.
+    // A mismatch means the cart changed mid-checkout, pricing/tax settings
+    // moved, or a stale session was replayed — fail loud, mutate nothing.
+    // (Idempotent retries never reach this: the pre-check returns the
+    // canonical order first.)
+    if (
+      dto.expectedTotal !== undefined &&
+      Math.abs(round2(dto.expectedTotal) - finalTotal) > TENDER_TOLERANCE
+    ) {
+      throw new ConflictException(
+        `Checkout quote mismatch: the confirmed total was ${round2(dto.expectedTotal).toFixed(2)} but the current authoritative total is ${finalTotal.toFixed(2)}. The cart or pricing changed — restart the checkout.`,
       );
     }
 
@@ -458,6 +495,7 @@ export class SalesService {
         subtotal,
         tax,
         total: finalTotal,
+        currency: orderCurrency,
         status: orderStatus,
         paymentStatus,
         payments: finalPayments.map(({ isExternal, ...record }) => record),

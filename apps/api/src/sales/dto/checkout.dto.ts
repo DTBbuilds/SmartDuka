@@ -156,6 +156,19 @@ export class CheckoutDto {
   @Min(0)
   taxRate?: number;
 
+  /**
+   * QUALITY-CORE1 POS-CURRENCY-CHECKOUT-P0: the client's checkout quote —
+   * the total the cashier CONFIRMED on the payment modal. Optional (legacy
+   * clients omit it). When present, the server rejects the checkout if its
+   * own authoritative total diverges: the cart changed mid-checkout, pricing
+   * or tax settings moved, or a stale session was replayed. This is a
+   * server-side guard — modifying frontend requests cannot bypass it.
+   */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  expectedTotal?: number;
+
   @IsOptional()
   @IsBoolean()
   isOffline?: boolean;

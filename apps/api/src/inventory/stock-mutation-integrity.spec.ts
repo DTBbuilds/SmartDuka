@@ -386,6 +386,7 @@ describe('Stock mutation integrity (P0-1)', () => {
       });
       const salesService = new SalesService(
         orderModel,
+        { findById: jest.fn().mockReturnValue({ select: jest.fn().mockReturnValue({ lean: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue({ currency: 'KES' }) }) }) }) } as any, // shop model (currency snapshot)
         {} as any, // connection
         inventoryService,
         { logActivity: jest.fn() } as any, // activity
@@ -397,6 +398,7 @@ describe('Stock mutation integrity (P0-1)', () => {
         {} as any, // transactionService
         {} as any, // loyalty
         {} as any, // customers
+        {} as any, // shifts
       );
 
       await salesService.checkout(SHOP, USER, undefined as any, {

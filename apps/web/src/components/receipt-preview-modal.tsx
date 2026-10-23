@@ -17,9 +17,13 @@ interface ReceiptPreviewModalProps {
   onClose: () => void;
   onEmail?: () => void;
   isProcessing?: boolean;
+  formatCurrency?: (value: number) => string;
 }
 
-const formatCurrency = (value: number) =>
+// POS-CURRENCY-CHECKOUT-P0: the shop-currency formatter is injected by the
+// POS page; the legacy hardcoded-Ksh default remains for callers that do
+// not pass one.
+const defaultFormatCurrency = (value: number) =>
   `Ksh ${value.toLocaleString('en-KE', { minimumFractionDigits: 0 })}`;
 
 const formatDate = (date: Date) => {
@@ -57,7 +61,9 @@ export function ReceiptPreviewModal({
   onClose,
   onEmail,
   isProcessing = false,
+  formatCurrency: formatCurrencyProp,
 }: ReceiptPreviewModalProps) {
+  const formatCurrency = formatCurrencyProp ?? defaultFormatCurrency;
   // Keyboard shortcuts: Enter/N = New Sale, P = Print
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (!isOpen || !receipt) return;

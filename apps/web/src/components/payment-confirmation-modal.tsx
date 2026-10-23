@@ -29,9 +29,13 @@ interface PaymentConfirmationModalProps {
   isProcessing?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
+  formatCurrency?: (value: number) => string;
 }
 
-const formatCurrency = (value: number) =>
+// POS-CURRENCY-CHECKOUT-P0: the shop-currency formatter is injected by the
+// POS page; the legacy hardcoded-Ksh default remains for callers that do
+// not pass one.
+const defaultFormatCurrency = (value: number) =>
   `Ksh ${value.toLocaleString('en-KE', { minimumFractionDigits: 0 })}`;
 
 const getPaymentIcon = (method: string) => {
@@ -50,7 +54,9 @@ export function PaymentConfirmationModal({
   isProcessing = false,
   onConfirm,
   onCancel,
+  formatCurrency: formatCurrencyProp,
 }: PaymentConfirmationModalProps) {
+  const formatCurrency = formatCurrencyProp ?? defaultFormatCurrency;
   const confirmRef = useRef<HTMLButtonElement>(null);
 
   // Auto-focus confirm button and handle Enter key for fast checkout

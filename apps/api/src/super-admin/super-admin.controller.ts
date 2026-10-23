@@ -139,6 +139,28 @@ export class SuperAdminController {
   }
 
   /**
+   * POS-CURRENCY-CHECKOUT-P0 (Part D): audited legacy base-currency
+   * remediation. The ONLY path that may change the base currency of a shop
+   * that already has financial records — super-admin authority, explicit
+   * reviewed evidence, idempotent on remediationId, fully audit-logged, no
+   * historical mutation, no conversion.
+   */
+  @Put('shops/:id/currency-remediation')
+  async remediateBaseCurrency(
+    @Param('id') shopId: string,
+    @Body()
+    body: {
+      remediationId: string;
+      targetCurrency: string;
+      reason: string;
+      evidenceSummary: string;
+    },
+    @CurrentUser() user: any,
+  ) {
+    return this.superAdminService.remediateBaseCurrency(shopId, user.sub, body);
+  }
+
+  /**
    * Reject a shop
    */
   @Put('shops/:id/reject')

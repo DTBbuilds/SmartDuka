@@ -7,6 +7,7 @@ import { Receipt, ReceiptSchema } from './schemas/receipt.schema';
 import { Invoice, InvoiceSchema } from './schemas/invoice.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { Product, ProductSchema } from '../inventory/schemas/product.schema';
+import { Shop, ShopSchema } from '../shops/schemas/shop.schema';
 import {
   StockAdjustment,
   StockAdjustmentSchema,
@@ -36,6 +37,7 @@ import { ShiftsModule } from '../shifts/shifts.module';
       { name: Invoice.name, schema: InvoiceSchema },
       { name: User.name, schema: UserSchema },
       { name: Product.name, schema: ProductSchema },
+      { name: Shop.name, schema: ShopSchema },
       { name: StockAdjustment.name, schema: StockAdjustmentSchema },
       { name: PaymentTransaction.name, schema: PaymentTransactionSchema },
     ]),

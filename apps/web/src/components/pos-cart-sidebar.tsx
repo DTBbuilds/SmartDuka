@@ -4,7 +4,10 @@ import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button, Input, Textarea, Badge, Separator, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@smartduka/ui';
 import { ShoppingCart, Trash2, Check } from 'lucide-react';
 
-const formatCurrency = (value: number) =>
+// POS-CURRENCY-CHECKOUT-P0: the shop-currency formatter is injected by
+// the POS page; the legacy hardcoded-Ksh default remains for callers that
+// do not pass one.
+const defaultFormatCurrency = (value: number) =>
   `Ksh ${value.toLocaleString('en-KE', { minimumFractionDigits: 0 })}`;
 
 interface CartItem {
@@ -49,6 +52,7 @@ interface POSCartSidebarProps {
   onOrderNotesChange: (notes: string) => void;
   onRemoveItem: (productId: string) => void;
   onCheckout: () => void;
+  formatCurrency?: (value: number) => string;
 }
 
 export function POSCartSidebar({
@@ -72,7 +76,10 @@ export function POSCartSidebar({
   onOrderNotesChange,
   onRemoveItem,
   onCheckout,
+  formatCurrency: formatCurrencyProp,
 }: POSCartSidebarProps) {
+  const formatCurrency = formatCurrencyProp ?? defaultFormatCurrency;
+
   const taxRate = shopSettings?.tax?.enabled ? shopSettings.tax.rate : 0;
   const taxName = shopSettings?.tax?.name || 'VAT';
 

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { formatMoney } from "@/lib/currency";
 import { useBranch } from "@/lib/branch-context";
 import { config } from "@/lib/config";
 import {
@@ -67,7 +68,7 @@ interface PaymentStats {
 }
 
 export default function PaymentsPage() {
-  const { token, user } = useAuth();
+  const { token, user, shop } = useAuth();
   const { currentBranch } = useBranch();
   const [payments, setPayments] = useState<Payment[]>([]);
   const [stats, setStats] = useState<PaymentStats | null>(null);
@@ -220,8 +221,12 @@ export default function PaymentsPage() {
     }
   };
 
+  // POS-CURRENCY-CHECKOUT-P0: display the shop's base currency — a literal
+  // KES label mislabels shops configured (or remediated) to another currency.
+  // Orders created from now on carry their own currency snapshot for
+  // per-record accuracy going forward.
   const formatCurrency = (amount: number) => {
-    return `KES ${amount.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return formatMoney(amount, shop?.currency);
   };
 
   const getMethodIcon = (method: string) => {

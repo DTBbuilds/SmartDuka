@@ -327,7 +327,9 @@ export function PaymentMethodModal({
   };
 
   const handleCashConfirm = () => {
-    if (amountTendered >= total) {
+    // POS-CURRENCY-CHECKOUT-P0: change is only meaningful against a positive,
+    // validated payable. A zero-total session must never confirm.
+    if (total > 0 && amountTendered >= total) {
       onConfirm('cash', amountTendered);
       resetState();
     }

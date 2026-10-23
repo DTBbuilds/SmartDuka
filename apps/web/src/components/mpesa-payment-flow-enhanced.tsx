@@ -41,9 +41,13 @@ interface MpesaPaymentFlowEnhancedProps {
   onSuccess: (receiptNumber: string) => void;
   onCancel: () => void;
   onBack?: () => void;
+  formatCurrency?: (value: number) => string;
 }
 
-const formatCurrency = (value: number) =>
+// POS-CURRENCY-CHECKOUT-P0: the shop-currency formatter is injected by the
+// POS page; the legacy hardcoded-Ksh default remains for callers that do
+// not pass one.
+const defaultFormatCurrency = (value: number) =>
   `Ksh ${value.toLocaleString('en-KE', { minimumFractionDigits: 0 })}`;
 
 const formatPhoneDisplay = (phone: string) => {
@@ -133,7 +137,9 @@ export function MpesaPaymentFlowEnhanced({
   onSuccess,
   onCancel,
   onBack,
+  formatCurrency: formatCurrencyProp,
 }: MpesaPaymentFlowEnhancedProps) {
+  const formatCurrency = formatCurrencyProp ?? defaultFormatCurrency;
   const [step, setStep] = useState<Step>(initialPhoneNumber ? 'processing' : 'phone-input');
   const [phoneNumber, setPhoneNumber] = useState(initialPhoneNumber || '');
   const [phoneError, setPhoneError] = useState<string | null>(null);

@@ -261,6 +261,15 @@ export class Order {
   @Prop({ required: true, min: 0 })
   total: number;
 
+  /**
+   * POS-CURRENCY-CHECKOUT-P0: the shop's base currency AT SALE TIME.
+   * Historical orders have no currency field (undefined) — they were
+   * denominated in the shop's currency of their era and must never be
+   * reinterpreted. New orders are self-describing.
+   */
+  @Prop({ required: false })
+  currency?: string;
+
   @Prop({ enum: ['pending', 'completed', 'void'], default: 'pending' })
   status: 'pending' | 'completed' | 'void';
 

@@ -5,6 +5,7 @@ import { PaymentTransactionService } from '../payments/services/payment-transact
 import { PaymentTransaction } from '../payments/schemas/payment-transaction.schema';
 import { MpesaTransaction } from '../payments/schemas/mpesa-transaction.schema';
 import { Order } from '../sales/schemas/order.schema';
+import { Shop } from '../shops/schemas/shop.schema';
 import { InventoryService } from '../inventory/inventory.service';
 import { ActivityService } from '../activity/activity.service';
 import { CacheService } from '../common/services/cache.service';
@@ -215,6 +216,7 @@ describe('P0-3E mpesa order/payment convergence', () => {
           useValue: mockMpesaTxnModel,
         },
         { provide: getModelToken(Order.name), useValue: mockOrderModel },
+        { provide: getModelToken(Shop.name), useValue: { findById: jest.fn().mockReturnThis(), select: jest.fn().mockReturnThis(), lean: jest.fn().mockReturnThis(), exec: jest.fn().mockResolvedValue({ currency: 'KES' }) } },
         {
           provide: getConnectionToken(),
           useValue: { startSession: jest.fn() },

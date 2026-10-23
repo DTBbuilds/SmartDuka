@@ -9,6 +9,7 @@ import { ShopAuditLogService } from '../shops/services/shop-audit-log.service';
 import { EmailService } from '../notifications/email.service';
 import { EMAIL_TEMPLATES } from '../notifications/email-templates';
 import { CacheService, CACHE_TTL, ADMIN_CACHE_KEYS } from '../common/services/cache.service';
+import { SUPPORTED_CURRENCIES } from '../common/currency';
 
 const GRACE_PERIOD_DAYS = 7;
 const FRONTEND_URL = process.env.FRONTEND_URL || 'https://www.smartduka.org';
@@ -1150,5 +1151,99 @@ export class SuperAdminService {
       this.logger.error(`Failed to send email to ${admin.email}:`, error);
       return false;
     }
+  }
+
+  /**
+   * POS-CURRENCY-CHECKOUT-P0 (Part D) — LEGACY BASE-CURRENCY REMEDIATION.
+   *
+   * The QUALITY-CORE1 currency-immutability policy locks the base currency
+   * once financial records exist. That correctly blocks casual changes, but
+   * it also blocks the ONE legitimate operation a legacy shop may need:
+   * correcting a base currency that was misconfigured before the policy
+   * existed (e.g. a shop operating in KES — Kenyan VAT, M-Pesa, KES
+   * amounts — whose configuration says AUD).
+   *
+   * This is the ONLY audited exception path:
+   *   - super_admin authority only (controller-level role guard),
+   *   - requires an explicit reason + evidence summary (reviewed offline),
+   *   - idempotent on `remediationId` (retries never double-apply),
+   *   - writes a ShopAuditLog event with oldValue/newValue/reason,
+   *   - performs NO historical record mutation and NO currency conversion —
+   *     historical amounts keep their original meaning; new orders snapshot
+   *     the corrected currency via the checkout currency snapshot.
+   */
+  async remediateBaseCurrency(
+    shopId: string,
+    superAdminId: string,
+    dto: {
+      remediationId: string;
+      targetCurrency: string;
+      reason: string;
+      evidenceSummary: string;
+    },
+  ): Promise<ShopDocument> {
+    if (!dto.remediationId || !dto.targetCurrency || !dto.reason || !dto.evidenceSummary) {
+      throw new BadRequestException(
+        'remediationId, targetCurrency, reason and evidenceSummary are required',
+      );
+    }
+    if (dto.reason.trim().length < 10 || dto.evidenceSummary.trim().length < 10) {
+      throw new BadRequestException(
+        'reason and evidenceSummary must each be at least 10 characters (reviewed evidence required)',
+      );
+    }
+    if (!SUPPORTED_CURRENCIES.includes(dto.targetCurrency)) {
+      throw new BadRequestException('Unsupported target currency');
+    }
+
+    const shop = await this.getShopDetails(shopId);
+    if (!shop) throw new NotFoundException('Shop not found');
+
+    if (!shop.currency || shop.currency === dto.targetCurrency) {
+      throw new BadRequestException(
+        `Shop currency is ${shop.currency ?? 'unset'} — nothing to remediate`,
+      );
+    }
+
+    // Idempotency: the same remediationId must never double-apply. The audit
+    // trail is the ledger.
+    const marker = `currency-remediation:${dto.remediationId}`;
+    const existing = await this.auditLogService
+      .getAuditLogsByAction(shopId, 'update', 200)
+      .then((logs) => logs.find((l) => (l.reason || '').includes(marker)));
+    if (existing) {
+      this.logger.warn(
+        `Currency remediation ${dto.remediationId} already applied to shop ${shopId} — returning current state`,
+      );
+      return this.getShopDetails(shopId);
+    }
+
+    const oldValue = { currency: shop.currency };
+
+    const updated = await this.shopModel
+      .findByIdAndUpdate(
+        new Types.ObjectId(shopId),
+        { $set: { currency: dto.targetCurrency, updatedAt: new Date() } },
+        { new: true, runValidators: true },
+      )
+      .exec();
+
+    if (!updated) throw new NotFoundException('Shop not found');
+
+    await this.auditLogService.create({
+      shopId,
+      performedBy: superAdminId,
+      action: 'update',
+      oldValue,
+      newValue: { currency: dto.targetCurrency },
+      reason: `${marker} — ${dto.reason.trim()}`,
+      notes: `Evidence: ${dto.evidenceSummary.trim()}. Historical records unchanged; no conversion performed.`,
+    });
+
+    this.logger.warn(
+      `CURRENCY REMEDIATION: shop ${shopId} (${shop.name}) ${oldValue.currency} -> ${dto.targetCurrency} by ${superAdminId} (${marker})`,
+    );
+
+    return updated;
   }
 }

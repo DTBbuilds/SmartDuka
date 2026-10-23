@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken, getConnectionToken } from '@nestjs/mongoose';
 import { SalesService } from './sales.service';
 import { Order } from './schemas/order.schema';
+import { Shop } from '../shops/schemas/shop.schema';
 import { InventoryService } from '../inventory/inventory.service';
 import { ActivityService } from '../activity/activity.service';
 import { PaymentTransactionService } from '../payments/services/payment-transaction.service';
@@ -82,6 +83,18 @@ describe('SalesService', () => {
         {
           provide: getModelToken(Order.name),
           useValue: mockOrderModel,
+        },
+        {
+          provide: getModelToken(Shop.name),
+          useValue: {
+            findById: jest.fn().mockReturnValue({
+              select: jest.fn().mockReturnValue({
+                lean: jest.fn().mockReturnValue({
+                  exec: jest.fn().mockResolvedValue({ currency: 'KES' }),
+                }),
+              }),
+            }),
+          },
         },
         {
           provide: getConnectionToken(),

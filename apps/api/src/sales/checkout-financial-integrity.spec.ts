@@ -3,6 +3,7 @@ import { getModelToken, getConnectionToken } from '@nestjs/mongoose';
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { SalesService } from './sales.service';
 import { Order } from './schemas/order.schema';
+import { Shop } from '../shops/schemas/shop.schema';
 import { InventoryService } from '../inventory/inventory.service';
 import { ActivityService } from '../activity/activity.service';
 import { PaymentTransactionService } from '../payments/services/payment-transaction.service';
@@ -115,6 +116,7 @@ describe('QUALITY-CORE1 checkout financial integrity', () => {
       providers: [
         SalesService,
         { provide: getModelToken(Order.name), useValue: mockOrderModel },
+        { provide: getModelToken(Shop.name), useValue: { findById: jest.fn().mockReturnThis(), select: jest.fn().mockReturnThis(), lean: jest.fn().mockReturnThis(), exec: jest.fn().mockResolvedValue({ currency: 'KES' }) } },
         {
           provide: getConnectionToken(),
           useValue: { startSession: jest.fn() },

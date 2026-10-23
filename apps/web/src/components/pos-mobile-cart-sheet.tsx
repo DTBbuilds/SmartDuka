@@ -6,7 +6,10 @@ import { ShoppingCart, Trash2, User, X, Minus, Plus, ChevronUp, ChevronDown, Gif
 import { CustomerSelect } from './pos/customer-select';
 import { CustomerWithLoyalty } from '@/hooks/use-customers';
 
-const formatCurrency = (value: number) =>
+// POS-CURRENCY-CHECKOUT-P0: the shop-currency formatter is injected by
+// the POS page; the legacy hardcoded-Ksh default remains for callers that
+// do not pass one.
+const defaultFormatCurrency = (value: number) =>
   `Ksh ${value.toLocaleString('en-KE', { minimumFractionDigits: 0 })}`;
 
 interface CartItem {
@@ -39,6 +42,7 @@ interface POSMobileCartSheetProps {
   loyaltyPointsToRedeem?: number;
   onSelectCustomer?: (customer: CustomerWithLoyalty | null) => void;
   onPointsRedemption?: (points: number) => void;
+  formatCurrency?: (value: number) => string;
 }
 
 export function POSMobileCartSheet({
@@ -61,7 +65,10 @@ export function POSMobileCartSheet({
   loyaltyPointsToRedeem = 0,
   onSelectCustomer,
   onPointsRedemption,
+  formatCurrency: formatCurrencyProp,
 }: POSMobileCartSheetProps) {
+  const formatCurrency = formatCurrencyProp ?? defaultFormatCurrency;
+
   const [showCustomerInput, setShowCustomerInput] = useState(false);
   const itemCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
 

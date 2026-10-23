@@ -6,7 +6,10 @@ import { ShoppingCart, Trash2, User, Gift, Package } from 'lucide-react';
 import { CustomerSelect } from './pos/customer-select';
 import { CustomerWithLoyalty } from '@/hooks/use-customers';
 
-const formatCurrency = (value: number) =>
+// POS-CURRENCY-CHECKOUT-P0: the shop-currency formatter is injected by the
+// POS page; the legacy hardcoded-Ksh default remains for any caller that
+// does not pass one.
+const defaultFormatCurrency = (value: number) =>
   `Ksh ${value.toLocaleString('en-KE', { minimumFractionDigits: 0 })}`;
 
 interface CartItem {
@@ -43,6 +46,7 @@ interface POSCartCompactProps {
   onPointsRedemption?: (points: number) => void;
   onRemoveItem: (productId: string) => void;
   onCheckout: () => void;
+  formatCurrency?: (value: number) => string;
 }
 
 export function POSCartCompact({
@@ -63,7 +67,9 @@ export function POSCartCompact({
   onPointsRedemption,
   onRemoveItem,
   onCheckout,
+  formatCurrency: formatCurrencyProp,
 }: POSCartCompactProps) {
+  const formatCurrency = formatCurrencyProp ?? defaultFormatCurrency;
   const taxRate = shopSettings?.tax?.enabled ? shopSettings.tax.rate : 0;
   const taxName = shopSettings?.tax?.name || 'VAT';
   const [showCustomerInfo, setShowCustomerInfo] = useState(false);
