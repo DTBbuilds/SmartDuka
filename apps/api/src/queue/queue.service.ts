@@ -3,7 +3,6 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { ConfigService } from '@nestjs/config';
 import { MpesaCallbackJobData } from './processors/mpesa-callback.processor';
-import { EmailJobData } from './processors/email.processor';
 import { StockAlertJobData } from './processors/stock-alert.processor';
 
 /**
@@ -29,10 +28,8 @@ export class QueueService implements OnModuleInit {
 
   constructor(
     @Optional() @InjectQueue('mpesa-callbacks') private mpesaQueue: Queue | null,
-    @Optional() @InjectQueue('email') private emailQueue: Queue | null,
     @Optional() @InjectQueue('stock-alerts') private stockAlertQueue: Queue | null,
     @Optional() @InjectQueue('notifications') private notificationQueue: Queue | null,
-    @Optional() @InjectQueue('reports') private reportsQueue: Queue | null,
     private configService: ConfigService,
   ) {}
 
@@ -90,35 +87,6 @@ export class QueueService implements OnModuleInit {
   }
 
   /**
-   * Add email to sending queue
-   */
-  async addEmail(data: EmailJobData): Promise<string | null> {
-    if (!this.isQueueAvailable) {
-      this.logger.debug('Queue unavailable - email will be sent synchronously');
-      return null;
-    }
-
-    try {
-      const priority = data.priority === 'high' ? 1 : data.priority === 'low' ? 10 : 5;
-      
-      const job = await this.emailQueue!.add('send-email', data, {
-        priority,
-        attempts: 3,
-        backoff: {
-          type: 'exponential',
-          delay: 5000,
-        },
-      });
-      
-      this.logger.log(`Email queued: ${job.id} - ${data.subject}`);
-      return job.id || null;
-    } catch (error: any) {
-      this.logger.error(`Failed to queue email: ${error.message}`);
-      return null;
-    }
-  }
-
-  /**
    * Add stock alert to processing queue
    */
   async addStockAlert(data: StockAlertJobData): Promise<string | null> {
@@ -167,32 +135,6 @@ export class QueueService implements OnModuleInit {
   }
 
   /**
-   * Add report generation to queue
-   */
-  async addReportGeneration(data: ReportJobData): Promise<string | null> {
-    if (!this.isQueueAvailable) {
-      return null;
-    }
-
-    try {
-      const job = await this.reportsQueue!.add('generate-report', data, {
-        priority: 10, // Low priority - reports can wait
-        attempts: 2,
-        backoff: {
-          type: 'fixed',
-          delay: 30000,
-        },
-      });
-      
-      this.logger.log(`Report generation queued: ${job.id} - ${data.reportType}`);
-      return job.id || null;
-    } catch (error: any) {
-      this.logger.error(`Failed to queue report: ${error.message}`);
-      return null;
-    }
-  }
-
-  /**
    * Add WhatsApp message to sending queue
    */
   async addWhatsAppMessage(data: WhatsAppMessageJobData): Promise<string | null> {
@@ -231,22 +173,18 @@ export class QueueService implements OnModuleInit {
     }
 
     try {
-      const [mpesa, email, stockAlerts, notifications, reports] = await Promise.all([
+      const [mpesa, stockAlerts, notifications] = await Promise.all([
         this.mpesaQueue!.getJobCounts(),
-        this.emailQueue!.getJobCounts(),
         this.stockAlertQueue!.getJobCounts(),
         this.notificationQueue!.getJobCounts(),
-        this.reportsQueue!.getJobCounts(),
       ]);
 
       return {
         available: true,
         queues: {
           'mpesa-callbacks': mpesa,
-          email,
           'stock-alerts': stockAlerts,
           notifications,
-          reports,
         },
       };
     } catch (error: any) {
@@ -270,22 +208,6 @@ export interface NotificationJobData {
   message: string;
   data?: Record<string, any>;
   priority?: 'high' | 'normal';
-}
-
-/**
- * Report generation job data
- */
-export interface ReportJobData {
-  shopId: string;
-  branchId?: string;
-  reportType: 'sales' | 'inventory' | 'financial' | 'custom';
-  dateRange: {
-    start: string;
-    end: string;
-  };
-  format: 'pdf' | 'csv' | 'excel';
-  requestedBy: string;
-  email?: string; // Send report to this email when done
 }
 
 /**

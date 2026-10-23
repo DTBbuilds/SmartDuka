@@ -21,6 +21,7 @@ import { CURRENCY_OPTIONS } from "@/lib/currency";
 import { ProfileSettings } from "@/components/settings/profile-settings";
 import { SecuritySettings } from "@/components/settings/security-settings";
 import { KeyboardShortcutsPanel } from "@/components/settings/keyboard-shortcuts-panel";
+import { ReportPreferencesSettings } from "@/components/settings/report-preferences-settings";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -49,6 +50,7 @@ export default function SettingsPage() {
     { id: 'profile', label: 'Profile', icon: User, description: 'Personal information' },
     { id: 'security', label: 'Security', icon: Lock, description: 'Password & access' },
     { id: 'shortcuts', label: 'Shortcuts', icon: Keyboard, description: 'Keyboard shortcuts' },
+    { id: 'reports', label: 'Reports', icon: FileText, description: 'Business report emails' },
   ];
 
   // Role-based access control - only admin can access settings
@@ -679,6 +681,9 @@ export default function SettingsPage() {
           />
         </TabsContent>
 
+        <TabsContent value="reports">
+          <ReportPreferencesSettings />
+        </TabsContent>
         <TabsContent value="shortcuts">
           <KeyboardShortcutsPanel />
         </TabsContent>

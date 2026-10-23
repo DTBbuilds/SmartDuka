@@ -2,7 +2,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { Cron } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
 import { Shop, ShopDocument } from '../../shops/schemas/shop.schema';
 import { AiDataService } from './ai-data.service';
@@ -47,102 +46,13 @@ export class AiReportSchedulerService implements OnModuleInit {
   }
 
   // ==================== SCHEDULED JOBS ====================
-
-  /**
-   * Daily reports - 8 PM local time
-   */
-  @Cron('0 20 * * *')
-  async sendDailyReports(): Promise<void> {
-    if (!this.isEnabled) return;
-
-    this.logger.log('Starting daily report distribution...');
-    const startTime = Date.now();
-
-    try {
-      const shops = await this.getActiveShops();
-      let successCount = 0;
-      let failCount = 0;
-
-      for (const shop of shops) {
-        try {
-          await this.generateAndSendDailyReport(shop);
-          successCount++;
-        } catch (error: any) {
-          this.logger.error(`Daily report failed for shop ${shop._id}: ${error.message}`);
-          failCount++;
-        }
-      }
-
-      const duration = Date.now() - startTime;
-      this.logger.log(`Daily reports completed: ${successCount} sent, ${failCount} failed (${duration}ms)`);
-    } catch (error: any) {
-      this.logger.error(`Daily report job failed: ${error.message}`);
-    }
-  }
-
-  /**
-   * Weekly reports - Sunday 8 AM
-   */
-  @Cron('0 8 * * 0')
-  async sendWeeklyReports(): Promise<void> {
-    if (!this.isEnabled) return;
-
-    this.logger.log('Starting weekly report distribution...');
-    const startTime = Date.now();
-
-    try {
-      const shops = await this.getActiveShops();
-      let successCount = 0;
-      let failCount = 0;
-
-      for (const shop of shops) {
-        try {
-          await this.generateAndSendWeeklyReport(shop);
-          successCount++;
-        } catch (error: any) {
-          this.logger.error(`Weekly report failed for shop ${shop._id}: ${error.message}`);
-          failCount++;
-        }
-      }
-
-      const duration = Date.now() - startTime;
-      this.logger.log(`Weekly reports completed: ${successCount} sent, ${failCount} failed (${duration}ms)`);
-    } catch (error: any) {
-      this.logger.error(`Weekly report job failed: ${error.message}`);
-    }
-  }
-
-  /**
-   * Monthly reports - 1st of month 9 AM
-   */
-  @Cron('0 9 1 * *')
-  async sendMonthlyReports(): Promise<void> {
-    if (!this.isEnabled) return;
-
-    this.logger.log('Starting monthly report distribution...');
-    const startTime = Date.now();
-
-    try {
-      const shops = await this.getActiveShops();
-      let successCount = 0;
-      let failCount = 0;
-
-      for (const shop of shops) {
-        try {
-          await this.generateAndSendMonthlyReport(shop);
-          successCount++;
-        } catch (error: any) {
-          this.logger.error(`Monthly report failed for shop ${shop._id}: ${error.message}`);
-          failCount++;
-        }
-      }
-
-      const duration = Date.now() - startTime;
-      this.logger.log(`Monthly reports completed: ${successCount} sent, ${failCount} failed (${duration}ms)`);
-    } catch (error: any) {
-      this.logger.error(`Monthly report job failed: ${error.message}`);
-    }
-  }
+  // EMAIL-REPORTS-CORE1: the daily/weekly/monthly CRON jobs were RETIRED
+  // from this service. They delivered via WhatsApp only (0 shops ever
+  // configured), the monthly job was a TODO that only logged, and the email
+  // path was commented out. The durable, timezone-correct, idempotent
+  // scheduler now owns scheduled reporting:
+  //   src/reports/report-scheduler.service.ts (REPORT_EMAILS_ENABLED gate).
+  // This class remains for its manual per-shop trigger helpers.
 
   // ==================== REPORT GENERATION ====================
 

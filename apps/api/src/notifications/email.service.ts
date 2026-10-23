@@ -35,6 +35,12 @@ export interface EmailOptions {
   templateName?: string;
   templateVariables?: Record<string, any>;
   triggeredBy?: string;
+  /**
+   * EMAIL-REPORTS-CORE1: idempotent send key. Retrying a send with the SAME
+   * key never delivers a second copy — the original attempt's log entry is
+   * reused (success short-circuits; a failed chain may retry under the key).
+   */
+  idempotencyKey?: string;
   // Use single provider for critical emails (like OTP) to avoid duplicates
   useSingleProvider?: boolean;
   preferredProvider?: 'smtp' | 'resend';
@@ -221,6 +227,29 @@ export class EmailService {
       return { success: false, error: 'Email html body is empty or missing' };
     }
 
+    // EMAIL-REPORTS-CORE1 — IDEMPOTENT SEND: a retry carrying the same key
+    // never delivers a second copy. If the key already produced a
+    // successful send, short-circuit and report that original acceptance.
+    if (options.idempotencyKey) {
+      try {
+        const prior = await this.emailLogModel
+          .findOne({ idempotencyKey: options.idempotencyKey, status: { $in: ['sent', 'delivered'] } })
+          .lean();
+        if (prior) {
+          this.logger.log(
+            `Email idempotency: key ${options.idempotencyKey} already accepted (${prior.status}) — not sending again`,
+          );
+          return {
+            success: true,
+            messageId: prior.messageId,
+            emailLogId: String(prior._id),
+          };
+        }
+      } catch (error: any) {
+        this.logger.warn(`Idempotency check failed (sending anyway): ${error.message}`);
+      }
+    }
+
     const toArray = Array.isArray(options.to) ? options.to : [options.to];
     const toAddress = toArray.join(', ');
     const replyTo = options.replyTo || process.env.REPLY_TO_EMAIL || 'smartdukainfo@gmail.com';
@@ -266,113 +295,93 @@ export class EmailService {
             : options.templateVariables
           : undefined,
         triggeredBy: options.triggeredBy || 'system',
+        idempotencyKey: options.idempotencyKey,
         status: 'pending',
         retryCount: 0,
       });
       await emailLog.save();
     } catch (logError: any) {
+      // EMAIL-REPORTS-CORE1: a duplicate-key error on the idempotency index
+      // means a concurrent attempt with the same key is already sending —
+      // never race it with a second delivery.
+      if (logError?.code === 11000 && options.idempotencyKey) {
+        this.logger.warn(
+          `Concurrent send detected for idempotency key ${options.idempotencyKey} — not sending again`,
+        );
+        return { success: false, error: 'Duplicate send prevented (idempotency key in flight)' };
+      }
       this.logger.warn(`Failed to create email log: ${logError.message}`);
     }
 
-    // ===== EMAIL SENDING STRATEGY =====
-    // For OTP emails: Use single provider to avoid duplicates
-    // For other emails: Use parallel mode (SMTP + Resend) for reliability
-    // SMTP sends from Gmail (smartdukainfo@gmail.com) - works in dev, may be blocked on Render.
-    // Resend sends from verified domain (noreply@smartduka.org) - always works via HTTP API.
+    // ===== EMAIL SENDING STRATEGY (EMAIL-REPORTS-CORE1) =====
+    // SINGLE-PROVIDER WITH CONTROLLED FALLBACK. The previous parallel mode
+    // (SMTP + Resend fired simultaneously) delivered TWO copies of every
+    // non-auth email. Now: attempt the preferred provider; only if it
+    // FAILS (nothing delivered) fall back to the other provider once. A
+    // fallback can never duplicate because the primary did not deliver.
+    // Authentication emails keep single-provider semantics (no fallback
+    // duplicates; the preferred provider is attempted, then the other).
+    const preferred: 'smtp' | 'resend' =
+      options.preferredProvider ||
+      (options.category === 'authentication' ? 'resend' : 'resend');
+    const fallback: 'smtp' | 'resend' | null =
+      preferred === 'resend'
+        ? this.transporter
+          ? 'smtp'
+          : null
+        : this.resend
+          ? 'resend'
+          : null;
 
-    const sendPromises: Array<Promise<{ provider: 'smtp' | 'resend'; success: boolean; messageId?: string; error?: string; from?: string }>> = [];
-    const useSingleProvider = options.useSingleProvider || options.category === 'authentication';
-
-    if (useSingleProvider) {
-      // Use single provider for OTP/auth emails to avoid duplicates
-      const preferredProvider = options.preferredProvider || 'resend'; // Prefer Resend for reliability
-      
-      if (preferredProvider === 'resend' && this.resend) {
-        const resendPromise = this.sendViaResend(toArray, options, resendFrom, replyTo);
-        sendPromises.push(resendPromise);
-      } else if (preferredProvider === 'smtp' && this.transporter) {
-        const smtpPromise = this.sendViaSmtp(toAddress, options, smtpFrom, replyTo);
-        sendPromises.push(smtpPromise);
-      } else {
-        // Fallback to available provider
-        if (this.resend) {
-          const resendPromise = this.sendViaResend(toArray, options, resendFrom, replyTo);
-          sendPromises.push(resendPromise);
-        } else if (this.transporter) {
-          const smtpPromise = this.sendViaSmtp(toAddress, options, smtpFrom, replyTo);
-          sendPromises.push(smtpPromise);
-        }
-      }
-    } else {
-      // Parallel mode for other emails
-      // SMTP attempt
-      if (this.transporter) {
-        const smtpPromise = this.sendViaSmtp(toAddress, options, smtpFrom, replyTo);
-        sendPromises.push(smtpPromise);
-      }
-
-      // Resend attempt
-      if (this.resend) {
-        const resendPromise = this.sendViaResend(toArray, options, resendFrom, replyTo);
-        sendPromises.push(resendPromise);
-      }
+    const attempts: Array<'smtp' | 'resend'> = [];
+    const primaryReady =
+      preferred === 'resend' ? !!this.resend : !!this.transporter;
+    if (primaryReady) {
+      attempts.push(preferred);
+      if (fallback) attempts.push(fallback); // controlled fallback AFTER a failed primary
+    } else if (fallback) {
+      attempts.push(fallback); // preferred provider unavailable — start on the fallback
     }
 
-    // No providers configured
-    if (sendPromises.length === 0) {
-      this.logger.warn('Email not sent - no provider configured (set SMTP credentials and/or RESEND_API_KEY)');
-      if (emailLog) {
-        await this.emailLogModel.findByIdAndUpdate(emailLog._id, {
-          status: 'failed',
-          failedAt: new Date(),
-          errorMessage: 'No email provider configured',
-        });
-      }
-      return { success: false, error: 'No email provider configured', emailLogId: emailLog?._id?.toString() };
+    const outcomes: Array<{ provider: 'smtp' | 'resend'; success: boolean; messageId?: string; error?: string; from?: string }> = [];
+    for (const provider of attempts) {
+      const result =
+        provider === 'resend'
+          ? await this.sendViaResend(toArray, options, resendFrom, replyTo)
+          : await this.sendViaSmtp(toAddress, options, smtpFrom, replyTo);
+      outcomes.push(result);
+      if (result.success) break; // delivered by THIS provider — stop; no fallback copy
     }
 
-    // Fire all providers in parallel, wait for all to settle
-    const results = await Promise.allSettled(sendPromises);
-    const outcomes = results.map(r => r.status === 'fulfilled' ? r.value : { provider: 'unknown' as const, success: false, error: (r as any).reason?.message, messageId: undefined as string | undefined, from: undefined as string | undefined });
-
-    const smtpResult = outcomes.find(r => r.provider === 'smtp');
-    const resendResult = outcomes.find(r => r.provider === 'resend');
-    const firstSuccess = outcomes.find(r => r.success);
+    const firstSuccess = outcomes.find((r) => r.success);
 
     // Log results
-    if (smtpResult) {
-      if (smtpResult.success) {
-        this.logger.log(`✅ SMTP sent to ${toAddress}: ${smtpResult.messageId}`);
+    for (const r of outcomes) {
+      if (r.success) {
+        this.logger.log(`✅ ${r.provider} accepted email to ${toAddress}: ${r.messageId}`);
       } else {
-        this.logger.warn(`⚠️ SMTP failed for ${toAddress}: ${smtpResult.error}`);
-      }
-    }
-    if (resendResult) {
-      if (resendResult.success) {
-        this.logger.log(`✅ Resend sent to ${toAddress}: ${resendResult.messageId}`);
-      } else {
-        this.logger.warn(`⚠️ Resend failed for ${toAddress}: ${resendResult.error}`);
+        this.logger.warn(`⚠️ ${r.provider} failed for ${toAddress}: ${r.error}`);
       }
     }
 
-    // Update email log based on results
+    // Update email log based on results — 'sent' records PROVIDER ACCEPTANCE
+    // (delivery confirmation arrives via the provider webhook).
     if (emailLog) {
       if (firstSuccess) {
-        const providers = outcomes.filter(r => r.success).map(r => r.provider).join('+');
         await this.emailLogModel.findByIdAndUpdate(emailLog._id, {
           status: 'sent',
           sentAt: new Date(),
           messageId: firstSuccess.messageId,
-          provider: providers,
+          provider: firstSuccess.provider,
           from: firstSuccess.from,
         });
       } else {
-        const errors = outcomes.map(r => `${r.provider}: ${r.error}`).join('; ');
+        const errors = outcomes.map((r) => `${r.provider}: ${r.error}`).join('; ');
         await this.emailLogModel.findByIdAndUpdate(emailLog._id, {
           status: 'failed',
           failedAt: new Date(),
           errorMessage: errors,
-          provider: outcomes.map(r => r.provider).join('+'),
+          provider: outcomes.map((r) => r.provider).join('+'),
         });
       }
     }
@@ -381,7 +390,7 @@ export class EmailService {
       return { success: true, messageId: firstSuccess.messageId, emailLogId: emailLog?._id?.toString() };
     }
 
-    const allErrors = outcomes.map(r => `${r.provider}: ${r.error}`).join('; ');
+    const allErrors = outcomes.map((r) => `${r.provider}: ${r.error}`).join('; ');
     this.logger.error(`All providers failed for ${toAddress}: ${allErrors}`);
     return { success: false, error: allErrors, emailLogId: emailLog?._id?.toString() };
   }
@@ -438,6 +447,18 @@ export class EmailService {
     replyTo: string,
   ): Promise<{ provider: 'resend'; success: boolean; messageId?: string; error?: string; from: string }> {
     try {
+      // EMAIL-REPORTS-CORE1: attachments must survive the Resend path — the
+      // previous implementation silently dropped them (masked by the old
+      // parallel mode where SMTP also delivered the mail). Resend expects
+      // base64 content.
+      const attachments = options.attachments?.map((a) => ({
+        filename: a.filename,
+        content: Buffer.isBuffer(a.content)
+          ? a.content.toString('base64')
+          : Buffer.from(a.content, 'utf8').toString('base64'),
+        contentType: a.contentType,
+      }));
+
       const result = await this.resend!.emails.send({
         from,
         to: toArray,
@@ -445,7 +466,8 @@ export class EmailService {
         html: options.html,
         text: options.text,
         replyTo,
-      });
+        ...(attachments && attachments.length > 0 ? { attachments } : {}),
+      } as any);
 
       if (result.error) {
         return { provider: 'resend', success: false, error: result.error.message, from };

@@ -4,6 +4,7 @@ import { EmailService } from './email.service';
 import { NotificationsService } from './notifications.service';
 import { NotificationsController } from './notifications.controller';
 import { EmailAdminController } from './email-admin.controller';
+import { EmailWebhookController } from './email-webhook.controller';
 import { SystemEventManagerService } from './system-event-manager.service';
 import { ExpiryAlertService } from './expiry-alert.service';
 import { ExpiryTrackingService } from '../inventory/services/expiry-tracking.service';
@@ -24,7 +25,7 @@ import { Shop, ShopSchema } from '../shops/schemas/shop.schema';
     ]),
   ],
   providers: [EmailService, NotificationsService, SystemEventManagerService, ExpiryAlertService, ExpiryTrackingService],
-  controllers: [NotificationsController, EmailAdminController],
+  controllers: [NotificationsController, EmailAdminController, EmailWebhookController],
   exports: [EmailService, NotificationsService, SystemEventManagerService, ExpiryAlertService],
 })
 export class NotificationsModule {}

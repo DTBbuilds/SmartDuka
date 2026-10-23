@@ -80,10 +80,12 @@ const REDIS_URL = process.env.REDIS_URL;
         };
       },
     }),
+    // EMAIL-REPORTS-CORE1: the 'email' and 'reports' queues were removed —
+    // they had no real processors (the email processor acknowledged jobs
+    // without sending) and no producers. Email delivery is in-process via
+    // EmailService; report delivery is the report_runs scheduler.
     BullModule.registerQueue(
       { name: 'mpesa-callbacks' },
-      { name: 'email' },
-      { name: 'reports' },
       { name: 'stock-alerts' },
       { name: 'notifications' },
     ),

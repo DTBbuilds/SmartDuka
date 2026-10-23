@@ -86,6 +86,15 @@ export class EmailLog {
   })
   status: 'pending' | 'sent' | 'delivered' | 'failed' | 'bounced' | 'spam';
 
+  /**
+   * EMAIL-REPORTS-CORE1: idempotent send key. A logical email (one send
+   * attempt chain) carries one key; a retry of the same key never sends a
+   * second copy — the original log entry is reused. Unique per key when
+   * present (sparse).
+   */
+  @Prop({ required: false })
+  idempotencyKey?: string;
+
   @Prop({ required: false })
   sentAt?: Date;
 
@@ -162,5 +171,10 @@ EmailLogSchema.index({ messageId: 1 });
 // Compound indexes
 EmailLogSchema.index({ status: 1, category: 1, createdAt: -1 });
 EmailLogSchema.index({ shopId: 1, status: 1, createdAt: -1 });
+// EMAIL-REPORTS-CORE1: idempotent send keys — one successful chain per key.
+EmailLogSchema.index(
+  { idempotencyKey: 1 },
+  { unique: true, partialFilterExpression: { idempotencyKey: { $exists: true } } },
+);
 // TTL index - auto-delete after 90 days
 // EmailLogSchema.index({ createdAt: 1 }, { expireAfterSeconds: 7776000 });

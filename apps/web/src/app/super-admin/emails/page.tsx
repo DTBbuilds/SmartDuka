@@ -56,7 +56,8 @@ import {
   TestTube,
   Edit,
   Copy,
-  Check
+  Check,
+  Activity
 } from 'lucide-react';
 
 interface EmailLog {
@@ -108,6 +109,8 @@ interface SmtpStatus {
   fromEmail?: string;
   frontendUrl?: string;
 }
+
+import { ReportSchedulerObservability } from '@/components/super-admin/report-observability';
 
 function SuperAdminEmailsContent() {
   const { token } = useAuth();
@@ -524,7 +527,7 @@ function SuperAdminEmailsContent() {
 
       {/* Main Content */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 md:space-y-6">
-        <TabsList className="grid w-full grid-cols-4 h-auto">
+        <TabsList className="grid w-full grid-cols-5 h-auto">
           <TabsTrigger value="overview" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-2 md:py-1.5 text-xs md:text-sm">
             <BarChart3 className="h-4 w-4" />
             <span className="hidden sm:inline">Overview</span>
@@ -544,7 +547,16 @@ function SuperAdminEmailsContent() {
             <span className="hidden sm:inline">Analytics</span>
             <span className="sm:hidden">Data</span>
           </TabsTrigger>
+          <TabsTrigger value="scheduler" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-2 md:py-1.5 text-xs md:text-sm">
+            <Activity className="h-4 w-4" />
+            <span className="hidden sm:inline">Scheduler</span>
+            <span className="sm:hidden">Runs</span>
+          </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="scheduler" className="space-y-6">
+          <ReportSchedulerObservability />
+        </TabsContent>
 
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-6">
