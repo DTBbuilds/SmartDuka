@@ -13,6 +13,9 @@ export class ShopSettings extends Document {
       name: { type: String, default: 'VAT' },
       description: { type: String, default: 'Value Added Tax (16%)' },
       appliedByDefault: { type: Boolean, default: true },
+      // QUALITY-CORE1: tax-inclusive pricing — shelf prices already contain
+      // the tax; checkout adds nothing and the tax portion is extracted.
+      inclusive: { type: Boolean, default: false },
     },
     default: {
       enabled: true,
@@ -20,6 +23,7 @@ export class ShopSettings extends Document {
       name: 'VAT',
       description: 'Value Added Tax (16%)',
       appliedByDefault: true,
+      inclusive: false,
     },
   })
   tax: {
@@ -28,6 +32,7 @@ export class ShopSettings extends Document {
     name: string;
     description: string;
     appliedByDefault: boolean;
+    inclusive?: boolean;
   };
 
   @Prop({ type: [String], default: [] })

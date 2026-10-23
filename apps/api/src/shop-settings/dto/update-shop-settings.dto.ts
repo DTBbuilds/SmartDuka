@@ -86,14 +86,16 @@ class ReceiptSettingsDto {
   socialMedia?: SocialMediaDto;
 }
 
-export class UpdateShopSettingsDto {
+export class TaxSettingsDto {
   @IsBoolean()
   @IsOptional()
   enabled?: boolean;
 
+  // QUALITY-CORE1: the rate is a FRACTION (0.16 = 16%), matching how checkout
+  // consumes it. Percent values (16) would compute a 1600% tax.
   @IsNumber()
   @Min(0)
-  @Max(100)
+  @Max(1)
   @IsOptional()
   rate?: number;
 
@@ -108,6 +110,22 @@ export class UpdateShopSettingsDto {
   @IsBoolean()
   @IsOptional()
   appliedByDefault?: boolean;
+
+  // QUALITY-CORE1: tax-inclusive pricing — shelf prices already contain the
+  // tax; checkout adds nothing and extracts the tax portion for reporting.
+  @IsBoolean()
+  @IsOptional()
+  inclusive?: boolean;
+}
+
+export class UpdateShopSettingsDto {
+  // QUALITY-CORE1: nested tax settings. The previous DTO had no `tax`
+  // property at all, so the global forbidNonWhitelisted ValidationPipe
+  // rejected every tax-settings save from the admin UI.
+  @ValidateNested()
+  @Type(() => TaxSettingsDto)
+  @IsOptional()
+  tax?: TaxSettingsDto;
 
   @IsArray()
   @IsOptional()

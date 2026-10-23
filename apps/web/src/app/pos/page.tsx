@@ -175,6 +175,9 @@ function POSContent() {
   const [isCheckoutMode, setIsCheckoutMode] = useState(false);
   const [showReceiptPreview, setShowReceiptPreview] = useState(false);
   const [shopSettings, setShopSettings] = useState<any>(null);
+  // QUALITY-CORE1: checkout is blocked until tax settings have resolved —
+  // an unresolved/null settings state must never present a pre-tax total.
+  const [settingsReady, setSettingsReady] = useState(false);
   const [businessTypeConfig, setBusinessTypeConfig] = useState<any>(null);
   const [orderType, setOrderType] = useState<string>('standard');
   const [tableNumber, setTableNumber] = useState<string>('');
@@ -183,6 +186,9 @@ function POSContent() {
   const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false);
   const [showMpesaFlow, setShowMpesaFlow] = useState(false);
   const [mpesaPhoneNumber, setMpesaPhoneNumber] = useState('');
+  // QUALITY-CORE1 R1: the STK push amount is the SERVER-DERIVED allocation
+  // from the checkout response — never the client-quoted total.
+  const [mpesaAmount, setMpesaAmount] = useState<number | null>(null);
   const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
   const [mpesaConfigStatus, setMpesaConfigStatus] = useState<{
     isConfigured: boolean;
@@ -749,6 +755,16 @@ function POSContent() {
           const settingsText = await settingsRes.text();
           const data = settingsText ? JSON.parse(settingsText) : {};
           setShopSettings(data);
+        } else {
+          // QUALITY-CORE1: a non-ok settings response previously left
+          // shopSettings null, which made the POS display PRE-TAX totals
+          // while the server applied VAT — the STK-2026-JD2PTR undercharge.
+          // Fail closed to the server's own default instead, and never check
+          // out until settings have resolved.
+          console.warn('Shop settings request failed:', settingsRes.status);
+          setShopSettings({
+            tax: { enabled: true, rate: 0.16, name: 'VAT' },
+          });
         }
         if (btConfigRes.ok) {
           const btText = await btConfigRes.text();
@@ -766,6 +782,8 @@ function POSContent() {
         setShopSettings({
           tax: { enabled: true, rate: 0.16, name: 'VAT' },
         });
+      } finally {
+        setSettingsReady(true);
       }
     };
 
@@ -820,14 +838,66 @@ function POSContent() {
   const totalDiscount = cartItems.reduce((sum, item) => sum + (item.discount ?? 0) * (item.quantity ?? 1), 0);
   const subtotalAfterDiscount = subtotal - totalDiscount;
 
-  // Calculate tax based on shop settings
+  // QUALITY-CORE1: mirror of the server's checkout tax authority
+  // (sales.service.ts STEP 3d). The client total is a QUOTE — the server
+  // recomputes it from authoritative settings and product prices — but the
+  // quote must use the same rules (2-decimal rounding, exemptions, category
+  // overrides, tax-inclusive extraction) so the cashier is never shown an
+  // amount that differs from what the server will charge.
+  const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+
   const calculateTax = () => {
-    if (!shopSettings?.tax?.enabled) return 0;
-    return Math.round(subtotalAfterDiscount * shopSettings.tax.rate);
+    const taxEnabled = !!shopSettings?.tax?.enabled;
+    if (!taxEnabled) return 0;
+    const baseRate = shopSettings?.tax?.rate ?? 0.16;
+    const inclusive = shopSettings?.tax?.inclusive === true;
+    const exemptProductIds = new Set<string>(
+      (shopSettings?.taxExemptProducts ?? []).map(String),
+    );
+    const categoryTaxRates: Record<string, any> =
+      shopSettings?.categoryTaxRates ?? {};
+
+    // Group taxable lines by effective rate (product exemption → category
+    // override → shop rate), mirroring the server's rate grouping.
+    const rateGroups = new Map<number, number>();
+    for (const item of cartItems) {
+      const product = products.find((p) => p._id === item.productId);
+      let rate = baseRate;
+      const productId = item.productId;
+      if (productId && exemptProductIds.has(productId)) {
+        rate = 0;
+      } else if (product?.categoryId) {
+        const override = categoryTaxRates[String(product.categoryId)];
+        if (override) {
+          if (override.exempt) rate = 0;
+          else if (typeof override.rate === 'number') rate = override.rate;
+        }
+      }
+      const lineTotal = round2(item.unitPrice * (item.quantity ?? 1));
+      rateGroups.set(rate, (rateGroups.get(rate) ?? 0) + lineTotal);
+    }
+
+    const discountedSubtotal = round2(subtotalAfterDiscount);
+    if (inclusive) {
+      // Shelf prices already include tax — extract, never add.
+      return round2(
+        [...rateGroups.entries()].reduce((sum, [rate, base]) => {
+          if (rate <= 0 || subtotal <= 0) return sum;
+          const share = (base / subtotal) * discountedSubtotal;
+          return sum + (share - share / (1 + rate));
+        }, 0),
+      );
+    }
+    return round2(
+      [...rateGroups.entries()].reduce((sum, [rate, base]) => sum + base * rate, 0),
+    );
   };
 
   const tax = calculateTax();
-  const total = subtotalAfterDiscount + tax;
+  const total =
+    shopSettings?.tax?.enabled && shopSettings?.tax?.inclusive === true
+      ? round2(subtotalAfterDiscount)
+      : round2(subtotalAfterDiscount + tax);
 
   // Create a map of productId -> quantity in cart for real-time stock display
   const cartQuantities = useMemo(() => {
@@ -1007,6 +1077,17 @@ function POSContent() {
       return;
     }
 
+    // QUALITY-CORE1: never check out against an unresolved tax configuration —
+    // the quoted total must reflect the same tax rules the server will apply.
+    if (!settingsReady) {
+      toast({
+        type: 'info',
+        title: 'Loading shop settings',
+        message: 'Please wait a moment while tax settings load, then check out again.',
+      });
+      return;
+    }
+
     // Show payment method modal - user selects payment method after clicking checkout
     setShowPaymentMethodModal(true);
   };
@@ -1077,10 +1158,21 @@ function POSContent() {
 
     const orderId = order._id || order.id;
     setPendingOrderId(orderId);
+    // QUALITY-CORE1 R1: the PaymentIntent amount must be the SERVER-DERIVED
+    // stripe allocation from the checkout response — the client quote can
+    // diverge (tax settings, loyalty, price changes) and the server rejects
+    // initiation when the hint doesn't match the allocation.
+    const serverAllocation = (order.payments ?? []).find(
+      (p: any) => p.method === 'stripe',
+    );
+    const chargedAmount =
+      typeof serverAllocation?.amount === 'number'
+        ? serverAllocation.amount
+        : payableTotal;
     return {
       orderId,
       orderNumber: order.orderNumber,
-      amountMinor: toCents(payableTotal, shop?.currency),
+      amountMinor: toCents(chargedAmount, shop?.currency),
       currency: getCurrencyConfig(shop?.currency).stripeCurrency,
     };
   };
@@ -1164,6 +1256,17 @@ function POSContent() {
           throw new Error(order?.message ?? `Failed to create order (${res.status})`);
         }
         setPendingOrderId(order._id || order.id);
+        // QUALITY-CORE1 R1: charge the server-derived allocation, not the
+        // client quote — they differ whenever client tax settings, loyalty
+        // redemption, or product prices diverged from server truth.
+        const serverAllocation = (order.payments ?? []).find(
+          (p: any) => p.method === 'mpesa',
+        );
+        setMpesaAmount(
+          typeof serverAllocation?.amount === 'number'
+            ? serverAllocation.amount
+            : null,
+        );
         setMpesaPhoneNumber(phoneNumber);
         setShowMpesaFlow(true);
         setIsCheckingOut(false);
@@ -1232,39 +1335,64 @@ function POSContent() {
     setFeedbackType('success');
     setFeedbackMessage(`${methodLabel} payment received!`);
     setShowSuccessAnimation(true);
-    
+
+    // QUALITY-CORE1: the receipt must show the CANONICAL order (server
+    // totals, server payment records) — client-quoted totals can diverge
+    // from what the server charged.
+    let canonicalOrder: any = null;
+    try {
+      if (pendingOrderId && token) {
+        const res = await fetch(
+          `${config.apiUrl}/sales/orders/${pendingOrderId}`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        if (res.ok) {
+          const text = await res.text();
+          canonicalOrder = text ? JSON.parse(text) : null;
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to fetch canonical order for receipt:', err);
+    }
+
+    const orderSubtotal = canonicalOrder?.subtotal ?? subtotal;
+    const orderTax = canonicalOrder?.tax ?? tax;
+    const orderTotal = canonicalOrder?.total ?? total;
+    const orderNumber =
+      canonicalOrder?.orderNumber || pendingOrderId || 'N/A';
+
     // Track transaction
     const newTransaction: Transaction = {
       id: pendingOrderId || `txn-${Date.now()}`,
       timestamp: new Date(),
-      amount: total,
+      amount: orderTotal,
       itemCount: cartItems.reduce((sum, item) => sum + item.quantity, 0),
       paymentMethod: methodLabel,
       customerName: customerName || undefined,
       status: 'completed',
     };
-    
+
     setTransactionHistory((prev) => [newTransaction, ...prev]);
-    setTotalSalesAmount((prev) => prev + total);
-    
+    setTotalSalesAmount((prev) => prev + orderTotal);
+
     // Initialize shift start time on first transaction
     if (!shiftStartTime) {
       setShiftStartTime(new Date());
     }
-    
+
     // Create receipt data with shop details
     const receiptSettings = shopSettings?.receipt || {};
     const mpesaLoyaltyBalance = selectedCustomer?.loyalty
       ? selectedCustomer.loyalty.availablePoints - loyaltyPointsToRedeem
       : undefined;
     const receipt: ReceiptData = {
-      orderNumber: pendingOrderId || "N/A",
+      orderNumber,
       date: new Date(),
       items: cartItems,
-      subtotal,
-      tax,
+      subtotal: orderSubtotal,
+      tax: orderTax,
       taxRate: shopSettings?.tax?.enabled ? shopSettings.tax.rate : 0,
-      total,
+      total: orderTotal,
       customerName: selectedCustomer?.name || customerName || undefined,
       cashierName,
       paymentMethod: methodKey === 'mpesa' ? 'mpesa' : 'card',
@@ -1318,6 +1446,7 @@ function POSContent() {
     setShowMpesaFlow(false);
     setPendingOrderId(null);
     setMpesaPhoneNumber('');
+    setMpesaAmount(null);
     clearCheckoutIdempotencyKey();
     toast({ type: 'info', title: 'Payment cancelled', message: 'M-Pesa payment was cancelled' });
   };
@@ -1418,28 +1547,44 @@ function POSContent() {
       setFeedbackMessage('Payment processed successfully!');
       setCheckoutMessage(`Order ${order.orderNumber ?? "created"} completed successfully.`);
       setShowSuccessAnimation(true);
-      
+
+      // QUALITY-CORE1: surface the server's payment verdict — a checkout the
+      // server accepted as partially tendered must never be presented as a
+      // fully-paid sale.
+      const serverPaymentStatus = order.paymentStatus;
+      if (serverPaymentStatus === 'partial') {
+        const confirmed = (order.payments ?? [])
+          .filter((p: any) => p.status === 'completed')
+          .reduce((s: number, p: any) => s + (p.amount || 0), 0);
+        toast({
+          type: 'error',
+          title: 'Outstanding balance',
+          message: `Order ${order.orderNumber} is PARTIAL: KES ${((order.total ?? 0) - confirmed).toFixed(2)} still due.`,
+        });
+      }
+
       // Track transaction
       const paymentMethodLabel: string = paymentOptions.find(o => o.id === selectedPaymentMethod)?.label || selectedPaymentMethod || 'Cash';
       const newTransaction: Transaction = {
         id: order.orderNumber || `txn-${Date.now()}`,
         timestamp: new Date(),
-        amount: total,
+        amount: order.total ?? total,
         itemCount: cartItems.reduce((sum, item) => sum + item.quantity, 0),
         paymentMethod: paymentMethodLabel,
         customerName: customerName || undefined,
         status: 'completed',
       };
-      
+
       setTransactionHistory((prev) => [newTransaction, ...prev]);
-      setTotalSalesAmount((prev) => prev + total);
-      
+      setTotalSalesAmount((prev) => prev + (order.total ?? total));
+
       // Initialize shift start time on first transaction
       if (!shiftStartTime) {
         setShiftStartTime(new Date());
       }
-      
-      // Create receipt data with shop details
+
+      // Create receipt data with shop details — totals come from the
+      // canonical server order, not the client quote.
       const receiptSettings = shopSettings?.receipt || {};
       const loyaltyEarned = order.loyaltyPointsEarned || 0;
       const loyaltyBalance = selectedCustomer?.loyalty
@@ -1449,10 +1594,10 @@ function POSContent() {
         orderNumber: order.orderNumber || "N/A",
         date: new Date(),
         items: cartItems,
-        subtotal,
-        tax,
+        subtotal: order.subtotal ?? subtotal,
+        tax: order.tax ?? tax,
         taxRate: shopSettings?.tax?.enabled ? shopSettings.tax.rate : 0,
-        total,
+        total: order.total ?? total,
         customerName: selectedCustomer?.name || customerName || undefined,
         cashierName,
         paymentMethod: selectedPaymentMethod || 'cash',
@@ -1514,7 +1659,9 @@ function POSContent() {
               quantity: item.quantity,
               unitPrice: item.unitPrice,
             })),
-            taxRate: 0.02,
+            // QUALITY-CORE1: dto.taxRate is never trusted by the server (it
+            // derives tax from shop settings) — sending a fabricated rate
+            // here only misled offline replay debugging.
             payments: [
               {
                 method: "cash",
@@ -2190,7 +2337,7 @@ function POSContent() {
       <MpesaPaymentFlowEnhanced
         isOpen={showMpesaFlow}
         orderId={pendingOrderId || ''}
-        amount={total}
+        amount={mpesaAmount ?? total}
         customerName={customerName || undefined}
         phoneNumber={mpesaPhoneNumber || undefined}
         onSuccess={handleMpesaSuccess}

@@ -233,14 +233,17 @@ describe('P0-3A checkout server authority', () => {
       expect(order.total).toBe(232);
     });
 
-    it('server total is authoritative for payment consistency (client underpays)', async () => {
+    it('server total is authoritative: under-tendered checkout is rejected naming the server total', async () => {
       await boot();
-      const order = await service.checkout(SHOP, USER_A, undefined, {
-        items: [{ productId: PRODUCT, name: 'X', quantity: 2, unitPrice: 1 }],
-        payments: [{ method: 'cash', amount: 5 }],
-      });
-      expect(order.total).toBe(232);
-      expect(order.paymentStatus).toBe('partial');
+      // QUALITY-CORE1 R2: a non-external tender below the server total is
+      // rejected — the old behavior (accept + 'partial') created silent
+      // phantom receivables (production orders STK-2026-JD2PTR/ERIQ05).
+      await expect(
+        service.checkout(SHOP, USER_A, undefined, {
+          items: [{ productId: PRODUCT, name: 'X', quantity: 2, unitPrice: 1 }],
+          payments: [{ method: 'cash', amount: 5 }],
+        }),
+      ).rejects.toThrow(/232\.00/);
     });
   });
 
@@ -390,13 +393,35 @@ describe('P0-3A checkout server authority', () => {
       expect(cashTxn.status).toBe('completed');
     });
 
-    it('client cannot inflate confirmed total: amount mismatch still partial', async () => {
+    it('client cannot inflate confirmed total: unexplained over-tender is rejected', async () => {
+      await boot();
+      // QUALITY-CORE1 R2: a cash allocation above the server total with no
+      // change mechanics is malformed and rejected — the recorded tender can
+      // never exceed what is owed.
+      await expect(
+        service.checkout(SHOP, USER_A, undefined, {
+          items: [{ productId: PRODUCT, name: 'X', quantity: 1, unitPrice: 100 }],
+          payments: [{ method: 'cash', amount: 999999 }],
+        }),
+      ).rejects.toThrow(/exceeds the order total/);
+    });
+
+    it('over-tender with change mechanics is clamped to the payable balance', async () => {
       await boot();
       const order = await service.checkout(SHOP, USER_A, undefined, {
         items: [{ productId: PRODUCT, name: 'X', quantity: 1, unitPrice: 100 }],
-        payments: [{ method: 'cash', amount: 999999 }],
+        payments: [
+          {
+            method: 'cash',
+            amount: 200,
+            amountTendered: 200,
+            change: 0,
+          },
+        ],
       });
       expect(order.total).toBe(116);
+      expect(order.payments[0].amount).toBe(116);
+      expect(order.payments[0].change).toBe(84);
       expect(order.paymentStatus).toBe('paid');
     });
   });
@@ -593,19 +618,39 @@ describe('P0-3A checkout server authority', () => {
   describe('OFFLINE replay', () => {
     it('stale client price/tax are replaced by server values at sync time', async () => {
       await boot();
+      // QUALITY-CORE1 R2: the offline device quoted 2.00 from a stale price
+      // and the customer physically paid 2.00. At sync the server reprices to
+      // 232.00 — silently converting that into a 230.00 phantom receivable is
+      // forbidden, so the replay is rejected and the sale stays offline for
+      // manual resolution (re-quote and collect, or void locally).
+      await expect(
+        service.checkout(SHOP, USER_A, BRANCH, {
+          items: [
+            { productId: PRODUCT, name: 'Old Name', quantity: 2, unitPrice: 1 },
+          ],
+          taxRate: 0,
+          isOffline: true,
+          payments: [{ method: 'cash', amount: 2 }],
+        }),
+      ).rejects.toThrow(/232\.00/);
+    });
+
+    it('offline replay with a server-consistent tender syncs with server price/tax', async () => {
+      await boot();
       const order = await service.checkout(SHOP, USER_A, BRANCH, {
         items: [
           { productId: PRODUCT, name: 'Old Name', quantity: 2, unitPrice: 1 },
         ],
         taxRate: 0,
         isOffline: true,
-        payments: [{ method: 'cash', amount: 2 }],
+        payments: [{ method: 'cash', amount: 232 }],
       });
       expect(order.isOffline).toBe(true);
       expect(order.items[0].unitPrice).toBe(100);
       expect(order.tax).toBe(32);
       expect(order.total).toBe(232);
       expect(order.branchId).toBeDefined();
+      expect(order.paymentStatus).toBe('paid');
     });
   });
 });

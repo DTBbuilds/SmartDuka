@@ -25,6 +25,7 @@ interface TaxSettings {
   name: string;
   description: string;
   appliedByDefault: boolean;
+  inclusive?: boolean;
 }
 
 interface ShopSettings {
@@ -63,6 +64,18 @@ export default function TaxSettingsPage() {
 
       const text = await res.text();
       const data = text ? JSON.parse(text) : {};
+      // QUALITY-CORE1: the rate is stored as a fraction (0.16 = 16%). Legacy
+      // data written before the API validated the range may hold a percent
+      // (16) — checkout would compute a 1600% tax. Normalize on load and tell
+      // the admin; saving then persists the corrected fraction.
+      if (data?.tax && typeof data.tax.rate === 'number' && data.tax.rate > 1) {
+        data.tax.rate = data.tax.rate / 100;
+        toast({
+          type: 'error',
+          title: 'Tax rate corrected',
+          message: `A legacy percent value was detected and normalized to ${(data.tax.rate * 100).toFixed(1)}%. Review and save to confirm.`,
+        });
+      }
       setSettings(data);
     } catch (err: any) {
       toast({
@@ -269,6 +282,30 @@ export default function TaxSettingsPage() {
                   setSettings({
                     ...settings,
                     tax: { ...settings.tax, appliedByDefault: e.target.checked },
+                  })
+                }
+                className="h-5 w-5 rounded border-gray-300 cursor-pointer"
+              />
+            </div>
+
+            {/* Tax-Inclusive Pricing Toggle (QUALITY-CORE1) */}
+            <div className="flex items-center justify-between p-4 rounded-lg border">
+              <div>
+                <Label className="text-base font-semibold">
+                  Prices include tax
+                </Label>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Enable if your shelf prices already contain tax. Checkout will
+                  not add tax on top; the tax portion is shown for reporting.
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                checked={!!settings.tax.inclusive}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    tax: { ...settings.tax, inclusive: e.target.checked },
                   })
                 }
                 className="h-5 w-5 rounded border-gray-300 cursor-pointer"

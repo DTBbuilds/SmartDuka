@@ -228,12 +228,11 @@ describe('SalesService', () => {
       });
 
       // The service should use 10% tax rate from settings
-      await service.checkout(
-        mockShopId,
-        mockUserId,
-        mockBranchId,
-        mockCheckoutDto,
-      );
+      // (200 subtotal + 20 tax = 220 payable; tender matches)
+      await service.checkout(mockShopId, mockUserId, mockBranchId, {
+        ...mockCheckoutDto,
+        payments: [{ method: 'cash', amount: 220 }],
+      });
 
       expect(shopSettingsService.getByShopId).toHaveBeenCalledWith(mockShopId);
     });
@@ -243,12 +242,10 @@ describe('SalesService', () => {
         tax: { enabled: false, rate: 0.16 },
       });
 
-      await service.checkout(
-        mockShopId,
-        mockUserId,
-        mockBranchId,
-        mockCheckoutDto,
-      );
+      await service.checkout(mockShopId, mockUserId, mockBranchId, {
+        ...mockCheckoutDto,
+        payments: [{ method: 'cash', amount: 200 }],
+      });
 
       expect(shopSettingsService.getByShopId).toHaveBeenCalled();
     });

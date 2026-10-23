@@ -577,9 +577,11 @@ describe('P0-3C checkout idempotency', () => {
 
     it('loyalty and customer stats execute exactly once across retries', async () => {
       await boot();
+      // 300 subtotal + 48 VAT − 10 loyalty = 338 payable
       const payload = basePayload({
         customerId: CUSTOMER_1,
         loyaltyPointsToRedeem: 10,
+        payments: [{ method: 'cash', amount: 338 }],
       });
       await service.checkout(SHOP_A, USER_A, undefined, payload);
       await service.checkout(SHOP_A, USER_A, undefined, { ...payload });

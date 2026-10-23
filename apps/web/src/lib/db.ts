@@ -22,7 +22,9 @@ export interface PendingOrder {
       quantity: number;
       unitPrice: number;
     }>;
-    taxRate: number;
+    // QUALITY-CORE1: optional — the server derives tax from shop settings and
+    // never trusts a client-sent rate; legacy queued payloads may still carry it.
+    taxRate?: number;
     payments: Array<{
       method: string;
       amount: number;

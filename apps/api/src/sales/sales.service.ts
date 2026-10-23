@@ -29,6 +29,20 @@ import { ShiftsService } from '../shifts/shifts.service';
 // Default tax rate (Kenya VAT) - used as fallback if shop settings not available
 const DEFAULT_TAX_RATE = 0.16;
 
+/**
+ * QUALITY-CORE1 — tender reconciliation tolerance in major currency units.
+ * Absorbs binary floating-point noise only; real tender differences are
+ * business events, not rounding.
+ */
+const TENDER_TOLERANCE = 0.01;
+
+/**
+ * QUALITY-CORE1 — external settlement methods. Their allocation amounts are
+ * SERVER-DERIVED from the payable balance; client-sent amounts are tamper
+ * hints only (see derivePaymentAllocations).
+ */
+const EXTERNAL_SETTLEMENT_METHODS = new Set(['mpesa', 'stripe']);
+
 @Injectable()
 export class SalesService {
   private readonly logger = new Logger(SalesService.name);
@@ -128,7 +142,6 @@ export class SalesService {
 
     // STEP 3: TAX AUTHORITY — derived from shop settings only.
     // dto.taxRate is never trusted; the client cannot lower or change tax.
-    let taxRate = 0;
     let shopSettings: any = null;
     try {
       shopSettings = await this.shopSettingsService.getByShopId(shopId);
@@ -137,14 +150,19 @@ export class SalesService {
         `Failed to get shop tax settings for ${shopId}, using default: ${error}`,
       );
     }
-    if (shopSettings?.tax?.enabled) {
-      taxRate = shopSettings.tax.rate ?? DEFAULT_TAX_RATE;
-    } else if (!shopSettings) {
-      taxRate = DEFAULT_TAX_RATE;
-    }
+    // Settings unavailable → fail closed on the default rate; settings present
+    // but tax disabled → no tax. (Pre-QUALITY-CORE1 behavior preserved.)
+    const taxEnabled =
+      !!shopSettings?.tax?.enabled || !shopSettings;
+    const baseTaxRate = taxEnabled
+      ? shopSettings?.tax?.rate ?? DEFAULT_TAX_RATE
+      : 0;
+    // Tax-inclusive pricing: shelf prices already contain the tax; nothing is
+    // added at checkout and the tax portion is extracted for reporting.
+    const taxInclusive = taxEnabled && shopSettings?.tax?.inclusive === true;
 
     // STEP 3a: SERVER-CALCULATED LINE ITEMS (authoritative snapshot)
-    const round2 = (n: number) => Math.round(n * 100) / 100;
+    const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
     const authoritativeItems = dto.items.map((item) => {
       const product = productMap.get(item.productId);
       const unitPrice = round2(product.price ?? 0);
@@ -165,9 +183,6 @@ export class SalesService {
       throw new BadRequestException('Subtotal must be greater than zero');
     }
 
-    const tax = round2(subtotal * taxRate);
-    const total = subtotal + tax;
-
     // STEP 3b: CUSTOMER TENANT SCOPE — a customerId must belong to the JWT shop.
     if (dto.customerId) {
       const customer = await this.customersService.findByIdForShop(
@@ -179,48 +194,12 @@ export class SalesService {
       }
     }
 
-    // STEP 3c: SHIFT ATTRIBUTION — an explicitly supplied shift must be the
-    // authenticated cashier's own open shift in this shop.
-    let shiftObjectId: Types.ObjectId | undefined = undefined;
-    if (dto.shiftId) {
-      const shift = await this.shiftsService.getShiftById(dto.shiftId, shopId);
-      if (!shift) {
-        throw new BadRequestException('Shift not found');
-      }
-      if (shift.cashierId?.toString() !== userId) {
-        throw new BadRequestException(
-          'Shift does not belong to the authenticated cashier',
-        );
-      }
-      if (shift.status !== 'open') {
-        throw new BadRequestException('Shift is not open');
-      }
-      shiftObjectId = new Types.ObjectId(dto.shiftId);
-    }
-
-    // STEP 3d: PAYMENT CLASSIFICATION — intent vs confirmation.
-    // External methods (mpesa/stripe) are never confirmed by client-supplied
-    // references; settlement evidence comes from the provider callback/query.
-    const EXTERNAL_SETTLEMENT_METHODS = new Set(['mpesa', 'stripe']);
-    const classifiedPayments = (dto.payments ?? []).map((p) => {
-      const isExternal = EXTERNAL_SETTLEMENT_METHODS.has(p.method);
-      return {
-        method: p.method,
-        amount: p.amount,
-        reference: p.reference,
-        status: isExternal ? 'pending' : 'completed',
-        customerPhone: p.customerPhone,
-        amountTendered: p.amountTendered,
-        change: p.change,
-        cardLastFour: p.cardLastFour,
-        cardBrand: p.cardBrand,
-        notes: p.notes,
-        isExternal,
-      };
-    });
-
-    // STEP 4: CREATE ORDER (with cost tracking for profit analytics)
-    // STEP 4a: PROCESS LOYALTY POINTS REDEMPTION (if customer and points to redeem)
+    // STEP 3c: LOYALTY REDEMPTION — resolved BEFORE money math so the payable
+    // total and the extracted tax always reflect the redemption the customer
+    // was shown. A failed redemption proceeds WITHOUT the discount; the
+    // server-derived payment allocation (STEP 3e) then charges the true
+    // payable, so the customer is never under- or over-charged by a client
+    // that assumed the discount succeeded.
     let loyaltyDiscount = 0;
     let loyaltyPointsRedeemed = 0;
 
@@ -249,12 +228,198 @@ export class SalesService {
       }
     }
 
-    // Apply loyalty discount to total
-    const finalTotal = Math.max(0, total - loyaltyDiscount);
+    // STEP 3d: TAX COMPUTATION — grouped per effective rate so product-level
+    // exemptions (taxExemptProducts) and category overrides
+    // (categoryTaxRates) are honored. Lines sharing a rate are aggregated
+    // before rounding, which reproduces the historical flat-rate result
+    // exactly when no overrides exist.
+    const exemptProductIds = new Set<string>(
+      (shopSettings?.taxExemptProducts ?? []).map((id: any) => String(id)),
+    );
+    const categoryTaxRates: Record<string, any> =
+      shopSettings?.categoryTaxRates ?? {};
+
+    const resolveLineRate = (product: any): number => {
+      if (!taxEnabled) return 0;
+      const productId = product?._id ? String(product._id) : '';
+      if (productId && exemptProductIds.has(productId)) return 0;
+      const categoryId = product?.categoryId ? String(product.categoryId) : '';
+      const categoryOverride = categoryId
+        ? categoryTaxRates[categoryId]
+        : undefined;
+      if (categoryOverride) {
+        if (categoryOverride.exempt) return 0;
+        if (typeof categoryOverride.rate === 'number') {
+          return categoryOverride.rate;
+        }
+      }
+      return baseTaxRate;
+    };
+
+    const rateGroups = new Map<number, number>();
+    for (const item of authoritativeItems) {
+      const product = productMap.get(item.productId);
+      const rate = resolveLineRate(product);
+      rateGroups.set(rate, (rateGroups.get(rate) ?? 0) + item.lineTotal);
+    }
+
+    // The payable amount after loyalty — the tax base for inclusive pricing
+    // and the reconciliation target for tender validation.
+    const payableTotal = round2(Math.max(0, subtotal - loyaltyDiscount));
+
+    let tax: number;
+    let finalTotal: number;
+    if (taxInclusive) {
+      // Shelf prices already contain the tax: the payable is the shelf total
+      // minus loyalty, and the tax portion is extracted for reporting. Each
+      // rate group contributes its share of the payable; tax portion =
+      // share − share/(1+rate).
+      tax = round2(
+        [...rateGroups.entries()].reduce((sum, [rate, base]) => {
+          if (rate <= 0 || subtotal <= 0) return sum;
+          const share = (base / subtotal) * payableTotal;
+          return sum + (share - share / (1 + rate));
+        }, 0),
+      );
+      finalTotal = payableTotal;
+    } else {
+      tax = round2(
+        [...rateGroups.entries()].reduce(
+          (sum, [rate, base]) => sum + base * rate,
+          0,
+        ),
+      );
+      finalTotal = round2(Math.max(0, round2(subtotal + tax) - loyaltyDiscount));
+    }
+
+    // STEP 3c: SHIFT ATTRIBUTION — an explicitly supplied shift must be the
+    // authenticated cashier's own open shift in this shop.
+    let shiftObjectId: Types.ObjectId | undefined = undefined;
+    if (dto.shiftId) {
+      const shift = await this.shiftsService.getShiftById(dto.shiftId, shopId);
+      if (!shift) {
+        throw new BadRequestException('Shift not found');
+      }
+      if (shift.cashierId?.toString() !== userId) {
+        throw new BadRequestException(
+          'Shift does not belong to the authenticated cashier',
+        );
+      }
+      if (shift.status !== 'open') {
+        throw new BadRequestException('Shift is not open');
+      }
+      shiftObjectId = new Types.ObjectId(dto.shiftId);
+    }
+
+    // STEP 3d: PAYMENT CLASSIFICATION — intent vs confirmation.
+    // External methods (mpesa/stripe) are never confirmed by client-supplied
+    // references; settlement evidence comes from the provider callback/query.
+    const classifiedPayments = (dto.payments ?? []).map((p) => {
+      const isExternal = EXTERNAL_SETTLEMENT_METHODS.has(p.method);
+      return {
+        method: p.method,
+        amount: p.amount,
+        reference: p.reference,
+        status: isExternal ? 'pending' : 'completed',
+        customerPhone: p.customerPhone,
+        amountTendered: p.amountTendered,
+        change: p.change,
+        cardLastFour: p.cardLastFour,
+        cardBrand: p.cardBrand,
+        notes: p.notes,
+        isExternal,
+      };
+    });
+
+    // STEP 3e: PAYMENT ALLOCATION AUTHORITY (QUALITY-CORE1 R1/R2).
+    //
+    // R1 — external allocation amounts are SERVER-DERIVED from the payable
+    // balance. The client's displayed total can diverge from the server's
+    // (settings not yet loaded, failed redemption, rounding); charging the
+    // client-sent amount produced the STK-2026-JD2PTR incident: the customer
+    // paid the pre-tax 805.00 against a 933.80 order. With a single external
+    // allocation the server charges the true remaining balance; with multiple
+    // external allocations the split must already equal the balance.
+    //
+    // R2 — a checkout whose confirmed non-external tender does not cover the
+    // payable total, with no external allocation to cover the remainder, is
+    // REJECTED. There is no add-payment-to-order flow, so such a sale would be
+    // an uncollectable phantom receivable born 'completed' — the exact
+    // production defect.
+    const nonExternalAllocations = classifiedPayments.filter(
+      (p) => !p.isExternal,
+    );
+    const externalAllocations = classifiedPayments.filter((p) => p.isExternal);
+    const confirmedNonExternal = round2(
+      nonExternalAllocations.reduce((sum, p) => sum + p.amount, 0),
+    );
+
+    if (confirmedNonExternal > round2(finalTotal + TENDER_TOLERANCE)) {
+      // Change mechanics (amountTendered ≥ amount) mean the client tendered
+      // physical cash above the payable and expects to give change — clamp the
+      // recorded allocations to the payable balance so the order never records
+      // more than is owed; the physical excess is the change handed back.
+      const hasChangeMechanics = nonExternalAllocations.some(
+        (p) =>
+          typeof p.amountTendered === 'number' &&
+          p.amountTendered >= p.amount &&
+          p.amountTendered > 0,
+      );
+      if (!hasChangeMechanics) {
+        throw new BadRequestException(
+          `Tendered KES ${confirmedNonExternal.toFixed(2)} exceeds the order total KES ${finalTotal.toFixed(2)}`,
+        );
+      }
+      let remaining = finalTotal;
+      for (const p of nonExternalAllocations) {
+        const applied = round2(Math.min(p.amount, Math.max(0, remaining)));
+        if (applied !== p.amount && typeof p.amountTendered === 'number') {
+          p.change = round2(Math.max(0, p.amountTendered - applied));
+        }
+        p.amount = applied;
+        remaining = round2(remaining - applied);
+      }
+    }
+
+    if (externalAllocations.length === 1) {
+      const remainder = round2(finalTotal - confirmedNonExternal);
+      if (remainder > 0) {
+        externalAllocations[0].amount = remainder;
+      } else {
+        // The tender already covers the order — nothing left to charge
+        // externally. Zero the allocation so it is dropped below; keeping a
+        // stray provider intent would block void and pollute reconciliation.
+        externalAllocations[0].amount = 0;
+      }
+    } else if (externalAllocations.length > 1) {
+      const externalSum = round2(
+        externalAllocations.reduce((sum, p) => sum + p.amount, 0),
+      );
+      const remainder = round2(finalTotal - confirmedNonExternal);
+      if (Math.abs(externalSum - remainder) > TENDER_TOLERANCE) {
+        throw new BadRequestException(
+          `Split external payments (KES ${externalSum.toFixed(2)}) must equal the remaining balance KES ${remainder.toFixed(2)}`,
+        );
+      }
+    }
+
+    if (
+      externalAllocations.length === 0 &&
+      confirmedNonExternal < round2(finalTotal - TENDER_TOLERANCE)
+    ) {
+      throw new BadRequestException(
+        `Checkout under-tendered: KES ${confirmedNonExternal.toFixed(2)} received of KES ${finalTotal.toFixed(2)}. Collect the outstanding KES ${round2(finalTotal - confirmedNonExternal).toFixed(2)} or add an external payment for the balance.`,
+      );
+    }
+
+    const finalPayments = [
+      ...nonExternalAllocations,
+      ...externalAllocations.filter((p) => p.amount > 0),
+    ];
 
     // PAYMENT STATUS AUTHORITY — only server-confirmed payments count.
     const confirmedTotal = round2(
-      classifiedPayments
+      finalPayments
         .filter((p) => !p.isExternal)
         .reduce((sum, p) => sum + p.amount, 0),
     );
@@ -269,7 +434,7 @@ export class SalesService {
     // A sale is born 'pending' only while an external payment awaits provider
     // confirmation; it is never born 'void' and never completed because the
     // client asked.
-    const hasUnconfirmedExternal = classifiedPayments.some((p) => p.isExternal);
+    const hasUnconfirmedExternal = finalPayments.some((p) => p.isExternal);
     const orderStatus: 'pending' | 'completed' = hasUnconfirmedExternal
       ? 'pending'
       : 'completed';
@@ -294,7 +459,7 @@ export class SalesService {
         total: finalTotal,
         status: orderStatus,
         paymentStatus,
-        payments: classifiedPayments.map(({ isExternal, ...record }) => record),
+        payments: finalPayments.map(({ isExternal, ...record }) => record),
         notes: dto.notes,
         customerId: dto.customerId
           ? new Types.ObjectId(dto.customerId)
@@ -457,7 +622,7 @@ export class SalesService {
     // Status is server-derived: external methods (mpesa/stripe) stay pending
     // until provider confirmation; client-supplied receipts/charge IDs are
     // never treated as settlement evidence.
-    for (const payment of classifiedPayments) {
+    for (const payment of finalPayments) {
       try {
         await this.paymentTransactionService.createTransaction({
           shopId,
@@ -544,11 +709,20 @@ export class SalesService {
 
     // Normalized payment intent: method + allocated amount per tender.
     // Provider evidence (receipts, references, client status) is excluded.
+    // QUALITY-CORE1 R1: external (mpesa/stripe) allocation amounts are
+    // server-derived, so the client-sent amount is a hint — a retry that
+    // changes only an external hint amount is the SAME logical checkout and
+    // must resolve to the canonical original. Non-external amounts are tender
+    // evidence and remain part of the fingerprint.
     const paymentIntentFingerprint = (
       payments: Array<{ method?: string; amount?: number }>,
     ) =>
       [...(payments ?? [])]
-        .map((p) => `${p.method ?? ''}|${p.amount ?? 0}`)
+        .map((p) =>
+          EXTERNAL_SETTLEMENT_METHODS.has(p.method ?? '')
+            ? `${p.method ?? ''}|hint`
+            : `${p.method ?? ''}|${p.amount ?? 0}`,
+        )
         .sort()
         .join(';');
 

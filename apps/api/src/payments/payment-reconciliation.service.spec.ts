@@ -32,7 +32,7 @@ describe('PaymentReconciliationService', () => {
 
   describe('reconcilePayments', () => {
     it('should reconcile payments successfully', async () => {
-      const shopId = 'shop123';
+      const shopId = '507f1f77bcf86cd799439011';
       const date = new Date();
       const actualCash = 10000;
       const reconcililedBy = 'user123';
@@ -63,7 +63,7 @@ describe('PaymentReconciliationService', () => {
     });
 
     it('should handle variance correctly', async () => {
-      const shopId = 'shop123';
+      const shopId = '507f1f77bcf86cd799439011';
       const date = new Date();
       const actualCash = 9900;
       const reconcililedBy = 'user123';
@@ -87,7 +87,7 @@ describe('PaymentReconciliationService', () => {
     });
 
     it('should mark as variance_pending for large variance', async () => {
-      const shopId = 'shop123';
+      const shopId = '507f1f77bcf86cd799439011';
       const date = new Date();
       const actualCash = 9800;
       const reconcililedBy = 'user123';
@@ -112,7 +112,7 @@ describe('PaymentReconciliationService', () => {
 
   describe('matchTransactions', () => {
     it('should match transactions correctly', async () => {
-      const shopId = 'shop123';
+      const shopId = '507f1f77bcf86cd799439011';
       const orders = [
         { total: 5000, createdAt: new Date() },
       ];
@@ -128,7 +128,7 @@ describe('PaymentReconciliationService', () => {
     });
 
     it('should identify unmatched transactions', async () => {
-      const shopId = 'shop123';
+      const shopId = '507f1f77bcf86cd799439011';
       const orders = [];
       const transactions = [
         { amount: 5000, createdAt: new Date() },
