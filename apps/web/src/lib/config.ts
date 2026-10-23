@@ -27,7 +27,7 @@ const getDevApiBaseUrl = (): string => {
 // Backend API URLs (static fallbacks for SSR)
 const BACKEND_URLS = {
   development: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000',
-  production: process.env.NEXT_PUBLIC_API_URL || 'https://smarduka.onrender.com',
+  production: process.env.NEXT_PUBLIC_API_URL || 'https://smartduka-91q6.onrender.com',
 } as const;
 
 // Frontend URLs

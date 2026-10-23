@@ -16,6 +16,7 @@ export class CookieService {
   static readonly ACCESS_TOKEN_COOKIE = 'smartduka_access';
   static readonly REFRESH_TOKEN_COOKIE = 'smartduka_refresh';
   static readonly CSRF_TOKEN_COOKIE = 'smartduka_csrf';
+  static readonly OAUTH_BIND_COOKIE = 'oauth_bind';
 
   // Cookie expiry times
   private readonly ACCESS_TOKEN_MAX_AGE = 30 * 60 * 1000; // 30 minutes
@@ -78,6 +79,30 @@ export class CookieService {
       secure: this.isProduction,
       sameSite: this.isCrossOrigin ? 'none' : 'lax',
       maxAge: this.ACCESS_TOKEN_MAX_AGE,
+      path: '/',
+      domain: this.cookieDomain,
+    });
+  }
+
+  /**
+   * OAUTH-COOKIE-FIX1: browser-binding cookie for the OAuth ticket
+   * handoff (the exchange must come from the same browser that received
+   * the OAuth redirect). HttpOnly + short-lived; the nonce is validated
+   * server-side against the hashed ticket payload.
+   *
+   * Cross-origin deployment (API on a different site than the frontend):
+   * SameSite=None + Secure is required or the browser drops the cookie —
+   * but third-party-cookie-blocking browsers (Safari ITP, Brave, Chrome
+   * incognito) will still not SEND it. Same-site deployment (API under
+   * the frontend's registrable domain, COOKIE_DOMAIN set): SameSite=Lax
+   * is sent by every browser and is strictly safer.
+   */
+  setOAuthBindingCookie(res: Response, nonce: string): void {
+    res.cookie(CookieService.OAUTH_BIND_COOKIE, nonce, {
+      httpOnly: true,
+      secure: this.isProduction,
+      sameSite: this.isCrossOrigin ? 'none' : 'lax',
+      maxAge: 120_000,
       path: '/',
       domain: this.cookieDomain,
     });

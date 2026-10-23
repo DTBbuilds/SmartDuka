@@ -421,9 +421,7 @@ export class AuthController {
               { googleProfile: result.googleProfile },
               'cashier_signup',
             );
-          res.cookie('oauth_bind', cashierNonce, {
-            httpOnly: true, secure: true, sameSite: 'none', maxAge: 120_000,
-          });
+          this.cookieService.setOAuthBindingCookie(res, cashierNonce);
           res.redirect(
             `${frontendUrl}/auth/cashier-google-signup?google_ticket=${cashierTicket}`,
           );
@@ -435,9 +433,7 @@ export class AuthController {
               { googleProfile: result.googleProfile },
               'shop_registration',
             );
-          res.cookie('oauth_bind', regNonce, {
-            httpOnly: true, secure: true, sameSite: 'none', maxAge: 120_000,
-          });
+          this.cookieService.setOAuthBindingCookie(res, regNonce);
           res.redirect(`${frontendUrl}/register-shop?google_ticket=${regTicket}`);
         }
       } else {
@@ -467,9 +463,7 @@ export class AuthController {
               },
               'otp_verification',
             );
-          res.cookie('oauth_bind', otpNonce, {
-            httpOnly: true, secure: true, sameSite: 'none', maxAge: 120_000,
-          });
+          this.cookieService.setOAuthBindingCookie(res, otpNonce);
           res.redirect(`${frontendUrl}/login?otp=true&otp_ticket=${otpTicket}`);
         } else if (result.tokens) {
           // OAUTH-SEC1: no credentials in redirect URLs. The token pair
@@ -488,12 +482,7 @@ export class AuthController {
             );
           // OAUTH-SEC2: browser transaction binding cookie (the exchange
           // must come from the same browser that received this redirect).
-          res.cookie('oauth_bind', bindNonce, {
-            httpOnly: true,
-            secure: true,
-            sameSite: 'none',
-            maxAge: 120_000,
-          });
+          this.cookieService.setOAuthBindingCookie(res, bindNonce);
           res.redirect(`${frontendUrl}/auth/callback?success=true&ticket=${ticket}`);
         } else {
           res.redirect(
