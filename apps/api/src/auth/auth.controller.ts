@@ -374,7 +374,7 @@ export class AuthController {
   async oauthExchange(@Body() body: { ticket?: string }, @Req() req: any) {
     const browserNonce = req.cookies?.['oauth_bind'];
     const payload = await this.oauthExchangeService.redeemTicket(
-      body?.ticket,
+      body?.ticket ?? '',
       undefined,
       browserNonce,
     );
