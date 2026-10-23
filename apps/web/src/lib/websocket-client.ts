@@ -2,6 +2,7 @@
 
 import { io, Socket } from 'socket.io-client';
 import { refreshEvents } from './refresh-events';
+import { config } from './config';
 
 class WebSocketClient {
   private socket: Socket | null = null;
@@ -18,7 +19,10 @@ class WebSocketClient {
   }
 
   private connect() {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+    // API-URL-RECOVERY1: the socket base must be the BARE API origin —
+    // the gateway namespace ('/events') is appended below. Never derive
+    // it from the raw env value, which may carry a /api/v1 suffix.
+    const apiUrl = config.apiBaseUrl;
     const token = this.getAuthToken();
 
     if (!token) {

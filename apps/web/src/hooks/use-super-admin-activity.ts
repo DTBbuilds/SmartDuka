@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { config } from '@/lib/config';
 
 interface ActivityStats {
   totalActiveShops: number;
@@ -91,7 +92,9 @@ export function useSuperAdminActivity() {
         return;
       }
 
-      const wsUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+      // API-URL-RECOVERY1: bare API origin + gateway namespace — never
+      // the raw env value (which may carry a /api/v1 suffix).
+      const wsUrl = config.apiBaseUrl;
       const newSocket = io(`${wsUrl}/super-admin-activity`, {
         auth: { token },
         transports: ['websocket', 'polling'],

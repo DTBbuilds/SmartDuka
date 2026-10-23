@@ -2499,7 +2499,7 @@ function SubscriptionSettingsTab() {
 
                                 try {
                                   // Call API to submit payment reference for verification
-                                  const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ''}/api/v1/subscriptions/payments/manual/confirm`, {
+                                  const response = await fetch(`${config.apiUrl}/subscriptions/payments/manual/confirm`, {
                                     method: 'POST',
                                     headers: {
                                       'Content-Type': 'application/json',

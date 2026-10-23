@@ -6,6 +6,7 @@
  */
 
 import { isNativePlatform } from './platform';
+import { config } from '../config';
 
 export type NetworkStatus = 'online' | 'offline' | 'unknown';
 
@@ -215,7 +216,7 @@ export async function canReachServer(): Promise<boolean> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
     
-    const response = await fetch('https://smarduka.onrender.com/health', {
+    const response = await fetch(`${config.apiBaseUrl}/health`, {
       method: 'HEAD',
       signal: controller.signal,
     });

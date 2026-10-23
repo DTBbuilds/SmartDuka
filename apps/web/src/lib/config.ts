@@ -10,6 +10,16 @@ const isProduction = process.env.NODE_ENV === 'production';
 // API version prefix
 const API_VERSION = '/api/v1';
 
+/**
+ * API-URL-RECOVERY1: NEXT_PUBLIC_API_URL must be the BARE API origin
+ * (no /api/v1 suffix, no trailing slash) — config appends API_VERSION
+ * itself and unversioned endpoints (ping/health) hang off the bare
+ * origin. Normalize defensively so a misconfigured value can never
+ * produce /api/v1/api/v1/... or /api/v1/ping.
+ */
+export const normalizeApiOrigin = (url: string): string =>
+  url.trim().replace(/\/+$/, '').replace(/(?:\/api\/v1)+$/, '');
+
 // Helper to get the current host for mobile testing on same network
 // This is called dynamically to support client-side detection
 const getDevApiBaseUrl = (): string => {
@@ -21,13 +31,13 @@ const getDevApiBaseUrl = (): string => {
       return `http://${currentHost}:5000`;
     }
   }
-  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+  return normalizeApiOrigin(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000');
 };
 
 // Backend API URLs (static fallbacks for SSR)
 const BACKEND_URLS = {
-  development: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000',
-  production: process.env.NEXT_PUBLIC_API_URL || 'https://smartduka-91q6.onrender.com',
+  development: normalizeApiOrigin(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'),
+  production: normalizeApiOrigin(process.env.NEXT_PUBLIC_API_URL || 'https://smartduka-91q6.onrender.com'),
 } as const;
 
 // Frontend URLs
