@@ -15,12 +15,12 @@ interface BarcodeScannerUnifiedProps {
 
 /**
  * Unified Barcode Scanner Component
- * 
+ *
  * Automatically selects the best barcode scanning implementation based on:
  * - Browser type (Chrome, Safari, Firefox, etc.)
  * - Platform (iOS, Android, Desktop)
  * - Environment (WebView, In-app browser, PWA)
- * 
+ *
  * Scanner Selection Logic:
  * - Desktop browsers: ZXing (better performance)
  * - iOS Safari: html5-qrcode (better user gesture handling)
@@ -28,15 +28,7 @@ interface BarcodeScannerUnifiedProps {
  * - Android WebView: html5-qrcode (more compatible)
  * - In-app browsers: html5-qrcode (graceful degradation)
  * - Samsung Internet: html5-qrcode (quirk handling)
- * 
- * Usage:
- * ```tsx
- * <BarcodeScannerUnified
- *   isOpen={isScannerOpen}
- *   onClose={() => setIsScannerOpen(false)}
- *   onScan={(barcode) => handleBarcode(barcode)}
- * />
- * ```
+ * - No camera API / insecure context: manual entry first (QUALITY-CORE1 P1-E)
  */
 export function BarcodeScannerUnified({
   isOpen,
@@ -46,11 +38,15 @@ export function BarcodeScannerUnified({
 }: BarcodeScannerUnifiedProps) {
   const [browserInfo, setBrowserInfo] = useState<BrowserInfo | null>(null);
   const [selectedScanner, setSelectedScanner] = useState<'zxing' | 'html5-qrcode'>('zxing');
+  const [startInManualMode, setStartInManualMode] = useState(false);
 
   // Detect browser and select appropriate scanner
   useEffect(() => {
     const info = detectBrowser();
     setBrowserInfo(info);
+
+    const manualOnly = info.recommendedScanner === 'manual-only';
+    setStartInManualMode(manualOnly);
 
     if (forceScanner !== 'auto') {
       setSelectedScanner(forceScanner);
@@ -62,8 +58,8 @@ export function BarcodeScannerUnified({
       setSelectedScanner('html5-qrcode');
     } else if (info.recommendedScanner === 'zxing') {
       setSelectedScanner('zxing');
-    } else if (info.recommendedScanner === 'manual-only') {
-      // Use html5-qrcode as it has better fallback UI
+    } else if (manualOnly) {
+      // No camera API at all — manual entry is the primary mode.
       setSelectedScanner('html5-qrcode');
     } else {
       // Default to html5-qrcode for better mobile support
@@ -77,6 +73,7 @@ export function BarcodeScannerUnified({
       isInAppBrowser: info.isInAppBrowser,
       recommended: info.recommendedScanner,
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [forceScanner]);
 
   // Don't render until browser detection is complete
@@ -91,6 +88,7 @@ export function BarcodeScannerUnified({
         isOpen={isOpen}
         onClose={onClose}
         onScan={onScan}
+        startInManualMode={startInManualMode}
       />
     );
   }

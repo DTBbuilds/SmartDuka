@@ -19,6 +19,12 @@ interface BarcodeScannerHtml5Props {
   isOpen: boolean;
   onClose: () => void;
   onScan: (barcode: string) => void;
+  /**
+   * QUALITY-CORE1 P1-E: when browser detection already knows the camera is
+   * unusable (no getUserMedia, insecure context), open straight into manual
+   * entry instead of showing a camera error first.
+   */
+  startInManualMode?: boolean;
 }
 
 type ScanMode = 'camera' | 'hardware' | 'manual';
@@ -43,10 +49,11 @@ export function BarcodeScannerHtml5({
   isOpen,
   onClose,
   onScan,
+  startInManualMode = false,
 }: BarcodeScannerHtml5Props) {
   // Camera permission hook - consistent with ZXing scanner
   const cameraPermission = useCameraPermission();
-  
+
   // Refs
   const scannerRef = useRef<any>(null);
   const scannerContainerId = 'html5-qrcode-scanner';
@@ -56,7 +63,9 @@ export function BarcodeScannerHtml5({
   const isInitializingRef = useRef(false);
 
   // State
-  const [scanMode, setScanMode] = useState<ScanMode>('camera');
+  const [scanMode, setScanMode] = useState<ScanMode>(
+    startInManualMode ? 'manual' : 'camera',
+  );
   const [scanStatus, setScanStatus] = useState<ScanStatus>('idle');
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState('');
