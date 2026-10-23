@@ -1,0 +1,24 @@
+SMARTDUKA DAILY DIGEST — Load & Go
+Thursday 22 October 2026 (Africa/Nairobi)
+
+Billed sales: KSh 933.80 (-87.8% vs previous day)
+Payments collected: KSh 805.00
+Outstanding balance: KSh 128.80
+Tax collected: KSh 128.80
+Orders: 1 | Items sold: 1
+Average order: KSh 933.80
+
+Payments by method:
+  cash: KSh 805.00
+
+Best sellers:
+  1. UltraPremium Deluxe Professional-Grade Organic Correction Tape with Extended Precision Applicator (Limited Edition) — 3 sold — KSh 1,875.00
+  2. HerbalPlus Daily Moisturizer with SPF 30 — Dermatologist Tested, Fragrance Free, 250ml — 2 sold — KSh 1,610.00
+
+LOW STOCK (reorder soon):
+  UltraPremium Deluxe Professional-Grade Organic Correction Tape with Extended Precision Applicator (Limited Edition) — 1 left
+
+Dashboard: https://www.smartduka.org/admin/dashboard
+Manage reports: https://www.smartduka.org/settings?tab=reports
+Generated 23 Oct 2026, 21:00 (UTC 18:00)
+Billed sales and collected payments are reported separately; outstanding balances are shown, not hidden.

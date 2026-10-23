@@ -156,4 +156,55 @@ describe('EMAIL-REPORTS-CORE1 email delivery', () => {
     expect(sentVia).toHaveLength(1);
     expect(sentVia[0]).toMatch(/resend/);
   });
+
+  // ===== RELEASE-GATE1: ambiguous acceptance =====
+
+  it('AMBIGUOUS acceptance (resend timeout after acceptance): NO fallback, NO false failure', async () => {
+    const { service, sentVia, transporter, logUpdates, resend } = boot();
+    resend!.emails.send = jest.fn(async () => {
+      const err: any = new Error('network timeout');
+      err.code = 'ETIMEDOUT';
+      throw err;
+    });
+    const result = await service.sendEmail({ ...BASE });
+    // The provider may hold the message — the SMTP fallback MUST NOT fire.
+    expect(result.success).toBe(false);
+    expect((result as any).ambiguous).toBe(true);
+    expect(sentVia.filter((s) => s.startsWith('smtp'))).toHaveLength(0);
+    // The log stays 'pending' with the ambiguity recorded (never 'failed').
+    expect(logUpdates[0]).toMatchObject({ status: 'pending' });
+    expect(logUpdates[0].errorMessage).toMatch(/AMBIGUOUS/);
+  });
+
+  it('AMBIGUOUS SMTP failure (timeout after DATA): no fallback, no SMTP retry', async () => {
+    const { service, sentVia, transporter, resend } = boot();
+    transporter!.sendMail = jest.fn(async () => {
+      const err: any = new Error('connection timeout mid-send');
+      err.code = 'ETIMEDOUT';
+      throw err;
+    });
+    const result = await service.sendEmail({ ...BASE, preferredProvider: 'smtp' });
+    expect((result as any).ambiguous).toBe(true);
+    expect(transporter!.sendMail).toHaveBeenCalledTimes(1); // no SMTP retry loop
+    expect(resend!.emails.send).not.toHaveBeenCalled(); // no fallback
+    expect(sentVia).toHaveLength(0);
+  });
+
+  it('a DEFINITIVE resend rejection (invalid recipient) falls back to SMTP safely', async () => {
+    const { service, sentVia, transporter, resend } = boot();
+    resend!.emails.send = jest.fn(async () => {
+      return { error: { message: 'Invalid `to` field' } }; // definitive 4xx-style rejection
+    });
+    const result = await service.sendEmail({ ...BASE });
+    expect(result.success).toBe(true);
+    expect(result.messageId).toBe('smtp-111');
+    expect(sentVia).toEqual(['smtp:owner@example.com']);
+  });
+
+  it('the Resend Idempotency-Key header is sent when a key is provided', async () => {
+    const { service, resend } = boot();
+    await service.sendEmail({ ...BASE, idempotencyKey: 'run-abc' });
+    const call = resend!.emails.send.mock.calls[0];
+    expect(call[1]?.headers?.['Idempotency-Key']).toBe('run-abc');
+  });
 });

@@ -1,0 +1,31 @@
+SMARTDUKA WEEKLY DIGEST — Load & Go
+19 October – 25 October 2026 (Africa/Nairobi)
+
+Billed sales: KSh 46,757.36 (+510.7% vs previous week)
+Payments collected: KSh 41,463.00
+Outstanding balance: KSh 5,294.36
+Tax collected: KSh 5,351.36
+Orders: 4 | Items sold: 18
+Average order: KSh 11,689.34
+
+Payments by method:
+  cash: KSh 41,658.00
+  send money: KSh 805.00
+
+Best sellers:
+  1. Oraimo Deluxe Phone Charger — 2 sold — KSh 12,900.00
+  2. SmartEdge Max Laptop Stand — 2 sold — KSh 10,890.00
+  3. Voltix Daily Laptop Stand — 2 sold — KSh 7,450.00
+
+LOW STOCK (reorder soon):
+  InkWave Organic Correction Tape — 2 left
+  SweetJoy Deluxe Candy Pack — 0 left
+
+Insights:
+  [Fact] Outstanding balance of 5,294.36 across the week (billed vs collected).
+  [Suggestion] Reorder InkWave Organic Correction Tape first — it has the least stock remaining.
+
+Dashboard: https://www.smartduka.org/admin/dashboard
+Manage reports: https://www.smartduka.org/settings?tab=reports
+Generated 23 Oct 2026, 21:00 (UTC 18:00)
+Billed sales and collected payments are reported separately; outstanding balances are shown, not hidden.

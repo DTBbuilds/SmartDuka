@@ -1,0 +1,16 @@
+SMARTDUKA DAILY DIGEST — Load & Go
+Sunday 26 October 2026 (Africa/Nairobi)
+
+Billed sales: KSh 0.00 (-100.0% vs previous day)
+Payments collected: KSh 0.00
+Tax collected: KSh 0.00
+Orders: 0 | Items sold: 0
+
+Insights:
+  [Fact] No completed sales in this period.
+  [Suggestion] No sales to analyse yet — focus on getting the first checkout completed this week.
+
+Dashboard: https://www.smartduka.org/admin/dashboard
+Manage reports: https://www.smartduka.org/settings?tab=reports
+Generated 23 Oct 2026, 21:00 (UTC 18:00)
+Billed sales and collected payments are reported separately; outstanding balances are shown, not hidden.

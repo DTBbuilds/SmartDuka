@@ -231,7 +231,16 @@ export class ReportRendererService {
    * tables; page numbers; generation timestamps.
    */
   async pdf(metrics: ReportMetrics): Promise<Buffer> {
-    const doc = new PDFDocument({ size: 'A4', margin: 48, compress: false, info: { Title: this.subject(metrics) } });
+    // NOTE: pdfkit 0.15 applies its default 72pt page margins regardless of
+    // the margin option (verified empirically: maxY = height − 72). The
+    // footer is therefore placed at maxY − 12 — INSIDE the text area — so
+    // the footer write cannot trigger pdfkit's automatic page-break (which
+    // previously produced a spurious trailing page).
+    const doc = new PDFDocument({
+      size: 'A4',
+      compress: false,
+      info: { Title: this.subject(metrics) },
+    });
     const chunks: Buffer[] = [];
     doc.on('data', (c: Buffer) => chunks.push(c));
     const done = new Promise<Buffer>((resolve) => doc.on('end', () => resolve(Buffer.concat(chunks))));
@@ -240,7 +249,7 @@ export class ReportRendererService {
     let y = 0;
 
     const ensureSpace = (needed: number) => {
-      if (y + needed > doc.page.height - 72) {
+      if (y + needed > doc.page.maxY() - 24) {
         doc.addPage();
         y = 48;
       }
@@ -335,10 +344,10 @@ export class ReportRendererService {
     // Footer with page numbers + generation timestamp
     const range = doc.bufferedPageRange();
     for (let i = 0; i < range.count; i++) {
-      doc.switchToPage(i);
+      doc.switchToPage(range.start + i);
       doc.fillColor('#9ca3af').fontSize(8).font('Helvetica').text(
         `Generated ${localTime(metrics.generatedAt, metrics.timezone)} (UTC ${metrics.generatedAt.toISOString().slice(11, 16)}) · Page ${i + 1} of ${range.count}`,
-        48, doc.page.height - 40, { width: W, align: 'center', lineBreak: false },
+        48, doc.page.maxY() - 12, { width: W, align: 'center', lineBreak: false },
       );
     }
 

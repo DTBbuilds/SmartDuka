@@ -1,0 +1,25 @@
+SMARTDUKA DAILY DIGEST — Load & Go
+Thursday 22 October 2026 (Africa/Nairobi)
+
+Billed sales: KSh 933.80 (-87.8% vs previous day)
+Payments collected: KSh 805.00
+Outstanding balance: KSh 128.80
+Tax collected: KSh 128.80
+Orders: 1 | Items sold: 1
+Average order: KSh 933.80
+
+Payments by method:
+  cash: KSh 805.00
+
+Best sellers:
+  1. HerbalPlus Daily Moisturizer — 1 sold — KSh 805.00
+
+Insights:
+  [Fact] Outstanding balance of 128.80 across the period (billed vs collected).
+  [Fact] Billed sales changed down 87.8% versus the previous comparable period.
+  [Suggestion] Review the outstanding balance on the Orders page — collect the difference or reconcile it.
+
+Dashboard: https://www.smartduka.org/admin/dashboard
+Manage reports: https://www.smartduka.org/settings?tab=reports
+Generated 23 Oct 2026, 21:00 (UTC 18:00)
+Billed sales and collected payments are reported separately; outstanding balances are shown, not hidden.

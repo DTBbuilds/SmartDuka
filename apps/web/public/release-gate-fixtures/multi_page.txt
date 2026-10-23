@@ -1,0 +1,49 @@
+SMARTDUKA MONTHLY DIGEST — Load & Go
+1 October – 31 October 2026 (Africa/Nairobi)
+
+Billed sales: KSh 933.80 (-87.8% vs previous month)
+Payments collected: KSh 805.00
+Outstanding balance: KSh 128.80
+Tax collected: KSh 128.80
+Orders: 1 | Items sold: 1
+Average order: KSh 933.80
+
+Payments by method:
+  cash: KSh 805.00
+
+Best sellers:
+  1. Bulk Product 1 — Extended Description For Pagination Testing 1 — 20 sold — KSh 20,000.00
+  2. Bulk Product 2 — Extended Description For Pagination Testing 2 — 19 sold — KSh 19,300.00
+  3. Bulk Product 3 — Extended Description For Pagination Testing 3 — 18 sold — KSh 18,600.00
+  4. Bulk Product 4 — Extended Description For Pagination Testing 4 — 17 sold — KSh 17,900.00
+  5. Bulk Product 5 — Extended Description For Pagination Testing 5 — 16 sold — KSh 17,200.00
+  6. Bulk Product 6 — Extended Description For Pagination Testing 6 — 15 sold — KSh 16,500.00
+  7. Bulk Product 7 — Extended Description For Pagination Testing 7 — 14 sold — KSh 15,800.00
+  8. Bulk Product 8 — Extended Description For Pagination Testing 8 — 13 sold — KSh 15,100.00
+  9. Bulk Product 9 — Extended Description For Pagination Testing 9 — 12 sold — KSh 14,400.00
+  10. Bulk Product 10 — Extended Description For Pagination Testing 10 — 11 sold — KSh 13,700.00
+
+LOW STOCK (reorder soon):
+  Low Stock Product 1 — Extended Name — 0 left
+  Low Stock Product 2 — Extended Name — 1 left
+  Low Stock Product 3 — Extended Name — 2 left
+  Low Stock Product 4 — Extended Name — 3 left
+  Low Stock Product 5 — Extended Name — 4 left
+  Low Stock Product 6 — Extended Name — 5 left
+  Low Stock Product 7 — Extended Name — 6 left
+  Low Stock Product 8 — Extended Name — 7 left
+
+Insights:
+  [Fact] Insight line 1: detailed explanation text detailed explanation text detailed explanation text 
+  [Suggestion] Insight line 2: detailed explanation text detailed explanation text detailed explanation text 
+  [Fact] Insight line 3: detailed explanation text detailed explanation text detailed explanation text 
+  [Suggestion] Insight line 4: detailed explanation text detailed explanation text detailed explanation text 
+  [Fact] Insight line 5: detailed explanation text detailed explanation text detailed explanation text 
+  [Suggestion] Insight line 6: detailed explanation text detailed explanation text detailed explanation text 
+  [Fact] Insight line 7: detailed explanation text detailed explanation text detailed explanation text 
+  [Suggestion] Insight line 8: detailed explanation text detailed explanation text detailed explanation text 
+
+Dashboard: https://www.smartduka.org/admin/dashboard
+Manage reports: https://www.smartduka.org/settings?tab=reports
+Generated 23 Oct 2026, 21:00 (UTC 18:00)
+Billed sales and collected payments are reported separately; outstanding balances are shown, not hidden.

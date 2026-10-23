@@ -127,6 +127,32 @@ describe('EMAIL-REPORTS-CORE1 preferences, narrative & renderer', () => {
       expect(prefsDoc.paused).toBe(false);
       expect(prefsDoc.unsubscribedAt).toBeUndefined();
     });
+
+    it('RELEASE-GATE1: an admin DOWNGRADED after being listed stops receiving at resolve time', async () => {
+      // The recipient list still contains u1, but u1 is now a cashier.
+      const { service } = bootPrefs({
+        prefs: { recipientUserIds: ['507f1f77bcf86cd799439072'] },
+        users: [{ _id: '507f1f77bcf86cd799439072', email: 'downgraded@shop.example', role: 'cashier' }],
+      });
+      const recipients = await service.resolveRecipients(SHOP);
+      expect(recipients).toEqual([]); // role re-checked at RESOLVE time
+    });
+
+    it('RELEASE-GATE1: multiple shops under one Google account resolve per-shop identities', async () => {
+      // The same Google email exists as two users (one per shop); each shop
+      // resolves ONLY its own user document.
+      const { service, userModel } = bootPrefs({
+        prefs: { recipientUserIds: ['507f1f77bcf86cd799439072'] },
+        users: [{ _id: '507f1f77bcf86cd799439072', email: 'owner@gmail.example', role: 'admin' }],
+      });
+      const recipients = await service.resolveRecipients(SHOP);
+      expect(recipients.map((r) => r.email)).toEqual(['owner@gmail.example']);
+      // The tenant scope in the query guarantees the OTHER shop's user
+      // document (same email, different _id) can never leak in.
+      expect(userModel.find).toHaveBeenCalledWith(
+        expect.objectContaining({ shopId: expect.anything() }),
+      );
+    });
   });
 
   describe('narrative guardrails (deterministic, no fabrication)', () => {

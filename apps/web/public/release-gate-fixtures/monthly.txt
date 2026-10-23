@@ -1,0 +1,40 @@
+SMARTDUKA MONTHLY DIGEST — Load & Go
+1 October – 31 October 2026 (Africa/Nairobi)
+
+Billed sales: KSh 47,182.16 (+516.3% vs previous month)
+Payments collected: KSh 41,887.80
+Outstanding balance: KSh 5,294.36
+Tax collected: KSh 5,476.16
+Discounts given: KSh 250.00
+Orders: 5 | Items sold: 19
+Average order: KSh 9,436.43
+
+Payments by method:
+  cash: KSh 42,082.80
+  send money: KSh 805.00
+
+Best sellers:
+  1. Product 1 — Oraimo Deluxe Phone Charger — 10 sold — KSh 12,900.00
+  2. Product 2 — SmartEdge Max Laptop Stand — 9 sold — KSh 11,800.00
+  3. Product 3 — Voltix Daily Laptop Stand — 8 sold — KSh 10,700.00
+  4. Product 4 — DermaLux Value Face Wash — 7 sold — KSh 9,600.00
+  5. Product 5 — AquaClean Family Sponges — 6 sold — KSh 8,500.00
+  6. Product 6 — Doom — 5 sold — KSh 7,400.00
+  7. Product 7 — Pure Australian Drink Water — 4 sold — KSh 6,300.00
+  8. Product 8 — HealthFirst Organic Thermometer — 3 sold — KSh 5,200.00
+  9. Product 9 — MamaFresh Pro Tea Leaves — 2 sold — KSh 4,100.00
+  10. Product 10 — SunGrain Classic Cereal — 1 sold — KSh 3,000.00
+
+LOW STOCK (reorder soon):
+  InkWave Organic Correction Tape — 2 left
+  SweetJoy Deluxe Candy Pack — 0 left
+  ChocoFun Fresh Candy Pack — 1 left
+
+Insights:
+  [Fact] 5 completed orders with 19 items sold in October.
+  [Suggestion] Review the outstanding balance on the Orders page — collect the difference or reconcile it.
+
+Dashboard: https://www.smartduka.org/admin/dashboard
+Manage reports: https://www.smartduka.org/settings?tab=reports
+Generated 23 Oct 2026, 21:00 (UTC 18:00)
+Billed sales and collected payments are reported separately; outstanding balances are shown, not hidden.

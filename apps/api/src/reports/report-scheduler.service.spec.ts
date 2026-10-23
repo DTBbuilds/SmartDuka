@@ -353,22 +353,65 @@ describe('EMAIL-REPORTS-CORE1 durable report scheduler', () => {
       monthly: { enabled: false, hourLocal: 9, dayOfWeekLocal: 1, dayOfMonthLocal: 1 },
       recipientUserIds: [],
     };
-    ((scheduler as any).prefsModel.find as jest.Mock).mockImplementation(() => ({ lean: jest.fn().mockResolvedValue([
-      {
-        shopId: SHOP,
-        timezone: 'Africa/Nairobi', paused: false, unsubscribedAt: undefined,
-        daily: { enabled: true, hourLocal: 20, dayOfWeekLocal: 1, dayOfMonthLocal: 1 },
-        weekly: { enabled: false, hourLocal: 20, dayOfWeekLocal: 1, dayOfMonthLocal: 1 },
-        monthly: { enabled: false, hourLocal: 9, dayOfWeekLocal: 1, dayOfMonthLocal: 1 },
-        recipientUserIds: [],
-      },
-      prefsB,
-    ])}));
+    ((scheduler as any).prefsModel.find as jest.Mock).mockImplementation(() => ({
+      lean: jest.fn().mockResolvedValue([
+        {
+          shopId: SHOP,
+          timezone: 'Africa/Nairobi', paused: false, unsubscribedAt: undefined,
+          daily: { enabled: true, hourLocal: 20, dayOfWeekLocal: 1, dayOfMonthLocal: 1 },
+          weekly: { enabled: false, hourLocal: 20, dayOfWeekLocal: 1, dayOfMonthLocal: 1 },
+          monthly: { enabled: false, hourLocal: 9, dayOfWeekLocal: 1, dayOfMonthLocal: 1 },
+          recipientUserIds: [],
+        },
+        prefsB,
+      ]),
+    }));
     await scheduler.createDueRuns();
     expect(runs.length).toBe(2);
     const ids = runs.map((r) => r.runId);
     expect(new Set(ids).size).toBe(2);
     expect(ids[0]).toContain(SHOP);
     expect(ids[1]).toContain(SHOP_B);
+  });
+
+  it('RELEASE-GATE1: a MISSED schedule (server down at send time) is created late and flagged', async () => {
+    const { scheduler, runs } = boot({ flag: 'true' });
+    await scheduler.onModuleInit();
+    // The scheduled instant was 2026-10-23T17:00:00Z (20:00 EAT); the server
+    // was down then and only comes back at 18:30Z — the run is created with
+    // late: true and still reports YESTERDAY (the missed period).
+    jest.setSystemTime(new Date('2026-10-23T18:30:00Z'));
+    await scheduler.createDueRuns();
+    expect(runs.length).toBe(1);
+    expect(runs[0].late).toBe(true);
+    expect(runs[0].periodKey).toBe('2026-10-22');
+  });
+
+  it('RELEASE-GATE1: NO multi-day back-fill after a long outage (only the latest period, once)', async () => {
+    const { scheduler, runs } = boot({ flag: 'true' });
+    await scheduler.onModuleInit();
+    // The server returns 5 days after the missed 2026-10-23 send: the ONLY
+    // run created is for the most recent period (2026-10-27) — the missed
+    // intermediate days are skipped, never flooded.
+    jest.setSystemTime(new Date('2026-10-28T18:30:00Z'));
+    await scheduler.createDueRuns();
+    expect(runs.length).toBe(1);
+    expect(runs[0].periodKey).toBe('2026-10-27');
+    expect(runs[0].late).toBe(true);
+  });
+
+  it('RELEASE-GATE1: an AMBIGUOUS provider outcome exhausts retries (no auto-resend)', async () => {
+    const { scheduler, runs, emailService } = boot({ flag: 'true' });
+    await scheduler.onModuleInit();
+    await scheduler.createDueRuns();
+    (emailService.sendEmail as jest.Mock).mockResolvedValue({
+      success: false,
+      error: 'AMBIGUOUS: provider may hold the message — resend: network timeout',
+      ambiguous: true,
+    });
+    await scheduler.deliverPendingRuns();
+    expect(runs[0].status).toBe('failed');
+    expect(runs[0].attempts).toBe(3); // exhausted — manual review, never auto-retried
+    expect(emailService.sendEmail).toHaveBeenCalledTimes(1);
   });
 });

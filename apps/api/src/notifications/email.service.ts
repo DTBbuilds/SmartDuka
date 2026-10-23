@@ -343,7 +343,7 @@ export class EmailService {
       attempts.push(fallback); // preferred provider unavailable — start on the fallback
     }
 
-    const outcomes: Array<{ provider: 'smtp' | 'resend'; success: boolean; messageId?: string; error?: string; from?: string }> = [];
+    const outcomes: Array<{ provider: 'smtp' | 'resend'; success: boolean; messageId?: string; error?: string; from?: string; ambiguous?: boolean }> = [];
     for (const provider of attempts) {
       const result =
         provider === 'resend'
@@ -351,9 +351,14 @@ export class EmailService {
           : await this.sendViaSmtp(toAddress, options, smtpFrom, replyTo);
       outcomes.push(result);
       if (result.success) break; // delivered by THIS provider — stop; no fallback copy
+      // AMBIGUOUS ACCEPTANCE (RELEASE-GATE1): the provider may hold the
+      // message — falling back would double-send. Stop the chain; the
+      // outcome is recorded honestly for manual reconciliation.
+      if ((result as any).ambiguous) break;
     }
 
     const firstSuccess = outcomes.find((r) => r.success);
+    const ambiguousFailure = !firstSuccess && outcomes.some((r) => (r as any).ambiguous);
 
     // Log results
     for (const r of outcomes) {
@@ -365,7 +370,9 @@ export class EmailService {
     }
 
     // Update email log based on results — 'sent' records PROVIDER ACCEPTANCE
-    // (delivery confirmation arrives via the provider webhook).
+    // (delivery confirmation arrives via the provider webhook). An ambiguous
+    // failure stays 'pending' with the error recorded: the provider may yet
+    // deliver, so a retry must not fire automatically.
     if (emailLog) {
       if (firstSuccess) {
         await this.emailLogModel.findByIdAndUpdate(emailLog._id, {
@@ -378,9 +385,8 @@ export class EmailService {
       } else {
         const errors = outcomes.map((r) => `${r.provider}: ${r.error}`).join('; ');
         await this.emailLogModel.findByIdAndUpdate(emailLog._id, {
-          status: 'failed',
-          failedAt: new Date(),
-          errorMessage: errors,
+          ...(ambiguousFailure ? { status: 'pending' } : { status: 'failed', failedAt: new Date() }),
+          errorMessage: ambiguousFailure ? `AMBIGUOUS: provider may hold the message — ${errors}` : errors,
           provider: outcomes.map((r) => r.provider).join('+'),
         });
       }
@@ -392,7 +398,12 @@ export class EmailService {
 
     const allErrors = outcomes.map((r) => `${r.provider}: ${r.error}`).join('; ');
     this.logger.error(`All providers failed for ${toAddress}: ${allErrors}`);
-    return { success: false, error: allErrors, emailLogId: emailLog?._id?.toString() };
+    return {
+      success: false,
+      error: allErrors,
+      emailLogId: emailLog?._id?.toString(),
+      ...(ambiguousFailure ? { ambiguous: true } : {}),
+    } as any;
   }
 
   /**
@@ -403,8 +414,9 @@ export class EmailService {
     options: EmailOptions,
     from: string,
     replyTo: string,
-  ): Promise<{ provider: 'smtp'; success: boolean; messageId?: string; error?: string; from: string }> {
+  ): Promise<{ provider: 'smtp'; success: boolean; messageId?: string; error?: string; from: string; ambiguous?: boolean }> {
     let lastError: Error | null = null;
+    let ambiguous = false;
 
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       try {
@@ -425,8 +437,17 @@ export class EmailService {
                            error.code === 'ECONNREFUSED' ||
                            error.message?.includes('timeout') ||
                            error.message?.includes('Connection');
+        // AMBIGUOUS ACCEPTANCE: a timeout/reset AFTER the DATA phase means
+        // the message may have been accepted — retrying or falling back
+        // could deliver a second copy. Only pre-connection failures
+        // (ECONNREFUSED, greeting timeout) are safely retryable.
+        if (error.code === 'ECONNREFUSED') {
+          ambiguous = false;
+        } else if (isRetryable) {
+          ambiguous = true;
+        }
 
-        if (isRetryable && attempt < this.maxRetries) {
+        if (isRetryable && attempt < this.maxRetries && !ambiguous) {
           await new Promise(resolve => setTimeout(resolve, this.retryDelayMs * (attempt + 1)));
           continue;
         }
@@ -434,7 +455,13 @@ export class EmailService {
       }
     }
 
-    return { provider: 'smtp', success: false, error: lastError?.message || 'SMTP failed', from };
+    return {
+      provider: 'smtp',
+      success: false,
+      error: lastError?.message || 'SMTP failed',
+      from,
+      ...(ambiguous ? { ambiguous: true } : {}),
+    };
   }
 
   /**
@@ -445,7 +472,7 @@ export class EmailService {
     options: EmailOptions,
     from: string,
     replyTo: string,
-  ): Promise<{ provider: 'resend'; success: boolean; messageId?: string; error?: string; from: string }> {
+  ): Promise<{ provider: 'resend'; success: boolean; messageId?: string; error?: string; from: string; ambiguous?: boolean }> {
     try {
       // EMAIL-REPORTS-CORE1: attachments must survive the Resend path — the
       // previous implementation silently dropped them (masked by the old
@@ -467,6 +494,13 @@ export class EmailService {
         text: options.text,
         replyTo,
         ...(attachments && attachments.length > 0 ? { attachments } : {}),
+      } as any, {
+        // RELEASE-GATE1: provider-side idempotency — when the caller supplies
+        // a key, Resend itself deduplicates retries of the same logical
+        // email (a timeout after acceptance cannot produce a second copy).
+        ...(options.idempotencyKey
+          ? { headers: { 'Idempotency-Key': options.idempotencyKey } }
+          : {}),
       } as any);
 
       if (result.error) {
@@ -475,7 +509,21 @@ export class EmailService {
 
       return { provider: 'resend', success: true, messageId: result.data?.id, from };
     } catch (error: any) {
-      return { provider: 'resend', success: false, error: error.message, from };
+      // AMBIGUOUS ACCEPTANCE: a network timeout/reset after the request may
+      // have reached Resend leaves delivery UNKNOWN. The caller must NOT
+      // fall back (that would double-send) and must not auto-retry.
+      const ambiguous =
+        error?.code === 'ETIMEDOUT' ||
+        error?.code === 'ECONNRESET' ||
+        error?.name === 'AbortError' ||
+        /timeout|network|fetch failed/i.test(error?.message || '');
+      return {
+        provider: 'resend',
+        success: false,
+        error: error.message,
+        from,
+        ...(ambiguous ? { ambiguous: true } : {}),
+      };
     }
   }
 

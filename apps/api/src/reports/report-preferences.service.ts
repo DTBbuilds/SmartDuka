@@ -140,6 +140,10 @@ export class ReportPreferencesService {
       if (!email || seen.has(email)) continue;
       // Optional reports go to verified identities only.
       if (u.emailVerified === false) continue;
+      // RELEASE-GATE1: role is re-checked at RESOLVE time — an admin who was
+      // downgraded or removed after being added to the recipient list stops
+      // receiving immediately.
+      if (u.role !== 'admin') continue;
       seen.add(email);
       recipients.push({ userId: String(u._id), email, name: u.name });
     }

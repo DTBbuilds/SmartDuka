@@ -319,7 +319,16 @@ export class ReportSchedulerService implements OnModuleInit {
         await this.deliverRun(claim);
         delivered++;
       } catch (error: any) {
-        await this.markFailed(claim, error?.message || 'delivery failed');
+        // RELEASE-GATE1: an AMBIGUOUS provider outcome (timeout after the
+        // request may have been accepted) must NOT auto-retry — a retry
+        // could double-send. Exhaust the attempts so the run lands in
+        // 'failed' for manual review; the provider-side Idempotency-Key
+        // header additionally deduplicates any provider-held copy.
+        const ambiguous = error?.ambiguous === true;
+        if (ambiguous) {
+          claim.attempts = ReportSchedulerService.MAX_ATTEMPTS;
+        }
+        await this.markFailed(claim, error?.message || 'delivery failed', ambiguous);
       }
     }
     return delivered;
@@ -346,6 +355,25 @@ export class ReportSchedulerService implements OnModuleInit {
       return;
     }
 
+    // RELEASE-GATE1: bounce-suppressed addresses are filtered out at send
+    // time (permanent bounces are added to email_suppressions by the
+    // webhook). If every recipient is suppressed, the run is suppressed.
+    const to = recipients.map((r) => r.email);
+    const suppressedAddresses = new Set(
+      (
+        await this.shopModel.db
+          .collection('email_suppressions')
+          .find({ email: { $in: to.map((e) => e.toLowerCase()) } })
+          .project({ email: 1 })
+          .toArray()
+      ).map((s: any) => s.email),
+    );
+    const deliverable = to.filter((e) => !suppressedAddresses.has(e.toLowerCase()));
+    if (deliverable.length === 0) {
+      await this.suppress(run, 'all_recipients_suppressed');
+      return;
+    }
+
     // Canonical metrics for the run's explicit period (never re-derived
     // from "now" — the period is immutable on the run).
     const metrics = await this.buildMetrics(run, shop);
@@ -358,7 +386,7 @@ export class ReportSchedulerService implements OnModuleInit {
 
     const periodLabel = run.periodKey;
     const send = await this.emailService.sendEmail({
-      to: recipients.map((r) => r.email),
+      to: deliverable,
       subject: this.renderer.subject(metrics),
       html,
       text,
@@ -383,7 +411,7 @@ export class ReportSchedulerService implements OnModuleInit {
         {
           $set: {
             status: 'accepted', // provider acceptance — delivery via webhook
-            recipients: recipients.map((r) => r.email),
+            recipients: deliverable,
             emailLogId: send.emailLogId,
             messageId: send.messageId,
             provider: 'resend|smtp',
@@ -399,7 +427,9 @@ export class ReportSchedulerService implements OnModuleInit {
       );
       this.logger.log(`Report run ${run.runId} accepted by provider (${recipients.length} recipient(s))`);
     } else {
-      throw new Error(send.error || 'provider rejected the send');
+      const err: any = new Error(send.error || 'provider rejected the send');
+      err.ambiguous = (send as any).ambiguous === true;
+      throw err;
     }
   }
 
@@ -499,13 +529,14 @@ export class ReportSchedulerService implements OnModuleInit {
     }
   }
 
-  private async markFailed(run: ReportRunDocument, error: string): Promise<void> {
-    const exhausted = run.attempts >= ReportSchedulerService.MAX_ATTEMPTS;
+  private async markFailed(run: ReportRunDocument, error: string, exhausted?: boolean): Promise<void> {
+    const terminal = exhausted || run.attempts >= ReportSchedulerService.MAX_ATTEMPTS;
     await this.runModel.updateOne(
       { _id: run._id, status: 'processing' },
       {
         $set: {
-          status: exhausted ? 'failed' : 'failed',
+          status: 'failed',
+          ...(terminal ? { attempts: ReportSchedulerService.MAX_ATTEMPTS } : {}),
           lastError: String(error).slice(0, 500),
         },
       },
