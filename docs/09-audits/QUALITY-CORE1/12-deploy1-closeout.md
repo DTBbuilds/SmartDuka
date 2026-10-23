@@ -55,8 +55,9 @@
 ## Phase 5 — Closeout
 
 **Exact deployment SHAs**
-- Release HEAD / `origin/main` / deployed API + web: **`fa5bffd`** (9 commits: `07ad353`, `d7d5c48`, `fc7c79a`, `4bcbf63`, `e56e35f`, `17d1e2d`, `f0568af`, `1167664`, `fa5bffd`)
+- Application code deployed to Render + Vercel: **`fa5bffd`** (9 commits: `07ad353`, `d7d5c48`, `fc7c79a`, `4bcbf63`, `e56e35f`, `17d1e2d`, `f0568af`, `1167664`, `fa5bffd`)
 - Previous production baseline: `2f93926`
+- Note: the closeout commit `accc658` (this report, docs-only, zero app-code changes) was pushed to main afterwards and triggers an identical-behavior redeploy; post-redeploy health re-verified (Mongo/memory up, web 200).
 
 **Render:** new build live at 07:29:34 UTC (behavioral probe), health/Mongo stable, zero observed downtime.
 **Vercel:** new build live (asset/markup probes), correct API origin, no prefix duplication.
