@@ -44,13 +44,14 @@ describe('POS-CURRENCY-CHECKOUT-P0 legacy currency remediation', () => {
         select: jest.fn().mockReturnThis(),
         lean: jest.fn().mockReturnThis(),
       })),
-      findByIdAndUpdate: jest
+      findOneAndUpdate: jest
         .fn()
-        .mockImplementation((_id: any, update: any) => {
+        .mockImplementation((filter: any, update: any) => {
+          if (filter.currency !== undefined && shopDoc.currency !== filter.currency) {
+            return { exec: jest.fn().mockResolvedValue(null) }; // CAS fails
+          }
           Object.assign(shopDoc, update.$set || update);
-          return {
-            exec: jest.fn().mockResolvedValue(shopDoc),
-          };
+          return { exec: jest.fn().mockResolvedValue(shopDoc) };
         }),
     };
     service = new SuperAdminService(
@@ -62,6 +63,8 @@ describe('POS-CURRENCY-CHECKOUT-P0 legacy currency remediation', () => {
       auditLogService as any,
       undefined,
       undefined,
+      { countDocuments: jest.fn().mockResolvedValue(0) } as any, // paymentTransactionModel
+      { countDocuments: jest.fn().mockResolvedValue(0) } as any, // orderModel
     );
   }
 
@@ -71,6 +74,7 @@ describe('POS-CURRENCY-CHECKOUT-P0 legacy currency remediation', () => {
     reason: 'Shop operates in Kenya: KES VAT, M-Pesa, KES-denominated history',
     evidenceSummary:
       '6 orders May-Oct 2026 all KES/VAT-16%; registered before country-currency validation',
+    expectedCurrentCurrency: 'AUD',
   };
 
   it('remediates a legacy misconfigured shop with a full audit event and no historical mutation', async () => {
@@ -131,6 +135,49 @@ describe('POS-CURRENCY-CHECKOUT-P0 legacy currency remediation', () => {
         targetCurrency: 'AUD',
       }),
     ).rejects.toThrow(/nothing to remediate/i);
+  });
+
+  it('preflight mismatch: expected currency does not match the stored currency → conflict, no write', async () => {
+    boot({ currency: 'KES' }); // concurrent change already happened
+    await expect(
+      service.remediateBaseCurrency(SHOP, SA, validDto),
+    ).rejects.toThrow(/preflight mismatch/i);
+    expect(auditCreates).toHaveLength(0);
+  });
+
+  it('CAS: a concurrent currency write between preflight and update aborts with no audit event', async () => {
+    boot();
+    // Preflight reads AUD; a concurrent write lands mid-flight so the atomic
+    // CAS filter (currency: AUD) no longer matches → update returns null.
+    const shopModel = (service as any).shopModel;
+    shopModel.findOneAndUpdate = jest.fn(() => ({
+      exec: jest.fn().mockResolvedValue(null), // CAS lost the race
+    }));
+    await expect(
+      service.remediateBaseCurrency(SHOP, SA, validDto),
+    ).rejects.toThrow(/Concurrent currency change detected/i);
+    expect(auditCreates).toHaveLength(0);
+    expect(shopDoc.currency).toBe('AUD'); // untouched by the aborted attempt
+  });
+
+  it('concurrent financial activity inside the quiet window aborts the remediation', async () => {
+    boot();
+    // Re-inject an order model reporting a fresh order.
+    (service as any).orderModel = { countDocuments: jest.fn().mockResolvedValue(1) };
+    await expect(
+      service.remediateBaseCurrency(SHOP, SA, validDto),
+    ).rejects.toThrow(/Concurrent financial activity/i);
+    expect(auditCreates).toHaveLength(0);
+    expect(shopDoc.currency).toBe('AUD');
+  });
+
+  it('missing expectedCurrentCurrency is rejected', async () => {
+    boot();
+    const { expectedCurrentCurrency, ...without } = validDto;
+    await expect(
+      service.remediateBaseCurrency(SHOP, SA, without as any),
+    ).rejects.toThrow(/expectedCurrentCurrency/);
+    expect(auditCreates).toHaveLength(0);
   });
 
   it('unknown shop is rejected', async () => {

@@ -1,8 +1,10 @@
-import { Injectable, Logger, BadRequestException, NotFoundException, Optional } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, NotFoundException, ConflictException, Optional } from '@nestjs/common';
 import { InjectModel, InjectConnection } from '@nestjs/mongoose';
 import { Model, Types, Connection } from 'mongoose';
 import { Shop, ShopDocument } from '../shops/schemas/shop.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
+import { Order, OrderDocument } from '../sales/schemas/order.schema';
+import { PaymentTransaction, PaymentTransactionDocument } from '../payments/schemas/payment-transaction.schema';
 import { Subscription, SubscriptionDocument, SubscriptionStatus } from '../subscriptions/schemas/subscription.schema';
 import { SubscriptionPlan, SubscriptionPlanDocument } from '../subscriptions/schemas/subscription-plan.schema';
 import { ShopAuditLogService } from '../shops/services/shop-audit-log.service';
@@ -27,6 +29,8 @@ export class SuperAdminService {
     private readonly auditLogService: ShopAuditLogService,
     @Optional() private readonly emailService?: EmailService,
     @Optional() private readonly cacheService?: CacheService,
+    @Optional() @InjectModel(PaymentTransaction.name) private readonly paymentTransactionModel?: Model<PaymentTransactionDocument>,
+    @Optional() @InjectModel(Order.name) private readonly orderModel?: Model<OrderDocument>,
   ) {}
 
   /**
@@ -1180,11 +1184,23 @@ export class SuperAdminService {
       targetCurrency: string;
       reason: string;
       evidenceSummary: string;
+      /**
+       * REMEDIATION2: compare-and-swap guard. The caller asserts the
+       * currency it verified during preflight; the atomic update refuses to
+       * land if ANY concurrent write has changed the currency since.
+       */
+      expectedCurrentCurrency: string;
     },
   ): Promise<ShopDocument> {
-    if (!dto.remediationId || !dto.targetCurrency || !dto.reason || !dto.evidenceSummary) {
+    if (
+      !dto.remediationId ||
+      !dto.targetCurrency ||
+      !dto.reason ||
+      !dto.evidenceSummary ||
+      !dto.expectedCurrentCurrency
+    ) {
       throw new BadRequestException(
-        'remediationId, targetCurrency, reason and evidenceSummary are required',
+        'remediationId, targetCurrency, reason, evidenceSummary and expectedCurrentCurrency are required',
       );
     }
     if (dto.reason.trim().length < 10 || dto.evidenceSummary.trim().length < 10) {
@@ -1199,9 +1215,42 @@ export class SuperAdminService {
     const shop = await this.getShopDetails(shopId);
     if (!shop) throw new NotFoundException('Shop not found');
 
-    if (!shop.currency || shop.currency === dto.targetCurrency) {
+    if (shop.currency !== dto.expectedCurrentCurrency) {
+      throw new ConflictException(
+        `Currency preflight mismatch: expected ${dto.expectedCurrentCurrency}, found ${shop.currency ?? 'unset'}. Re-run the preflight verification before remediating.`,
+      );
+    }
+    if (shop.currency === dto.targetCurrency) {
       throw new BadRequestException(
-        `Shop currency is ${shop.currency ?? 'unset'} — nothing to remediate`,
+        `Shop currency is ${shop.currency} — nothing to remediate`,
+      );
+    }
+
+    // REMEDIATION2 — CONCURRENT FINANCIAL ACTIVITY GUARD. Refuse to flip the
+    // base currency while the shop is transacting: any order or payment
+    // transaction created inside the quiet window aborts the remediation.
+    // (A checkout that commits in the residual race is still safe — orders
+    // snapshot the currency at their own sale time — but a quiet shop is the
+    // correct precondition for a reviewed configuration change.)
+    const QUIET_WINDOW_MINUTES = 10;
+    const windowStart = new Date(Date.now() - QUIET_WINDOW_MINUTES * 60_000);
+    const [recentOrders, recentTransactions] = await Promise.all([
+      this.orderModel
+        ? this.orderModel.countDocuments({
+            shopId: new Types.ObjectId(shopId),
+            createdAt: { $gte: windowStart },
+          })
+        : Promise.resolve(0),
+      this.paymentTransactionModel
+        ? this.paymentTransactionModel.countDocuments({
+            shopId: new Types.ObjectId(shopId),
+            createdAt: { $gte: windowStart },
+          })
+        : Promise.resolve(0),
+    ]);
+    if (recentOrders > 0 || recentTransactions > 0) {
+      throw new ConflictException(
+        `Concurrent financial activity detected: ${recentOrders} order(s) and ${recentTransactions} payment transaction(s) created within the last ${QUIET_WINDOW_MINUTES} minutes. Remediation aborted — retry when the shop is quiet.`,
       );
     }
 
@@ -1220,15 +1269,27 @@ export class SuperAdminService {
 
     const oldValue = { currency: shop.currency };
 
+    // ATOMIC COMPARE-AND-SWAP: the update lands only if the currency is
+    // still the preflight-verified value. A concurrent currency write (any
+    // other remediation, a settings race) makes the filter fail → conflict,
+    // no partial state, no second audit event.
     const updated = await this.shopModel
-      .findByIdAndUpdate(
-        new Types.ObjectId(shopId),
+      .findOneAndUpdate(
+        {
+          _id: new Types.ObjectId(shopId),
+          currency: dto.expectedCurrentCurrency,
+        },
         { $set: { currency: dto.targetCurrency, updatedAt: new Date() } },
         { new: true, runValidators: true },
       )
       .exec();
 
-    if (!updated) throw new NotFoundException('Shop not found');
+    if (!updated) {
+      const current = await this.getShopDetails(shopId);
+      throw new ConflictException(
+        `Concurrent currency change detected: expected ${dto.expectedCurrentCurrency}, found ${current?.currency ?? 'unknown'}. Remediation aborted; no records modified.`,
+      );
+    }
 
     await this.auditLogService.create({
       shopId,

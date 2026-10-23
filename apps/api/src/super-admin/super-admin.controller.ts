@@ -154,6 +154,7 @@ export class SuperAdminController {
       targetCurrency: string;
       reason: string;
       evidenceSummary: string;
+      expectedCurrentCurrency: string;
     },
     @CurrentUser() user: any,
   ) {

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Shop, ShopSchema } from '../shops/schemas/shop.schema';
 import { ShopAuditLog, ShopAuditLogSchema } from '../shops/schemas/shop-audit-log.schema';
+import { Order, OrderSchema } from '../sales/schemas/order.schema';
 import { Subscription, SubscriptionSchema } from '../subscriptions/schemas/subscription.schema';
 import { SubscriptionPlan, SubscriptionPlanSchema } from '../subscriptions/schemas/subscription-plan.schema';
 import { SubscriptionInvoice, SubscriptionInvoiceSchema } from '../subscriptions/schemas/subscription-invoice.schema';
@@ -42,6 +43,7 @@ import { JwtModule } from '@nestjs/jwt';
     MongooseModule.forFeature([
       { name: Shop.name, schema: ShopSchema },
       { name: ShopAuditLog.name, schema: ShopAuditLogSchema },
+      { name: Order.name, schema: OrderSchema },
       { name: Subscription.name, schema: SubscriptionSchema },
       { name: SubscriptionPlan.name, schema: SubscriptionPlanSchema },
       { name: SubscriptionInvoice.name, schema: SubscriptionInvoiceSchema },
