@@ -481,6 +481,39 @@ describe('QUALITY-CORE1 checkout financial integrity', () => {
       expect(order.tax).toBe(128.8);
       expect(order.total).toBe(933.8);
     });
+
+    it('tenant tax isolation: two shops with different settings get different totals for the same basket', async () => {
+      await boot();
+      // SHOP_A: VAT 16% (default boot settings). SHOP_B: VAT disabled.
+      shopSettingsService.getByShopId.mockImplementation(
+        async (shopId: string) => {
+          if (shopId === SHOP) return { tax: { enabled: true, rate: 0.16 } };
+          return { tax: { enabled: false, rate: 0.16 } };
+        },
+      );
+
+      const shopA = await service.checkout(SHOP, USER_A, undefined, {
+        items: incidentItems(),
+        payments: [{ method: 'cash', amount: INCIDENT_TOTAL }],
+      });
+      const shopB = await service.checkout(
+        '507f1f77bcf86cd799439099',
+        USER_A,
+        undefined,
+        {
+          items: incidentItems(),
+          payments: [{ method: 'cash', amount: INCIDENT_SUBTOTAL }],
+        },
+      );
+
+      expect(shopA.total).toBe(933.8);
+      expect(shopB.total).toBe(805); // no VAT for shop B
+      // Each checkout consulted ITS OWN shop's settings only.
+      expect(shopSettingsService.getByShopId).toHaveBeenCalledWith(SHOP);
+      expect(shopSettingsService.getByShopId).toHaveBeenCalledWith(
+        '507f1f77bcf86cd799439099',
+      );
+    });
   });
 
   describe('idempotent retry with server-derived allocations', () => {
