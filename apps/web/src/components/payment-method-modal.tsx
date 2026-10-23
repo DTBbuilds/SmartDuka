@@ -424,7 +424,7 @@ export function PaymentMethodModal({
                       {/* Branded logo or icon */}
                       {option.id === 'mpesa' ? (
                         <div className="h-12 w-full flex items-center justify-center">
-                          <Image src="/images/payments/mpesa.svg" alt="M-Pesa" width={80} height={26} className="h-6 w-auto" unoptimized />
+                          <Image src="/images/payments/mpesa-official.svg" alt="M-Pesa" width={49} height={26} className="h-6 w-auto" unoptimized />
                         </div>
                       ) : option.id === 'cash' ? (
                         <div className={`h-12 w-12 rounded-full flex items-center justify-center transition-colors bg-primary/10 group-hover:bg-primary/20`}>
@@ -508,7 +508,7 @@ export function PaymentMethodModal({
               <span className="flex items-center gap-0.5"><Lock className="h-2.5 w-2.5" /> Secure</span>
               <span className="flex items-center gap-0.5"><Shield className="h-2.5 w-2.5" /> Encrypted</span>
               <div className="flex items-center gap-1.5">
-                <Image src="/images/payments/mpesa.svg" alt="M-Pesa" width={36} height={12} className="h-2.5 w-auto opacity-40" unoptimized />
+                <Image src="/images/payments/mpesa-official.svg" alt="M-Pesa" width={23} height={12} className="h-2.5 w-auto opacity-40" unoptimized />
                 <Image src="/images/payments/visa.svg" alt="Visa" width={24} height={8} className="h-2 w-auto opacity-40" unoptimized />
                 <Image src="/images/payments/mastercard.svg" alt="Mastercard" width={16} height={10} className="h-2.5 w-auto opacity-40" unoptimized />
               </div>

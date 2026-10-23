@@ -186,7 +186,7 @@ export default function MpesaFeaturePage() {
               <div className="flex items-center gap-6 text-sm text-green-100">
                 <div className="flex items-center gap-2">
                   <CheckCircle className="h-5 w-5" />
-                  Safaricom Approved
+                  Integrated with M-Pesa (Daraja API)
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle className="h-5 w-5" />

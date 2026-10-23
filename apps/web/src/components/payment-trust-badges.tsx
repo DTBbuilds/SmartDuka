@@ -9,9 +9,17 @@ interface PaymentTrustBadgesProps {
   className?: string;
 }
 
+// QUALITY-CORE1 P1-C: official brand artwork, bundled locally (no external
+// image dependency at runtime).
+//  - M-Pesa: official wordmark SVG (Vodafone artwork, Wikimedia Commons
+//    "M-PESA LOGO-01.svg", public domain) — intrinsic 512x273.
+//  - Safaricom: official main logo from safaricom.co.ke brand assets
+//    (SAF-MAIN-LOGO.png, trimmed) — intrinsic 480x106.
+// width/height props preserve each intrinsic aspect ratio so next/image never
+// distorts the mark.
 const paymentLogos = {
-  mpesa: { src: '/images/payments/mpesa.svg', alt: 'M-Pesa', width: 100, height: 32 },
-  safaricom: { src: '/images/payments/safaricom.svg', alt: 'Safaricom', width: 110, height: 32 },
+  mpesa: { src: '/images/payments/mpesa-official.svg', alt: 'M-Pesa', width: 60, height: 32 },
+  safaricom: { src: '/images/payments/safaricom-official.png', alt: 'Safaricom', width: 145, height: 32 },
   visa: { src: '/images/payments/visa.svg', alt: 'Visa', width: 60, height: 20 },
   mastercard: { src: '/images/payments/mastercard.svg', alt: 'Mastercard', width: 48, height: 32 },
   stripe: { src: '/images/payments/stripe.svg', alt: 'Stripe', width: 64, height: 28 },

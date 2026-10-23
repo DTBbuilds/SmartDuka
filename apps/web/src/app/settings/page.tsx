@@ -70,6 +70,28 @@ export default function SettingsPage() {
     currency: "KES",
   });
 
+  // QUALITY-CORE1 P1-B: base-currency immutability. Once the shop has any
+  // currency-denominated financial record, the currency is locked and the
+  // selector is disabled with guidance.
+  const [currencyLocked, setCurrencyLocked] = useState(false);
+  useEffect(() => {
+    const fetchCurrencyPolicy = async () => {
+      if (!token) return;
+      try {
+        const res = await fetch(`${config.apiUrl}/shops/currency-policy`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setCurrencyLocked(!!data.currencyLocked);
+        }
+      } catch {
+        // Policy status is advisory UI; the server enforces the rule anyway.
+      }
+    };
+    fetchCurrencyPolicy();
+  }, [token]);
+
   // User profile
   const [profileData, setProfileData] = useState({
     name: "",
@@ -233,10 +255,19 @@ export default function SettingsPage() {
           updateShop({ currency: shopData.currency });
         }
       } else {
-        throw new Error("Failed to save settings");
+        // QUALITY-CORE1: surface the server's reason (e.g. currency locked
+        // once financial records exist) instead of a generic failure.
+        const errText = await res.text();
+        let serverMessage = "";
+        try {
+          serverMessage = errText ? JSON.parse(errText)?.message : "";
+        } catch {
+          serverMessage = "";
+        }
+        throw new Error(serverMessage || "Failed to save settings");
       }
-    } catch (error) {
-      setMessage({ type: "error", text: "Failed to save shop settings" });
+    } catch (error: any) {
+      setMessage({ type: "error", text: error?.message || "Failed to save shop settings" });
     } finally {
       setIsSaving(false);
     }
@@ -554,15 +585,18 @@ export default function SettingsPage() {
                   <select
                     id="currency"
                     value={shopData.currency || 'KES'}
+                    disabled={currencyLocked}
                     onChange={(e) => setShopData({ ...shopData, currency: e.target.value })}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     {CURRENCY_OPTIONS.map((opt) => (
                       <option key={opt.value} value={opt.value}>{opt.label}</option>
                     ))}
                   </select>
                   <p className="text-xs text-muted-foreground">
-                    This will be used for all prices, receipts, and invoices. Contact support to change after registration.
+                    {currencyLocked
+                      ? "Locked: this shop already has financial records, so the currency can no longer be changed — every recorded amount would change meaning. To operate in another currency, create a new shop; existing records and reports stay unchanged."
+                      : "Used for all prices, receipts, and invoices. It can only be changed before the first sale, payment, purchase or cash shift — after that it is locked to keep recorded amounts meaningful."}
                   </p>
                 </div>
               </div>

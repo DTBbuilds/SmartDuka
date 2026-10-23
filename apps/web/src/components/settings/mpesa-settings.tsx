@@ -208,9 +208,9 @@ export function MpesaSettings({ token, onMessage }: MpesaSettingsProps) {
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
             {/* Logos */}
             <div className="flex items-center gap-3 bg-white/95 rounded-xl px-4 py-2.5 shadow-md">
-              <Image src="/images/payments/mpesa.svg" alt="M-Pesa" width={90} height={28} className="h-7 w-auto" unoptimized />
+              <Image src="/images/payments/mpesa-official.svg" alt="M-Pesa" width={53} height={28} className="h-7 w-auto" unoptimized />
               <div className="w-px h-6 bg-gray-300" />
-              <Image src="/images/payments/safaricom.svg" alt="Safaricom" width={100} height={28} className="h-6 w-auto" unoptimized />
+              <Image src="/images/payments/safaricom-official.png" alt="Safaricom" width={127} height={28} className="h-6 w-auto" unoptimized />
             </div>
             <div className="flex-1">
               <h2 className="text-white text-lg sm:text-xl font-bold">M-Pesa Payment Configuration</h2>
