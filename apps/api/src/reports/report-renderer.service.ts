@@ -43,6 +43,7 @@ export interface ReportMetrics {
 }
 
 const BRAND = { dark: '#111827', muted: '#6b7280', accent: '#f97316', line: '#e5e7eb', bg: '#f9fafb' };
+const PAGE_W = 595.28; // A4 width in pt (pdfkit default)
 
 const fmt = (v: number, currency?: string) => formatMoney(v, currency || 'KES');
 const pct = (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(1)}%`;
@@ -229,13 +230,25 @@ export class ReportRendererService {
    * Branded PDF attachment. pdfkit is pure JavaScript (no browser/Chromium
    * dependency) — suitable for the Render free tier. Simple, accurate
    * tables; page numbers; generation timestamps.
+   *
+   * TWO-PASS RENDER (DEPLOY1 fix): pdfkit FLUSHES a page as soon as
+   * addPage() creates the next one, and flushed pages are unreachable by
+   * switchToPage — a single-pass footer loop silently skipped every page
+   * except the last (page 1 had no footer; page 2's footer read
+   * "Page 1 of 1"). Pass 1 renders without footers to count pages; pass 2
+   * writes each page's footer WHILE THAT PAGE IS STILL CURRENT (just
+   * before leaving it / before end), with the true total.
    */
   async pdf(metrics: ReportMetrics): Promise<Buffer> {
-    // NOTE: pdfkit 0.15 applies its default 72pt page margins regardless of
-    // the margin option (verified empirically: maxY = height − 72). The
-    // footer is therefore placed at maxY − 12 — INSIDE the text area — so
-    // the footer write cannot trigger pdfkit's automatic page-break (which
-    // previously produced a spurious trailing page).
+    const first = await this.renderPdf(metrics, null);
+    const second = await this.renderPdf(metrics, first.pageCount);
+    return second.buffer;
+  }
+
+  private async renderPdf(
+    metrics: ReportMetrics,
+    totalPages: number | null,
+  ): Promise<{ buffer: Buffer; pageCount: number }> {
     const doc = new PDFDocument({
       size: 'A4',
       compress: false,
@@ -247,9 +260,34 @@ export class ReportRendererService {
 
     const W = doc.page.width - 96;
     let y = 0;
+    // pdfkit 0.15 does not expose a pages array — the page number is
+    // tracked directly (every page break in this renderer goes through
+    // ensureSpace; individual text lines are short and guarded).
+    let pageNumber = 1;
+
+    // Footer for the CURRENT page — written while the page is still
+    // current (before addPage/end), positioned INSIDE the text area
+    // (pdfkit applies its default 72pt margins; maxY = height − 72).
+    // Drawn WITHOUT width/align (no LineWrapper): pdfkit's line wrapper
+    // sizes its section from the remaining page height and re-breaks the
+    // page for this text — manual centering avoids the wrapper entirely.
+    const writeFooter = () => {
+      if (totalPages === null) return; // pass 1 (page count only)
+      const label = `Generated ${localTime(metrics.generatedAt, metrics.timezone)} (UTC ${metrics.generatedAt.toISOString().slice(11, 16)}) · Page ${pageNumber} of ${totalPages}`;
+      const estimatedWidth = label.length * 8 * 0.5;
+      doc
+        .fillColor('#9ca3af')
+        .fontSize(8)
+        .font('Helvetica')
+        .text(label, Math.max(48, (PAGE_W - estimatedWidth) / 2), doc.page.maxY() - 12, {
+          lineBreak: false,
+        });
+    };
 
     const ensureSpace = (needed: number) => {
       if (y + needed > doc.page.maxY() - 24) {
+        writeFooter(); // footer for the page being left
+        pageNumber += 1;
         doc.addPage();
         y = 48;
       }
@@ -341,18 +379,10 @@ export class ReportRendererService {
       }
     }
 
-    // Footer with page numbers + generation timestamp
-    const range = doc.bufferedPageRange();
-    for (let i = 0; i < range.count; i++) {
-      doc.switchToPage(range.start + i);
-      doc.fillColor('#9ca3af').fontSize(8).font('Helvetica').text(
-        `Generated ${localTime(metrics.generatedAt, metrics.timezone)} (UTC ${metrics.generatedAt.toISOString().slice(11, 16)}) · Page ${i + 1} of ${range.count}`,
-        48, doc.page.maxY() - 12, { width: W, align: 'center', lineBreak: false },
-      );
-    }
-
+    // Footer for the FINAL page (all previous pages got theirs when left).
+    writeFooter();
     doc.end();
-    return done;
+    return { buffer: await done, pageCount: pageNumber };
   }
 }
 
