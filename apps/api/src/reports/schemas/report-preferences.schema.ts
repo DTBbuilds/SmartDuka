@@ -72,6 +72,8 @@ export class ReportPreferences {
   updatedAt?: Date;
 }
 
+export type ReportPreferencesDocument = HydratedDocument<ReportPreferences>;
+
 export const ReportPreferencesSchema =
   SchemaFactory.createForClass(ReportPreferences);
 

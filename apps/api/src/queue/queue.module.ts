@@ -84,11 +84,7 @@ const REDIS_URL = process.env.REDIS_URL;
     // they had no real processors (the email processor acknowledged jobs
     // without sending) and no producers. Email delivery is in-process via
     // EmailService; report delivery is the report_runs scheduler.
-    BullModule.registerQueue(
-      { name: 'mpesa-callbacks' },
-      { name: 'stock-alerts' },
-      { name: 'notifications' },
-    ),
+    BullModule.registerQueue({ name: 'notifications' }),
   ] : [],
   providers: [QueueService],
   exports: REDIS_URL ? [BullModule, QueueService] : [QueueService],

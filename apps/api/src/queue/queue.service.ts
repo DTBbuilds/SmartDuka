@@ -2,8 +2,6 @@ import { Injectable, Logger, OnModuleInit, Optional, Inject } from '@nestjs/comm
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { ConfigService } from '@nestjs/config';
-import { MpesaCallbackJobData } from './processors/mpesa-callback.processor';
-import { StockAlertJobData } from './processors/stock-alert.processor';
 
 /**
  * WhatsApp message job data
@@ -27,8 +25,6 @@ export class QueueService implements OnModuleInit {
   private isQueueAvailable = false;
 
   constructor(
-    @Optional() @InjectQueue('mpesa-callbacks') private mpesaQueue: Queue | null,
-    @Optional() @InjectQueue('stock-alerts') private stockAlertQueue: Queue | null,
     @Optional() @InjectQueue('notifications') private notificationQueue: Queue | null,
     private configService: ConfigService,
   ) {}
@@ -36,14 +32,14 @@ export class QueueService implements OnModuleInit {
   async onModuleInit() {
     const redisUrl = this.configService.get<string>('REDIS_URL');
     
-    if (!redisUrl || !this.mpesaQueue) {
+    if (!redisUrl || !this.notificationQueue) {
       this.isQueueAvailable = false;
       return;
     }
 
     try {
       // Test queue connection
-      await this.mpesaQueue.getJobCounts();
+      await this.notificationQueue.getJobCounts();
       this.isQueueAvailable = true;
       this.logger.log('✅ Queue system initialized successfully');
     } catch (error: any) {
@@ -57,60 +53,6 @@ export class QueueService implements OnModuleInit {
    */
   isAvailable(): boolean {
     return this.isQueueAvailable;
-  }
-
-  /**
-   * Add M-Pesa callback to processing queue
-   */
-  async addMpesaCallback(data: MpesaCallbackJobData): Promise<string | null> {
-    if (!this.isQueueAvailable) {
-      this.logger.debug('Queue unavailable - M-Pesa callback will be processed synchronously');
-      return null;
-    }
-
-    try {
-      const job = await this.mpesaQueue!.add('process-callback', data, {
-        priority: 1, // High priority
-        attempts: 5,
-        backoff: {
-          type: 'exponential',
-          delay: 2000,
-        },
-      });
-      
-      this.logger.log(`M-Pesa callback queued: ${job.id}`);
-      return job.id || null;
-    } catch (error: any) {
-      this.logger.error(`Failed to queue M-Pesa callback: ${error.message}`);
-      return null;
-    }
-  }
-
-  /**
-   * Add stock alert to processing queue
-   */
-  async addStockAlert(data: StockAlertJobData): Promise<string | null> {
-    if (!this.isQueueAvailable) {
-      this.logger.debug('Queue unavailable - stock alert will be processed synchronously');
-      return null;
-    }
-
-    try {
-      // Deduplicate by product ID - only one alert per product in queue
-      const jobId = `stock-alert-${data.shopId}-${data.productId}`;
-      
-      const job = await this.stockAlertQueue!.add('process-alert', data, {
-        jobId,
-        priority: data.alertType === 'out_of_stock' ? 1 : 5,
-        attempts: 3,
-      });
-      
-      this.logger.log(`Stock alert queued: ${job.id} - ${data.alertType}`);
-      return job.id || null;
-    } catch (error: any) {
-      this.logger.error(`Failed to queue stock alert: ${error.message}`);
-      return null;
-    }
   }
 
   /**
@@ -173,17 +115,11 @@ export class QueueService implements OnModuleInit {
     }
 
     try {
-      const [mpesa, stockAlerts, notifications] = await Promise.all([
-        this.mpesaQueue!.getJobCounts(),
-        this.stockAlertQueue!.getJobCounts(),
-        this.notificationQueue!.getJobCounts(),
-      ]);
+      const notifications = await this.notificationQueue!.getJobCounts();
 
       return {
         available: true,
         queues: {
-          'mpesa-callbacks': mpesa,
-          'stock-alerts': stockAlerts,
           notifications,
         },
       };

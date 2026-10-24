@@ -100,6 +100,8 @@ export class ReportRun {
   updatedAt?: Date;
 }
 
+export type ReportRunDocument = HydratedDocument<ReportRun>;
+
 export const ReportRunSchema = SchemaFactory.createForClass(ReportRun);
 
 ReportRunSchema.index({ shopId: 1, createdAt: -1 });

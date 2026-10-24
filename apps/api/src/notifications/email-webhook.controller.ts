@@ -1,6 +1,7 @@
-import { Controller, Post, Body, Headers, Req, Logger, HttpCode, HttpStatus, BadRequestException, RawBodyRequest } from '@nestjs/common';
+import { Controller, Post, Body, Headers, Req, Logger, HttpCode, HttpStatus, BadRequestException } from '@nestjs/common';
+import type { RawBodyRequest } from '@nestjs/common';
 import { createHmac, timingSafeEqual } from 'crypto';
-import { Request } from 'express';
+import type { Request } from 'express';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { EmailLog } from '../super-admin/schemas/email-log.schema';

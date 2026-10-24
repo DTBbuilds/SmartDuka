@@ -5,7 +5,6 @@ import {
   Put,
   Post,
   UseGuards,
-  CurrentUser,
   Param,
   Query,
   Logger,
@@ -19,6 +18,7 @@ import { ReportPreferencesService } from './report-preferences.service';
 import { ReportSchedulerService } from './report-scheduler.service';
 import { ReportRendererService } from './report-renderer.service';
 import { ReportsService } from './reports.service';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
 /**
  * EMAIL-REPORTS-CORE1 (Phase C) — REPORT PREFERENCES & MONITORING API.
