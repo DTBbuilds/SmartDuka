@@ -46,9 +46,8 @@ jobs:
       - name: Lint Web
         run: pnpm --filter @smartduka/web lint
 
-      - name: Type check API
+      - name: Type check API (mandatory - failures fail CI)
         run: pnpm --filter @smartduka/api build
-        continue-on-error: true
 
   # ===========================================
   # Unit Tests
@@ -75,9 +74,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run API tests
+      - name: Run API tests (mandatory - failures fail CI)
         run: pnpm --filter @smartduka/api test
-        continue-on-error: true
 
       - name: Upload coverage report
         uses: codecov/codecov-action@v3
@@ -114,10 +112,25 @@ jobs:
       - name: Build API
         run: pnpm --filter @smartduka/api build
 
+      - name: Verify API build artifacts (CANARY-PREP1 - no stale output)
+        run: |
+          test -f apps/api/dist/src/main.js || { echo "FATAL: dist/src/main.js missing"; exit 1; }
+          ART=$(find apps/api/dist -name '*.js' | head -1 | xargs stat -c '%Y')
+          AGE=$(( $(date +%s) - ART ))
+          test "$AGE" -lt 300 || { echo "FATAL: dist artifacts stale ($AGE s)"; exit 1; }
+          echo "API artifacts verified (fresh, $AGE s old)"
+
       - name: Build Web
         run: pnpm --filter @smartduka/web build
         env:
           NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL || 'http://localhost:5000' }}
+
+      - name: Verify Web build artifacts (CANARY-PREP1 - no stale output)
+        run: |
+          test -f apps/web/.next/BUILD_ID || { echo "FATAL: .next/BUILD_ID missing"; exit 1; }
+          AGE=$(( $(date +%s) - $(stat -c '%Y' apps/web/.next/BUILD_ID) ))
+          test "$AGE" -lt 300 || { echo "FATAL: .next stale ($AGE s)"; exit 1; }
+          echo "Web artifacts verified (fresh, $AGE s old)"
 
       - name: Upload API build artifacts
         uses: actions/upload-artifact@v4

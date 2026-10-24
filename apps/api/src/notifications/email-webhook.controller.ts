@@ -81,16 +81,23 @@ export class EmailWebhookController {
       (request?.rawBody as Buffer | undefined)?.toString('utf8') ??
       JSON.stringify(payload ?? {});
 
-    if (secret) {
-      const verified = this.verifySvix(rawPayload, headers, secret);
-      if (!verified) {
-        this.logger.warn('Resend webhook signature verification FAILED — event rejected');
-        throw new BadRequestException('Invalid webhook signature');
-      }
-    } else {
+    // CANARY-PREP1 — NO TRUSTED-STATE MUTATION WITHOUT VERIFICATION.
+    // Without the signing secret the endpoint previously processed events
+    // "log-only" — but that still mutated delivery statuses AND could add
+    // suppressions from FORGED permanent-bounce events (an unauthenticated
+    // attacker could suppress a legitimate address or fake delivery
+    // evidence). Now: unconfigured webhook → hard reject, zero mutation.
+    // Delivery observability activates together with the secret.
+    if (!secret) {
       this.logger.warn(
-        'Resend webhook received without RESEND_WEBHOOK_SECRET — log-only mode (unverified; set the secret to enforce verification)',
+        'Resend webhook rejected: RESEND_WEBHOOK_SECRET is not configured (no verification possible, no state mutated)',
       );
+      throw new BadRequestException('Webhook not configured');
+    }
+    const verified = this.verifySvix(rawPayload, headers, secret);
+    if (!verified) {
+      this.logger.warn('Resend webhook signature verification FAILED — event rejected');
+      throw new BadRequestException('Invalid webhook signature');
     }
 
     const type = payload?.type || '';

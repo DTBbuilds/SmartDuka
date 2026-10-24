@@ -217,6 +217,23 @@ describe('EMAIL-REPORTS-CORE1 durable report scheduler', () => {
     expect(emailService.sendEmail).not.toHaveBeenCalled();
   });
 
+  it('CANARY-PREP1: pending runs CANNOT bypass the kill switch once it is OFF', async () => {
+    const { scheduler, runs, emailService } = boot({ flag: 'true' });
+    await scheduler.onModuleInit();
+    await scheduler.createDueRuns();
+    expect(runs.length).toBe(1);
+    // The operator flips the global kill switch OFF.
+    (scheduler as any).enabled = false;
+    await scheduler.tick();
+    expect(runs[0].status).toBe('queued'); // stays queued — never delivered
+    expect(emailService.sendEmail).not.toHaveBeenCalled();
+    // Re-enabling resumes the SAME run (no duplicate creation).
+    (scheduler as any).enabled = true;
+    await scheduler.tick();
+    expect(runs.filter((r) => r.runId === runs[0].runId)).toHaveLength(1);
+    expect(emailService.sendEmail).toHaveBeenCalledTimes(1);
+  });
+
   it('feature flag ON: a due daily run is created, claimed, delivered as accepted', async () => {
     const { scheduler, runs, emailService } = boot({ flag: 'true' });
     await scheduler.onModuleInit();

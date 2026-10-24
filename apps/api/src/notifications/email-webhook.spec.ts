@@ -107,25 +107,36 @@ describe('RELEASE-GATE1 Resend webhook', () => {
     ).rejects.toThrow(BadRequestException);
   });
 
-  it('without the secret: events are recorded in log-only mode (warned, not rejected)', async () => {
-    const { controller, updates } = boot({ secret: '' });
-    const res = await controller.handleResendEvent({}, event('email.bounced'), {});
-    expect(res.received).toBe(true);
-    expect(updates[0].update.$set.status).toBe('bounced');
-    expect(updates[0].update.$set['metadata.webhookVerified']).toBe(false);
+  it('CANARY-PREP1: without the secret the webhook REJECTS — zero trusted-state mutation', async () => {
+    const { controller, updates, suppressUpserts } = boot({ secret: '' });
+    await expect(
+      controller.handleResendEvent({}, event('email.bounced'), {}),
+    ).rejects.toThrow(/Webhook not configured/i);
+    expect(updates).toHaveLength(0); // no delivery-state mutation
+    expect(suppressUpserts).toHaveLength(0); // no suppression poisoning
   });
 
   it('out-of-order: a late bounced event does NOT regress a delivered message', async () => {
-    const { controller, updates, existing } = boot({ secret: '', existingStatus: 'delivered' });
-    await controller.handleResendEvent({}, event('email.bounced'), {});
+    const { controller, updates, existing } = boot({ secret: SECRET, existingStatus: 'delivered' });
+    const payload = JSON.stringify(event('email.bounced'));
+    await controller.handleResendEvent(
+      { rawBody: Buffer.from(payload) },
+      event('email.bounced'),
+      svixHeaders(payload, SECRET),
+    );
     // The guard excludes delivered → matchedCount 0 → no regression write.
     expect(updates[0].filter.status.$nin).toContain('delivered');
     expect(existing.status).toBe('delivered');
   });
 
   it('out-of-order: a late delivered event does NOT overwrite a bounced message', async () => {
-    const { controller, updates, existing } = boot({ secret: '', existingStatus: 'bounced' });
-    await controller.handleResendEvent({}, event('email.delivered'), {});
+    const { controller, updates, existing } = boot({ secret: SECRET, existingStatus: 'bounced' });
+    const payload = JSON.stringify(event('email.delivered'));
+    await controller.handleResendEvent(
+      { rawBody: Buffer.from(payload) },
+      event('email.delivered'),
+      svixHeaders(payload, SECRET),
+    );
     // The guard for a positive event excludes the negative terminal states.
     expect(updates[0].filter.status.$nin).toContain('bounced');
     expect(existing.status).toBe('bounced');
@@ -133,13 +144,16 @@ describe('RELEASE-GATE1 Resend webhook', () => {
 
   it('a PERMANENT bounce adds the address to the suppression list', async () => {
     const { controller, suppressUpserts } = boot({
-      secret: '',
+      secret: SECRET,
       existingStatus: 'sent',
     });
-    await controller.handleResendEvent(
-      {},
+    const payload = JSON.stringify(
       event('email.bounced', { bounce: { type: 'permanent', message: 'address does not exist' } }),
-      {},
+    );
+    await controller.handleResendEvent(
+      { rawBody: Buffer.from(payload) },
+      event('email.bounced', { bounce: { type: 'permanent', message: 'address does not exist' } }),
+      svixHeaders(payload, SECRET),
     );
     expect(suppressUpserts).toHaveLength(1);
     expect(suppressUpserts[0].name).toBe('email_suppressions');
@@ -148,19 +162,25 @@ describe('RELEASE-GATE1 Resend webhook', () => {
   });
 
   it('a TRANSIENT (soft) bounce does NOT suppress the address', async () => {
-    const { controller, suppressUpserts } = boot({ secret: '', existingStatus: 'sent' });
-    await controller.handleResendEvent(
-      {},
+    const { controller, suppressUpserts } = boot({ secret: SECRET, existingStatus: 'sent' });
+    const payload = JSON.stringify(
       event('email.bounced', { bounce: { type: 'transient', message: 'mailbox full' } }),
-      {},
+    );
+    await controller.handleResendEvent(
+      { rawBody: Buffer.from(payload) },
+      event('email.bounced', { bounce: { type: 'transient', message: 'mailbox full' } }),
+      svixHeaders(payload, SECRET),
     );
     expect(suppressUpserts).toHaveLength(0);
   });
 
   it('duplicate events are idempotent (same messageId → same update)', async () => {
-    const { controller, updates } = boot({ secret: '' });
-    await controller.handleResendEvent({}, event('email.delivered'), {});
-    await controller.handleResendEvent({}, event('email.delivered'), {});
+    const { controller, updates } = boot({ secret: SECRET });
+    const payload = JSON.stringify(event('email.delivered'));
+    const headers = svixHeaders(payload, SECRET, undefined, 'evt_dup_1');
+    await controller.handleResendEvent({ rawBody: Buffer.from(payload) }, event('email.delivered'), headers);
+    // A duplicate event (same svix-id, replayed within tolerance) is also accepted.
+    await controller.handleResendEvent({ rawBody: Buffer.from(payload) }, event('email.delivered'), headers);
     expect(updates).toHaveLength(2);
     expect(updates[0].filter.messageId).toBe(updates[1].filter.messageId);
   });

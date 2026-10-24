@@ -1,0 +1,37 @@
+SMARTDUKA DAILY DIGEST — Load & Go
+2026-10-23 (Africa/Nairobi)
+
+Billed sales: A$ 30,891.96
+Payments collected: A$ 26,631.00
+Outstanding balance: A$ 4,260.96
+Tax collected: A$ 4,260.96
+Orders: 3 | Items sold: 15
+Average order: A$ 10,297.32
+
+Payments by method:
+  cash: A$ 25,826.00
+  send money: A$ 805.00
+
+Best sellers:
+  1. Oraimo Deluxe Phone Charger — 1 sold — A$ 6,450.00
+  2. SmartEdge Max Laptop Stand — 1 sold — A$ 5,445.00
+  3. Voltix Daily Laptop Stand — 1 sold — A$ 3,725.00
+  4. HerbalPlus Daily Moisturizer — 2 sold — A$ 1,610.00
+  5. HealthFirst Organic Thermometer — 1 sold — A$ 1,475.00
+  6. AquaClean Family Sponges — 1 sold — A$ 1,455.00
+  7. ActiveWear Smart Baseball Cap — 1 sold — A$ 1,440.00
+  8. DermaLux Value Face Wash — 1 sold — A$ 1,420.00
+  9. MamaFresh Pro Tea Leaves — 1 sold — A$ 1,085.00
+  10. SunGrain Classic Cereal — 1 sold — A$ 875.00
+
+Insights:
+  [Fact] 3 completed orders with 15 items sold.
+  [Fact] Outstanding balance of 4260.96 across the period (billed vs collected).
+  [Fact] Best seller: Oraimo Deluxe Phone Charger (1 sold).
+  [Suggestion] Review the outstanding balance on the Orders page — collect the difference or reconcile it.
+  [Suggestion] Oraimo Deluxe Phone Charger is selling well — keep it stocked and consider featuring it near the counter.
+
+Dashboard: https://www.smartduka.org/admin/dashboard
+Manage reports: https://www.smartduka.org/settings?tab=reports
+Generated 24 Oct 2026, 11:02 (UTC 08:02)
+Billed sales and collected payments are reported separately; outstanding balances are shown, not hidden.
