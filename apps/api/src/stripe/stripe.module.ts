@@ -31,6 +31,8 @@ import {
   StripeWebhookEvent,
   StripeWebhookEventSchema,
 } from './schemas/stripe-webhook-event.schema';
+import { OAuthState, OAuthStateSchema } from './schemas/oauth-state.schema';
+import { User, UserSchema } from '../users/schemas/user.schema';
 
 @Global()
 @Module({})
@@ -53,6 +55,8 @@ export class StripeModule {
           { name: StripePayment.name, schema: StripePaymentSchema },
           { name: StripeSubscription.name, schema: StripeSubscriptionSchema },
           { name: StripeWebhookEvent.name, schema: StripeWebhookEventSchema },
+          { name: OAuthState.name, schema: OAuthStateSchema },
+          { name: User.name, schema: UserSchema },
           { name: Shop.name, schema: ShopSchema },
           { name: Order.name, schema: OrderSchema },
         ]),

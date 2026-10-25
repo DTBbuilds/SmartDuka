@@ -605,8 +605,10 @@ export class StripeController {
 
   /**
    * Attach payment method to customer
+   * FIX1-A2: admin-only; the PM must not belong to another customer.
    */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   @Post('customer/attach-payment-method')
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
@@ -640,17 +642,35 @@ export class StripeController {
 
   /**
    * Detach payment method
+   * FIX1-A2: admin-only + OWNERSHIP ENFORCED — the payment method must
+   * belong to the authenticated shop's own Stripe customer. Foreign and
+   * unknown payment methods return the same safe 404 (no disclosure).
    */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   @Post('customer/detach-payment-method')
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Detach payment method from customer' })
-  async detachPaymentMethod(@Body() dto: { paymentMethodId: string }): Promise<{
+  async detachPaymentMethod(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: { paymentMethodId: string },
+  ): Promise<{
     success: boolean;
     message: string;
   }> {
-    await this.customerService.detachPaymentMethod(dto.paymentMethodId);
+    const customer = await this.customerService.getCustomerByShopId(
+      user.shopId,
+    );
+
+    if (!customer) {
+      throw new BadRequestException('Customer not found');
+    }
+
+    await this.customerService.detachPaymentMethodOwned(
+      customer.stripeCustomerId,
+      dto.paymentMethodId,
+    );
 
     return {
       success: true,
@@ -664,6 +684,11 @@ export class StripeController {
 
   /**
    * Process refund
+   *
+   * FIX1-A1: the caller's shop identity comes from the JWT and is enforced
+   * end-to-end — a payment is refundable only when it belongs to the
+   * authenticated shop. Foreign and unknown references get the same
+   * safe 404 (no information disclosure).
    */
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
@@ -672,6 +697,7 @@ export class StripeController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Process refund for a payment' })
   async processRefund(
+    @CurrentUser() user: JwtPayload,
     @Body()
     dto: {
       paymentIntentId: string;
@@ -683,6 +709,7 @@ export class StripeController {
     message: string;
   }> {
     await this.paymentService.refundPayment({
+      shopId: user.shopId,
       paymentIntentId: dto.paymentIntentId,
       amount: dto.amount,
       reason: dto.reason,

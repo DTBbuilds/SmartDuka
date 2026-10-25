@@ -368,6 +368,8 @@ export class StripeService implements OnModuleInit {
     amount?: number;
     reason?: 'duplicate' | 'fraudulent' | 'requested_by_customer';
     metadata?: Record<string, string>;
+    /** FIX1-A1: idempotency key so repeated/concurrent identical refunds return the SAME refund. */
+    idempotencyKey?: string;
     /**
      * Stripe Connect: refund a charge on a connected account.
      * Must match the account the original PaymentIntent was created on.
@@ -412,6 +414,9 @@ export class StripeService implements OnModuleInit {
     const options: Stripe.RequestOptions = {};
     if (params.stripeAccount) {
       options.stripeAccount = params.stripeAccount;
+    }
+    if (params.idempotencyKey) {
+      options.idempotencyKey = params.idempotencyKey;
     }
 
     const refund = await stripe.refunds.create(refundParams, options);

@@ -62,7 +62,7 @@ export class StripeConnectController {
     if (!user?.shopId) {
       throw new BadRequestException('No shop context — please log in again.');
     }
-    const url = this.connectService.buildAuthorizeUrl({
+    const url = await this.connectService.buildAuthorizeUrl({
       shopId: user.shopId,
       userId: (user as any).sub || (user as any).userId || '',
       email: user.email,

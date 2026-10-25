@@ -190,6 +190,25 @@ export class StripeCustomerService {
   }
 
   /**
+   * FIX1-A2 — OWNERSHIP-ENFORCED DETACH.
+   *
+   * The payment method must currently belong to the given customer. The
+   * ownership check happens BEFORE any Stripe mutation: a foreign or
+   * unknown payment method gets the same safe 404 (no information
+   * disclosure about other tenants' payment methods).
+   */
+  async detachPaymentMethodOwned(
+    stripeCustomerId: string,
+    paymentMethodId: string,
+  ): Promise<void> {
+    const owned = await this.listPaymentMethods(stripeCustomerId);
+    if (!owned.some((pm) => pm.id === paymentMethodId)) {
+      throw new NotFoundException('Payment method not found');
+    }
+    await this.detachPaymentMethod(paymentMethodId);
+  }
+
+  /**
    * Create a setup intent for saving payment methods
    */
   async createSetupIntent(stripeCustomerId: string): Promise<Stripe.SetupIntent> {

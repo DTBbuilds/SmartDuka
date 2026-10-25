@@ -132,6 +132,9 @@ export class Shop {
     // Cached account metadata (for UI display)
     country?: string;
     defaultCurrency?: string;
+    // FIX1-B1: the CONNECTED ACCOUNT's own publishable key — required to
+    // confirm direct charges with Elements (captured at account sync).
+    publishableKey?: string;
     displayName?: string;
     email?: string;
     // Connection lifecycle

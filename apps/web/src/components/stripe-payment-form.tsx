@@ -26,6 +26,13 @@ interface StripePaymentFormProps {
   onCancel: () => void;
   onError?: (error: string) => void;
   publishableKey: string;
+  /**
+   * FIX1-B1: the connected-account context for DIRECT CHARGES. Stripe.js
+   * must be loaded with { stripeAccount } so the Elements confirmation
+   * targets the account that owns the client secret — the platform key
+   * alone cannot confirm another account's intent.
+   */
+  stripeAccount?: string | null;
 }
 
 // Inner form component that uses Stripe hooks
@@ -230,15 +237,18 @@ export function StripePaymentForm({
   onCancel,
   onError,
   publishableKey,
+  stripeAccount,
 }: StripePaymentFormProps) {
-  // Use useMemo to properly handle publishableKey changes
+  // FIX1-B1: load Stripe.js with the CONNECTED-ACCOUNT context for direct
+  // charges — the platform key alone cannot confirm another account's
+  // client secret.
   const stripePromise = useMemo(() => {
     if (!publishableKey) {
       console.warn('Stripe publishable key is empty');
       return null;
     }
-    return loadStripe(publishableKey);
-  }, [publishableKey]);
+    return loadStripe(publishableKey, stripeAccount ? { stripeAccount } : undefined);
+  }, [publishableKey, stripeAccount]);
 
   const [stripeReady, setStripeReady] = useState(false);
 
@@ -327,6 +337,8 @@ interface StripePaymentModalProps {
   amount: number;
   currency: string;
   publishableKey: string;
+  /** FIX1-B1: the connected-account context for direct charges. */
+  stripeAccount?: string | null;
   title?: string;
   description?: string;
   onSuccess: (paymentIntentId: string) => void;
@@ -340,6 +352,7 @@ export function StripePaymentModal({
   amount,
   currency,
   publishableKey,
+  stripeAccount,
   title = 'Complete Payment',
   description,
   onSuccess,
@@ -447,6 +460,7 @@ export function StripePaymentModal({
                   amount={amount}
                   currency={currency}
                   publishableKey={publishableKey}
+                  stripeAccount={stripeAccount}
                   onSuccess={onSuccess}
                   onCancel={onClose}
                   onError={onError}

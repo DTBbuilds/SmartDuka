@@ -13,6 +13,8 @@ import * as crypto from 'crypto';
 import Stripe from 'stripe';
 import { StripeService } from '../stripe.service';
 import { Shop, ShopDocument } from '../../shops/schemas/shop.schema';
+import { OAuthState, OAuthStateSchema } from '../schemas/oauth-state.schema';
+import { User } from '../../users/schemas/user.schema';
 
 /**
  * Stripe Connect Service (Standard accounts, OAuth flow)
@@ -42,6 +44,10 @@ export class StripeConnectService {
     private readonly configService: ConfigService,
     @InjectModel(Shop.name)
     private readonly shopModel: Model<ShopDocument>,
+    @InjectModel(OAuthState.name)
+    private readonly oauthStateModel: Model<any>,
+    @InjectModel(User.name)
+    private readonly userModel: Model<any>,
   ) {}
 
   // ------------------------------------------------------------------
@@ -96,7 +102,7 @@ export class StripeConnectService {
    * Format: base64url(JSON({ shopId, userId, nonce, exp })) + '.' + hmacSHA256
    * Expires in 15 minutes to limit replay window.
    */
-  private signState(shopId: string, userId: string): string {
+  private async signState(shopId: string, userId: string): Promise<string> {
     const payload = {
       shopId,
       userId,
@@ -108,10 +114,20 @@ export class StripeConnectService {
       .createHmac('sha256', this.getStateSecret())
       .update(body)
       .digest('base64url');
-    return `${body}.${sig}`;
+    // FIX1-A4: the nonce is durably registered for SINGLE-USE — the callback
+    // consumes it atomically, so a replayed state is rejected even within
+    // the 15-minute window (and across instances).
+    return this.oauthStateModel
+      .create({ nonce: payload.nonce, shopId, userId })
+      .then(() => `${body}.${sig}`)
+      .catch((err: any) => {
+        // A duplicate nonce (crypto.randomBytes collision — practically
+        // impossible) must not silently weaken replay protection.
+        throw new InternalServerErrorException(`Could not register OAuth state: ${err?.message}`);
+      });
   }
 
-  private verifyState(state: string): { shopId: string; userId: string } {
+  private verifyState(state: string): { shopId: string; userId: string; nonce: string } {
     if (!state || typeof state !== 'string' || !state.includes('.')) {
       throw new BadRequestException('Invalid OAuth state token');
     }
@@ -128,7 +144,7 @@ export class StripeConnectService {
       throw new BadRequestException('OAuth state signature mismatch');
     }
 
-    let payload: { shopId: string; userId: string; exp: number };
+    let payload: { shopId: string; userId: string; exp: number; nonce: string };
     try {
       payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
     } catch {
@@ -138,10 +154,44 @@ export class StripeConnectService {
     if (!payload.exp || Date.now() > payload.exp) {
       throw new BadRequestException('OAuth state expired — please try connecting again');
     }
-    if (!payload.shopId || !payload.userId) {
+    if (!payload.shopId || !payload.userId || !payload.nonce) {
       throw new BadRequestException('OAuth state missing required fields');
     }
-    return { shopId: payload.shopId, userId: payload.userId };
+    return { shopId: payload.shopId, userId: payload.userId, nonce: payload.nonce };
+  }
+
+  /**
+   * FIX1-A4 — ATOMIC SINGLE-USE NONCE CONSUMPTION + MEMBERSHIP REVALIDATION.
+   *
+   * The nonce is consumed with findOneAndDelete (atomic): a replayed state
+   * finds nothing and is rejected. The initiating user's CURRENT membership
+   * and admin role are re-checked at callback time — a user who was removed
+   * from the shop or demoted between flow start and callback can no longer
+   * bind a Stripe account to that shop.
+   */
+  private async consumeStateNonce(
+    nonce: string,
+    shopId: string,
+    userId: string,
+  ): Promise<void> {
+    const consumed = await this.oauthStateModel
+      .findOneAndDelete({ nonce, shopId, userId })
+      .exec();
+    if (!consumed) {
+      throw new BadRequestException(
+        'OAuth state was already used or is unknown — please start the connection again',
+      );
+    }
+    const user = await this.userModel
+      .findOne({ _id: new Types.ObjectId(userId), shopId: new Types.ObjectId(shopId) })
+      .select('role')
+      .lean()
+      .exec();
+    if (!user || (user as any).role !== 'admin') {
+      throw new UnauthorizedException(
+        'The initiating user is no longer an administrator of this shop',
+      );
+    }
   }
 
   // ------------------------------------------------------------------
@@ -152,7 +202,7 @@ export class StripeConnectService {
    * Build Stripe OAuth authorize URL for a shop to initiate connection.
    * Frontend should redirect the shop owner's browser to this URL.
    */
-  buildAuthorizeUrl(params: { shopId: string; userId: string; email?: string }): string {
+  async buildAuthorizeUrl(params: { shopId: string; userId: string; email?: string }): Promise<string> {
     // Refuse to start if Stripe client isn't initialised on the platform side
     if (!this.stripeService.isStripeConfigured()) {
       throw new InternalServerErrorException(
@@ -160,7 +210,7 @@ export class StripeConnectService {
       );
     }
 
-    const state = this.signState(params.shopId, params.userId);
+    const state = await this.signState(params.shopId, params.userId);
     const url = new URL('https://connect.stripe.com/oauth/authorize');
     url.searchParams.set('response_type', 'code');
     url.searchParams.set('client_id', this.getClientId());
@@ -182,7 +232,11 @@ export class StripeConnectService {
     if (!code) {
       throw new BadRequestException('Missing authorization code from Stripe');
     }
-    const { shopId, userId } = this.verifyState(state);
+    const { shopId, userId, nonce } = this.verifyState(state);
+
+    // FIX1-A4: atomic single-use consumption + current membership/role
+    // revalidation BEFORE any provider call.
+    await this.consumeStateNonce(nonce, shopId, userId);
 
     const shop = await this.shopModel.findById(shopId).exec();
     if (!shop) {
@@ -325,6 +379,13 @@ export class StripeConnectService {
       disabledReason: account.requirements?.disabled_reason || undefined,
       country: account.country || undefined,
       defaultCurrency: account.default_currency || undefined,
+      // FIX1-B1: the CONNECTED ACCOUNT's own publishable key — required to
+      // confirm direct charges with Elements (the platform key cannot
+      // confirm another account's client secret).
+      publishableKey:
+        ((account.settings?.dashboard as any)?.publishable_key as string | undefined) ||
+        (shop.stripeConnect as any)?.publishableKey ||
+        undefined,
       displayName:
         (account.business_profile?.name as string | undefined) ||
         (account.settings?.dashboard?.display_name as string | undefined) ||
@@ -425,6 +486,54 @@ export class StripeConnectService {
       );
     }
     return cfg.accountId;
+  }
+
+  /**
+   * FIX1-B1 — the CONNECTED-ACCOUNT context for Elements confirmation.
+   * A direct charge's client secret can only be confirmed with the
+   * CONNECTED ACCOUNT's publishable key (loadStripe(pk, { stripeAccount })).
+   * The key is captured at sync time from accounts.retrieve; if missing
+   * (older sync), fetch it once now.
+   */
+  async getAccountContext(shopId: string): Promise<{
+    accountId: string;
+    publishableKey?: string;
+    defaultCurrency?: string;
+    country?: string;
+  }> {
+    const accountId = await this.requireConnectedAccountId(shopId);
+    const shop = await this.shopModel
+      .findById(shopId)
+      .select('stripeConnect.publishableKey stripeConnect.defaultCurrency stripeConnect.country currency')
+      .lean()
+      .exec();
+    const cfg: any = (shop as any)?.stripeConnect || {};
+    let publishableKey = cfg.publishableKey;
+
+    if (!publishableKey) {
+      // Older sync without the key — fetch once and persist.
+      try {
+        const account = await this.stripeService.getClient().accounts.retrieve(accountId);
+        publishableKey =
+          ((account.settings?.dashboard as any)?.publishable_key as string | undefined) || undefined;
+        if (publishableKey) {
+          await this.shopModel.updateOne(
+            { _id: new Types.ObjectId(shopId) },
+            { $set: { 'stripeConnect.publishableKey': publishableKey } },
+          );
+        }
+      } catch (err: any) {
+        this.logger.warn(`Could not fetch the connected account's publishable key: ${err?.message}`);
+      }
+    }
+
+    // FIX1-B3: currency compatibility signal for the caller/UI.
+    return {
+      accountId,
+      publishableKey,
+      defaultCurrency: cfg.defaultCurrency,
+      country: cfg.country,
+    };
   }
 
   /**

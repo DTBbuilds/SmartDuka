@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Logger,
   Inject,
+  BadRequestException,
 } from '@nestjs/common';
 import type { RawBodyRequest } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
@@ -60,25 +61,30 @@ export class StripeWebhookController {
     @Headers('stripe-signature') signature: string,
     @Req() request: RawBodyRequest<Request>,
   ): Promise<{ received: boolean }> {
+    // FIX1-A3: authentication failures are NON-SUCCESS responses — Stripe
+    // redelivers legitimate events, and attackers get no silent acceptance.
+    // The previous behavior returned 200 {received:true} for unsigned or
+    // badly-signed requests, silently DROPPING legitimate events (e.g.
+    // after a secret rotation) with no record and no retry.
     if (!this.stripeService.isStripeConfigured()) {
       this.logger.warn('Stripe webhook received but Stripe is not configured');
-      return { received: true };
+      throw new BadRequestException('Stripe is not configured');
     }
 
     if (!signature || !this.webhookSecret) {
       this.logger.error('Missing webhook signature or secret');
-      return { received: true };
+      throw new BadRequestException('Missing webhook signature');
     }
 
     let event: Stripe.Event;
 
-    try {
-      const rawBody = request.rawBody;
-      if (!rawBody) {
-        this.logger.error('No raw body available for webhook verification');
-        return { received: true };
-      }
+    const rawBody = request.rawBody;
+    if (!rawBody) {
+      this.logger.error('No raw body available for webhook verification');
+      throw new BadRequestException('Malformed webhook payload');
+    }
 
+    try {
       event = this.stripeService.constructWebhookEvent(
         rawBody,
         signature,
@@ -88,7 +94,7 @@ export class StripeWebhookController {
       this.logger.error(
         `Webhook signature verification failed: ${err.message}`,
       );
-      return { received: true };
+      throw new BadRequestException('Invalid webhook signature');
     }
 
     // Check for duplicate event (idempotency)
@@ -274,14 +280,26 @@ export class StripeWebhookController {
   }
 
   /**
-   * Handle charge refunded event
+   * Handle charge refunded event — FIX1-C: provider truth converges the
+   * local payment record (refunds initiated in the shop's own Stripe
+   * dashboard). Delegated to the payment service (tenant-scoped, idempotent).
    */
   private async handleChargeRefunded(event: Stripe.Event): Promise<void> {
     const charge = event.data.object as Stripe.Charge;
-
-    this.logger.log(`Charge ${charge.id} refunded: ${charge.amount_refunded}`);
-
-    // Refunds are handled through the refund API, this is just for logging
+    const paymentIntentId =
+      typeof charge.payment_intent === 'string'
+        ? charge.payment_intent
+        : charge.payment_intent?.id;
+    if (!paymentIntentId) {
+      this.logger.log(`Charge ${charge.id} refunded without a payment intent — ignoring`);
+      return;
+    }
+    try {
+      await this.paymentService.convergeExternalRefund(paymentIntentId, charge);
+    } catch (err: any) {
+      this.logger.error(`External refund convergence failed for ${paymentIntentId}: ${err.message}`);
+      throw err; // non-2xx → Stripe redelivers
+    }
   }
 
   // ============================================

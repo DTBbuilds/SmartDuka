@@ -165,6 +165,8 @@ export function PaymentMethodModal({
   // Stripe payment state
   const [stripeClientSecret, setStripeClientSecret] = useState<string | null>(null);
   const [stripePublishableKey, setStripePublishableKey] = useState<string>('');
+  // FIX1-B1: the connected-account context for the direct charge.
+  const [stripeAccount, setStripeAccount] = useState<string | null>(null);
   const [isCreatingPaymentIntent, setIsCreatingPaymentIntent] = useState(false);
   const [stripeError, setStripeError] = useState<string | null>(null);
 
@@ -284,6 +286,12 @@ export function PaymentMethodModal({
       
       const { clientSecret } = data;
       setStripeClientSecret(clientSecret);
+      // FIX1-B1: the direct charge's confirmation context — the CONNECTED
+      // ACCOUNT's own publishable key + the account id. The platform key
+      // cannot confirm another account's client secret (the root cause of
+      // every card checkout failing).
+      if (data.publishableKey) setStripePublishableKey(data.publishableKey);
+      setStripeAccount(data.stripeAccount || null);
     } catch (err: any) {
       console.error('Stripe payment intent error:', err);
       // Provide user-friendly error message based on error type
@@ -689,6 +697,7 @@ export function PaymentMethodModal({
             <StripePaymentModal
               isOpen={!!stripeClientSecret && !isCreatingPaymentIntent}
               clientSecret={stripeClientSecret}
+              stripeAccount={stripeAccount}
               amount={toCents(total, shopCurrency)}
               currency={currencyConfig.stripeCurrency}
               publishableKey={stripePublishableKey}

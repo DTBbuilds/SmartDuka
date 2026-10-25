@@ -94,6 +94,10 @@ export class StripePaymentService {
     amount: number;
     currency: string;
     minimumAmount?: number;
+    /** FIX1-B1: the connected account's OWN publishable key for Elements. */
+    publishableKey?: string;
+    /** FIX1-B1: the connected account id (Stripe-Account context). */
+    stripeAccount?: string;
   }> {
     const currency = params.currency || 'kes';
 
@@ -106,7 +110,10 @@ export class StripePaymentService {
       throw new BadRequestException(validation.message);
     }
 
-    // Check for existing payment intent for this order to ensure idempotency
+    // Check for existing payment intent for this order to ensure idempotency.
+    // FIX1-C: the reuse path must ALSO verify the connected account still
+    // matches — a pending intent created before a disconnect/reconnect must
+    // never be reused against a different (or missing) account.
     const existingPayment = await this.paymentModel.findOne({
       shopId: new Types.ObjectId(params.shopId),
       'metadata.orderNumber': params.orderNumber,
@@ -114,33 +121,87 @@ export class StripePaymentService {
         $in: [
           StripePaymentStatus.REQUIRES_PAYMENT_METHOD,
           StripePaymentStatus.REQUIRES_ACTION,
+          StripePaymentStatus.REQUIRES_CONFIRMATION,
         ],
       },
     });
 
     if (existingPayment) {
-      this.logger.log(
-        `Returning existing payment intent ${existingPayment.stripePaymentIntentId} for order ${params.orderNumber}`,
-      );
-      return {
-        paymentIntentId: existingPayment.stripePaymentIntentId,
-        clientSecret: existingPayment.clientSecret!,
-        amount: existingPayment.amount,
-        currency: existingPayment.currency,
-      };
+      const currentAccountId = await this.connectService
+        .requireConnectedAccountId(params.shopId)
+        .catch(() => null);
+      if (
+        !currentAccountId ||
+        currentAccountId !== existingPayment.connectedAccountId
+      ) {
+        // The account changed or the shop disconnected — the stale intent is
+        // unusable. Cancel it best-effort and fall through to a fresh intent.
+        try {
+          await this.stripeService.cancelPaymentIntent(
+            existingPayment.stripePaymentIntentId,
+          );
+        } catch {
+          // Provider cancel is best-effort; the stale intent can never be
+          // confirmed once its account context is gone.
+        }
+        await this.paymentModel.updateOne(
+          { _id: existingPayment._id },
+          { $set: { status: StripePaymentStatus.CANCELED, canceledAt: new Date() } },
+        );
+        this.logger.warn(
+          `Stale pending intent ${existingPayment.stripePaymentIntentId} canceled (account changed/disconnected) — creating a fresh intent`,
+        );
+      } else {
+        this.logger.log(
+          `Returning existing payment intent ${existingPayment.stripePaymentIntentId} for order ${params.orderNumber}`,
+        );
+        return {
+          paymentIntentId: existingPayment.stripePaymentIntentId,
+          clientSecret: existingPayment.clientSecret!,
+          amount: existingPayment.amount,
+          currency: existingPayment.currency,
+          publishableKey: await this.connectService
+            .getAccountContext(params.shopId)
+            .then((c) => c.publishableKey)
+            .catch(() => undefined),
+          stripeAccount: existingPayment.connectedAccountId,
+        };
+      }
     }
 
     // Stripe Connect: require the shop to have a connected account that can accept charges.
     // This both enforces "no card sales without Stripe configured" and routes funds directly
     // to the shop's own Stripe balance — the platform never touches the money.
-    const connectedAccountId =
-      await this.connectService.requireConnectedAccountId(params.shopId);
+    // FIX1-B1: the account context (id + the account's OWN publishable key)
+    // is required to confirm the direct charge with Elements.
+    const accountContext = await this.connectService.getAccountContext(params.shopId);
+    const connectedAccountId = accountContext.accountId;
+    // FIX1-B1: test/live consistency — the connected account must be in the
+    // same mode as the platform key (a live account on a test platform, or
+    // vice versa, can never settle).
+    const platformIsLive = this.configService
+      .get<string>('STRIPE_SECRET_KEY', '')
+      .startsWith('sk_live_');
+    const shopEnv = (await this.connectService.getStatus(params.shopId)).environment;
+    if (shopEnv && (shopEnv === 'live') !== platformIsLive) {
+      throw new BadRequestException(
+        'Card payments are unavailable: the shop\u2019s connected Stripe account and the platform are in different modes. Reconnect the Stripe account.',
+      );
+    }
     const applicationFeeAmount = this.computeApplicationFee(params.amount);
 
-    // Generate idempotency key to prevent duplicate payments on retry
+    // FIX1-C: the idempotency key is DETERMINISTIC per attempt generation —
+    // stable across retries of the same attempt (Stripe returns the same
+    // intent, no duplicate charge), but advanced after a CANCELED intent so
+    // a legitimate re-attempt gets a fresh intent.
+    const canceledGenerations = await this.paymentModel.countDocuments({
+      shopId: new Types.ObjectId(params.shopId),
+      orderId: new Types.ObjectId(params.orderId),
+      status: StripePaymentStatus.CANCELED,
+    });
     const idempotencyKey = this.generateIdempotencyKey(
       params.shopId,
-      params.orderId,
+      `${params.orderId}_${canceledGenerations}`,
       'pos',
     );
 
@@ -201,6 +262,10 @@ export class StripePaymentService {
       clientSecret: paymentIntent.client_secret!,
       amount: params.amount,
       currency,
+      // FIX1-B1: the connected-account context for Elements confirmation —
+      // the account's OWN publishable key + the account id.
+      publishableKey: accountContext.publishableKey,
+      stripeAccount: connectedAccountId,
     };
   }
 
@@ -508,39 +573,111 @@ export class StripePaymentService {
 
     return payment;
   }
+  /**
+   * FIX1-A1 — TENANT-SCOPED, VALIDATED, IDEMPOTENT REFUNDS.
+   *
+   * Ownership: `{ shopId, stripePaymentIntentId }` must match — foreign and
+   * unknown references return the SAME safe 404 (no information disclosure).
+   * Validation: positive amounts, the remaining refundable balance and the
+   * cumulative refunded total are checked BEFORE any Stripe call.
+   * Idempotency: the Stripe refund carries an idempotency key derived from
+   * the logical refund (shop + intent + amount + reason), so a repeated or
+   * concurrent identical request returns the SAME refund instead of
+   * double-refunding; an already-recorded identical refund short-circuits.
+   * Ambiguity: a network failure after the request may have reached Stripe
+   * leaves the refund UNRECORDED locally (never falsely successful) — the
+   * provider truth is re-fetched on the next status sync and via the
+   * charge.refunded webhook.
+   */
   async refundPayment(params: {
+    shopId: string;
     paymentIntentId: string;
     amount?: number;
     reason?: 'duplicate' | 'fraudulent' | 'requested_by_customer';
   }): Promise<StripePaymentDocument> {
+    if (!params.shopId || !Types.ObjectId.isValid(params.shopId)) {
+      throw new NotFoundException('Payment not found');
+    }
+    const shopObjectId = new Types.ObjectId(params.shopId);
+
     const payment = await this.paymentModel.findOne({
       stripePaymentIntentId: params.paymentIntentId,
+      shopId: shopObjectId,
     });
 
     if (!payment) {
+      // Same response for foreign AND unknown references — no disclosure.
       throw new NotFoundException('Payment not found');
     }
 
-    if (payment.status !== StripePaymentStatus.SUCCEEDED) {
+    if (payment.status !== StripePaymentStatus.SUCCEEDED && payment.status !== StripePaymentStatus.PARTIALLY_REFUNDED) {
       throw new BadRequestException('Can only refund succeeded payments');
     }
 
-    const refund = await this.stripeService.createRefund({
-      paymentIntentId: params.paymentIntentId,
-      amount: params.amount,
-      reason: params.reason,
-      // If the original charge was a Direct Charge on a connected account, the refund
-      // must be scoped to that same account — otherwise Stripe returns "No such payment_intent".
-      stripeAccount: payment.connectedAccountId || undefined,
-    });
+    const refundAmount = params.amount ?? payment.amount - (payment.refundedAmount || 0);
+    if (!Number.isFinite(refundAmount) || refundAmount <= 0) {
+      throw new BadRequestException('Refund amount must be positive');
+    }
+    const remaining = payment.amount - (payment.refundedAmount || 0);
+    if (refundAmount > remaining + 0.001) {
+      throw new BadRequestException(
+        `Refund exceeds the remaining refundable balance (${remaining.toFixed(2)})`,
+      );
+    }
 
-    // Update payment record
-    const refundAmount = params.amount || payment.amount;
+    // Idempotency: an already-recorded refund with the same logical identity
+    // short-circuits (repeated clicks / concurrent requests).
+    const refundIdempotencyKey = this.generateIdempotencyKey(
+      params.shopId,
+      `${params.paymentIntentId}:${refundAmount.toFixed(2)}:${params.reason || 'requested_by_customer'}`,
+      'refund',
+    );
+    const existingRefund = (payment.refunds || []).find(
+      (r: any) => r.idempotencyKey === refundIdempotencyKey && r.status !== 'failed',
+    );
+    if (existingRefund) {
+      this.logger.log(
+        `Refund idempotency: ${refundIdempotencyKey} already recorded (${existingRefund.refundId}) — not refunding again`,
+      );
+      return payment;
+    }
+
+    let refund: Stripe.Refund;
+    try {
+      refund = await this.stripeService.createRefund({
+        paymentIntentId: params.paymentIntentId,
+        amount: refundAmount,
+        reason: params.reason,
+        idempotencyKey: refundIdempotencyKey,
+        // If the original charge was a Direct Charge on a connected account, the refund
+        // must be scoped to that same account — otherwise Stripe returns "No such payment_intent".
+        stripeAccount: payment.connectedAccountId || undefined,
+      });
+    } catch (err: any) {
+      // Ambiguous provider outcome (network failure after the request may
+      // have reached Stripe): the refund may exist on Stripe — do NOT record
+      // it locally as successful. The next status sync / charge.refunded
+      // webhook converges the truth.
+      const ambiguous =
+        err?.code === 'ETIMEDOUT' || err?.code === 'ECONNRESET' ||
+        /timeout|network/i.test(err?.message || '');
+      if (ambiguous) {
+        this.logger.warn(
+          `Refund outcome AMBIGUOUS for ${params.paymentIntentId} — not recorded locally; provider truth will converge`,
+        );
+        throw new BadRequestException(
+          'The refund outcome is currently unknown (the payment provider may still be processing it). Check the payment status before retrying.',
+        );
+      }
+      throw err;
+    }
+
+    // Update payment record (tenant-scoped)
     const newRefundedAmount = (payment.refundedAmount || 0) + refundAmount;
-    const isFullyRefunded = newRefundedAmount >= payment.amount;
+    const isFullyRefunded = newRefundedAmount >= payment.amount - 0.001;
 
     await this.paymentModel.updateOne(
-      { stripePaymentIntentId: params.paymentIntentId },
+      { stripePaymentIntentId: params.paymentIntentId, shopId: shopObjectId },
       {
         $set: {
           status: isFullyRefunded
@@ -554,6 +691,7 @@ export class StripePaymentService {
             amount: refundAmount,
             reason: params.reason,
             status: refund.status,
+            idempotencyKey: refundIdempotencyKey,
             createdAt: new Date(),
           },
         },
@@ -561,12 +699,58 @@ export class StripePaymentService {
     );
 
     this.logger.log(
-      `Refunded ${refundAmount} for payment ${params.paymentIntentId}`,
+      `Refunded ${refundAmount} for payment ${params.paymentIntentId} (shop ${params.shopId})`,
     );
 
     return this.paymentModel.findOne({
       stripePaymentIntentId: params.paymentIntentId,
+      shopId: shopObjectId,
     }) as Promise<StripePaymentDocument>;
+  }
+
+  /**
+   * FIX1-C — EXTERNAL REFUND CONVERGENCE (provider truth).
+   *
+   * Refunds initiated in the SHOP'S OWN Stripe dashboard (outside
+   * SmartDuka) arrive via the charge.refunded webhook. The charge's
+   * amount_refunded is the authoritative cumulative total; the local
+   * record converges idempotently (the refund id is recorded once).
+   */
+  async convergeExternalRefund(
+    paymentIntentId: string,
+    charge: { id: string; amount_refunded?: number; refunds?: { data?: Array<any> } },
+  ): Promise<void> {
+    const payment = await this.paymentModel.findOne({ stripePaymentIntentId: paymentIntentId });
+    if (!payment) {
+      return;
+    }
+    const refund = charge.refunds?.data?.[0];
+    const refundId = refund?.id || `charge_${charge.id}`;
+    if ((payment.refunds || []).some((r: any) => r.refundId === refundId)) {
+      return; // idempotent
+    }
+    const refundedAmount = charge.amount_refunded ?? (payment.refundedAmount || 0);
+    const isFullyRefunded = refundedAmount >= payment.amount - 0.001;
+    await this.paymentModel.updateOne(
+      { stripePaymentIntentId: paymentIntentId },
+      {
+        $set: {
+          status: isFullyRefunded ? StripePaymentStatus.REFUNDED : StripePaymentStatus.PARTIALLY_REFUNDED,
+          refundedAmount,
+        },
+        $push: {
+          refunds: {
+            refundId,
+            amount: refund?.amount ?? refundedAmount - (payment.refundedAmount || 0),
+            reason: refund?.reason,
+            status: refund?.status || 'succeeded',
+            source: 'stripe_dashboard',
+            createdAt: new Date(),
+          },
+        },
+      },
+    );
+    this.logger.log(`External refund converged for ${paymentIntentId} (charge ${charge.id})`);
   }
 
   /**
@@ -613,8 +797,41 @@ export class StripePaymentService {
   async handlePaymentIntentEvent(event: Stripe.Event): Promise<void> {
     const paymentIntent = event.data.object as Stripe.PaymentIntent;
 
+    // FIX1-A3: verified bindings before any financial mutation.
+    // 1) ACCOUNT CONTEXT: when the event arrives in a connected-account
+    //    context (event.account), it must match the local record's
+    //    connectedAccountId — a mismatched account never mutates state.
+    // 2) The local record is the canonical binding (unique by PI id,
+    //    created shop-scoped); unknown intents are ignored here (the
+    //    subscription metadata recovery path handles its own binding).
+    const existing = await this.paymentModel
+      .findOne({ stripePaymentIntentId: paymentIntent.id })
+      .select('connectedAccountId status shopId')
+      .lean();
+    if (existing && event.account && existing.connectedAccountId && event.account !== existing.connectedAccountId) {
+      this.logger.warn(
+        `Webhook event account ${event.account} does not match payment ${paymentIntent.id} bound account ${existing.connectedAccountId} — ignoring`,
+      );
+      return;
+    }
+
+    // FIX1-A3: terminal-state reorder guard — a duplicate/reordered event
+    // must never regress a terminal state (succeeded/refunded/canceled).
+    const currentStatus = (existing as any)?.status as StripePaymentStatus | undefined;
+    const nextStatus = this.mapStripeStatus(paymentIntent.status);
+    if (
+      currentStatus &&
+      [StripePaymentStatus.SUCCEEDED, StripePaymentStatus.REFUNDED, StripePaymentStatus.PARTIALLY_REFUNDED, StripePaymentStatus.CANCELED].includes(currentStatus) &&
+      ![StripePaymentStatus.REFUNDED, StripePaymentStatus.PARTIALLY_REFUNDED].includes(nextStatus)
+    ) {
+      this.logger.log(
+        `Webhook event would regress payment ${paymentIntent.id} from ${currentStatus} to ${nextStatus} — ignoring`,
+      );
+      return;
+    }
+
     const updateData: any = {
-      status: this.mapStripeStatus(paymentIntent.status),
+      status: nextStatus,
     };
 
     if (paymentIntent.status === 'succeeded') {
@@ -867,12 +1084,19 @@ export class StripePaymentService {
   /**
    * Generate idempotency key for payment operations
    */
+  /**
+   * FIX1-C: DETERMINISTIC idempotency keys. The previous implementation
+   * embedded Date.now(), so every retry produced a DIFFERENT key and Stripe
+   * created a duplicate PaymentIntent/charge. A logical operation must map
+   * to ONE key: retries with the same (shop, identifier, type) return the
+   * same provider object.
+   */
   private generateIdempotencyKey(
     shopId: string,
     identifier: string,
     type: string,
   ): string {
-    return `${shopId}_${identifier}_${type}_${Date.now()}`;
+    return `${shopId}_${identifier}_${type}`.replace(/[^a-zA-Z0-9_.:-]/g, '_');
   }
 
   /**
