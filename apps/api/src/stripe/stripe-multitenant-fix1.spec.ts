@@ -47,20 +47,32 @@ describe('SMARTDUKA_STRIPE_MULTITENANT_FIX1 — Stripe acceptance suite', () => 
             (!stripePaymentIntentId || stripePaymentIntentId === payment.stripePaymentIntentId);
           return Promise.resolve(matches ? payment : null);
         }),
-        updateOne: jest.fn(async (_f: any, u: any) => {
+        updateOne: jest.fn(async (f: any, u: any) => {
+          // Honor the race-safe guard: 'refunds.idempotencyKey': { $ne: key }
+          // — when the refund is already recorded, the update matches
+          // NOTHING (never double-accumulates).
+          const guard = f['refunds.idempotencyKey'];
+          if (guard?.$ne && payment.refunds.some((r: any) => r.idempotencyKey === guard.$ne)) {
+            return { matchedCount: 0, modifiedCount: 0 };
+          }
           updates.push(u);
           if (u.$set?.status) payment.status = u.$set.status;
           if (u.$set?.refundedAmount !== undefined) payment.refundedAmount = u.$set.refundedAmount;
           if (u.$push?.refunds) payment.refunds.push(u.$push.refunds);
-          return { modifiedCount: 1 };
+          return { matchedCount: 1, modifiedCount: 1 };
         }),
         countDocuments: jest.fn().mockResolvedValue(0),
       });
       const stripeService = {
         createRefund: jest.fn(async (p: any) => {
           if (opts.stripeError) throw opts.stripeError;
-          refundsCreated.push(p);
-          return { id: `re_${refundsCreated.length}`, status: 'succeeded', amount: p.amount };
+          // Simulate Stripe's IDEMPOTENCY-KEY behaviour: the same key
+          // returns the SAME refund object (never a second provider refund).
+          const existing = refundsCreated.find((r) => r.idempotencyKey === p.idempotencyKey);
+          if (existing) return existing;
+          const refund = { id: `re_${refundsCreated.length + 1}`, status: 'succeeded', amount: p.amount, idempotencyKey: p.idempotencyKey };
+          refundsCreated.push(refund);
+          return refund;
         }),
       };
       const service = new StripePaymentService(
@@ -123,6 +135,21 @@ describe('SMARTDUKA_STRIPE_MULTITENANT_FIX1 — Stripe acceptance suite', () => 
       await service.refundPayment({ shopId: SHOP_A, paymentIntentId: 'pi_111', amount: 4000 });
       expect(refundsCreated.length).toBe(callsAfterFirst); // no second Stripe call
       expect(payment.refunds.length).toBe(afterFirst);
+    });
+
+    it('RELEASE-GATE: CONCURRENT identical refunds accumulate exactly once (race-safe)', async () => {
+      const payment = makePaymentDoc();
+      const { service, refundsCreated } = bootRefund(payment);
+      // Two concurrent requests share one Stripe idempotency key → Stripe
+      // returns the SAME refund object to both; the race-safe guarded
+      // update must accumulate it exactly once.
+      await Promise.all([
+        service.refundPayment({ shopId: SHOP_A, paymentIntentId: 'pi_111', amount: 4000 }),
+        service.refundPayment({ shopId: SHOP_A, paymentIntentId: 'pi_111', amount: 4000 }),
+      ]);
+      expect(refundsCreated).toHaveLength(1); // Stripe idempotency: one provider refund
+      expect(payment.refundedAmount).toBe(4000); // NOT 8000
+      expect(payment.refunds.filter((r: any) => r.idempotencyKey)).toHaveLength(1);
     });
 
     it('partial refunds accumulate; the status transitions correctly', async () => {
@@ -453,7 +480,9 @@ describe('SMARTDUKA_STRIPE_MULTITENANT_FIX1 — Stripe acceptance suite', () => 
         shopId: SHOP_A, orderId: ORDER_A, orderNumber: 'STK-A-1', amount: 10000, currency: 'kes',
       });
       expect(result.stripeAccount).toBe('acct_A');
-      expect(result.publishableKey).toBe('pk_acct_A');
+      // RELEASE-GATE CORRECTED: no account-pk retrieval dependency — the
+      // documented pattern is loadStripe(PLATFORM_pk, { stripeAccount }).
+      expect(result.publishableKey).toBeUndefined();
     });
 
     it('a pending intent from a DISCONNECTED account is canceled, not reused', async () => {

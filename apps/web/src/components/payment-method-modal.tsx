@@ -286,11 +286,12 @@ export function PaymentMethodModal({
       
       const { clientSecret } = data;
       setStripeClientSecret(clientSecret);
-      // FIX1-B1: the direct charge's confirmation context — the CONNECTED
-      // ACCOUNT's own publishable key + the account id. The platform key
-      // cannot confirm another account's client secret (the root cause of
-      // every card checkout failing).
-      if (data.publishableKey) setStripePublishableKey(data.publishableKey);
+      // FIX1-B1 (RELEASE-GATE CORRECTED): per the official Stripe.js docs,
+      // a direct charge is confirmed with the PLATFORM publishable key plus
+      // the connected account id — loadStripe(platformPk, { stripeAccount }).
+      // The account id comes from the server-verified checkout result (never
+      // the browser); the platform key was already fetched from
+      // /stripe/config above.
       setStripeAccount(data.stripeAccount || null);
     } catch (err: any) {
       console.error('Stripe payment intent error:', err);

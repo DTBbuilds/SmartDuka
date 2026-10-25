@@ -3,7 +3,7 @@ import { getModelToken } from '@nestjs/mongoose';
 import { InventoryService } from './inventory.service';
 import { Product } from './schemas/product.schema';
 import { Category } from './schemas/category.schema';
-import { Adjustment as StockAdjustment } from '../stock/adjustment.schema';
+import { StockAdjustment } from './schemas/stock-adjustment.schema';
 import { SubscriptionGuardService } from '../subscriptions/subscription-guard.service';
 import { CacheService } from '../common/services/cache.service';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
@@ -36,21 +36,48 @@ describe('InventoryService', () => {
 
   beforeEach(async () => {
     // Create mock product model
-    const mockProductModel = {
-      find: jest.fn().mockReturnThis(),
-      findOne: jest.fn().mockReturnThis(),
-      findById: jest.fn().mockReturnThis(),
-      findOneAndUpdate: jest.fn().mockReturnThis(),
-      countDocuments: jest.fn().mockResolvedValue(10),
-      updateOne: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
-      deleteOne: jest.fn().mockResolvedValue({ deletedCount: 1 }),
-      sort: jest.fn().mockReturnThis(),
-      skip: jest.fn().mockReturnThis(),
-      limit: jest.fn().mockReturnThis(),
-      lean: jest.fn().mockReturnThis(),
-      exec: jest.fn().mockResolvedValue([mockProduct]),
-      create: jest.fn().mockResolvedValue(mockProduct),
-    };
+    const mockProductModel: any = Object.assign(
+      jest.fn().mockImplementation((data: any) => ({
+        ...data,
+        save: jest.fn().mockResolvedValue({ ...mockProduct, ...data }),
+      })),
+      {
+        find: jest.fn().mockReturnThis(),
+        findOne: jest.fn((q: any) => ({
+          exec: jest.fn().mockResolvedValue(
+            !q || String(q._id) === mockProductId || !q._id ? mockProduct : null,
+          ),
+          lean: jest.fn(() => ({
+            exec: jest.fn().mockResolvedValue(
+              !q || String(q._id) === mockProductId || !q._id ? mockProduct : null,
+            ),
+          })),
+        })),
+        findById: jest.fn((id: any) => {
+          const chain = {
+            exec: jest.fn().mockResolvedValue(
+              String(id) === mockProductId ? mockProduct : null,
+            ),
+            lean: jest.fn(() => ({
+              exec: jest.fn().mockResolvedValue(
+                String(id) === mockProductId ? mockProduct : null,
+              ),
+            })),
+          };
+          return chain;
+        }),
+        findOneAndUpdate: jest.fn().mockReturnThis(),
+        countDocuments: jest.fn().mockResolvedValue(10),
+        updateOne: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+        deleteOne: jest.fn().mockResolvedValue({ deletedCount: 1 }),
+        sort: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue([mockProduct]),
+        create: jest.fn().mockResolvedValue(mockProduct),
+      },
+    );
 
     const mockCategoryModel = {
       find: jest.fn().mockReturnThis(),
@@ -61,13 +88,27 @@ describe('InventoryService', () => {
       create: jest.fn().mockResolvedValue({ _id: 'cat1', name: 'Test Category' }),
     };
 
-    const mockStockAdjustmentModel = {
-      create: jest.fn().mockResolvedValue({}),
-      find: jest.fn().mockReturnThis(),
-      sort: jest.fn().mockReturnThis(),
-      limit: jest.fn().mockReturnThis(),
-      exec: jest.fn().mockResolvedValue([]),
-    };
+    const mockStockAdjustmentModel: any = Object.assign(
+      jest.fn().mockImplementation((data: any) => ({
+        ...data,
+        save: jest.fn().mockResolvedValue({ ...data, _id: 'adj1' }),
+      })),
+      {
+        create: jest.fn().mockResolvedValue({}),
+        // findOne (mutation-witness lookup) must resolve NULL — no existing
+        // audit — so a NEW mutation proceeds; find chains resolve [].
+        findOne: jest.fn(() => ({
+          exec: jest.fn().mockResolvedValue(null),
+          lean: jest.fn(() => ({ exec: jest.fn().mockResolvedValue(null) })),
+        })),
+        find: jest.fn(() => ({
+          sort: jest.fn().mockReturnThis(),
+          limit: jest.fn().mockReturnThis(),
+          lean: jest.fn().mockReturnThis(),
+          exec: jest.fn().mockResolvedValue([]),
+        })),
+      },
+    );
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -83,6 +124,18 @@ describe('InventoryService', () => {
         {
           provide: getModelToken(StockAdjustment.name),
           useValue: mockStockAdjustmentModel,
+        },
+        {
+          provide: getModelToken('StockReconciliation'),
+          useValue: { findOne: jest.fn(), find: jest.fn(), create: jest.fn() },
+        },
+        {
+          provide: getModelToken('Order'),
+          useValue: { findOne: jest.fn(), find: jest.fn(), countDocuments: jest.fn().mockResolvedValue(0) },
+        },
+        {
+          provide: require('./services/category-suggestion.service').CategorySuggestionService,
+          useValue: { suggest: jest.fn().mockResolvedValue([]) },
         },
         {
           provide: SubscriptionGuardService,
@@ -164,9 +217,9 @@ describe('InventoryService', () => {
     });
 
     it('should throw NotFoundException for non-existent product', async () => {
-      productModel.findOne.mockReturnValue({
-        exec: jest.fn().mockResolvedValue(null),
-      });
+      // The service awaits the query directly (thenable) — mock the
+      // RESOLVED VALUE, not an {exec} wrapper.
+      productModel.findOne.mockResolvedValue(null);
 
       await expect(
         service.deleteProduct(mockShopId, mockProductId)
@@ -274,7 +327,8 @@ describe('InventoryService', () => {
 
       expect(productModel.findOne).toHaveBeenCalledWith(
         expect.objectContaining({
-          sku: 'TEST-001',
+          sku: { $regex: '^TEST-001$', $options: 'i' },
+          status: 'active',
         })
       );
       expect(result).toBeDefined();
@@ -326,7 +380,7 @@ describe('InventoryService', () => {
         'Test adjustment'
       );
 
-      expect(stockAdjustmentModel.create).toHaveBeenCalledWith(
+      expect(stockAdjustmentModel).toHaveBeenCalledWith(
         expect.objectContaining({
           shopId: expect.any(Types.ObjectId),
           productId: expect.any(Types.ObjectId),

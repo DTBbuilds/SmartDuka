@@ -379,13 +379,6 @@ export class StripeConnectService {
       disabledReason: account.requirements?.disabled_reason || undefined,
       country: account.country || undefined,
       defaultCurrency: account.default_currency || undefined,
-      // FIX1-B1: the CONNECTED ACCOUNT's own publishable key — required to
-      // confirm direct charges with Elements (the platform key cannot
-      // confirm another account's client secret).
-      publishableKey:
-        ((account.settings?.dashboard as any)?.publishable_key as string | undefined) ||
-        (shop.stripeConnect as any)?.publishableKey ||
-        undefined,
       displayName:
         (account.business_profile?.name as string | undefined) ||
         (account.settings?.dashboard?.display_name as string | undefined) ||
@@ -489,48 +482,33 @@ export class StripeConnectService {
   }
 
   /**
-   * FIX1-B1 — the CONNECTED-ACCOUNT context for Elements confirmation.
-   * A direct charge's client secret can only be confirmed with the
-   * CONNECTED ACCOUNT's publishable key (loadStripe(pk, { stripeAccount })).
-   * The key is captured at sync time from accounts.retrieve; if missing
-   * (older sync), fetch it once now.
+   * FIX1-B1 (RELEASE-GATE CORRECTED) — the CONNECTED-ACCOUNT context for
+   * Elements confirmation.
+   *
+   * Per the official Stripe.js documentation, a direct charge is confirmed
+   * with the PLATFORM's publishable key plus the connected account id:
+   *   loadStripe(platformPublishableKey, { stripeAccount: connectedAccountId })
+   * The connected account's own publishable key is NOT used — Stripe does
+   * not document `settings.dashboard.publishable_key` as an exposed field
+   * for OAuth-connected Standard accounts, and depending on it would add an
+   * unsupported key-retrieval dependency. The frontend obtains the platform
+   * key from GET /stripe/config and the account id from THIS server-verified
+   * record (never from the browser).
    */
   async getAccountContext(shopId: string): Promise<{
     accountId: string;
-    publishableKey?: string;
     defaultCurrency?: string;
     country?: string;
   }> {
     const accountId = await this.requireConnectedAccountId(shopId);
     const shop = await this.shopModel
       .findById(shopId)
-      .select('stripeConnect.publishableKey stripeConnect.defaultCurrency stripeConnect.country currency')
+      .select('stripeConnect.defaultCurrency stripeConnect.country')
       .lean()
       .exec();
     const cfg: any = (shop as any)?.stripeConnect || {};
-    let publishableKey = cfg.publishableKey;
-
-    if (!publishableKey) {
-      // Older sync without the key — fetch once and persist.
-      try {
-        const account = await this.stripeService.getClient().accounts.retrieve(accountId);
-        publishableKey =
-          ((account.settings?.dashboard as any)?.publishable_key as string | undefined) || undefined;
-        if (publishableKey) {
-          await this.shopModel.updateOne(
-            { _id: new Types.ObjectId(shopId) },
-            { $set: { 'stripeConnect.publishableKey': publishableKey } },
-          );
-        }
-      } catch (err: any) {
-        this.logger.warn(`Could not fetch the connected account's publishable key: ${err?.message}`);
-      }
-    }
-
-    // FIX1-B3: currency compatibility signal for the caller/UI.
     return {
       accountId,
-      publishableKey,
       defaultCurrency: cfg.defaultCurrency,
       country: cfg.country,
     };

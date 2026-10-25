@@ -94,9 +94,9 @@ export class StripePaymentService {
     amount: number;
     currency: string;
     minimumAmount?: number;
-    /** FIX1-B1: the connected account's OWN publishable key for Elements. */
-    publishableKey?: string;
-    /** FIX1-B1: the connected account id (Stripe-Account context). */
+    /** FIX1-B1: the connected account id (Stripe-Account context) — the
+     *  frontend combines it with the PLATFORM publishable key:
+     *  loadStripe(platformPk, { stripeAccount }). */
     stripeAccount?: string;
   }> {
     const currency = params.currency || 'kes';
@@ -160,10 +160,6 @@ export class StripePaymentService {
           clientSecret: existingPayment.clientSecret!,
           amount: existingPayment.amount,
           currency: existingPayment.currency,
-          publishableKey: await this.connectService
-            .getAccountContext(params.shopId)
-            .then((c) => c.publishableKey)
-            .catch(() => undefined),
           stripeAccount: existingPayment.connectedAccountId,
         };
       }
@@ -262,9 +258,8 @@ export class StripePaymentService {
       clientSecret: paymentIntent.client_secret!,
       amount: params.amount,
       currency,
-      // FIX1-B1: the connected-account context for Elements confirmation —
-      // the account's OWN publishable key + the account id.
-      publishableKey: accountContext.publishableKey,
+      // FIX1-B1: the connected-account id — the frontend combines it with
+      // the PLATFORM publishable key (loadStripe(platformPk, {stripeAccount})).
       stripeAccount: connectedAccountId,
     };
   }
@@ -672,12 +667,21 @@ export class StripePaymentService {
       throw err;
     }
 
-    // Update payment record (tenant-scoped)
+    // Update payment record (tenant-scoped, RACE-SAFE): the filter's
+    // $ne on the refund idempotency key makes the update atomic — two
+    // concurrent refunds sharing one Stripe idempotency key both receive
+    // the SAME refund object from Stripe, but only the FIRST update
+    // accumulates it locally; the loser's update matches nothing (the
+    // refunded amount is never double-counted).
     const newRefundedAmount = (payment.refundedAmount || 0) + refundAmount;
     const isFullyRefunded = newRefundedAmount >= payment.amount - 0.001;
 
-    await this.paymentModel.updateOne(
-      { stripePaymentIntentId: params.paymentIntentId, shopId: shopObjectId },
+    const refundUpdate = await this.paymentModel.updateOne(
+      {
+        stripePaymentIntentId: params.paymentIntentId,
+        shopId: shopObjectId,
+        'refunds.idempotencyKey': { $ne: refundIdempotencyKey },
+      },
       {
         $set: {
           status: isFullyRefunded
@@ -697,6 +701,13 @@ export class StripePaymentService {
         },
       },
     );
+    if (refundUpdate.matchedCount === 0) {
+      // A concurrent identical refund won the race — the refund is recorded
+      // once; this caller observes the already-refunded state.
+      this.logger.log(
+        `Refund ${refundIdempotencyKey} was recorded concurrently — no double accumulation`,
+      );
+    }
 
     this.logger.log(
       `Refunded ${refundAmount} for payment ${params.paymentIntentId} (shop ${params.shopId})`,
@@ -718,7 +729,7 @@ export class StripePaymentService {
    */
   async convergeExternalRefund(
     paymentIntentId: string,
-    charge: { id: string; amount_refunded?: number; refunds?: { data?: Array<any> } },
+    charge: { id: string; amount_refunded?: number; refunds?: any },
   ): Promise<void> {
     const payment = await this.paymentModel.findOne({ stripePaymentIntentId: paymentIntentId });
     if (!payment) {
@@ -731,8 +742,10 @@ export class StripePaymentService {
     }
     const refundedAmount = charge.amount_refunded ?? (payment.refundedAmount || 0);
     const isFullyRefunded = refundedAmount >= payment.amount - 0.001;
+    // RACE-SAFE (FIX1 gate): the refund-id guard makes concurrent webhook
+    // redelivery + status-sync convergence accumulate exactly once.
     await this.paymentModel.updateOne(
-      { stripePaymentIntentId: paymentIntentId },
+      { stripePaymentIntentId: paymentIntentId, 'refunds.refundId': { $ne: refundId } },
       {
         $set: {
           status: isFullyRefunded ? StripePaymentStatus.REFUNDED : StripePaymentStatus.PARTIALLY_REFUNDED,

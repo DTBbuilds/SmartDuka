@@ -16,8 +16,11 @@ describe('AppController', () => {
   });
 
   describe('root', () => {
-    it('should return "Hello World!"', () => {
-      expect(appController.getHello()).toBe('Hello World!');
+    it('returns the API descriptor (name/version/status/endpoints)', () => {
+      const result = appController.getRoot() as any;
+      expect(result.name).toBe('SmartDuka API');
+      expect(result.status).toBe('running');
+      expect(result.endpoints.health).toBe('/health');
     });
   });
 });
