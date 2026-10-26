@@ -47,7 +47,10 @@ describe('POS-CURRENCY-CHECKOUT-P0 legacy currency remediation', () => {
       findOneAndUpdate: jest
         .fn()
         .mockImplementation((filter: any, update: any) => {
-          if (filter.currency !== undefined && shopDoc.currency !== filter.currency) {
+          if (
+            filter.currency !== undefined &&
+            shopDoc.currency !== filter.currency
+          ) {
             return { exec: jest.fn().mockResolvedValue(null) }; // CAS fails
           }
           Object.assign(shopDoc, update.$set || update);
@@ -57,10 +60,12 @@ describe('POS-CURRENCY-CHECKOUT-P0 legacy currency remediation', () => {
     service = new SuperAdminService(
       shopModel as any,
       {} as any,
-      { findOne: jest.fn(() => ({ exec: jest.fn().mockResolvedValue(null) })) } as any,
+      {
+        findOne: jest.fn(() => ({ exec: jest.fn().mockResolvedValue(null) })),
+      } as any,
       {} as any,
       {} as any,
-      auditLogService as any,
+      auditLogService,
       undefined,
       undefined,
       { countDocuments: jest.fn().mockResolvedValue(0) } as any, // paymentTransactionModel
@@ -163,7 +168,9 @@ describe('POS-CURRENCY-CHECKOUT-P0 legacy currency remediation', () => {
   it('concurrent financial activity inside the quiet window aborts the remediation', async () => {
     boot();
     // Re-inject an order model reporting a fresh order.
-    (service as any).orderModel = { countDocuments: jest.fn().mockResolvedValue(1) };
+    (service as any).orderModel = {
+      countDocuments: jest.fn().mockResolvedValue(1),
+    };
     await expect(
       service.remediateBaseCurrency(SHOP, SA, validDto),
     ).rejects.toThrow(/Concurrent financial activity/i);

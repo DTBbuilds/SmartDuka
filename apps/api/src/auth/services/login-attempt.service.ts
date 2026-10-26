@@ -65,10 +65,7 @@ export class LoginAttemptService {
     const existing = this.attempts.get(key);
 
     // Reset window if expired
-    if (
-      !existing ||
-      now - existing.firstAttemptAt > this.ATTEMPT_WINDOW_MS
-    ) {
+    if (!existing || now - existing.firstAttemptAt > this.ATTEMPT_WINDOW_MS) {
       this.attempts.set(key, {
         count: 1,
         firstAttemptAt: now,

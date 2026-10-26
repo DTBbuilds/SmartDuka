@@ -24,7 +24,9 @@ import { Server, Socket } from 'socket.io';
   },
   transports: ['polling', 'websocket'],
 })
-export class EventsGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
+export class EventsGateway
+  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
+{
   @WebSocketServer() server: Server;
   private readonly logger = new Logger(EventsGateway.name);
   private userSockets: Map<string, Set<string>> = new Map(); // userId -> Set of socketIds
@@ -48,7 +50,9 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection, OnGate
       client.join(`shop:${shopId}`);
       client.join(`user:${userId}`);
 
-      this.logger.log(`Client ${client.id} connected (user: ${userId}, shop: ${shopId})`);
+      this.logger.log(
+        `Client ${client.id} connected (user: ${userId}, shop: ${shopId})`,
+      );
     }
   }
 

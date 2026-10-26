@@ -1,6 +1,17 @@
-import { Body, Controller, Get, Post, Param, UseGuards, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Param,
+  UseGuards,
+  Query,
+} from '@nestjs/common';
 import { PaymentReversalService } from './payment-reversal.service';
-import { ReversePaymentDto, GetReversalHistoryDto } from './dto/payment-reversal.dto';
+import {
+  ReversePaymentDto,
+  GetReversalHistoryDto,
+} from './dto/payment-reversal.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -35,7 +46,11 @@ export class PaymentReversalController {
   ) {
     const startDate = query.startDate ? new Date(query.startDate) : undefined;
     const endDate = query.endDate ? new Date(query.endDate) : undefined;
-    return this.reversalService.getReversalHistory(user.shopId, startDate, endDate);
+    return this.reversalService.getReversalHistory(
+      user.shopId,
+      startDate,
+      endDate,
+    );
   }
 
   @Get('stats')

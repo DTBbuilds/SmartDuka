@@ -49,21 +49,33 @@ function localYmd(instant: Date, timeZone: string): string {
 }
 
 /** UTC instants covering [startOfDay, nextDay) for a shop-local Y-M-D. */
-function shopDayRangeUtc(ymd: string, timeZone: string): { start: Date; end: Date } {
+function shopDayRangeUtc(
+  ymd: string,
+  timeZone: string,
+): { start: Date; end: Date } {
   // Midday trick: noon in the target zone is never near a DST/offset edge,
   // so formatting back yields the correct offset for that calendar day.
   const probe = new Date(`${ymd}T12:00:00Z`);
   const formatter = new Intl.DateTimeFormat('en-US', {
     timeZone,
     hour12: false,
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
   });
   const parts = formatter.formatToParts(probe);
-  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? 0);
+  const get = (t: string) =>
+    Number(parts.find((p) => p.type === t)?.value ?? 0);
   const asUtc = Date.UTC(
-    get('year'), get('month') - 1, get('day'),
-    get('hour') % 24, get('minute'), get('second'),
+    get('year'),
+    get('month') - 1,
+    get('day'),
+    get('hour') % 24,
+    get('minute'),
+    get('second'),
   );
   const offsetMs = asUtc - probe.getTime();
   const start = new Date(new Date(`${ymd}T00:00:00Z`).getTime() - offsetMs);
@@ -108,7 +120,8 @@ function accumulateOrders(orders: any[]): CanonicalOrderFacts {
     facts.orders += 1;
     facts.billedRevenue += order.total || 0;
     facts.tax += order.tax || 0;
-    facts.discounts += (order.loyaltyDiscount || 0) + (order.discountAmount || 0);
+    facts.discounts +=
+      (order.loyaltyDiscount || 0) + (order.discountAmount || 0);
     for (const d of order.discounts || []) facts.discounts += d.amount || 0;
     for (const r of order.refunds || []) {
       if (r.status === 'completed') facts.refunds += r.amount || 0;
@@ -117,7 +130,10 @@ function accumulateOrders(orders: any[]): CanonicalOrderFacts {
       if (p.status === 'completed') {
         facts.collectedPayments += p.amount || 0;
         const m = p.method || 'unknown';
-        facts.paymentMethods.set(m, (facts.paymentMethods.get(m) || 0) + (p.amount || 0));
+        facts.paymentMethods.set(
+          m,
+          (facts.paymentMethods.get(m) || 0) + (p.amount || 0),
+        );
       }
     }
     const cur = order.currency ? String(order.currency) : '(unlabelled)';
@@ -137,7 +153,8 @@ function accumulateOrders(orders: any[]): CanonicalOrderFacts {
       }
       const prod = facts.productMap.get(key)!;
       prod.quantity += item.quantity || 0;
-      prod.revenue += item.lineTotal ?? (item.unitPrice || 0) * (item.quantity || 0);
+      prod.revenue +=
+        item.lineTotal ?? (item.unitPrice || 0) * (item.quantity || 0);
     }
   }
 
@@ -149,7 +166,10 @@ function accumulateOrders(orders: any[]): CanonicalOrderFacts {
   return facts;
 }
 
-function topProductsFrom(productMap: Map<string, { name: string; quantity: number; revenue: number }>, limit = 10) {
+function topProductsFrom(
+  productMap: Map<string, { name: string; quantity: number; revenue: number }>,
+  limit = 10,
+) {
   return Array.from(productMap.entries())
     .map(([productId, data]) => ({
       productId,
@@ -162,7 +182,10 @@ function topProductsFrom(productMap: Map<string, { name: string; quantity: numbe
 }
 
 /** The period's dominant currency: order snapshots first, majority wins. */
-function dominantCurrency(facts: CanonicalOrderFacts, shopCurrency?: string): string | undefined {
+function dominantCurrency(
+  facts: CanonicalOrderFacts,
+  shopCurrency?: string,
+): string | undefined {
   let best: string | undefined;
   let bestN = 0;
   for (const [cur, n] of facts.currencies.entries()) {
@@ -296,7 +319,11 @@ export class ReportsService {
   }
 
   /** Canonical facts for an explicit [start, end) UTC instant range. */
-  async factsForRange(shopId: string, start: Date, end: Date): Promise<CanonicalOrderFacts> {
+  async factsForRange(
+    shopId: string,
+    start: Date,
+    end: Date,
+  ): Promise<CanonicalOrderFacts> {
     const orders = await this.orderModel
       .find({
         shopId: new Types.ObjectId(shopId),
@@ -329,7 +356,8 @@ export class ReportsService {
       currency: dominantCurrency(facts, currency),
       orders: facts.orders,
       itemsSold: facts.itemsSold,
-      averageOrderValue: facts.orders > 0 ? round2(facts.billedRevenue / facts.orders) : 0,
+      averageOrderValue:
+        facts.orders > 0 ? round2(facts.billedRevenue / facts.orders) : 0,
       paymentMethods: Array.from(facts.paymentMethods.entries())
         .map(([method, amount]) => ({ method, amount: round2(amount) }))
         .sort((a, b) => b.amount - a.amount),
@@ -371,13 +399,19 @@ export class ReportsService {
       const acc = dayFacts.get(ymd)!;
       acc.orders += single.orders;
       acc.billedRevenue = round2(acc.billedRevenue + single.billedRevenue);
-      acc.collectedPayments = round2(acc.collectedPayments + single.collectedPayments);
+      acc.collectedPayments = round2(
+        acc.collectedPayments + single.collectedPayments,
+      );
       acc.refunds = round2(acc.refunds + single.refunds);
       acc.tax = round2(acc.tax + single.tax);
       acc.discounts = round2(acc.discounts + single.discounts);
       acc.itemsSold += single.itemsSold;
       for (const [k, v] of single.productMap) {
-        const existing = acc.productMap.get(k) || { name: v.name, quantity: 0, revenue: 0 };
+        const existing = acc.productMap.get(k) || {
+          name: v.name,
+          quantity: 0,
+          revenue: 0,
+        };
         existing.quantity += v.quantity;
         existing.revenue = round2(existing.revenue + v.revenue);
         acc.productMap.set(k, existing);
@@ -406,8 +440,11 @@ export class ReportsService {
         currency: dominantCurrency(f, currency),
         orders: f.orders,
         itemsSold: f.itemsSold,
-        averageOrderValue: f.orders > 0 ? round2(f.billedRevenue / f.orders) : 0,
-        paymentMethods: Array.from(f.paymentMethods.entries()).map(([method, amount]) => ({ method, amount: round2(amount) })),
+        averageOrderValue:
+          f.orders > 0 ? round2(f.billedRevenue / f.orders) : 0,
+        paymentMethods: Array.from(f.paymentMethods.entries()).map(
+          ([method, amount]) => ({ method, amount: round2(amount) }),
+        ),
         topProducts: topProductsFrom(f.productMap, 5),
       });
       cursor.setUTCDate(cursor.getUTCDate() + 1);
@@ -428,7 +465,8 @@ export class ReportsService {
       currency: dominantCurrency(facts, currency),
       orders: facts.orders,
       itemsSold: facts.itemsSold,
-      averageOrderValue: facts.orders > 0 ? round2(facts.billedRevenue / facts.orders) : 0,
+      averageOrderValue:
+        facts.orders > 0 ? round2(facts.billedRevenue / facts.orders) : 0,
       dailyBreakdown,
       topProducts: topProductsFrom(facts.productMap),
     };
@@ -467,10 +505,14 @@ export class ReportsService {
       .exec();
 
     const weeklyReports: WeeklySalesReport[] = [];
-    const weekCount = Math.ceil((end.getTime() - start.getTime()) / (7 * 24 * 60 * 60 * 1000));
+    const weekCount = Math.ceil(
+      (end.getTime() - start.getTime()) / (7 * 24 * 60 * 60 * 1000),
+    );
     for (let w = 0; w < weekCount; w++) {
       const wStart = new Date(start.getTime() + w * 7 * 24 * 60 * 60 * 1000);
-      const wEnd = new Date(Math.min(wStart.getTime() + 7 * 24 * 60 * 60 * 1000, end.getTime()));
+      const wEnd = new Date(
+        Math.min(wStart.getTime() + 7 * 24 * 60 * 60 * 1000, end.getTime()),
+      );
       const wFacts = accumulateOrders(
         orders.filter((o: any) => o.createdAt >= wStart && o.createdAt < wEnd),
       );
@@ -487,15 +529,26 @@ export class ReportsService {
         currency: dominantCurrency(wFacts, currency),
         orders: wFacts.orders,
         itemsSold: wFacts.itemsSold,
-        averageOrderValue: wFacts.orders > 0 ? round2(wFacts.billedRevenue / wFacts.orders) : 0,
+        averageOrderValue:
+          wFacts.orders > 0 ? round2(wFacts.billedRevenue / wFacts.orders) : 0,
         dailyBreakdown: [],
         topProducts: topProductsFrom(wFacts.productMap, 5),
       });
     }
 
     const monthNames = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December',
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
     ];
 
     return {
@@ -510,13 +563,17 @@ export class ReportsService {
       currency: dominantCurrency(facts, currency),
       orders: facts.orders,
       itemsSold: facts.itemsSold,
-      averageOrderValue: facts.orders > 0 ? round2(facts.billedRevenue / facts.orders) : 0,
+      averageOrderValue:
+        facts.orders > 0 ? round2(facts.billedRevenue / facts.orders) : 0,
       weeklyBreakdown: weeklyReports,
       topProducts: topProductsFrom(facts.productMap),
     };
   }
 
-  async getSalesMetrics(shopId: string, days: number = 30): Promise<SalesMetrics> {
+  async getSalesMetrics(
+    shopId: string,
+    days: number = 30,
+  ): Promise<SalesMetrics> {
     const tz = await this.getShopTimezone(shopId);
     const end = new Date();
     const start = new Date(end.getTime() - days * 24 * 60 * 60 * 1000);
@@ -530,8 +587,12 @@ export class ReportsService {
       tax: facts.tax,
       totalOrders: facts.orders,
       totalItemsSold: facts.itemsSold,
-      averageOrderValue: facts.orders > 0 ? round2(facts.billedRevenue / facts.orders) : 0,
-      averageItemsPerOrder: facts.orders > 0 ? Math.round((facts.itemsSold / facts.orders) * 100) / 100 : 0,
+      averageOrderValue:
+        facts.orders > 0 ? round2(facts.billedRevenue / facts.orders) : 0,
+      averageItemsPerOrder:
+        facts.orders > 0
+          ? Math.round((facts.itemsSold / facts.orders) * 100) / 100
+          : 0,
       conversionRate: 0, // Would need visitor data to calculate
     };
   }
@@ -551,17 +612,24 @@ export class ReportsService {
       .lean()
       .exec();
 
-    const dailyData: Record<string, { revenue: number; orders: number; collected: number }> = {};
+    const dailyData: Record<
+      string,
+      { revenue: number; orders: number; collected: number }
+    > = {};
     for (const order of orders) {
       const date = localYmd(new Date(order.createdAt), tz);
       if (!dailyData[date]) {
         dailyData[date] = { revenue: 0, orders: 0, collected: 0 };
       }
-      dailyData[date].revenue = round2(dailyData[date].revenue + (order.total || 0));
+      dailyData[date].revenue = round2(
+        dailyData[date].revenue + (order.total || 0),
+      );
       dailyData[date].orders += 1;
       for (const p of order.payments || []) {
         if (p.status === 'completed') {
-          dailyData[date].collected = round2(dailyData[date].collected + (p.amount || 0));
+          dailyData[date].collected = round2(
+            dailyData[date].collected + (p.amount || 0),
+          );
         }
       }
     }

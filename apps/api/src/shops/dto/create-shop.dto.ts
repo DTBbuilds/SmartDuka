@@ -1,22 +1,80 @@
-import { IsEmail, IsString, IsOptional, MinLength, Matches, MaxLength, IsIn, ValidateIf } from 'class-validator';
+import {
+  IsEmail,
+  IsString,
+  IsOptional,
+  MinLength,
+  Matches,
+  MaxLength,
+  IsIn,
+  ValidateIf,
+} from 'class-validator';
 import { Transform } from 'class-transformer';
-import { SUPPORTED_CURRENCIES, SUPPORTED_COUNTRIES } from '../../common/currency';
+import {
+  SUPPORTED_CURRENCIES,
+  SUPPORTED_COUNTRIES,
+} from '../../common/currency';
 
 // Kenya counties
 const KENYA_COUNTIES = [
-  "Baringo", "Bomet", "Bungoma", "Busia", "Elgeyo-Marakwet", "Embu", "Garissa",
-  "Homa Bay", "Isiolo", "Kajiado", "Kakamega", "Kericho", "Kiambu", "Kilifi",
-  "Kirinyaga", "Kisii", "Kisumu", "Kitui", "Kwale", "Laikipia", "Lamu", "Machakos",
-  "Makueni", "Mandera", "Marsabit", "Meru", "Migori", "Mombasa", "Murang'a",
-  "Nairobi", "Nakuru", "Nandi", "Narok", "Nyamira", "Nyandarua", "Nyeri", "Samburu",
-  "Siaya", "Taita-Taveta", "Tana River", "Tharaka-Nithi", "Trans-Nzoia", "Turkana",
-  "Uasin Gishu", "Vihiga", "Wajir", "West Pokot"
+  'Baringo',
+  'Bomet',
+  'Bungoma',
+  'Busia',
+  'Elgeyo-Marakwet',
+  'Embu',
+  'Garissa',
+  'Homa Bay',
+  'Isiolo',
+  'Kajiado',
+  'Kakamega',
+  'Kericho',
+  'Kiambu',
+  'Kilifi',
+  'Kirinyaga',
+  'Kisii',
+  'Kisumu',
+  'Kitui',
+  'Kwale',
+  'Laikipia',
+  'Lamu',
+  'Machakos',
+  'Makueni',
+  'Mandera',
+  'Marsabit',
+  'Meru',
+  'Migori',
+  'Mombasa',
+  "Murang'a",
+  'Nairobi',
+  'Nakuru',
+  'Nandi',
+  'Narok',
+  'Nyamira',
+  'Nyandarua',
+  'Nyeri',
+  'Samburu',
+  'Siaya',
+  'Taita-Taveta',
+  'Tana River',
+  'Tharaka-Nithi',
+  'Trans-Nzoia',
+  'Turkana',
+  'Uasin Gishu',
+  'Vihiga',
+  'Wajir',
+  'West Pokot',
 ];
 
 // Australian states/territories
 const AUSTRALIA_STATES = [
-  "Australian Capital Territory", "New South Wales", "Northern Territory",
-  "Queensland", "South Australia", "Tasmania", "Victoria", "Western Australia"
+  'Australian Capital Territory',
+  'New South Wales',
+  'Northern Territory',
+  'Queensland',
+  'South Australia',
+  'Tasmania',
+  'Victoria',
+  'Western Australia',
 ];
 
 const ALL_REGIONS = [...KENYA_COUNTIES, ...AUSTRALIA_STATES];
@@ -64,9 +122,15 @@ export class CreateShopDto {
     }
     return undefined;
   })
-  @ValidateIf((o) => o.country === 'KE' && o.kraPin !== undefined && o.kraPin !== null && o.kraPin !== '')
+  @ValidateIf(
+    (o) =>
+      o.country === 'KE' &&
+      o.kraPin !== undefined &&
+      o.kraPin !== null &&
+      o.kraPin !== '',
+  )
   @IsString()
-  @Matches(/^[A-Z][0-9]{9}[A-Z]$/, { 
+  @Matches(/^[A-Z][0-9]{9}[A-Z]$/, {
     message: 'Invalid KRA PIN format (e.g., A123456789B)',
   })
   kraPin?: string;

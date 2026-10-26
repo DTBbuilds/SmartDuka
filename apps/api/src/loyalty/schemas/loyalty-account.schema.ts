@@ -18,7 +18,8 @@ export class PointsTransaction {
   createdAt: Date;
 }
 
-export const PointsTransactionSchema = SchemaFactory.createForClass(PointsTransaction);
+export const PointsTransactionSchema =
+  SchemaFactory.createForClass(PointsTransaction);
 
 @Schema({ timestamps: true })
 export class LoyaltyAccount {
@@ -65,7 +66,8 @@ export class LoyaltyAccount {
   status: 'active' | 'suspended';
 }
 
-export const LoyaltyAccountSchema = SchemaFactory.createForClass(LoyaltyAccount);
+export const LoyaltyAccountSchema =
+  SchemaFactory.createForClass(LoyaltyAccount);
 
 // Create indexes for multi-tenant queries
 LoyaltyAccountSchema.index({ shopId: 1, customerId: 1 });

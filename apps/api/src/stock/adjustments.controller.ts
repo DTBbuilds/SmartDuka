@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import type { CreateAdjustmentDto } from './adjustments.service';
 import { AdjustmentsService } from './adjustments.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -53,6 +61,9 @@ export class AdjustmentsController {
     @Query('days') days: string = '7',
     @CurrentUser() user: Record<string, any>,
   ) {
-    return this.adjustmentsService.getRecentAdjustments(user.shopId, parseInt(days, 10));
+    return this.adjustmentsService.getRecentAdjustments(
+      user.shopId,
+      parseInt(days, 10),
+    );
   }
 }

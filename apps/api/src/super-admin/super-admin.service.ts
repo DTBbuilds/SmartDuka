@@ -1,16 +1,37 @@
-import { Injectable, Logger, BadRequestException, NotFoundException, ConflictException, Optional } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  BadRequestException,
+  NotFoundException,
+  ConflictException,
+  Optional,
+} from '@nestjs/common';
 import { InjectModel, InjectConnection } from '@nestjs/mongoose';
 import { Model, Types, Connection } from 'mongoose';
 import { Shop, ShopDocument } from '../shops/schemas/shop.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { Order, OrderDocument } from '../sales/schemas/order.schema';
-import { PaymentTransaction, PaymentTransactionDocument } from '../payments/schemas/payment-transaction.schema';
-import { Subscription, SubscriptionDocument, SubscriptionStatus } from '../subscriptions/schemas/subscription.schema';
-import { SubscriptionPlan, SubscriptionPlanDocument } from '../subscriptions/schemas/subscription-plan.schema';
+import {
+  PaymentTransaction,
+  PaymentTransactionDocument,
+} from '../payments/schemas/payment-transaction.schema';
+import {
+  Subscription,
+  SubscriptionDocument,
+  SubscriptionStatus,
+} from '../subscriptions/schemas/subscription.schema';
+import {
+  SubscriptionPlan,
+  SubscriptionPlanDocument,
+} from '../subscriptions/schemas/subscription-plan.schema';
 import { ShopAuditLogService } from '../shops/services/shop-audit-log.service';
 import { EmailService } from '../notifications/email.service';
 import { EMAIL_TEMPLATES } from '../notifications/email-templates';
-import { CacheService, CACHE_TTL, ADMIN_CACHE_KEYS } from '../common/services/cache.service';
+import {
+  CacheService,
+  CACHE_TTL,
+  ADMIN_CACHE_KEYS,
+} from '../common/services/cache.service';
 import { SUPPORTED_CURRENCIES } from '../common/currency';
 
 const GRACE_PERIOD_DAYS = 7;
@@ -23,14 +44,20 @@ export class SuperAdminService {
   constructor(
     @InjectModel(Shop.name) private readonly shopModel: Model<ShopDocument>,
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
-    @InjectModel(Subscription.name) private readonly subscriptionModel: Model<SubscriptionDocument>,
-    @InjectModel(SubscriptionPlan.name) private readonly planModel: Model<SubscriptionPlanDocument>,
+    @InjectModel(Subscription.name)
+    private readonly subscriptionModel: Model<SubscriptionDocument>,
+    @InjectModel(SubscriptionPlan.name)
+    private readonly planModel: Model<SubscriptionPlanDocument>,
     @InjectConnection() private readonly connection: Connection,
     private readonly auditLogService: ShopAuditLogService,
     @Optional() private readonly emailService?: EmailService,
     @Optional() private readonly cacheService?: CacheService,
-    @Optional() @InjectModel(PaymentTransaction.name) private readonly paymentTransactionModel?: Model<PaymentTransactionDocument>,
-    @Optional() @InjectModel(Order.name) private readonly orderModel?: Model<OrderDocument>,
+    @Optional()
+    @InjectModel(PaymentTransaction.name)
+    private readonly paymentTransactionModel?: Model<PaymentTransactionDocument>,
+    @Optional()
+    @InjectModel(Order.name)
+    private readonly orderModel?: Model<OrderDocument>,
   ) {}
 
   /**
@@ -39,7 +66,9 @@ export class SuperAdminService {
   async getPendingShops(limit: number = 50, skip: number = 0): Promise<any[]> {
     return this.shopModel
       .find({ status: 'pending' })
-      .select('name email phone shopId status city businessType createdAt isFlagged subscriptionPlan')
+      .select(
+        'name email phone shopId status city businessType createdAt isFlagged subscriptionPlan',
+      )
       .sort({ createdAt: -1 })
       .limit(limit)
       .skip(skip)
@@ -53,7 +82,9 @@ export class SuperAdminService {
   async getVerifiedShops(limit: number = 50, skip: number = 0): Promise<any[]> {
     return this.shopModel
       .find({ status: 'verified' })
-      .select('name email phone shopId status city businessType createdAt isFlagged subscriptionPlan')
+      .select(
+        'name email phone shopId status city businessType createdAt isFlagged subscriptionPlan',
+      )
       .sort({ createdAt: -1 })
       .limit(limit)
       .skip(skip)
@@ -67,7 +98,9 @@ export class SuperAdminService {
   async getActiveShops(limit: number = 50, skip: number = 0): Promise<any[]> {
     return this.shopModel
       .find({ status: 'active' })
-      .select('name email phone shopId status city businessType createdAt isFlagged subscriptionPlan subscriptionStatus')
+      .select(
+        'name email phone shopId status city businessType createdAt isFlagged subscriptionPlan subscriptionStatus',
+      )
       .sort({ createdAt: -1 })
       .limit(limit)
       .skip(skip)
@@ -78,10 +111,15 @@ export class SuperAdminService {
   /**
    * Get all suspended shops
    */
-  async getSuspendedShops(limit: number = 50, skip: number = 0): Promise<any[]> {
+  async getSuspendedShops(
+    limit: number = 50,
+    skip: number = 0,
+  ): Promise<any[]> {
     return this.shopModel
       .find({ status: 'suspended' })
-      .select('name email phone shopId status city businessType createdAt isFlagged suspensionDate suspensionReason')
+      .select(
+        'name email phone shopId status city businessType createdAt isFlagged suspensionDate suspensionReason',
+      )
       .sort({ createdAt: -1 })
       .limit(limit)
       .skip(skip)
@@ -95,7 +133,9 @@ export class SuperAdminService {
   async getFlaggedShops(limit: number = 50, skip: number = 0): Promise<any[]> {
     return this.shopModel
       .find({ isFlagged: true })
-      .select('name email phone shopId status city businessType createdAt isFlagged flagReason')
+      .select(
+        'name email phone shopId status city businessType createdAt isFlagged flagReason',
+      )
       .sort({ createdAt: -1 })
       .limit(limit)
       .skip(skip)
@@ -106,7 +146,11 @@ export class SuperAdminService {
   /**
    * Get all shops with optional status filter
    */
-  async getAllShops(limit: number = 50, skip: number = 0, status?: string): Promise<ShopDocument[]> {
+  async getAllShops(
+    limit: number = 50,
+    skip: number = 0,
+    status?: string,
+  ): Promise<ShopDocument[]> {
     const query: any = {};
     if (status && status !== 'all') {
       if (status === 'flagged') {
@@ -141,53 +185,69 @@ export class SuperAdminService {
   /**
    * Get shop details with subscription information
    */
-  async getShopDetails(shopId: string): Promise<ShopDocument & { subscription?: any }> {
-    const shop = await this.shopModel.findById(new Types.ObjectId(shopId)).exec();
+  async getShopDetails(
+    shopId: string,
+  ): Promise<ShopDocument & { subscription?: any }> {
+    const shop = await this.shopModel
+      .findById(new Types.ObjectId(shopId))
+      .exec();
     if (!shop) {
       throw new NotFoundException('Shop not found');
     }
-    
+
     // Fetch subscription to ensure status sync
-    const subscription = await this.subscriptionModel.findOne({
-      shopId: new Types.ObjectId(shopId),
-    }).exec();
-    
+    const subscription = await this.subscriptionModel
+      .findOne({
+        shopId: new Types.ObjectId(shopId),
+      })
+      .exec();
+
     // Sync shop status with subscription status if there's a mismatch
     if (subscription) {
       const subStatus = subscription.status;
       let shouldUpdate = false;
       let newShopStatus = shop.status;
-      
+
       // If subscription is suspended/expired but shop shows active, sync it
-      if ((subStatus === SubscriptionStatus.SUSPENDED || subStatus === SubscriptionStatus.EXPIRED) 
-          && shop.status === 'active') {
+      if (
+        (subStatus === SubscriptionStatus.SUSPENDED ||
+          subStatus === SubscriptionStatus.EXPIRED) &&
+        shop.status === 'active'
+      ) {
         newShopStatus = 'suspended';
         shouldUpdate = true;
       }
       // If subscription is active but shop shows suspended (due to subscription), reactivate
-      else if (subStatus === SubscriptionStatus.ACTIVE && shop.subscriptionStatus === 'suspended') {
+      else if (
+        subStatus === SubscriptionStatus.ACTIVE &&
+        shop.subscriptionStatus === 'suspended'
+      ) {
         newShopStatus = 'active';
         shouldUpdate = true;
       }
-      
+
       if (shouldUpdate) {
         // Use findByIdAndUpdate to avoid full document validation (some shops may lack optional fields like county)
-        await this.shopModel.findByIdAndUpdate(
-          new Types.ObjectId(shopId),
-          { 
-            status: newShopStatus, 
-            subscriptionStatus: subStatus,
-            updatedAt: new Date(),
-          },
-          { runValidators: false }
-        ).exec();
-        
+        await this.shopModel
+          .findByIdAndUpdate(
+            new Types.ObjectId(shopId),
+            {
+              status: newShopStatus,
+              subscriptionStatus: subStatus,
+              updatedAt: new Date(),
+            },
+            { runValidators: false },
+          )
+          .exec();
+
         // Update local shop object for return
         shop.status = newShopStatus;
         shop.subscriptionStatus = subStatus;
-        this.logger.log(`Synced shop ${shopId} status to ${newShopStatus} (subscription: ${subStatus})`);
+        this.logger.log(
+          `Synced shop ${shopId} status to ${newShopStatus} (subscription: ${subStatus})`,
+        );
       }
-      
+
       // Return shop with subscription info
       const shopObj = shop.toObject();
       return {
@@ -200,7 +260,7 @@ export class SuperAdminService {
         },
       } as ShopDocument & { subscription?: any };
     }
-    
+
     return shop;
   }
 
@@ -216,12 +276,16 @@ export class SuperAdminService {
 
     // If already active, return silently (idempotent)
     if (shop.status === 'active') {
-      this.logger.log(`Shop ${shopId} is already active, skipping verification`);
+      this.logger.log(
+        `Shop ${shopId} is already active, skipping verification`,
+      );
       return shop;
     }
 
     if (shop.status !== 'pending') {
-      throw new BadRequestException(`Cannot verify shop with status: ${shop.status}`);
+      throw new BadRequestException(
+        `Cannot verify shop with status: ${shop.status}`,
+      );
     }
 
     const oldValue = { status: shop.status };
@@ -230,7 +294,7 @@ export class SuperAdminService {
       .findByIdAndUpdate(
         new Types.ObjectId(shopId),
         {
-          status: 'active',  // ✅ Changed from 'verified' to 'active'
+          status: 'active', // ✅ Changed from 'verified' to 'active'
           verificationBy: new Types.ObjectId(superAdminId),
           verificationDate: new Date(),
           verificationNotes: notes,
@@ -246,7 +310,7 @@ export class SuperAdminService {
       performedBy: superAdminId,
       action: 'verify',
       oldValue,
-      newValue: { status: 'active' },  // ✅ Updated to reflect 'active' status
+      newValue: { status: 'active' }, // ✅ Updated to reflect 'active' status
       reason: 'Shop verified and activated by super admin',
       notes,
     });
@@ -296,7 +360,9 @@ export class SuperAdminService {
     const shop = await this.getShopDetails(shopId);
 
     if (shop.status !== 'pending') {
-      throw new BadRequestException(`Cannot reject shop with status: ${shop.status}`);
+      throw new BadRequestException(
+        `Cannot reject shop with status: ${shop.status}`,
+      );
     }
 
     const oldValue = { status: shop.status };
@@ -363,7 +429,9 @@ export class SuperAdminService {
     const shop = await this.getShopDetails(shopId);
 
     if (!['active', 'verified'].includes(shop.status)) {
-      throw new BadRequestException(`Cannot suspend shop with status: ${shop.status}`);
+      throw new BadRequestException(
+        `Cannot suspend shop with status: ${shop.status}`,
+      );
     }
 
     const oldValue = { status: shop.status };
@@ -429,7 +497,9 @@ export class SuperAdminService {
     const shop = await this.getShopDetails(shopId);
 
     if (shop.status !== 'suspended') {
-      throw new BadRequestException(`Cannot reactivate shop with status: ${shop.status}`);
+      throw new BadRequestException(
+        `Cannot reactivate shop with status: ${shop.status}`,
+      );
     }
 
     const oldValue = { status: shop.status };
@@ -599,7 +669,7 @@ export class SuperAdminService {
     total: number;
   }> {
     const cacheKey = ADMIN_CACHE_KEYS.shopStats();
-    
+
     if (this.cacheService) {
       const cached = this.cacheService.get<any>(cacheKey);
       if (cached) return cached;
@@ -701,7 +771,7 @@ export class SuperAdminService {
       throw new BadRequestException('Shop is already deleted');
     }
 
-    const oldValue = { 
+    const oldValue = {
       status: shop.status,
       deletedAt: null,
     };
@@ -726,7 +796,7 @@ export class SuperAdminService {
       performedBy: superAdminId,
       action: 'delete',
       oldValue,
-      newValue: { 
+      newValue: {
         status: 'suspended',
         deletedAt: new Date(),
       },
@@ -734,8 +804,10 @@ export class SuperAdminService {
       notes: `Shop soft deleted by super admin. Reason: ${reason}`,
     });
 
-    this.logger.log(`Shop ${shopId} soft deleted by ${superAdminId}. Reason: ${reason}`);
-    
+    this.logger.log(
+      `Shop ${shopId} soft deleted by ${superAdminId}. Reason: ${reason}`,
+    );
+
     if (!updatedShop) {
       throw new NotFoundException('Shop not found after update');
     }
@@ -751,8 +823,10 @@ export class SuperAdminService {
     superAdminId: string,
     notes?: string,
   ): Promise<ShopDocument> {
-    const shop = await this.shopModel.findById(new Types.ObjectId(shopId)).exec();
-    
+    const shop = await this.shopModel
+      .findById(new Types.ObjectId(shopId))
+      .exec();
+
     if (!shop) {
       throw new NotFoundException('Shop not found');
     }
@@ -761,7 +835,7 @@ export class SuperAdminService {
       throw new BadRequestException('Shop is not deleted');
     }
 
-    const oldValue = { 
+    const oldValue = {
       status: shop.status,
       deletedAt: shop.deletedAt,
     };
@@ -771,7 +845,7 @@ export class SuperAdminService {
         new Types.ObjectId(shopId),
         {
           status: 'active', // Restore to active status
-          $unset: { 
+          $unset: {
             deletedAt: 1,
             deletedBy: 1,
             deletionReason: 1,
@@ -788,7 +862,7 @@ export class SuperAdminService {
       performedBy: superAdminId,
       action: 'reactivate',
       oldValue,
-      newValue: { 
+      newValue: {
         status: 'active',
         deletedAt: null,
       },
@@ -797,7 +871,7 @@ export class SuperAdminService {
     });
 
     this.logger.log(`Shop ${shopId} restored by ${superAdminId}`);
-    
+
     if (!updatedShop) {
       throw new NotFoundException('Shop not found after update');
     }
@@ -808,7 +882,10 @@ export class SuperAdminService {
   /**
    * Get deleted shops
    */
-  async getDeletedShops(limit: number = 50, skip: number = 0): Promise<ShopDocument[]> {
+  async getDeletedShops(
+    limit: number = 50,
+    skip: number = 0,
+  ): Promise<ShopDocument[]> {
     return this.shopModel
       .find({ deletedAt: { $ne: null } })
       .sort({ deletedAt: -1 })
@@ -832,7 +909,10 @@ export class SuperAdminService {
     shopId: string,
     superAdminId: string,
     confirmName: string,
-  ): Promise<{ deletedCollections: Record<string, number>; totalDeleted: number }> {
+  ): Promise<{
+    deletedCollections: Record<string, number>;
+    totalDeleted: number;
+  }> {
     const shopObjectId = new Types.ObjectId(shopId);
 
     // Verify shop exists and is already soft-deleted
@@ -972,12 +1052,24 @@ export class SuperAdminService {
       cancelledCount,
     ] = await Promise.all([
       this.subscriptionModel.countDocuments(),
-      this.subscriptionModel.countDocuments({ status: SubscriptionStatus.ACTIVE }),
-      this.subscriptionModel.countDocuments({ status: SubscriptionStatus.TRIAL }),
-      this.subscriptionModel.countDocuments({ status: SubscriptionStatus.PAST_DUE }),
-      this.subscriptionModel.countDocuments({ status: SubscriptionStatus.SUSPENDED }),
-      this.subscriptionModel.countDocuments({ status: SubscriptionStatus.EXPIRED }),
-      this.subscriptionModel.countDocuments({ status: SubscriptionStatus.CANCELLED }),
+      this.subscriptionModel.countDocuments({
+        status: SubscriptionStatus.ACTIVE,
+      }),
+      this.subscriptionModel.countDocuments({
+        status: SubscriptionStatus.TRIAL,
+      }),
+      this.subscriptionModel.countDocuments({
+        status: SubscriptionStatus.PAST_DUE,
+      }),
+      this.subscriptionModel.countDocuments({
+        status: SubscriptionStatus.SUSPENDED,
+      }),
+      this.subscriptionModel.countDocuments({
+        status: SubscriptionStatus.EXPIRED,
+      }),
+      this.subscriptionModel.countDocuments({
+        status: SubscriptionStatus.CANCELLED,
+      }),
     ]);
 
     return {
@@ -1009,7 +1101,9 @@ export class SuperAdminService {
       errors: [] as string[],
     };
 
-    this.logger.log(`Processing expired subscriptions triggered by ${superAdminId}`);
+    this.logger.log(
+      `Processing expired subscriptions triggered by ${superAdminId}`,
+    );
 
     try {
       // 1. Expire subscriptions (no auto-renew, period ended)
@@ -1036,7 +1130,9 @@ export class SuperAdminService {
 
       for (const sub of toPastDue) {
         sub.status = SubscriptionStatus.PAST_DUE;
-        sub.gracePeriodEndDate = new Date(now.getTime() + GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000);
+        sub.gracePeriodEndDate = new Date(
+          now.getTime() + GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000,
+        );
         await sub.save();
         results.pastDue++;
         await this.sendSubscriptionEmail(sub, 'past_due');
@@ -1059,45 +1155,64 @@ export class SuperAdminService {
 
       // 4. Send reminders to existing PAST_DUE, SUSPENDED, EXPIRED
       const needReminders = await this.subscriptionModel.find({
-        status: { $in: [SubscriptionStatus.PAST_DUE, SubscriptionStatus.SUSPENDED, SubscriptionStatus.EXPIRED] },
+        status: {
+          $in: [
+            SubscriptionStatus.PAST_DUE,
+            SubscriptionStatus.SUSPENDED,
+            SubscriptionStatus.EXPIRED,
+          ],
+        },
       });
 
       for (const sub of needReminders) {
         // Skip if we already processed this subscription above
-        if (toExpire.some(s => s._id.equals(sub._id)) ||
-            toPastDue.some(s => s._id.equals(sub._id)) ||
-            toSuspend.some(s => s._id.equals(sub._id))) {
+        if (
+          toExpire.some((s) => s._id.equals(sub._id)) ||
+          toPastDue.some((s) => s._id.equals(sub._id)) ||
+          toSuspend.some((s) => s._id.equals(sub._id))
+        ) {
           continue;
         }
         await this.sendSubscriptionEmail(sub, sub.status);
         results.emailsSent++;
       }
 
-      results.processed = toExpire.length + toPastDue.length + toSuspend.length + needReminders.length;
-
+      results.processed =
+        toExpire.length +
+        toPastDue.length +
+        toSuspend.length +
+        needReminders.length;
     } catch (error: any) {
       this.logger.error('Error processing subscriptions:', error);
       results.errors.push(error.message);
     }
 
-    this.logger.log(`Subscription processing complete: ${JSON.stringify(results)}`);
+    this.logger.log(
+      `Subscription processing complete: ${JSON.stringify(results)}`,
+    );
     return results;
   }
 
   /**
    * Send subscription status email
    */
-  private async sendSubscriptionEmail(subscription: SubscriptionDocument, status: string): Promise<boolean> {
+  private async sendSubscriptionEmail(
+    subscription: SubscriptionDocument,
+    status: string,
+  ): Promise<boolean> {
     if (!this.emailService) return false;
 
     const shop = await this.shopModel.findById(subscription.shopId);
-    const admin = await this.userModel.findOne({ shopId: subscription.shopId, role: 'admin' });
+    const admin = await this.userModel.findOne({
+      shopId: subscription.shopId,
+      role: 'admin',
+    });
     const plan = await this.planModel.findById(subscription.planId);
 
     if (!shop || !admin?.email) return false;
 
     let template: any;
-    let vars: Record<string, any> = {
+    const vars: Record<string, any> = {
       shopName: shop.name,
       userName: admin.name || admin.email,
       planName: plan?.name || subscription.planCode,
@@ -1116,7 +1231,10 @@ export class SuperAdminService {
       case 'past_due':
         template = EMAIL_TEMPLATES.subscription_past_due_day1;
         const daysUntil = subscription.gracePeriodEndDate
-          ? Math.ceil((subscription.gracePeriodEndDate.getTime() - Date.now()) / (24 * 60 * 60 * 1000))
+          ? Math.ceil(
+              (subscription.gracePeriodEndDate.getTime() - Date.now()) /
+                (24 * 60 * 60 * 1000),
+            )
           : GRACE_PERIOD_DAYS;
         vars.daysUntilSuspension = daysUntil.toString();
         break;
@@ -1137,17 +1255,22 @@ export class SuperAdminService {
       past_due: 'subscription_past_due_day1',
       suspended: 'subscription_suspended_notice',
     };
-    const normalizedStatus = status === SubscriptionStatus.EXPIRED ? 'expired'
-      : status === SubscriptionStatus.PAST_DUE ? 'past_due'
-      : status === SubscriptionStatus.SUSPENDED ? 'suspended'
-      : status;
+    const normalizedStatus =
+      status === SubscriptionStatus.EXPIRED
+        ? 'expired'
+        : status === SubscriptionStatus.PAST_DUE
+          ? 'past_due'
+          : status === SubscriptionStatus.SUSPENDED
+            ? 'suspended'
+            : status;
 
     try {
       const result = await this.emailService.sendEmail({
         to: admin.email,
         subject: template.subject.replace('{{shopName}}', shop.name),
         html: template.getHtml(vars),
-        templateName: templateNames[normalizedStatus] || `subscription_${normalizedStatus}`,
+        templateName:
+          templateNames[normalizedStatus] || `subscription_${normalizedStatus}`,
         category: 'subscription',
       });
       return result.success;
@@ -1203,7 +1326,10 @@ export class SuperAdminService {
         'remediationId, targetCurrency, reason, evidenceSummary and expectedCurrentCurrency are required',
       );
     }
-    if (dto.reason.trim().length < 10 || dto.evidenceSummary.trim().length < 10) {
+    if (
+      dto.reason.trim().length < 10 ||
+      dto.evidenceSummary.trim().length < 10
+    ) {
       throw new BadRequestException(
         'reason and evidenceSummary must each be at least 10 characters (reviewed evidence required)',
       );

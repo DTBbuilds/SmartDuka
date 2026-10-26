@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/require-await */
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -43,15 +42,25 @@ export class AnomalyDetectionService {
     return anomalies;
   }
 
-  async detectCashVariance(shopId: string, expectedCash: number, actualCash: number): Promise<AnomalyResult | null> {
+  async detectCashVariance(
+    shopId: string,
+    expectedCash: number,
+    actualCash: number,
+  ): Promise<AnomalyResult | null> {
     const variance = actualCash - expectedCash;
-    const variancePercent = expectedCash > 0 ? (variance / expectedCash) * 100 : 0;
+    const variancePercent =
+      expectedCash > 0 ? (variance / expectedCash) * 100 : 0;
 
     if (Math.abs(variancePercent) < 5) {
       return null;
     }
 
-    const severity = Math.abs(variancePercent) > 20 ? 'critical' : Math.abs(variancePercent) > 10 ? 'high' : 'medium';
+    const severity =
+      Math.abs(variancePercent) > 20
+        ? 'critical'
+        : Math.abs(variancePercent) > 10
+          ? 'high'
+          : 'medium';
 
     return {
       detected: true,

@@ -1,7 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Notification, NotificationDocument, NotificationType, NotificationChannel } from './notification.schema';
+import {
+  Notification,
+  NotificationDocument,
+  NotificationType,
+  NotificationChannel,
+} from './notification.schema';
 import { EmailService } from './email.service';
 
 export interface CreateNotificationDto {
@@ -57,7 +62,7 @@ export class NotificationsService {
     options: { unreadOnly?: boolean; limit?: number; skip?: number } = {},
   ): Promise<NotificationDocument[]> {
     const query: any = { shopId: new Types.ObjectId(shopId) };
-    
+
     if (options.unreadOnly) {
       query.read = false;
     }
@@ -77,7 +82,10 @@ export class NotificationsService {
     });
   }
 
-  async markAsRead(notificationId: string, shopId: string): Promise<NotificationDocument | null> {
+  async markAsRead(
+    notificationId: string,
+    shopId: string,
+  ): Promise<NotificationDocument | null> {
     return this.notificationModel.findOneAndUpdate(
       {
         _id: new Types.ObjectId(notificationId),
@@ -123,7 +131,10 @@ export class NotificationsService {
 
     // Send email
     const productList = products
-      .map(p => `<li><strong>${p.name}</strong>: ${p.stock} remaining (reorder at ${p.reorderLevel})</li>`)
+      .map(
+        (p) =>
+          `<li><strong>${p.name}</strong>: ${p.stock} remaining (reorder at ${p.reorderLevel})</li>`,
+      )
       .join('');
 
     await this.emailService.sendTemplateEmail({
@@ -161,11 +172,15 @@ export class NotificationsService {
     });
 
     // Format top products
-    const topProductsHtml = data.topProducts.length > 0
-      ? `<ol>${data.topProducts.map(p => 
-          `<li>${p.name} - ${p.quantity} sold (KES ${p.revenue.toLocaleString()})</li>`
-        ).join('')}</ol>`
-      : '<p>No sales recorded today.</p>';
+    const topProductsHtml =
+      data.topProducts.length > 0
+        ? `<ol>${data.topProducts
+            .map(
+              (p) =>
+                `<li>${p.name} - ${p.quantity} sold (KES ${p.revenue.toLocaleString()})</li>`,
+            )
+            .join('')}</ol>`
+        : '<p>No sales recorded today.</p>';
 
     // Send email
     await this.emailService.sendTemplateEmail({
@@ -191,7 +206,9 @@ export class NotificationsService {
     planName: string,
     expiryDate: Date,
   ): Promise<void> {
-    const daysLeft = Math.ceil((expiryDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+    const daysLeft = Math.ceil(
+      (expiryDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24),
+    );
 
     // Create in-app notification
     await this.create({
@@ -211,11 +228,11 @@ export class NotificationsService {
         shopName,
         userName,
         planName,
-        expiryDate: expiryDate.toLocaleDateString('en-KE', { 
-          weekday: 'long', 
-          year: 'numeric', 
-          month: 'long', 
-          day: 'numeric' 
+        expiryDate: expiryDate.toLocaleDateString('en-KE', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
         }),
         daysLeft,
         renewUrl: `${process.env.FRONTEND_URL || 'https://www.smartduka.org'}/admin/subscription`,

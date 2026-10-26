@@ -6,15 +6,9 @@ import {
   StockTransferSchema,
 } from './schemas/stock-transfer.schema';
 import { Branch, BranchSchema } from './branch.schema';
-import {
-  Product,
-  ProductSchema,
-} from '../inventory/schemas/product.schema';
+import { Product, ProductSchema } from '../inventory/schemas/product.schema';
 import { AuditLog, AuditLogSchema } from '../audit/audit-log.schema';
-import {
-  Adjustment,
-  AdjustmentSchema,
-} from '../stock/adjustment.schema';
+import { Adjustment, AdjustmentSchema } from '../stock/adjustment.schema';
 
 jest.mock('nanoid', () => ({ nanoid: () => 'testnanoid' }));
 
@@ -161,7 +155,7 @@ describe('FRONTEND-FIX1A — branch transfer safety (real MongoDB)', () => {
         svc.create(SHOP, '507f1f77bcf86cd7994390c3', {
           fromBranchId: BRANCH_B,
           toBranchId: BRANCH_C,
-          items: [{ productId: (p._id as any).toString(), quantity: 10 }],
+          items: [{ productId: p._id.toString(), quantity: 10 }],
           reason: 'Low stock in kitale',
         } as any),
       ).rejects.toThrow(/Insufficient stock/i);
@@ -170,20 +164,17 @@ describe('FRONTEND-FIX1A — branch transfer safety (real MongoDB)', () => {
     },
   );
 
-  itMongo(
-    '2. main→branch transfer of global stock is allowed',
-    async () => {
-      const p = await seedProduct();
-      const t = await svc.create(SHOP, '507f1f77bcf86cd7994390c3', {
-        fromBranchId: 'main',
-        toBranchId: BRANCH_B,
-        items: [{ productId: (p._id as any).toString(), quantity: 10 }],
-        reason: 'Stock replenishment',
-      } as any);
-      expect(t.status).toBe('pending_approval');
-      expect((t as any).fromBranchId).toBeNull(); // main store
-    },
-  );
+  itMongo('2. main→branch transfer of global stock is allowed', async () => {
+    const p = await seedProduct();
+    const t = await svc.create(SHOP, '507f1f77bcf86cd7994390c3', {
+      fromBranchId: 'main',
+      toBranchId: BRANCH_B,
+      items: [{ productId: p._id.toString(), quantity: 10 }],
+      reason: 'Stock replenishment',
+    });
+    expect(t.status).toBe('pending_approval');
+    expect((t as any).fromBranchId).toBeNull(); // main store
+  });
 
   itMongo(
     '3. branch→branch with sufficient branch stock: ship deducts branch stock exactly once; global untouched',
@@ -193,17 +184,25 @@ describe('FRONTEND-FIX1A — branch transfer safety (real MongoDB)', () => {
           [BRANCH_B]: { stock: 30 },
         },
       });
-      const pid = (p._id as any).toString();
+      const pid = p._id.toString();
       const t = await svc.create(SHOP, '507f1f77bcf86cd7994390c3', {
         fromBranchId: BRANCH_B,
         toBranchId: BRANCH_C,
         items: [{ productId: pid, quantity: 10 }],
         reason: 'Stock rebalancing',
-      } as any);
+      });
       expect(t.status).toBe('pending_approval');
 
-      await svc.approve((t._id as any).toString(), SHOP, '507f1f77bcf86cd7994390c3');
-      const shipped = await svc.ship((t._id as any).toString(), SHOP, '507f1f77bcf86cd7994390c3');
+      await svc.approve(
+        (t._id as any).toString(),
+        SHOP,
+        '507f1f77bcf86cd7994390c3',
+      );
+      const shipped = await svc.ship(
+        (t._id as any).toString(),
+        SHOP,
+        '507f1f77bcf86cd7994390c3',
+      );
       expect(shipped.status).toBe('in_transit');
 
       // Branch B deducted exactly once: 30 → 20. Global stock untouched: 50.
@@ -223,11 +222,11 @@ describe('FRONTEND-FIX1A — branch transfer safety (real MongoDB)', () => {
         svc.create(SHOP, '507f1f77bcf86cd7994390c3', {
           fromBranchId: BRANCH_B,
           toBranchId: BRANCH_C,
-          items: [{ productId: (p._id as any).toString(), quantity: 10 }],
+          items: [{ productId: p._id.toString(), quantity: 10 }],
           reason: 'Transfer request',
         } as any),
       ).rejects.toThrow(/Insufficient stock.*Available: 5/);
-      expect(await getBranchStock((p._id as any).toString(), BRANCH_B)).toBe(5);
+      expect(await getBranchStock(p._id.toString(), BRANCH_B)).toBe(5);
     },
   );
 
@@ -237,23 +236,35 @@ describe('FRONTEND-FIX1A — branch transfer safety (real MongoDB)', () => {
       const p = await seedProduct({
         branchInventory: { [BRANCH_B]: { stock: 10 } },
       });
-      const pid = (p._id as any).toString();
+      const pid = p._id.toString();
       // Two transfers of 10 each — both PASS creation (the check is
       // advisory; no reservation at creation).
       const t1 = await svc.create(SHOP, '507f1f77bcf86cd7994390c3', {
-        fromBranchId: BRANCH_B, toBranchId: BRANCH_C,
-        items: [{ productId: pid, quantity: 10 }], reason: 'r1',
-      } as any);
+        fromBranchId: BRANCH_B,
+        toBranchId: BRANCH_C,
+        items: [{ productId: pid, quantity: 10 }],
+        reason: 'r1',
+      });
       const t2 = await svc.create(SHOP, '507f1f77bcf86cd7994390c3', {
-        fromBranchId: BRANCH_B, toBranchId: BRANCH_C,
-        items: [{ productId: pid, quantity: 10 }], reason: 'r2',
-      } as any);
+        fromBranchId: BRANCH_B,
+        toBranchId: BRANCH_C,
+        items: [{ productId: pid, quantity: 10 }],
+        reason: 'r2',
+      });
       for (const t of [t1, t2]) {
-        await svc.approve((t._id as any).toString(), SHOP, '507f1f77bcf86cd7994390c3');
+        await svc.approve(
+          (t._id as any).toString(),
+          SHOP,
+          '507f1f77bcf86cd7994390c3',
+        );
       }
       // Ship both: the first deduction lands (10→0); the second MUST be
       // blocked by the atomic $gte guard — branch stock never negative.
-      const s1 = await svc.ship((t1._id as any).toString(), SHOP, '507f1f77bcf86cd7994390c3');
+      const s1 = await svc.ship(
+        (t1._id as any).toString(),
+        SHOP,
+        '507f1f77bcf86cd7994390c3',
+      );
       expect(s1.status).toBe('in_transit');
       expect(await getBranchStock(pid, BRANCH_B)).toBe(0);
       await expect(
@@ -269,16 +280,30 @@ describe('FRONTEND-FIX1A — branch transfer safety (real MongoDB)', () => {
       const p = await seedProduct({
         branchInventory: { [BRANCH_B]: { stock: 30 } },
       });
-      const pid = (p._id as any).toString();
+      const pid = p._id.toString();
       const t = await svc.create(SHOP, '507f1f77bcf86cd7994390c3', {
-        fromBranchId: BRANCH_B, toBranchId: BRANCH_C,
-        items: [{ productId: pid, quantity: 10 }], reason: 'retry case',
-      } as any);
-      await svc.approve((t._id as any).toString(), SHOP, '507f1f77bcf86cd7994390c3');
-      await svc.ship((t._id as any).toString(), SHOP, '507f1f77bcf86cd7994390c3');
+        fromBranchId: BRANCH_B,
+        toBranchId: BRANCH_C,
+        items: [{ productId: pid, quantity: 10 }],
+        reason: 'retry case',
+      });
+      await svc.approve(
+        (t._id as any).toString(),
+        SHOP,
+        '507f1f77bcf86cd7994390c3',
+      );
+      await svc.ship(
+        (t._id as any).toString(),
+        SHOP,
+        '507f1f77bcf86cd7994390c3',
+      );
       expect(await getBranchStock(pid, BRANCH_B)).toBe(20);
       // Re-ship (retry/duplicate call) — idempotent, no second deduction.
-      await svc.ship((t._id as any).toString(), SHOP, '507f1f77bcf86cd7994390c3');
+      await svc.ship(
+        (t._id as any).toString(),
+        SHOP,
+        '507f1f77bcf86cd7994390c3',
+      );
       expect(await getBranchStock(pid, BRANCH_B)).toBe(20);
     },
   );

@@ -1,4 +1,14 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -7,11 +17,14 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { EmailService } from './email.service';
 import { EmailTemplate, EmailTemplateDocument } from './email-template.schema';
 import { Notification, NotificationDocument } from './notification.schema';
-import { EmailLog, EmailLogDocument } from '../super-admin/schemas/email-log.schema';
+import {
+  EmailLog,
+  EmailLogDocument,
+} from '../super-admin/schemas/email-log.schema';
 
 /**
  * Super Admin Email Management Controller
- * 
+ *
  * Provides endpoints for super admins to:
  * - View and manage email templates
  * - View email logs and statistics
@@ -56,7 +69,8 @@ export class EmailAdminController {
   @Put('templates/:name')
   async updateTemplate(
     @Param('name') name: string,
-    @Body() body: {
+    @Body()
+    body: {
       subject: string;
       htmlContent: string;
       textContent?: string;
@@ -122,7 +136,9 @@ export class EmailAdminController {
           _id: null,
           total: { $sum: 1 },
           sent: { $sum: { $cond: [{ $eq: ['$status', 'sent'] }, 1, 0] } },
-          delivered: { $sum: { $cond: [{ $eq: ['$status', 'delivered'] }, 1, 0] } },
+          delivered: {
+            $sum: { $cond: [{ $eq: ['$status', 'delivered'] }, 1, 0] },
+          },
           failed: { $sum: { $cond: [{ $eq: ['$status', 'failed'] }, 1, 0] } },
           pending: { $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] } },
           bounced: { $sum: { $cond: [{ $eq: ['$status', 'bounced'] }, 1, 0] } },
@@ -163,8 +179,12 @@ export class EmailAdminController {
     // Note: 'sent' status means successfully delivered by SMTP provider
     const total = stats?.total || 0;
     const sentCount = (stats?.sent || 0) + (stats?.delivered || 0);
-    const deliveryRate = total > 0 ? Math.round((sentCount / total) * 100 * 10) / 10 : 0;
-    const openRate = sentCount > 0 ? Math.round(((stats?.opened || 0) / sentCount) * 100 * 10) / 10 : 0;
+    const deliveryRate =
+      total > 0 ? Math.round((sentCount / total) * 100 * 10) / 10 : 0;
+    const openRate =
+      sentCount > 0
+        ? Math.round(((stats?.opened || 0) / sentCount) * 100 * 10) / 10
+        : 0;
 
     return {
       summary: {
@@ -179,8 +199,12 @@ export class EmailAdminController {
         deliveryRate,
         openRate,
       },
-      byCategory: Object.fromEntries(byCategory.map(c => [c._id || 'other', c.count])),
-      byTemplate: Object.fromEntries(byTemplate.map(t => [t._id || 'custom', t.count])),
+      byCategory: Object.fromEntries(
+        byCategory.map((c) => [c._id || 'other', c.count]),
+      ),
+      byTemplate: Object.fromEntries(
+        byTemplate.map((t) => [t._id || 'custom', t.count]),
+      ),
     };
   }
 
@@ -206,7 +230,9 @@ export class EmailAdminController {
         .sort({ createdAt: -1 })
         .skip(parseInt(skip || '0', 10))
         .limit(parseInt(limit || '50', 10))
-        .select('to subject status category templateName sentAt failedAt createdAt errorMessage retryCount shopName userName messageId')
+        .select(
+          'to subject status category templateName sentAt failedAt createdAt errorMessage retryCount shopName userName messageId',
+        )
         .exec(),
       this.emailLogModel.countDocuments(query),
     ]);
@@ -235,7 +261,7 @@ export class EmailAdminController {
     if (!log) {
       return { error: 'Email log not found' };
     }
-    
+
     if (log.status !== 'failed') {
       return { error: 'Can only retry failed emails' };
     }
@@ -255,7 +281,9 @@ export class EmailAdminController {
 
     return {
       success: result.success,
-      message: result.success ? 'Email resent successfully' : `Failed to resend: ${result.error}`,
+      message: result.success
+        ? 'Email resent successfully'
+        : `Failed to resend: ${result.error}`,
       newEmailLogId: result.emailLogId,
     };
   }
@@ -276,7 +304,8 @@ export class EmailAdminController {
    */
   @Post('test')
   async sendTestEmail(
-    @Body() body: {
+    @Body()
+    body: {
       to: string;
       templateName?: string;
       subject?: string;
@@ -300,7 +329,9 @@ export class EmailAdminController {
       return this.emailService.sendEmail({
         to: body.to,
         subject: body.subject || 'Test Email from SmartDuka',
-        html: body.content || '<h1>Test Email</h1><p>This is a test email from SmartDuka.</p>',
+        html:
+          body.content ||
+          '<h1>Test Email</h1><p>This is a test email from SmartDuka.</p>',
       });
     }
   }
@@ -333,7 +364,9 @@ export class EmailAdminController {
       currency: 'KES',
       productCount: 5,
       daysLeft: 7,
-      expiryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-KE'),
+      expiryDate: new Date(
+        Date.now() + 7 * 24 * 60 * 60 * 1000,
+      ).toLocaleDateString('en-KE'),
       ...variables,
     };
 
@@ -370,8 +403,8 @@ export class EmailAdminController {
    */
   @Delete('logs/bulk')
   async bulkDeleteEmailLogs(@Body() body: { ids: string[] }) {
-    const result = await this.emailLogModel.deleteMany({ 
-      _id: { $in: body.ids } 
+    const result = await this.emailLogModel.deleteMany({
+      _id: { $in: body.ids },
     });
     return { deleted: result.deletedCount };
   }
@@ -587,24 +620,27 @@ export class EmailAdminController {
    * Send bulk email to multiple recipients
    */
   @Post('bulk/send')
-  async sendBulkEmail(@Body() body: {
-    to: string[];
-    subject: string;
-    templateName?: string;
-    content?: string;
-    variables?: Record<string, any>;
-  }) {
+  async sendBulkEmail(
+    @Body()
+    body: {
+      to: string[];
+      subject: string;
+      templateName?: string;
+      content?: string;
+      variables?: Record<string, any>;
+    },
+  ) {
     const results: Array<{
       recipient: string;
       success: boolean;
       messageId?: string;
       error?: string;
     }> = [];
-    
+
     for (const recipient of body.to) {
       try {
         let result;
-        
+
         if (body.templateName) {
           result = await this.emailService.sendTemplateEmail({
             to: recipient,
@@ -618,8 +654,12 @@ export class EmailAdminController {
             html: body.content || '<p>Bulk email message</p>',
           });
         }
-        
-        results.push({ recipient, success: result.success, messageId: result.messageId });
+
+        results.push({
+          recipient,
+          success: result.success,
+          messageId: result.messageId,
+        });
       } catch (error: any) {
         results.push({ recipient, success: false, error: error.message });
       }
@@ -627,8 +667,8 @@ export class EmailAdminController {
 
     return {
       total: body.to.length,
-      successful: results.filter(r => r.success).length,
-      failed: results.filter(r => !r.success).length,
+      successful: results.filter((r) => r.success).length,
+      failed: results.filter((r) => !r.success).length,
       results,
     };
   }
@@ -664,7 +704,9 @@ export class EmailAdminController {
           sent: { $sum: { $cond: [{ $eq: ['$status', 'sent'] }, 1, 0] } },
           pending: { $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] } },
           failed: { $sum: { $cond: [{ $eq: ['$status', 'failed'] }, 1, 0] } },
-          emailSentTrue: { $sum: { $cond: [{ $eq: ['$emailSent', true] }, 1, 0] } },
+          emailSentTrue: {
+            $sum: { $cond: [{ $eq: ['$emailSent', true] }, 1, 0] },
+          },
         },
       },
     ]);
@@ -687,13 +729,39 @@ export class EmailAdminController {
         $group: {
           _id: null,
           total: { $sum: 1 },
-          statusPending: { $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] } },
+          statusPending: {
+            $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] },
+          },
           statusSent: { $sum: { $cond: [{ $eq: ['$status', 'sent'] }, 1, 0] } },
-          statusFailed: { $sum: { $cond: [{ $eq: ['$status', 'failed'] }, 1, 0] } },
-          emailSentTrue: { $sum: { $cond: [{ $eq: ['$emailSent', true] }, 1, 0] } },
-          emailSentFalse: { $sum: { $cond: [{ $eq: ['$emailSent', false] }, 1, 0] } },
-          missingTo: { $sum: { $cond: [{ $or: [{ $eq: ['$to', null] }, { $eq: ['$to', ''] }] }, 1, 0] } },
-          missingSubject: { $sum: { $cond: [{ $or: [{ $eq: ['$subject', null] }, { $eq: ['$subject', ''] }] }, 1, 0] } },
+          statusFailed: {
+            $sum: { $cond: [{ $eq: ['$status', 'failed'] }, 1, 0] },
+          },
+          emailSentTrue: {
+            $sum: { $cond: [{ $eq: ['$emailSent', true] }, 1, 0] },
+          },
+          emailSentFalse: {
+            $sum: { $cond: [{ $eq: ['$emailSent', false] }, 1, 0] },
+          },
+          missingTo: {
+            $sum: {
+              $cond: [
+                { $or: [{ $eq: ['$to', null] }, { $eq: ['$to', ''] }] },
+                1,
+                0,
+              ],
+            },
+          },
+          missingSubject: {
+            $sum: {
+              $cond: [
+                {
+                  $or: [{ $eq: ['$subject', null] }, { $eq: ['$subject', ''] }],
+                },
+                1,
+                0,
+              ],
+            },
+          },
         },
       },
     ]);
@@ -705,13 +773,14 @@ export class EmailAdminController {
     });
 
     // Get recent emails with issues
-    const recentIssues = await this.notificationModel.find({
-      $or: [
-        { emailSent: true, status: 'pending' },
-        { to: { $in: [null, ''] } },
-        { subject: { $in: [null, ''] } },
-      ],
-    })
+    const recentIssues = await this.notificationModel
+      .find({
+        $or: [
+          { emailSent: true, status: 'pending' },
+          { to: { $in: [null, ''] } },
+          { subject: { $in: [null, ''] } },
+        ],
+      })
       .sort({ createdAt: -1 })
       .limit(20)
       .select('_id to subject status emailSent type createdAt')
@@ -725,9 +794,15 @@ export class EmailAdminController {
       },
       recentIssues,
       recommendations: [
-        mismatchCount > 0 ? `Run POST /admin/emails/audit/fix-statuses to fix ${mismatchCount} mismatched emails` : null,
-        statusCounts?.missingTo > 0 ? `${statusCounts.missingTo} emails missing recipient (to) field` : null,
-        statusCounts?.missingSubject > 0 ? `${statusCounts.missingSubject} emails missing subject field` : null,
+        mismatchCount > 0
+          ? `Run POST /admin/emails/audit/fix-statuses to fix ${mismatchCount} mismatched emails`
+          : null,
+        statusCounts?.missingTo > 0
+          ? `${statusCounts.missingTo} emails missing recipient (to) field`
+          : null,
+        statusCounts?.missingSubject > 0
+          ? `${statusCounts.missingSubject} emails missing subject field`
+          : null,
       ].filter(Boolean),
     };
   }
@@ -757,10 +832,18 @@ export class EmailAdminController {
 
     // Convert to CSV format
     const csvHeaders = [
-      'ID', 'To', 'Subject', 'Template', 'Status', 
-      'Created At', 'Sent At', 'Error Message', 'Shop ID', 'User ID'
+      'ID',
+      'To',
+      'Subject',
+      'Template',
+      'Status',
+      'Created At',
+      'Sent At',
+      'Error Message',
+      'Shop ID',
+      'User ID',
     ];
-    
+
     const csvRows = logs.map((log) => {
       const anyLog = log as any;
       return [
@@ -779,7 +862,7 @@ export class EmailAdminController {
 
     const csvContent = [
       csvHeaders.join(','),
-      ...csvRows.map(row => row.map(cell => `"${cell}"`).join(','))
+      ...csvRows.map((row) => row.map((cell) => `"${cell}"`).join(',')),
     ].join('\n');
 
     return csvContent;

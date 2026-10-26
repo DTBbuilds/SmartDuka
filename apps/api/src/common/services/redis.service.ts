@@ -1,10 +1,15 @@
-import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleInit,
+  OnModuleDestroy,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 
 /**
  * Redis Service with automatic fallback to in-memory cache
- * 
+ *
  * Features:
  * - Connects to Redis if REDIS_URL is configured
  * - Falls back to in-memory Map if Redis unavailable
@@ -17,7 +22,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   private client: Redis | null = null;
   private isConnected = false;
   private useInMemory = false;
-  
+
   // In-memory fallback cache
   private memoryCache = new Map<string, { value: string; expiresAt: number }>();
   private cleanupInterval: NodeJS.Timeout | null = null;
@@ -26,9 +31,11 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleInit() {
     const redisUrl = this.configService.get<string>('REDIS_URL');
-    
+
     if (!redisUrl) {
-      this.logger.log('Redis not configured - using in-memory cache (this is fine for development)');
+      this.logger.log(
+        'Redis not configured - using in-memory cache (this is fine for development)',
+      );
       this.useInMemory = true;
       this.startMemoryCleanup();
       return;
@@ -89,7 +96,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
    */
   private startMemoryCleanup() {
     if (this.cleanupInterval) return;
-    
+
     this.cleanupInterval = setInterval(() => {
       const now = Date.now();
       for (const [key, entry] of this.memoryCache.entries()) {
@@ -282,7 +289,10 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       const entry = this.memoryCache.get(key);
       const current = entry ? parseInt(entry.value, 10) || 0 : 0;
       const newValue = current + 1;
-      this.memoryCache.set(key, { value: String(newValue), expiresAt: entry?.expiresAt || Infinity });
+      this.memoryCache.set(key, {
+        value: String(newValue),
+        expiresAt: entry?.expiresAt || Infinity,
+      });
       return newValue;
     }
 
@@ -334,7 +344,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       const info = await this.client!.info('memory');
       const dbSize = await this.client!.dbsize();
       const memMatch = info.match(/used_memory_human:(\S+)/);
-      
+
       return {
         mode: 'redis',
         connected: this.isConnected,

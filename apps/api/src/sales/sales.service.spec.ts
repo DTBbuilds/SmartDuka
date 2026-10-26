@@ -275,7 +275,7 @@ describe('SalesService', () => {
         mockShopId,
         'prod1',
         -2, // Negative for reduction
-        expect.objectContaining({ reason: 'sale' })
+        expect.objectContaining({ reason: 'sale' }),
       );
     });
 

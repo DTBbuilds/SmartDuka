@@ -5,7 +5,7 @@ import { Product, ProductDocument } from '../schemas/product.schema';
 
 interface ExpiryAlertThresholds {
   critical: number; // days (default: 7)
-  warning: number;  // days (default: 30)
+  warning: number; // days (default: 30)
   upcoming: number; // days (default: 90)
 }
 
@@ -52,23 +52,28 @@ export class ExpiryTrackingService {
     shopId: string | Types.ObjectId,
     thresholds: Partial<ExpiryAlertThresholds> = {},
   ): Promise<{ products: ExpiringProduct[]; stats: ExpiryStats }> {
-    const shopObjectId = typeof shopId === 'string' ? new Types.ObjectId(shopId) : shopId;
+    const shopObjectId =
+      typeof shopId === 'string' ? new Types.ObjectId(shopId) : shopId;
     const mergedThresholds = { ...this.defaultThresholds, ...thresholds };
 
     const now = new Date();
     const ninetyDaysFromNow = new Date(now);
-    ninetyDaysFromNow.setDate(ninetyDaysFromNow.getDate() + mergedThresholds.upcoming);
+    ninetyDaysFromNow.setDate(
+      ninetyDaysFromNow.getDate() + mergedThresholds.upcoming,
+    );
 
     // Find all products with expiry dates within the next 90 days or already expired
-    const products = await this.productModel.find({
-      shopId: shopObjectId,
-      expiryDate: { $exists: true, $ne: null, $lte: ninetyDaysFromNow },
-      stock: { $gt: 0 },
-      status: 'active',
-    }).lean();
+    const products = await this.productModel
+      .find({
+        shopId: shopObjectId,
+        expiryDate: { $exists: true, $ne: null, $lte: ninetyDaysFromNow },
+        stock: { $gt: 0 },
+        status: 'active',
+      })
+      .lean();
 
     const expiringProducts: ExpiringProduct[] = [];
-    let stats: ExpiryStats = {
+    const stats: ExpiryStats = {
       total: 0,
       expired: 0,
       critical: 0,
@@ -81,7 +86,9 @@ export class ExpiryTrackingService {
       if (!product.expiryDate) continue;
 
       const expiryDate = new Date(product.expiryDate);
-      const daysUntilExpiry = Math.ceil((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      const daysUntilExpiry = Math.ceil(
+        (expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
+      );
 
       let status: ExpiringProduct['status'];
       if (daysUntilExpiry < 0) {
@@ -131,15 +138,18 @@ export class ExpiryTrackingService {
   async getExpiredProducts(
     shopId: string | Types.ObjectId,
   ): Promise<ExpiringProduct[]> {
-    const shopObjectId = typeof shopId === 'string' ? new Types.ObjectId(shopId) : shopId;
+    const shopObjectId =
+      typeof shopId === 'string' ? new Types.ObjectId(shopId) : shopId;
     const now = new Date();
 
-    const products = await this.productModel.find({
-      shopId: shopObjectId,
-      expiryDate: { $exists: true, $ne: null, $lt: now },
-      stock: { $gt: 0 },
-      status: 'active',
-    }).lean();
+    const products = await this.productModel
+      .find({
+        shopId: shopObjectId,
+        expiryDate: { $exists: true, $ne: null, $lt: now },
+        stock: { $gt: 0 },
+        status: 'active',
+      })
+      .lean();
 
     return products.map((product) => ({
       _id: product._id.toString(),
@@ -147,7 +157,10 @@ export class ExpiryTrackingService {
       sku: product.sku || '',
       batchNumber: product.batchNumber,
       expiryDate: new Date(product.expiryDate!),
-      daysUntilExpiry: Math.ceil((new Date(product.expiryDate!).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)),
+      daysUntilExpiry: Math.ceil(
+        (new Date(product.expiryDate!).getTime() - now.getTime()) /
+          (1000 * 60 * 60 * 24),
+      ),
       stock: product.stock || 0,
       category: product.categoryId?.toString(),
       supplier: product.preferredSupplierId?.toString(),
@@ -163,23 +176,27 @@ export class ExpiryTrackingService {
     shopId: string | Types.ObjectId,
     days: number,
   ): Promise<ExpiringProduct[]> {
-    const shopObjectId = typeof shopId === 'string' ? new Types.ObjectId(shopId) : shopId;
+    const shopObjectId =
+      typeof shopId === 'string' ? new Types.ObjectId(shopId) : shopId;
     const now = new Date();
     const futureDate = new Date(now);
     futureDate.setDate(futureDate.getDate() + days);
 
-    const products = await this.productModel.find({
-      shopId: shopObjectId,
-      expiryDate: { $exists: true, $ne: null, $gte: now, $lte: futureDate },
-      stock: { $gt: 0 },
-      status: 'active',
-    }).lean();
+    const products = await this.productModel
+      .find({
+        shopId: shopObjectId,
+        expiryDate: { $exists: true, $ne: null, $gte: now, $lte: futureDate },
+        stock: { $gt: 0 },
+        status: 'active',
+      })
+      .lean();
 
     return products.map((product) => {
       const daysUntilExpiry = Math.ceil(
-        (new Date(product.expiryDate!).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+        (new Date(product.expiryDate!).getTime() - now.getTime()) /
+          (1000 * 60 * 60 * 24),
       );
-      
+
       let status: ExpiringProduct['status'];
       if (daysUntilExpiry <= 7) status = 'critical';
       else if (daysUntilExpiry <= 30) status = 'warning';
@@ -220,9 +237,9 @@ export class ExpiryTrackingService {
       'agro_vet',
       'beauty_cosmetics',
     ];
-    
-    return typesRequiringExpiry.some(type => 
-      businessType.toLowerCase().includes(type)
+
+    return typesRequiringExpiry.some((type) =>
+      businessType.toLowerCase().includes(type),
     );
   }
 
@@ -232,44 +249,46 @@ export class ExpiryTrackingService {
   async getFEFORecommendation(
     shopId: string | Types.ObjectId,
     productName?: string,
-  ): Promise<Array<{ product: ExpiringProduct; action: string; priority: number }>> {
+  ): Promise<
+    Array<{ product: ExpiringProduct; action: string; priority: number }>
+  > {
     const { products } = await this.getExpiringProducts(shopId);
-    
+
     let filtered = products;
     if (productName) {
-      filtered = products.filter(p => 
-        p.name.toLowerCase().includes(productName.toLowerCase())
+      filtered = products.filter((p) =>
+        p.name.toLowerCase().includes(productName.toLowerCase()),
       );
     }
 
-    return filtered.map((product) => {
-      let action: string;
-      let priority: number;
+    return filtered
+      .map((product) => {
+        let action: string;
+        let priority: number;
 
-      if (product.status === 'expired') {
-        action = 'Dispose immediately - write off inventory';
-        priority = 1;
-      } else if (product.status === 'critical') {
-        action = 'Mark for discount sale or promotion';
-        priority = 2;
-      } else if (product.status === 'warning') {
-        action = 'Plan promotion or bundle with faster-moving items';
-        priority = 3;
-      } else {
-        action = 'Monitor and plan inventory rotation';
-        priority = 4;
-      }
+        if (product.status === 'expired') {
+          action = 'Dispose immediately - write off inventory';
+          priority = 1;
+        } else if (product.status === 'critical') {
+          action = 'Mark for discount sale or promotion';
+          priority = 2;
+        } else if (product.status === 'warning') {
+          action = 'Plan promotion or bundle with faster-moving items';
+          priority = 3;
+        } else {
+          action = 'Monitor and plan inventory rotation';
+          priority = 4;
+        }
 
-      return { product, action, priority };
-    }).sort((a, b) => a.priority - b.priority);
+        return { product, action, priority };
+      })
+      .sort((a, b) => a.priority - b.priority);
   }
 
   /**
    * Generate disposal report for expired products
    */
-  async generateDisposalReport(
-    shopId: string | Types.ObjectId,
-  ): Promise<{
+  async generateDisposalReport(shopId: string | Types.ObjectId): Promise<{
     totalItems: number;
     totalValue: number;
     products: Array<{
@@ -283,7 +302,7 @@ export class ExpiryTrackingService {
     }>;
   }> {
     const expiredProducts = await this.getExpiredProducts(shopId);
-    
+
     const products = expiredProducts.map((p) => ({
       name: p.name,
       sku: p.sku,

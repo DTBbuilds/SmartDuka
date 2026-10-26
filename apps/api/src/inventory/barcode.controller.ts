@@ -1,6 +1,11 @@
 import { Body, Controller, Post, Get, Param, UseGuards } from '@nestjs/common';
 import { BarcodeService } from './barcode.service';
-import { ScanBarcodeDto, GenerateBarcodeDto, BulkImportBarcodesDto, ValidateBarcodeDto } from './dto/barcode.dto';
+import {
+  ScanBarcodeDto,
+  GenerateBarcodeDto,
+  BulkImportBarcodesDto,
+  ValidateBarcodeDto,
+} from './dto/barcode.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';

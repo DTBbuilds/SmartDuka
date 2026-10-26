@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Post, Put, Param, UseGuards, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Put,
+  Param,
+  UseGuards,
+  Query,
+} from '@nestjs/common';
 import { LoyaltyService } from './loyalty.service';
 import { CreateLoyaltyProgramDto } from './dto/create-loyalty-program.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -41,7 +50,11 @@ export class LoyaltyController {
     @Query('programId') programId: string,
     @CurrentUser() user: Record<string, any>,
   ) {
-    return this.loyaltyService.enrollCustomer(user.shopId, customerId, programId);
+    return this.loyaltyService.enrollCustomer(
+      user.shopId,
+      customerId,
+      programId,
+    );
   }
 
   @Post('earn/:customerId')
@@ -51,7 +64,12 @@ export class LoyaltyController {
     @Body() dto: { amount: number; reason?: string },
     @CurrentUser() user: Record<string, any>,
   ) {
-    return this.loyaltyService.earnPoints(user.shopId, customerId, dto.amount, dto.reason);
+    return this.loyaltyService.earnPoints(
+      user.shopId,
+      customerId,
+      dto.amount,
+      dto.reason,
+    );
   }
 
   @Post('redeem/:customerId')
@@ -61,7 +79,11 @@ export class LoyaltyController {
     @Body() dto: { points: number },
     @CurrentUser() user: Record<string, any>,
   ) {
-    return this.loyaltyService.redeemPoints(user.shopId, customerId, dto.points);
+    return this.loyaltyService.redeemPoints(
+      user.shopId,
+      customerId,
+      dto.points,
+    );
   }
 
   @Post('birthday-bonus/:customerId')
@@ -77,7 +99,10 @@ export class LoyaltyController {
     @Body() dto: { referralCode: string },
     @CurrentUser() user: Record<string, any>,
   ) {
-    return this.loyaltyService.claimReferralBonus(user.shopId, dto.referralCode);
+    return this.loyaltyService.claimReferralBonus(
+      user.shopId,
+      dto.referralCode,
+    );
   }
 
   @Get('account/:customerId')
@@ -125,7 +150,10 @@ export class LoyaltyController {
     @Query('limit') limit: string,
     @CurrentUser() user: Record<string, any>,
   ) {
-    return this.loyaltyService.getRecentLoyaltyCustomers(user.shopId, parseInt(limit) || 5);
+    return this.loyaltyService.getRecentLoyaltyCustomers(
+      user.shopId,
+      parseInt(limit) || 5,
+    );
   }
 
   @Get('top-customers')
@@ -134,7 +162,10 @@ export class LoyaltyController {
     @Query('limit') limit: string,
     @CurrentUser() user: Record<string, any>,
   ) {
-    return this.loyaltyService.getTopCustomers(user.shopId, parseInt(limit) || 10);
+    return this.loyaltyService.getTopCustomers(
+      user.shopId,
+      parseInt(limit) || 10,
+    );
   }
 
   @Get('stats')

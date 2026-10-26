@@ -1,4 +1,8 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Shift, ShiftDocument } from './schemas/shift.schema';
@@ -59,7 +63,10 @@ export class ShiftsService {
     return shift.save();
   }
 
-  async getCurrentShift(shopId: string, cashierId: string): Promise<Shift | null> {
+  async getCurrentShift(
+    shopId: string,
+    cashierId: string,
+  ): Promise<Shift | null> {
     return this.shiftModel.findOne({
       shopId: new Types.ObjectId(shopId),
       cashierId: new Types.ObjectId(cashierId),
@@ -67,7 +74,10 @@ export class ShiftsService {
     });
   }
 
-  async getShiftSalesData(shiftId: string, shopId: string): Promise<{
+  async getShiftSalesData(
+    shiftId: string,
+    shopId: string,
+  ): Promise<{
     totalSales: number;
     transactionCount: number;
     expectedCash: number;
@@ -191,7 +201,9 @@ export class ShiftsService {
     }
 
     if (shift.status !== 'closed') {
-      throw new BadRequestException('Shift must be closed before reconciliation');
+      throw new BadRequestException(
+        'Shift must be closed before reconciliation',
+      );
     }
 
     // Calculate actual sales from orders during this shift. P0-10: net cash
@@ -328,7 +340,9 @@ export class ShiftsService {
     if (!shift.endTime) {
       return Date.now() - new Date(shift.startTime).getTime();
     }
-    return new Date(shift.endTime).getTime() - new Date(shift.startTime).getTime();
+    return (
+      new Date(shift.endTime).getTime() - new Date(shift.startTime).getTime()
+    );
   }
 
   async formatDuration(milliseconds: number): Promise<string> {
@@ -351,7 +365,11 @@ export class ShiftsService {
     shiftId: string,
     shopId: string,
     isActive: boolean,
-  ): Promise<{ success: boolean; activeTimeMs: number; inactiveTimeMs: number }> {
+  ): Promise<{
+    success: boolean;
+    activeTimeMs: number;
+    inactiveTimeMs: number;
+  }> {
     const shift = await this.shiftModel.findOne({
       _id: new Types.ObjectId(shiftId),
       shopId: new Types.ObjectId(shopId),
@@ -409,7 +427,8 @@ export class ShiftsService {
 
     // Close any open activity period
     if (shift.activityPeriods && shift.activityPeriods.length > 0) {
-      const lastPeriod = shift.activityPeriods[shift.activityPeriods.length - 1];
+      const lastPeriod =
+        shift.activityPeriods[shift.activityPeriods.length - 1];
       if (!lastPeriod.endTime) {
         lastPeriod.endTime = now;
       }
@@ -445,10 +464,12 @@ export class ShiftsService {
 
     // Find and close the open break period
     if (shift.activityPeriods && shift.activityPeriods.length > 0) {
-      const lastPeriod = shift.activityPeriods[shift.activityPeriods.length - 1];
+      const lastPeriod =
+        shift.activityPeriods[shift.activityPeriods.length - 1];
       if (lastPeriod.type === 'break' && !lastPeriod.endTime) {
         lastPeriod.endTime = now;
-        const breakDuration = now.getTime() - new Date(lastPeriod.startTime).getTime();
+        const breakDuration =
+          now.getTime() - new Date(lastPeriod.startTime).getTime();
         shift.breakTimeMs = (shift.breakTimeMs || 0) + breakDuration;
       }
     }
@@ -466,7 +487,10 @@ export class ShiftsService {
   /**
    * Get shift statistics with activity breakdown
    */
-  async getShiftStats(shiftId: string, shopId: string): Promise<{
+  async getShiftStats(
+    shiftId: string,
+    shopId: string,
+  ): Promise<{
     totalDurationMs: number;
     activeTimeMs: number;
     inactiveTimeMs: number;
@@ -491,20 +515,19 @@ export class ShiftsService {
 
     // Calculate active percentage
     const trackedTime = activeTimeMs + inactiveTimeMs + breakTimeMs;
-    const activePercentage = trackedTime > 0 
-      ? Math.round((activeTimeMs / trackedTime) * 100) 
-      : 100; // Default to 100% if no tracking data
+    const activePercentage =
+      trackedTime > 0 ? Math.round((activeTimeMs / trackedTime) * 100) : 100; // Default to 100% if no tracking data
 
     // Calculate sales per active hour
     const activeHours = activeTimeMs / (1000 * 60 * 60);
-    const salesPerActiveHour = activeHours > 0 
-      ? Math.round(salesData.totalSales / activeHours) 
-      : 0;
+    const salesPerActiveHour =
+      activeHours > 0 ? Math.round(salesData.totalSales / activeHours) : 0;
 
     // Average transaction value
-    const averageTransactionValue = salesData.transactionCount > 0
-      ? Math.round(salesData.totalSales / salesData.transactionCount)
-      : 0;
+    const averageTransactionValue =
+      salesData.transactionCount > 0
+        ? Math.round(salesData.totalSales / salesData.transactionCount)
+        : 0;
 
     return {
       totalDurationMs,
@@ -568,10 +591,12 @@ export class ShiftsService {
       totalTransactions += shift.transactionCount || 0;
     }
 
-    const totalTrackedTime = totalActiveTimeMs + totalInactiveTimeMs + totalBreakTimeMs;
-    const averageActivePercentage = totalTrackedTime > 0
-      ? Math.round((totalActiveTimeMs / totalTrackedTime) * 100)
-      : 100;
+    const totalTrackedTime =
+      totalActiveTimeMs + totalInactiveTimeMs + totalBreakTimeMs;
+    const averageActivePercentage =
+      totalTrackedTime > 0
+        ? Math.round((totalActiveTimeMs / totalTrackedTime) * 100)
+        : 100;
 
     return {
       totalShifts: shifts.length,

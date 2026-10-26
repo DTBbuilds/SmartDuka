@@ -5,7 +5,7 @@ export type StripeWebhookEventDocument = HydratedDocument<StripeWebhookEvent>;
 
 /**
  * Stripe Webhook Event Schema
- * 
+ *
  * Stores all webhook events for idempotency and audit trail.
  * Prevents duplicate processing and enables event replay if needed.
  */
@@ -42,7 +42,8 @@ export class StripeWebhookEvent {
   updatedAt?: Date;
 }
 
-export const StripeWebhookEventSchema = SchemaFactory.createForClass(StripeWebhookEvent);
+export const StripeWebhookEventSchema =
+  SchemaFactory.createForClass(StripeWebhookEvent);
 
 // Indexes
 // Note: stripeEventId index is already created by unique: true in @Prop decorator
@@ -52,5 +53,8 @@ StripeWebhookEventSchema.index({ createdAt: -1 });
 // TTL index to auto-delete old processed events after 90 days
 StripeWebhookEventSchema.index(
   { createdAt: 1 },
-  { expireAfterSeconds: 90 * 24 * 60 * 60, partialFilterExpression: { processed: true } }
+  {
+    expireAfterSeconds: 90 * 24 * 60 * 60,
+    partialFilterExpression: { processed: true },
+  },
 );

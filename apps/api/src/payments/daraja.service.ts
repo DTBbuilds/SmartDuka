@@ -66,7 +66,7 @@ export class DarajaService {
       consumerSecret: this.configService.get('MPESA_CONSUMER_SECRET', ''),
       shortCode: this.configService.get('MPESA_SHORTCODE', '174379'),
       passKey: this.configService.get('MPESA_PASSKEY', ''),
-      environment: this.configService.get('MPESA_ENV', 'sandbox') as 'sandbox' | 'production',
+      environment: this.configService.get('MPESA_ENV', 'sandbox'),
     };
 
     this.client = axios.create({
@@ -109,9 +109,15 @@ export class DarajaService {
     } catch (error: any) {
       this.logger.error('Failed to get access token');
       this.logger.error('Error message:', error?.message);
-      this.logger.error('Response data:', JSON.stringify(error?.response?.data));
+      this.logger.error(
+        'Response data:',
+        JSON.stringify(error?.response?.data),
+      );
       this.logger.error('Response status:', error?.response?.status);
-      this.logger.error('Consumer Key (first 10 chars):', this.config.consumerKey?.substring(0, 10));
+      this.logger.error(
+        'Consumer Key (first 10 chars):',
+        this.config.consumerKey?.substring(0, 10),
+      );
       throw new Error('Failed to authenticate with M-Pesa');
     }
   }
@@ -124,25 +130,31 @@ export class DarajaService {
 
       // Validate phone number format (Safaricom: 2547XXXXXXXX or 2541XXXXXXXX)
       if (!/^254[71]\d{8}$/.test(formattedPhone)) {
-        throw new Error(`Invalid phone number format: ${formattedPhone}. Must be 2547XXXXXXXX or 2541XXXXXXXX (Safaricom number)`);
+        throw new Error(
+          `Invalid phone number format: ${formattedPhone}. Must be 2547XXXXXXXX or 2541XXXXXXXX (Safaricom number)`,
+        );
       }
 
       // SANDBOX MODE: Only allow sandbox test numbers
       if (isSandbox) {
         if (!isSandboxTestNumber(formattedPhone)) {
-          this.logger.warn(`🧪 SANDBOX: Rejecting non-test number ${formattedPhone}`);
+          this.logger.warn(
+            `🧪 SANDBOX: Rejecting non-test number ${formattedPhone}`,
+          );
           throw new Error(SANDBOX_MODE_ERROR.message);
         }
-        
+
         // For sandbox test numbers, simulate the STK push response
-        this.logger.log(`🧪 SANDBOX: Simulating STK Push for test number ${formattedPhone}`);
+        this.logger.log(
+          `🧪 SANDBOX: Simulating STK Push for test number ${formattedPhone}`,
+        );
         const scenario = getSimulationScenario(formattedPhone);
         this.logger.log(`🧪 SANDBOX: Scenario = ${scenario}`);
-        
+
         // Generate fake checkout/merchant request IDs
         const fakeCheckoutId = `ws_CO_SANDBOX_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
         const fakeMerchantId = `SANDBOX_${Date.now()}`;
-        
+
         return {
           MerchantRequestID: fakeMerchantId,
           CheckoutRequestID: fakeCheckoutId,
@@ -158,34 +170,44 @@ export class DarajaService {
 
       // Validate amount
       if (request.amount < 1 || request.amount > 150000) {
-        throw new Error(`Invalid amount: ${request.amount}. Must be between 1 and 150,000 KES`);
+        throw new Error(
+          `Invalid amount: ${request.amount}. Must be between 1 and 150,000 KES`,
+        );
       }
 
       // Validate callback URL
       if (!request.callbackUrl || !request.callbackUrl.startsWith('https://')) {
-        this.logger.warn(`Callback URL should be HTTPS: ${request.callbackUrl}`);
+        this.logger.warn(
+          `Callback URL should be HTTPS: ${request.callbackUrl}`,
+        );
       }
 
       // Check for potentially problematic callback URLs in sandbox
-      const problematicDomains = ['trycloudflare.com', 'cloudflare', 'workers.dev'];
-      const hasProblematicDomain = problematicDomains.some(d => request.callbackUrl.includes(d));
-      
+      const problematicDomains = [
+        'trycloudflare.com',
+        'cloudflare',
+        'workers.dev',
+      ];
+      const hasProblematicDomain = problematicDomains.some((d) =>
+        request.callbackUrl.includes(d),
+      );
+
       if (hasProblematicDomain) {
         this.logger.warn(
           `Cloudflare tunnel URLs often get rejected by M-Pesa sandbox with "Threat Detected" error. ` +
-          `Consider using ngrok instead: ngrok http 5000`
+            `Consider using ngrok instead: ngrok http 5000`,
         );
       }
 
       // Sanitize account reference (max 12 chars, alphanumeric)
-      const sanitizedAccountRef = request.accountReference
-        .replace(/[^a-zA-Z0-9]/g, '')
-        .slice(0, 12) || 'Payment';
+      const sanitizedAccountRef =
+        request.accountReference.replace(/[^a-zA-Z0-9]/g, '').slice(0, 12) ||
+        'Payment';
 
       // Sanitize transaction description (max 13 chars)
-      const sanitizedDesc = request.transactionDesc
-        .replace(/[^a-zA-Z0-9 ]/g, '')
-        .slice(0, 13) || 'Payment';
+      const sanitizedDesc =
+        request.transactionDesc.replace(/[^a-zA-Z0-9 ]/g, '').slice(0, 13) ||
+        'Payment';
 
       const payload = {
         BusinessShortCode: this.config.shortCode,
@@ -201,13 +223,19 @@ export class DarajaService {
         TransactionDesc: sanitizedDesc,
       };
 
-      this.logger.log(`STK Push payload: ShortCode=${this.config.shortCode}, Phone=${formattedPhone}, Amount=${payload.Amount}, AccountRef=${sanitizedAccountRef}`);
+      this.logger.log(
+        `STK Push payload: ShortCode=${this.config.shortCode}, Phone=${formattedPhone}, Amount=${payload.Amount}, AccountRef=${sanitizedAccountRef}`,
+      );
 
-      const response = await this.client.post('/mpesa/stkpush/v1/processrequest', payload, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
+      const response = await this.client.post(
+        '/mpesa/stkpush/v1/processrequest',
+        payload,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
         },
-      });
+      );
 
       this.logger.log(`STK Push initiated: ${response.data.CheckoutRequestID}`);
 
@@ -221,14 +249,15 @@ export class DarajaService {
     } catch (error: any) {
       this.logger.error('STK Push failed');
       this.logger.error(error?.response?.data || error?.message);
-      
+
       // Parse specific M-Pesa errors
       const errorData = error?.response?.data;
       let errorMessage = 'Failed to initiate STK push';
-      
+
       if (errorData?.errorCode === '400.002.02') {
         // "Threat Detected" - usually means invalid callback URL or request format
-        errorMessage = 'M-Pesa rejected the request. Common causes:\n' +
+        errorMessage =
+          'M-Pesa rejected the request. Common causes:\n' +
           '1. Invalid callback URL (must be HTTPS and publicly accessible)\n' +
           '2. Invalid phone number format\n' +
           '3. Special characters in AccountReference or TransactionDesc\n' +
@@ -238,7 +267,7 @@ export class DarajaService {
       } else if (error?.message) {
         errorMessage = error.message;
       }
-      
+
       throw new Error(errorMessage);
     }
   }
@@ -278,7 +307,10 @@ export class DarajaService {
         resultDesc: response.data.ResultDesc,
       };
     } catch (error: any) {
-      this.logger.error('STK Query failed', error?.response?.data || error?.message);
+      this.logger.error(
+        'STK Query failed',
+        error?.response?.data || error?.message,
+      );
       throw new Error(
         error?.response?.data?.errorMessage ||
           error?.message ||
@@ -304,8 +336,12 @@ export class DarajaService {
         Amount: Math.round(amount),
         ReceiverParty: this.config.shortCode,
         RecieverIdentifierType: '4',
-        ResultURL: process.env.MPESA_RESULT_URL || 'https://your-domain.com/payments/reversal-result',
-        QueueTimeOutURL: process.env.MPESA_TIMEOUT_URL || 'https://your-domain.com/payments/reversal-timeout',
+        ResultURL:
+          process.env.MPESA_RESULT_URL ||
+          'https://your-domain.com/payments/reversal-result',
+        QueueTimeOutURL:
+          process.env.MPESA_TIMEOUT_URL ||
+          'https://your-domain.com/payments/reversal-timeout',
         Remarks: reason,
       };
 
@@ -326,7 +362,10 @@ export class DarajaService {
         status: response.data.ResponseCode === '0' ? 'pending' : 'failed',
       };
     } catch (error: any) {
-      this.logger.error('Transaction reversal failed', error?.response?.data || error?.message);
+      this.logger.error(
+        'Transaction reversal failed',
+        error?.response?.data || error?.message,
+      );
       throw new Error(
         error?.response?.data?.errorMessage ||
           error?.message ||
@@ -350,7 +389,10 @@ export class DarajaService {
   }
 
   private getTimestamp(): string {
-    return new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
+    return new Date()
+      .toISOString()
+      .replace(/[^0-9]/g, '')
+      .slice(0, 14);
   }
 
   private generatePassword(timestamp: string): string {

@@ -29,7 +29,10 @@ import {
   PaymentAttemptDocument,
   PaymentAttemptStatus,
 } from '../subscriptions/schemas/payment-attempt.schema';
-import { Subscription, SubscriptionDocument } from '../subscriptions/schemas/subscription.schema';
+import {
+  Subscription,
+  SubscriptionDocument,
+} from '../subscriptions/schemas/subscription.schema';
 import { Shop, ShopDocument } from '../shops/schemas/shop.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
@@ -40,7 +43,7 @@ import { EventsGateway } from '../events/events.gateway';
 
 /**
  * Super Admin Payment Verification Controller
- * 
+ *
  * Allows super admins to:
  * 1. View all pending payment verifications
  * 2. Verify/approve manual payments
@@ -87,23 +90,33 @@ export class SuperAdminPaymentsController {
     const todayStart = new Date(now.setHours(0, 0, 0, 0));
     const weekStart = new Date(now.setDate(now.getDate() - 7));
 
-    const [
-      pendingVerifications,
-      pendingUpgrades,
-      todayStats,
-      weekStats,
-    ] = await Promise.all([
-      this.invoiceModel.countDocuments({ status: 'pending_verification' }),
-      this.subscriptionModel.countDocuments({ 'pendingUpgrade': { $exists: true, $ne: null } }),
-      this.invoiceModel.aggregate([
-        { $match: { status: 'paid', paidAt: { $gte: todayStart } } },
-        { $group: { _id: null, count: { $sum: 1 }, total: { $sum: '$totalAmount' } } },
-      ]),
-      this.invoiceModel.aggregate([
-        { $match: { status: 'paid', paidAt: { $gte: weekStart } } },
-        { $group: { _id: null, count: { $sum: 1 }, total: { $sum: '$totalAmount' } } },
-      ]),
-    ]);
+    const [pendingVerifications, pendingUpgrades, todayStats, weekStats] =
+      await Promise.all([
+        this.invoiceModel.countDocuments({ status: 'pending_verification' }),
+        this.subscriptionModel.countDocuments({
+          pendingUpgrade: { $exists: true, $ne: null },
+        }),
+        this.invoiceModel.aggregate([
+          { $match: { status: 'paid', paidAt: { $gte: todayStart } } },
+          {
+            $group: {
+              _id: null,
+              count: { $sum: 1 },
+              total: { $sum: '$totalAmount' },
+            },
+          },
+        ]),
+        this.invoiceModel.aggregate([
+          { $match: { status: 'paid', paidAt: { $gte: weekStart } } },
+          {
+            $group: {
+              _id: null,
+              count: { $sum: 1 },
+              total: { $sum: '$totalAmount' },
+            },
+          },
+        ]),
+      ]);
 
     return {
       pendingVerifications,
@@ -152,7 +165,9 @@ export class SuperAdminPaymentsController {
           },
         },
         { $unwind: { path: '$shop', preserveNullAndEmptyArrays: true } },
-        { $unwind: { path: '$subscription', preserveNullAndEmptyArrays: true } },
+        {
+          $unwind: { path: '$subscription', preserveNullAndEmptyArrays: true },
+        },
         {
           $addFields: {
             shopName: { $ifNull: ['$shop.name', 'Unknown Shop'] },
@@ -201,7 +216,15 @@ export class SuperAdminPaymentsController {
             let: { invoiceId: { $toObjectId: '$pendingUpgrade.invoiceId' } },
             pipeline: [
               { $match: { $expr: { $eq: ['$_id', '$$invoiceId'] } } },
-              { $project: { invoiceNumber: 1, status: 1, totalAmount: 1, mpesaReceiptNumber: 1, manualPayment: 1 } },
+              {
+                $project: {
+                  invoiceNumber: 1,
+                  status: 1,
+                  totalAmount: 1,
+                  mpesaReceiptNumber: 1,
+                  manualPayment: 1,
+                },
+              },
             ],
             as: 'invoice',
           },
@@ -233,7 +256,9 @@ export class SuperAdminPaymentsController {
           },
         },
       ]),
-      this.subscriptionModel.countDocuments({ pendingUpgrade: { $exists: true, $ne: null } }),
+      this.subscriptionModel.countDocuments({
+        pendingUpgrade: { $exists: true, $ne: null },
+      }),
     ]);
 
     return { upgrades, total };
@@ -254,7 +279,9 @@ export class SuperAdminPaymentsController {
     message: string;
     upgradeActivated?: boolean;
   }> {
-    this.logger.log(`Super admin ${admin.email} verifying payment for invoice ${invoiceId}`);
+    this.logger.log(
+      `Super admin ${admin.email} verifying payment for invoice ${invoiceId}`,
+    );
 
     const invoice = await this.invoiceModel.findById(invoiceId);
     if (!invoice) {
@@ -266,7 +293,10 @@ export class SuperAdminPaymentsController {
     }
 
     if (invoice.status !== 'pending_verification') {
-      return { success: false, message: `Cannot verify invoice with status: ${invoice.status}` };
+      return {
+        success: false,
+        message: `Cannot verify invoice with status: ${invoice.status}`,
+      };
     }
 
     // Update invoice as verified and paid
@@ -321,7 +351,7 @@ export class SuperAdminPaymentsController {
     // Check if this is for a pending upgrade and activate it
     let upgradeActivated = false;
     let subscriptionActivated = false;
-    
+
     if (invoice.type === 'upgrade') {
       const result = await this.subscriptionsService.activatePendingUpgrade(
         invoice.shopId.toString(),
@@ -329,68 +359,96 @@ export class SuperAdminPaymentsController {
       );
       if (result) {
         upgradeActivated = true;
-        this.logger.log(`✅ Upgrade activated for shop ${invoice.shopId} after payment verification`);
+        this.logger.log(
+          `✅ Upgrade activated for shop ${invoice.shopId} after payment verification`,
+        );
       }
     } else {
       // For regular subscription invoices (renewal, new subscription), activate the subscription
       try {
-        await this.subscriptionsService.verifyAndActivatePayment(invoiceId, admin.sub);
+        await this.subscriptionsService.verifyAndActivatePayment(
+          invoiceId,
+          admin.sub,
+        );
         subscriptionActivated = true;
-        this.logger.log(`✅ Subscription activated for shop ${invoice.shopId} after payment verification`);
+        this.logger.log(
+          `✅ Subscription activated for shop ${invoice.shopId} after payment verification`,
+        );
       } catch (activationError: any) {
-        this.logger.warn(`Subscription activation skipped or failed: ${activationError.message}`);
+        this.logger.warn(
+          `Subscription activation skipped or failed: ${activationError.message}`,
+        );
         // Continue - invoice is already marked as paid
       }
     }
 
     // Emit refresh events for instant UI updates
-    this.emitPaymentVerifiedEvents(invoice.shopId.toString(), invoiceId, upgradeActivated || subscriptionActivated);
+    this.emitPaymentVerifiedEvents(
+      invoice.shopId.toString(),
+      invoiceId,
+      upgradeActivated || subscriptionActivated,
+    );
 
     // Send payment confirmation email
     try {
       const shop = await this.shopModel.findById(invoice.shopId).lean();
-      const shopAdmin = await this.userModel.findOne({ 
-        shopId: invoice.shopId, 
-        role: 'admin' 
-      }).lean();
-      const subscription = await this.subscriptionModel.findById(invoice.subscriptionId).lean();
+      const shopAdmin = await this.userModel
+        .findOne({
+          shopId: invoice.shopId,
+          role: 'admin',
+        })
+        .lean();
+      const subscription = await this.subscriptionModel
+        .findById(invoice.subscriptionId)
+        .lean();
 
       if (shopAdmin?.email && shop) {
         const template = EMAIL_TEMPLATES.payment_successful;
-        const frontendUrl = process.env.FRONTEND_URL || 'https://www.smartduka.org';
+        const frontendUrl =
+          process.env.FRONTEND_URL || 'https://www.smartduka.org';
         const apiUrl = process.env.API_URL || 'https://smarduka.onrender.com';
-        
+
         // Format sender phone if available
         const senderPhone = invoice.manualPayment?.senderPhoneNumber;
-        const formattedPhone = senderPhone ? 
-          senderPhone.replace(/(\d{4})(\d{3})(\d{3})/, '$1 $2 $3') : null;
-        
+        const formattedPhone = senderPhone
+          ? senderPhone.replace(/(\d{4})(\d{3})(\d{3})/, '$1 $2 $3')
+          : null;
+
         await this.emailService.sendEmail({
           to: shopAdmin.email,
           subject: template.subject
-            .replace('{{amount}}', `KES ${invoice.totalAmount.toLocaleString()}`)
+            .replace(
+              '{{amount}}',
+              `KES ${invoice.totalAmount.toLocaleString()}`,
+            )
             .replace('{{currency}}', 'KES'),
           html: template.getHtml({
             shopName: shop.name,
             userName: shopAdmin.name || shopAdmin.email,
             amount: `KES ${invoice.totalAmount.toLocaleString()}`,
             currency: 'KES',
-            paymentMethod: formattedPhone ? `M-Pesa Send Money (${formattedPhone})` : 'M-Pesa Send Money',
+            paymentMethod: formattedPhone
+              ? `M-Pesa Send Money (${formattedPhone})`
+              : 'M-Pesa Send Money',
             transactionId: invoice.mpesaReceiptNumber || invoice.invoiceNumber,
             planName: subscription?.planCode || 'Subscription',
             receiptUrl: `${frontendUrl}/settings/billing`,
-            date: new Date().toLocaleDateString('en-KE', { 
-              dateStyle: 'long' 
+            date: new Date().toLocaleDateString('en-KE', {
+              dateStyle: 'long',
             }),
           }),
           templateName: 'payment_confirmed',
           category: 'billing',
         });
 
-        this.logger.log(`📧 Payment confirmation email sent to ${shopAdmin.email}`);
+        this.logger.log(
+          `📧 Payment confirmation email sent to ${shopAdmin.email}`,
+        );
       }
     } catch (emailError: any) {
-      this.logger.error(`Failed to send payment confirmation email: ${emailError.message}`);
+      this.logger.error(
+        `Failed to send payment confirmation email: ${emailError.message}`,
+      );
       // Don't fail the verification if email fails
     }
 
@@ -399,8 +457,8 @@ export class SuperAdminPaymentsController {
       message: upgradeActivated
         ? 'Payment verified and subscription upgraded successfully!'
         : subscriptionActivated
-        ? 'Payment verified and subscription activated successfully!'
-        : 'Payment verified successfully!',
+          ? 'Payment verified and subscription activated successfully!'
+          : 'Payment verified successfully!',
       upgradeActivated,
     };
   }
@@ -419,10 +477,14 @@ export class SuperAdminPaymentsController {
     message: string;
   }> {
     if (!dto.reason || dto.reason.trim().length < 10) {
-      throw new BadRequestException('Please provide a detailed reason for rejection (min 10 characters)');
+      throw new BadRequestException(
+        'Please provide a detailed reason for rejection (min 10 characters)',
+      );
     }
 
-    this.logger.log(`Super admin ${admin.email} rejecting payment for invoice ${invoiceId}`);
+    this.logger.log(
+      `Super admin ${admin.email} rejecting payment for invoice ${invoiceId}`,
+    );
 
     const invoice = await this.invoiceModel.findById(invoiceId);
     if (!invoice) {
@@ -445,7 +507,9 @@ export class SuperAdminPaymentsController {
 
     // Cancel the pending upgrade if this was for an upgrade
     if (invoice.type === 'upgrade') {
-      await this.subscriptionsService.cancelPendingUpgrade(invoice.shopId.toString());
+      await this.subscriptionsService.cancelPendingUpgrade(
+        invoice.shopId.toString(),
+      );
     }
 
     // Log the rejection
@@ -580,7 +644,9 @@ export class SuperAdminPaymentsController {
     message: string;
   }> {
     if (!dto.reason || dto.reason.trim().length < 20) {
-      throw new BadRequestException('Please provide a detailed reason for force activation (min 20 characters)');
+      throw new BadRequestException(
+        'Please provide a detailed reason for force activation (min 20 characters)',
+      );
     }
 
     const subscription = await this.subscriptionModel.findById(subscriptionId);
@@ -589,10 +655,14 @@ export class SuperAdminPaymentsController {
     }
 
     if (!subscription.pendingUpgrade) {
-      throw new BadRequestException('No pending upgrade found for this subscription');
+      throw new BadRequestException(
+        'No pending upgrade found for this subscription',
+      );
     }
 
-    this.logger.warn(`⚠️ Super admin ${admin.email} FORCE activating upgrade for subscription ${subscriptionId}`);
+    this.logger.warn(
+      `⚠️ Super admin ${admin.email} FORCE activating upgrade for subscription ${subscriptionId}`,
+    );
 
     const result = await this.subscriptionsService.activatePendingUpgrade(
       subscription.shopId.toString(),
@@ -628,15 +698,23 @@ export class SuperAdminPaymentsController {
   /**
    * Emit refresh events for instant UI updates after payment verification
    */
-  private emitPaymentVerifiedEvents(shopId: string, invoiceId: string, subscriptionActivated: boolean): void {
+  private emitPaymentVerifiedEvents(
+    shopId: string,
+    invoiceId: string,
+    subscriptionActivated: boolean,
+  ): void {
     try {
-      this.logger.log(`🔄 Payment verified for shop ${shopId}, invoice ${invoiceId}${subscriptionActivated ? ' - subscription activated' : ''}`);
-      
+      this.logger.log(
+        `🔄 Payment verified for shop ${shopId}, invoice ${invoiceId}${subscriptionActivated ? ' - subscription activated' : ''}`,
+      );
+
       // Emit real-time WebSocket events for instant UI updates
       this.eventsGateway.emitPaymentVerified({
         shopId,
         invoiceId,
-        status: subscriptionActivated ? 'subscription_activated' : 'payment_verified',
+        status: subscriptionActivated
+          ? 'subscription_activated'
+          : 'payment_verified',
         data: {
           subscriptionActivated,
           timestamp: new Date().toISOString(),
@@ -658,7 +736,9 @@ export class SuperAdminPaymentsController {
 
       this.logger.log(`📡 Real-time events emitted for instant UI refresh`);
     } catch (error) {
-      this.logger.warn(`Failed to emit payment verification events: ${error.message}`);
+      this.logger.warn(
+        `Failed to emit payment verification events: ${error.message}`,
+      );
       // Don't fail payment verification if WebSocket fails
     }
   }

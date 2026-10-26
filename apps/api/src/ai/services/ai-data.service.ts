@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return */
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -12,13 +11,19 @@ export class AiDataService {
     @InjectModel('Product') private productModel: Model<any>,
   ) {}
 
-  async getSalesData(shopId: string, startDate: Date, endDate: Date): Promise<any[]> {
+  async getSalesData(
+    shopId: string,
+    startDate: Date,
+    endDate: Date,
+  ): Promise<any[]> {
     try {
-      return await this.orderModel.find({
-        shopId: new Types.ObjectId(shopId),
-        createdAt: { $gte: startDate, $lte: endDate },
-        status: { $in: ['completed', 'paid'] },
-      }).lean();
+      return await this.orderModel
+        .find({
+          shopId: new Types.ObjectId(shopId),
+          createdAt: { $gte: startDate, $lte: endDate },
+          status: { $in: ['completed', 'paid'] },
+        })
+        .lean();
     } catch (error: any) {
       this.logger.error(`Failed to get sales data: ${error.message}`);
       return [];
@@ -27,10 +32,12 @@ export class AiDataService {
 
   async getProductsWithStock(shopId: string): Promise<any[]> {
     try {
-      return await this.productModel.find({
-        shopId: new Types.ObjectId(shopId),
-        deletedAt: { $exists: false },
-      }).lean();
+      return await this.productModel
+        .find({
+          shopId: new Types.ObjectId(shopId),
+          deletedAt: { $exists: false },
+        })
+        .lean();
     } catch (error: any) {
       this.logger.error(`Failed to get products: ${error.message}`);
       return [];
@@ -39,18 +46,23 @@ export class AiDataService {
 
   async getLowStockProducts(shopId: string): Promise<any[]> {
     try {
-      return await this.productModel.find({
-        shopId: new Types.ObjectId(shopId),
-        deletedAt: { $exists: false },
-        $expr: { $lte: ['$stock', '$reorderLevel'] },
-      }).lean();
+      return await this.productModel
+        .find({
+          shopId: new Types.ObjectId(shopId),
+          deletedAt: { $exists: false },
+          $expr: { $lte: ['$stock', '$reorderLevel'] },
+        })
+        .lean();
     } catch (error: any) {
       this.logger.error(`Failed to get low stock products: ${error.message}`);
       return [];
     }
   }
 
-  async getDailySalesMetrics(shopId: string, date: Date): Promise<{ revenue: number; orders: number; items: number }> {
+  async getDailySalesMetrics(
+    shopId: string,
+    date: Date,
+  ): Promise<{ revenue: number; orders: number; items: number }> {
     const startOfDay = new Date(date);
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(date);

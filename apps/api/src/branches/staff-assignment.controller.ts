@@ -1,4 +1,13 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Put,
+  UseGuards,
+} from '@nestjs/common';
 import { StaffAssignmentService } from './staff-assignment.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -7,12 +16,14 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
 /**
  * PHASE 2: STAFF ASSIGNMENT CONTROLLER
- * 
+ *
  * Manages assignment of staff to branches
  */
 @Controller('staff-assignment')
 export class StaffAssignmentController {
-  constructor(private readonly staffAssignmentService: StaffAssignmentService) {}
+  constructor(
+    private readonly staffAssignmentService: StaffAssignmentService,
+  ) {}
 
   /**
    * Assign user to a branch

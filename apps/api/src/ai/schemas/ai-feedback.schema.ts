@@ -14,7 +14,10 @@ export class AiFeedback {
   @Prop({ type: Types.ObjectId, required: true })
   userId: Types.ObjectId;
 
-  @Prop({ required: true, enum: ['helpful', 'not_helpful', 'inaccurate', 'too_late', 'already_known'] })
+  @Prop({
+    required: true,
+    enum: ['helpful', 'not_helpful', 'inaccurate', 'too_late', 'already_known'],
+  })
   rating: string;
 
   @Prop()

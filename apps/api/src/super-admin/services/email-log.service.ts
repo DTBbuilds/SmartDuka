@@ -89,19 +89,21 @@ export class EmailLogService {
     provider?: string,
     providerResponse?: Record<string, any>,
   ): Promise<EmailLogDocument | null> {
-    return this.emailLogModel.findByIdAndUpdate(
-      new Types.ObjectId(emailLogId),
-      {
-        $set: {
-          status: 'sent',
-          sentAt: new Date(),
-          messageId,
-          provider,
-          providerResponse,
+    return this.emailLogModel
+      .findByIdAndUpdate(
+        new Types.ObjectId(emailLogId),
+        {
+          $set: {
+            status: 'sent',
+            sentAt: new Date(),
+            messageId,
+            provider,
+            providerResponse,
+          },
         },
-      },
-      { new: true },
-    ).exec();
+        { new: true },
+      )
+      .exec();
   }
 
   /**
@@ -112,69 +114,80 @@ export class EmailLogService {
     errorMessage: string,
     errorCode?: string,
   ): Promise<EmailLogDocument | null> {
-    return this.emailLogModel.findByIdAndUpdate(
-      new Types.ObjectId(emailLogId),
-      {
-        $set: {
-          status: 'failed',
-          failedAt: new Date(),
-          errorMessage,
-          errorCode,
+    return this.emailLogModel
+      .findByIdAndUpdate(
+        new Types.ObjectId(emailLogId),
+        {
+          $set: {
+            status: 'failed',
+            failedAt: new Date(),
+            errorMessage,
+            errorCode,
+          },
+          $inc: { retryCount: 1 },
         },
-        $inc: { retryCount: 1 },
-      },
-      { new: true },
-    ).exec();
+        { new: true },
+      )
+      .exec();
   }
 
   /**
    * Update email status to delivered
    */
   async markDelivered(emailLogId: string): Promise<EmailLogDocument | null> {
-    return this.emailLogModel.findByIdAndUpdate(
-      new Types.ObjectId(emailLogId),
-      {
-        $set: {
-          status: 'delivered',
-          deliveredAt: new Date(),
+    return this.emailLogModel
+      .findByIdAndUpdate(
+        new Types.ObjectId(emailLogId),
+        {
+          $set: {
+            status: 'delivered',
+            deliveredAt: new Date(),
+          },
         },
-      },
-      { new: true },
-    ).exec();
+        { new: true },
+      )
+      .exec();
   }
 
   /**
    * Track email open
    */
   async trackOpen(messageId: string): Promise<EmailLogDocument | null> {
-    return this.emailLogModel.findOneAndUpdate(
-      { messageId },
-      {
-        $set: {
-          opened: true,
-          openedAt: new Date(),
+    return this.emailLogModel
+      .findOneAndUpdate(
+        { messageId },
+        {
+          $set: {
+            opened: true,
+            openedAt: new Date(),
+          },
+          $inc: { openCount: 1 },
         },
-        $inc: { openCount: 1 },
-      },
-      { new: true },
-    ).exec();
+        { new: true },
+      )
+      .exec();
   }
 
   /**
    * Track link click
    */
-  async trackClick(messageId: string, link: string): Promise<EmailLogDocument | null> {
-    return this.emailLogModel.findOneAndUpdate(
-      { messageId },
-      {
-        $set: {
-          clicked: true,
-          clickedAt: new Date(),
+  async trackClick(
+    messageId: string,
+    link: string,
+  ): Promise<EmailLogDocument | null> {
+    return this.emailLogModel
+      .findOneAndUpdate(
+        { messageId },
+        {
+          $set: {
+            clicked: true,
+            clickedAt: new Date(),
+          },
+          $addToSet: { clickedLinks: link },
         },
-        $addToSet: { clickedLinks: link },
-      },
-      { new: true },
-    ).exec();
+        { new: true },
+      )
+      .exec();
   }
 
   /**
@@ -247,7 +260,10 @@ export class EmailLogService {
   /**
    * Get email statistics
    */
-  async getStats(startDate?: Date, endDate?: Date): Promise<{
+  async getStats(
+    startDate?: Date,
+    endDate?: Date,
+  ): Promise<{
     total: number;
     sent: number;
     delivered: number;
@@ -262,39 +278,45 @@ export class EmailLogService {
     if (startDate) dateQuery.$gte = startDate;
     if (endDate) dateQuery.$lte = endDate;
 
-    const matchStage = Object.keys(dateQuery).length > 0 
-      ? { createdAt: dateQuery } 
-      : {};
+    const matchStage =
+      Object.keys(dateQuery).length > 0 ? { createdAt: dateQuery } : {};
 
-    const [
-      total,
-      byStatus,
-      byCategory,
-      byTemplate,
-      openedCount,
-      clickedCount,
-    ] = await Promise.all([
-      this.emailLogModel.countDocuments(matchStage).exec(),
-      this.emailLogModel.aggregate([
-        { $match: matchStage },
-        { $group: { _id: '$status', count: { $sum: 1 } } },
-      ]).exec(),
-      this.emailLogModel.aggregate([
-        { $match: matchStage },
-        { $group: { _id: '$category', count: { $sum: 1 } } },
-      ]).exec(),
-      this.emailLogModel.aggregate([
-        { $match: { ...matchStage, templateName: { $exists: true } } },
-        { $group: { _id: '$templateName', count: { $sum: 1 } } },
-      ]).exec(),
-      this.emailLogModel.countDocuments({ ...matchStage, opened: true }).exec(),
-      this.emailLogModel.countDocuments({ ...matchStage, clicked: true }).exec(),
-    ]);
+    const [total, byStatus, byCategory, byTemplate, openedCount, clickedCount] =
+      await Promise.all([
+        this.emailLogModel.countDocuments(matchStage).exec(),
+        this.emailLogModel
+          .aggregate([
+            { $match: matchStage },
+            { $group: { _id: '$status', count: { $sum: 1 } } },
+          ])
+          .exec(),
+        this.emailLogModel
+          .aggregate([
+            { $match: matchStage },
+            { $group: { _id: '$category', count: { $sum: 1 } } },
+          ])
+          .exec(),
+        this.emailLogModel
+          .aggregate([
+            { $match: { ...matchStage, templateName: { $exists: true } } },
+            { $group: { _id: '$templateName', count: { $sum: 1 } } },
+          ])
+          .exec(),
+        this.emailLogModel
+          .countDocuments({ ...matchStage, opened: true })
+          .exec(),
+        this.emailLogModel
+          .countDocuments({ ...matchStage, clicked: true })
+          .exec(),
+      ]);
 
-    const statusMap = byStatus.reduce((acc, item) => {
-      acc[item._id] = item.count;
-      return acc;
-    }, {} as Record<string, number>);
+    const statusMap = byStatus.reduce(
+      (acc, item) => {
+        acc[item._id] = item.count;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
 
     const sentCount = (statusMap.sent || 0) + (statusMap.delivered || 0);
 
@@ -306,21 +328,31 @@ export class EmailLogService {
       pending: statusMap.pending || 0,
       openRate: sentCount > 0 ? (openedCount / sentCount) * 100 : 0,
       clickRate: sentCount > 0 ? (clickedCount / sentCount) * 100 : 0,
-      byCategory: byCategory.reduce((acc, item) => {
-        acc[item._id] = item.count;
-        return acc;
-      }, {} as Record<string, number>),
-      byTemplate: byTemplate.reduce((acc, item) => {
-        acc[item._id] = item.count;
-        return acc;
-      }, {} as Record<string, number>),
+      byCategory: byCategory.reduce(
+        (acc, item) => {
+          acc[item._id] = item.count;
+          return acc;
+        },
+        {} as Record<string, number>,
+      ),
+      byTemplate: byTemplate.reduce(
+        (acc, item) => {
+          acc[item._id] = item.count;
+          return acc;
+        },
+        {} as Record<string, number>,
+      ),
     };
   }
 
   /**
    * Get emails by shop
    */
-  async getByShop(shopId: string, limit = 50, skip = 0): Promise<EmailLogDocument[]> {
+  async getByShop(
+    shopId: string,
+    limit = 50,
+    skip = 0,
+  ): Promise<EmailLogDocument[]> {
     return this.emailLogModel
       .find({ shopId: new Types.ObjectId(shopId) })
       .sort({ createdAt: -1 })
@@ -333,23 +365,29 @@ export class EmailLogService {
    * Retry failed email (mark as pending for retry)
    */
   async retryEmail(emailLogId: string): Promise<EmailLogDocument | null> {
-    return this.emailLogModel.findByIdAndUpdate(
-      new Types.ObjectId(emailLogId),
-      {
-        $set: {
-          status: 'pending',
-          lastRetryAt: new Date(),
+    return this.emailLogModel
+      .findByIdAndUpdate(
+        new Types.ObjectId(emailLogId),
+        {
+          $set: {
+            status: 'pending',
+            lastRetryAt: new Date(),
+          },
         },
-      },
-      { new: true },
-    ).exec();
+        { new: true },
+      )
+      .exec();
   }
 
   /**
    * Retry failed email by actually resending it
    */
-  async retryFailedEmail(emailLogId: string): Promise<{ success: boolean; message: string; emailLogId?: string }> {
-    const emailLog = await this.emailLogModel.findById(new Types.ObjectId(emailLogId)).exec();
+  async retryFailedEmail(
+    emailLogId: string,
+  ): Promise<{ success: boolean; message: string; emailLogId?: string }> {
+    const emailLog = await this.emailLogModel
+      .findById(new Types.ObjectId(emailLogId))
+      .exec();
     if (!emailLog) {
       return { success: false, message: 'Email log not found' };
     }
@@ -359,7 +397,10 @@ export class EmailLogService {
     }
 
     if (!emailLog.to || !emailLog.subject || !emailLog.htmlContent) {
-      return { success: false, message: 'Email missing required data for retry' };
+      return {
+        success: false,
+        message: 'Email missing required data for retry',
+      };
     }
 
     try {
@@ -380,7 +421,9 @@ export class EmailLogService {
 
       return {
         success: result.success,
-        message: result.success ? 'Email retry successful' : `Retry failed: ${result.error}`,
+        message: result.success
+          ? 'Email retry successful'
+          : `Retry failed: ${result.error}`,
         emailLogId: result.emailLogId,
       };
     } catch (error: any) {
@@ -395,20 +438,24 @@ export class EmailLogService {
   /**
    * Delete an email log entry
    */
-  async delete(emailLogId: string): Promise<{ success: boolean; message: string }> {
+  async delete(
+    emailLogId: string,
+  ): Promise<{ success: boolean; message: string }> {
     try {
-      const result = await this.emailLogModel.findByIdAndDelete(
-        new Types.ObjectId(emailLogId)
-      ).exec();
-      
+      const result = await this.emailLogModel
+        .findByIdAndDelete(new Types.ObjectId(emailLogId))
+        .exec();
+
       if (!result) {
         return { success: false, message: 'Email log not found' };
       }
-      
+
       this.logger.log(`Deleted email log: ${emailLogId}`);
       return { success: true, message: 'Email log deleted successfully' };
     } catch (error: any) {
-      this.logger.error(`Failed to delete email log ${emailLogId}: ${error.message}`);
+      this.logger.error(
+        `Failed to delete email log ${emailLogId}: ${error.message}`,
+      );
       return { success: false, message: error.message };
     }
   }

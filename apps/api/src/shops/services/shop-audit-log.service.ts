@@ -1,12 +1,25 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { ShopAuditLog, ShopAuditLogDocument } from '../schemas/shop-audit-log.schema';
+import {
+  ShopAuditLog,
+  ShopAuditLogDocument,
+} from '../schemas/shop-audit-log.schema';
 
 export interface CreateAuditLogDto {
   shopId: string;
   performedBy: string;
-  action: 'verify' | 'reject' | 'suspend' | 'reactivate' | 'flag' | 'unflag' | 'update' | 'create' | 'delete' | 'restore';
+  action:
+    | 'verify'
+    | 'reject'
+    | 'suspend'
+    | 'reactivate'
+    | 'flag'
+    | 'unflag'
+    | 'update'
+    | 'create'
+    | 'delete'
+    | 'restore';
   oldValue?: Record<string, any>;
   newValue?: Record<string, any>;
   reason?: string;
@@ -18,7 +31,8 @@ export class ShopAuditLogService {
   private readonly logger = new Logger(ShopAuditLogService.name);
 
   constructor(
-    @InjectModel(ShopAuditLog.name) private readonly auditLogModel: Model<ShopAuditLogDocument>,
+    @InjectModel(ShopAuditLog.name)
+    private readonly auditLogModel: Model<ShopAuditLogDocument>,
   ) {}
 
   /**
@@ -95,13 +109,17 @@ export class ShopAuditLogService {
    * Get total audit log count for a shop
    */
   async getAuditLogCount(shopId: string): Promise<number> {
-    return this.auditLogModel.countDocuments({ shopId: new Types.ObjectId(shopId) });
+    return this.auditLogModel.countDocuments({
+      shopId: new Types.ObjectId(shopId),
+    });
   }
 
   /**
    * Get verification history for a shop
    */
-  async getVerificationHistory(shopId: string): Promise<ShopAuditLogDocument[]> {
+  async getVerificationHistory(
+    shopId: string,
+  ): Promise<ShopAuditLogDocument[]> {
     return this.auditLogModel
       .find({
         shopId: new Types.ObjectId(shopId),

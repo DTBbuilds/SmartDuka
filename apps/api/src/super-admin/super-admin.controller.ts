@@ -1,4 +1,15 @@
-import { Controller, Get, Put, Delete, Post, Query, Param, Body, UseGuards, BadRequestException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Put,
+  Delete,
+  Post,
+  Query,
+  Param,
+  Body,
+  UseGuards,
+  BadRequestException,
+} from '@nestjs/common';
 import { SuperAdminService } from './super-admin.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -19,7 +30,10 @@ export class SuperAdminController {
     @Query('limit') limit: string = '50',
     @Query('skip') skip: string = '0',
   ) {
-    const shops = await this.superAdminService.getPendingShops(parseInt(limit), parseInt(skip));
+    const shops = await this.superAdminService.getPendingShops(
+      parseInt(limit),
+      parseInt(skip),
+    );
     const count = await this.superAdminService.getPendingShopsCount();
     return { shops, count };
   }
@@ -32,7 +46,10 @@ export class SuperAdminController {
     @Query('limit') limit: string = '50',
     @Query('skip') skip: string = '0',
   ) {
-    const shops = await this.superAdminService.getVerifiedShops(parseInt(limit), parseInt(skip));
+    const shops = await this.superAdminService.getVerifiedShops(
+      parseInt(limit),
+      parseInt(skip),
+    );
     const count = await this.superAdminService.getVerifiedShopsCount();
     return { shops, count };
   }
@@ -45,7 +62,10 @@ export class SuperAdminController {
     @Query('limit') limit: string = '50',
     @Query('skip') skip: string = '0',
   ) {
-    const shops = await this.superAdminService.getActiveShops(parseInt(limit), parseInt(skip));
+    const shops = await this.superAdminService.getActiveShops(
+      parseInt(limit),
+      parseInt(skip),
+    );
     const count = await this.superAdminService.getActiveShopsCount();
     return { shops, count };
   }
@@ -58,7 +78,10 @@ export class SuperAdminController {
     @Query('limit') limit: string = '50',
     @Query('skip') skip: string = '0',
   ) {
-    const shops = await this.superAdminService.getSuspendedShops(parseInt(limit), parseInt(skip));
+    const shops = await this.superAdminService.getSuspendedShops(
+      parseInt(limit),
+      parseInt(skip),
+    );
     const count = await this.superAdminService.getSuspendedShopsCount();
     return { shops, count };
   }
@@ -71,7 +94,10 @@ export class SuperAdminController {
     @Query('limit') limit: string = '50',
     @Query('skip') skip: string = '0',
   ) {
-    const shops = await this.superAdminService.getFlaggedShops(parseInt(limit), parseInt(skip));
+    const shops = await this.superAdminService.getFlaggedShops(
+      parseInt(limit),
+      parseInt(skip),
+    );
     const count = await this.superAdminService.getFlaggedShopsCount();
     return { shops, count };
   }
@@ -85,7 +111,11 @@ export class SuperAdminController {
     @Query('skip') skip: string = '0',
     @Query('status') status?: string,
   ) {
-    const shops = await this.superAdminService.getAllShops(parseInt(limit), parseInt(skip), status);
+    const shops = await this.superAdminService.getAllShops(
+      parseInt(limit),
+      parseInt(skip),
+      status,
+    );
     const count = await this.superAdminService.getAllShopsCount(status);
     return { shops, count };
   }
@@ -115,7 +145,11 @@ export class SuperAdminController {
     @Query('limit') limit: string = '50',
     @Query('skip') skip: string = '0',
   ) {
-    return this.superAdminService.getShopAuditLog(shopId, parseInt(limit), parseInt(skip));
+    return this.superAdminService.getShopAuditLog(
+      shopId,
+      parseInt(limit),
+      parseInt(skip),
+    );
   }
 
   /**
@@ -173,7 +207,12 @@ export class SuperAdminController {
     if (!body.reason) {
       throw new BadRequestException('Rejection reason is required');
     }
-    return this.superAdminService.rejectShop(shopId, user.sub, body.reason, body.notes);
+    return this.superAdminService.rejectShop(
+      shopId,
+      user.sub,
+      body.reason,
+      body.notes,
+    );
   }
 
   /**
@@ -188,7 +227,12 @@ export class SuperAdminController {
     if (!body.reason) {
       throw new BadRequestException('Suspension reason is required');
     }
-    return this.superAdminService.suspendShop(shopId, user.sub, body.reason, body.notes);
+    return this.superAdminService.suspendShop(
+      shopId,
+      user.sub,
+      body.reason,
+      body.notes,
+    );
   }
 
   /**
@@ -215,7 +259,12 @@ export class SuperAdminController {
     if (!body.reason) {
       throw new BadRequestException('Flag reason is required');
     }
-    return this.superAdminService.flagShop(shopId, user.sub, body.reason, body.notes);
+    return this.superAdminService.flagShop(
+      shopId,
+      user.sub,
+      body.reason,
+      body.notes,
+    );
   }
 
   /**
@@ -282,7 +331,11 @@ export class SuperAdminController {
     if (!body.confirmName || body.confirmName.trim().length === 0) {
       throw new BadRequestException('Shop name confirmation is required');
     }
-    return this.superAdminService.permanentDeleteShop(shopId, user.sub, body.confirmName);
+    return this.superAdminService.permanentDeleteShop(
+      shopId,
+      user.sub,
+      body.confirmName,
+    );
   }
 
   /**
@@ -305,7 +358,10 @@ export class SuperAdminController {
     @Query('limit') limit: string = '50',
     @Query('skip') skip: string = '0',
   ) {
-    const shops = await this.superAdminService.getDeletedShops(parseInt(limit), parseInt(skip));
+    const shops = await this.superAdminService.getDeletedShops(
+      parseInt(limit),
+      parseInt(skip),
+    );
     const count = await this.superAdminService.getDeletedShopsCount();
     return { shops, count };
   }

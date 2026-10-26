@@ -41,7 +41,13 @@ describe('EMAIL-REPORTS-CORE1 financial reporting correctness', () => {
       payments: [{ method: 'cash', amount: 1160, status: 'completed' }],
       currency: 'KES',
       items: [
-        { productId: 'p1', name: 'InkWave Organic Correction Tape', quantity: 1, unitPrice: 1000, lineTotal: 1000 },
+        {
+          productId: 'p1',
+          name: 'InkWave Organic Correction Tape',
+          quantity: 1,
+          unitPrice: 1000,
+          lineTotal: 1000,
+        },
       ],
       createdAt: IN_DAY,
       ...overrides,
@@ -83,10 +89,16 @@ describe('EMAIL-REPORTS-CORE1 financial reporting correctness', () => {
   describe('shop-local day boundaries (Africa/Nairobi, UTC+3)', () => {
     it('a 21:30Z sale belongs to the NEXT local day (00:30 EAT)', async () => {
       const { service } = boot([makeOrder({ createdAt: NEXT_DAY_EAT })]);
-      const report = await service.getDailySalesReport(SHOP, new Date('2026-10-23T12:00:00Z'));
+      const report = await service.getDailySalesReport(
+        SHOP,
+        new Date('2026-10-23T12:00:00Z'),
+      );
       expect(report.date).toBe('2026-10-23');
       expect(report.orders).toBe(0); // the 21:30Z sale is Oct 24 in EAT
-      const next = await service.getDailySalesReport(SHOP, new Date('2026-10-24T12:00:00Z'));
+      const next = await service.getDailySalesReport(
+        SHOP,
+        new Date('2026-10-24T12:00:00Z'),
+      );
       expect(next.date).toBe('2026-10-24');
       expect(next.orders).toBe(1);
       expect(next.revenue).toBe(1160);
@@ -101,9 +113,15 @@ describe('EMAIL-REPORTS-CORE1 financial reporting correctness', () => {
 
     it('the previous local day is separate', async () => {
       const { service } = boot([makeOrder({ createdAt: PREV_DAY })]);
-      const report = await service.getDailySalesReport(SHOP, new Date('2026-10-23T12:00:00Z'));
+      const report = await service.getDailySalesReport(
+        SHOP,
+        new Date('2026-10-23T12:00:00Z'),
+      );
       expect(report.orders).toBe(0);
-      const prev = await service.getDailySalesReport(SHOP, new Date('2026-10-22T12:00:00Z'));
+      const prev = await service.getDailySalesReport(
+        SHOP,
+        new Date('2026-10-22T12:00:00Z'),
+      );
       expect(prev.orders).toBe(1);
     });
   });
@@ -111,7 +129,9 @@ describe('EMAIL-REPORTS-CORE1 financial reporting correctness', () => {
   describe('canonical financial separation', () => {
     it('billed vs collected vs outstanding for partial payments', async () => {
       const { service } = boot([
-        makeOrder({ payments: [{ method: 'cash', amount: 500, status: 'completed' }] }),
+        makeOrder({
+          payments: [{ method: 'cash', amount: 500, status: 'completed' }],
+        }),
         makeOrder({}),
       ]);
       const report = await service.getDailySalesReport(SHOP, IN_DAY);
@@ -160,7 +180,12 @@ describe('EMAIL-REPORTS-CORE1 financial reporting correctness', () => {
 
     it('payment-method breakdown reflects completed payments only', async () => {
       const { service } = boot([
-        makeOrder({ payments: [{ method: 'cash', amount: 1000, status: 'completed' }, { method: 'mpesa', amount: 160, status: 'pending' }] }),
+        makeOrder({
+          payments: [
+            { method: 'cash', amount: 1000, status: 'completed' },
+            { method: 'mpesa', amount: 160, status: 'pending' },
+          ],
+        }),
       ]);
       const report = await service.getDailySalesReport(SHOP, IN_DAY);
       expect(report.paymentMethods).toEqual([{ method: 'cash', amount: 1000 }]);
@@ -173,15 +198,37 @@ describe('EMAIL-REPORTS-CORE1 financial reporting correctness', () => {
       const { service } = boot([
         makeOrder({
           items: [
-            { productId: 'p1', name: 'InkWave Organic Correction Tape', quantity: 3, unitPrice: 625, lineTotal: 1875 },
-            { productId: 'p2', name: 'SweetJoy Deluxe Candy Pack', quantity: 1, unitPrice: 215, lineTotal: 215 },
+            {
+              productId: 'p1',
+              name: 'InkWave Organic Correction Tape',
+              quantity: 3,
+              unitPrice: 625,
+              lineTotal: 1875,
+            },
+            {
+              productId: 'p2',
+              name: 'SweetJoy Deluxe Candy Pack',
+              quantity: 1,
+              unitPrice: 215,
+              lineTotal: 215,
+            },
           ],
-          total: 2419.6, tax: 334.6, subtotal: 2090,
+          total: 2419.6,
+          tax: 334.6,
+          subtotal: 2090,
         }),
       ]);
       const report = await service.getDailySalesReport(SHOP, IN_DAY);
-      expect(report.topProducts[0]).toMatchObject({ productName: 'InkWave Organic Correction Tape', quantity: 3, revenue: 1875 });
-      expect(report.topProducts[1]).toMatchObject({ productName: 'SweetJoy Deluxe Candy Pack', quantity: 1, revenue: 215 });
+      expect(report.topProducts[0]).toMatchObject({
+        productName: 'InkWave Organic Correction Tape',
+        quantity: 3,
+        revenue: 1875,
+      });
+      expect(report.topProducts[1]).toMatchObject({
+        productName: 'SweetJoy Deluxe Candy Pack',
+        quantity: 1,
+        revenue: 215,
+      });
       expect(report.itemsSold).toBe(4);
     });
   });
@@ -207,7 +254,10 @@ describe('EMAIL-REPORTS-CORE1 financial reporting correctness', () => {
         makeOrder({ createdAt: new Date('2026-10-20T10:00:00Z') }), // Mon Oct 19 13:00 EAT? (10:00Z = 13:00 EAT Mon 19th? — 2026-10-19 is a Monday)
         makeOrder({ createdAt: new Date('2026-10-23T18:30:00Z') }),
       ]);
-      const week = await service.getWeeklySalesReport(SHOP, new Date('2026-10-19T00:00:00Z'));
+      const week = await service.getWeeklySalesReport(
+        SHOP,
+        new Date('2026-10-19T00:00:00Z'),
+      );
       expect(week.orders).toBe(2);
       expect(week.revenue).toBe(2320);
       expect(week.dailyBreakdown).toHaveLength(7);
@@ -237,7 +287,12 @@ describe('EMAIL-REPORTS-CORE1 financial reporting correctness', () => {
       const { service } = boot([]);
       const report = await service.getDailySalesReport(SHOP, IN_DAY);
       expect(report).toMatchObject({
-        orders: 0, revenue: 0, collectedPayments: 0, outstanding: 0, tax: 0, refunds: 0,
+        orders: 0,
+        revenue: 0,
+        collectedPayments: 0,
+        outstanding: 0,
+        tax: 0,
+        refunds: 0,
       });
       expect(report.topProducts).toEqual([]);
       expect(report.averageOrderValue).toBe(0);

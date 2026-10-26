@@ -13,12 +13,12 @@ import { PaymentTransactionService } from './payment-transaction.service';
 
 /**
  * M-Pesa Reconciliation Service
- * 
+ *
  * Handles automatic reconciliation of M-Pesa transactions:
  * 1. Queries M-Pesa for pending transactions that haven't received callbacks
  * 2. Auto-expires transactions that have timed out
  * 3. Generates reconciliation reports
- * 
+ *
  * This ensures no transaction gets "stuck" due to:
  * - Network issues preventing callback delivery
  * - Callback processing failures
@@ -36,8 +36,9 @@ export class MpesaReconciliationService {
     private readonly paymentTransactionService: PaymentTransactionService,
     private readonly configService: ConfigService,
   ) {
-    this.isEnabled = this.configService.get('MPESA_RECONCILIATION_ENABLED', 'true') === 'true';
-    
+    this.isEnabled =
+      this.configService.get('MPESA_RECONCILIATION_ENABLED', 'true') === 'true';
+
     if (this.isEnabled) {
       this.logger.log('M-Pesa reconciliation service enabled');
     } else {
@@ -47,12 +48,12 @@ export class MpesaReconciliationService {
 
   /**
    * Reconcile pending transactions every 2 minutes
-   * 
+   *
    * Finds transactions that:
    * - Are in PENDING status
    * - Were sent more than 30 seconds ago (callback should have arrived)
    * - Haven't expired yet
-   * 
+   *
    * Then queries M-Pesa for their actual status
    */
   @Cron(CronExpression.EVERY_5_MINUTES)
@@ -77,14 +78,17 @@ export class MpesaReconciliationService {
         return;
       }
 
-      this.logger.log(`Reconciling ${pendingTransactions.length} pending transactions`);
+      this.logger.log(
+        `Reconciling ${pendingTransactions.length} pending transactions`,
+      );
 
       let reconciled = 0;
       let failed = 0;
 
       for (const transaction of pendingTransactions) {
         try {
-          const wasReconciled = await this.queryAndUpdateTransaction(transaction);
+          const wasReconciled =
+            await this.queryAndUpdateTransaction(transaction);
           if (wasReconciled) reconciled++;
         } catch (error: any) {
           this.logger.error(
@@ -107,7 +111,7 @@ export class MpesaReconciliationService {
 
   /**
    * Auto-expire old pending transactions every 5 minutes
-   * 
+   *
    * Transactions that have passed their expiry time are marked as EXPIRED.
    * This prevents them from being processed if a very late callback arrives.
    */
@@ -131,7 +135,9 @@ export class MpesaReconciliationService {
       );
 
       if (result.modifiedCount > 0) {
-        this.logger.log(`Expired ${result.modifiedCount} old pending transactions`);
+        this.logger.log(
+          `Expired ${result.modifiedCount} old pending transactions`,
+        );
       }
     } catch (error: any) {
       this.logger.error(`Expiry job error: ${error.message}`);
@@ -170,10 +176,13 @@ export class MpesaReconciliationService {
 
       const report = {
         date: yesterday.toISOString().split('T')[0],
-        stats: stats.reduce((acc, s) => {
-          acc[s._id] = { count: s.count, totalAmount: s.totalAmount };
-          return acc;
-        }, {} as Record<string, { count: number; totalAmount: number }>),
+        stats: stats.reduce(
+          (acc, s) => {
+            acc[s._id] = { count: s.count, totalAmount: s.totalAmount };
+            return acc;
+          },
+          {} as Record<string, { count: number; totalAmount: number }>,
+        ),
       };
 
       this.logger.log(`Daily M-Pesa Report: ${JSON.stringify(report)}`);
@@ -191,7 +200,9 @@ export class MpesaReconciliationService {
     transaction: MpesaTransactionDocument,
   ): Promise<boolean> {
     if (!transaction.checkoutRequestId) {
-      this.logger.warn(`Transaction ${transaction._id} has no checkoutRequestId`);
+      this.logger.warn(
+        `Transaction ${transaction._id} has no checkoutRequestId`,
+      );
       return false;
     }
 
@@ -212,7 +223,9 @@ export class MpesaReconciliationService {
         return true;
       } else if (result.resultCode === 1037) {
         // DS Timeout - transaction still processing, leave as pending
-        this.logger.debug(`Transaction ${transaction._id} still processing (DS timeout)`);
+        this.logger.debug(
+          `Transaction ${transaction._id} still processing (DS timeout)`,
+        );
         return false;
       } else if (result.resultCode !== undefined) {
         // Payment failed
@@ -250,9 +263,7 @@ export class MpesaReconciliationService {
 
     await transaction.save();
 
-    this.logger.log(
-      `Reconciled transaction ${transaction._id} as COMPLETED`,
-    );
+    this.logger.log(`Reconciled transaction ${transaction._id} as COMPLETED`);
 
     // Create payment transaction record if we have receipt number
     if (transaction.mpesaReceiptNumber) {
@@ -429,7 +440,9 @@ export class MpesaReconciliationService {
 
     const completedOrFailed = result.completed + result.failed;
     if (completedOrFailed > 0) {
-      result.successRate = Math.round((result.completed / completedOrFailed) * 100);
+      result.successRate = Math.round(
+        (result.completed / completedOrFailed) * 100,
+      );
     }
 
     return result;
@@ -439,6 +452,6 @@ export class MpesaReconciliationService {
    * Utility delay function
    */
   private delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

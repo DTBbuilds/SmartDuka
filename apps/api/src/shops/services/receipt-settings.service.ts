@@ -1,8 +1,14 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { ReceiptSettings, ReceiptSettingsDocument } from '../schemas/receipt-settings.schema';
-import { UpdateReceiptSettingsDto, ReceiptSettingsResponseDto } from '../dto/receipt-settings.dto';
+import {
+  ReceiptSettings,
+  ReceiptSettingsDocument,
+} from '../schemas/receipt-settings.schema';
+import {
+  UpdateReceiptSettingsDto,
+  ReceiptSettingsResponseDto,
+} from '../dto/receipt-settings.dto';
 
 @Injectable()
 export class ReceiptSettingsService {
@@ -14,10 +20,15 @@ export class ReceiptSettingsService {
   /**
    * Get or create default receipt settings for a shop
    */
-  async getSettings(shopId: string | Types.ObjectId): Promise<ReceiptSettingsResponseDto> {
-    const shopObjectId = typeof shopId === 'string' ? new Types.ObjectId(shopId) : shopId;
+  async getSettings(
+    shopId: string | Types.ObjectId,
+  ): Promise<ReceiptSettingsResponseDto> {
+    const shopObjectId =
+      typeof shopId === 'string' ? new Types.ObjectId(shopId) : shopId;
 
-    let settings: any = await this.receiptSettingsModel.findOne({ shopId: shopObjectId });
+    let settings: any = await this.receiptSettingsModel.findOne({
+      shopId: shopObjectId,
+    });
 
     if (!settings) {
       // Create default settings
@@ -35,7 +46,8 @@ export class ReceiptSettingsService {
     updateDto: UpdateReceiptSettingsDto,
     userId?: string,
   ): Promise<ReceiptSettingsResponseDto> {
-    const shopObjectId = typeof shopId === 'string' ? new Types.ObjectId(shopId) : shopId;
+    const shopObjectId =
+      typeof shopId === 'string' ? new Types.ObjectId(shopId) : shopId;
 
     const updateData: any = {
       ...updateDto,
@@ -46,11 +58,13 @@ export class ReceiptSettingsService {
       updateData.updatedBy = new Types.ObjectId(userId);
     }
 
-    const settings = await this.receiptSettingsModel.findOneAndUpdate(
-      { shopId: shopObjectId },
-      { $set: updateData },
-      { new: true, upsert: true },
-    ).lean();
+    const settings = await this.receiptSettingsModel
+      .findOneAndUpdate(
+        { shopId: shopObjectId },
+        { $set: updateData },
+        { new: true, upsert: true },
+      )
+      .lean();
 
     return this.mapToResponseDto(settings);
   }
@@ -73,7 +87,11 @@ export class ReceiptSettingsService {
     shopId: string | Types.ObjectId,
     userId?: string,
   ): Promise<ReceiptSettingsResponseDto> {
-    return this.updateSettings(shopId, { logoUrl: undefined, showLogo: false }, userId);
+    return this.updateSettings(
+      shopId,
+      { logoUrl: undefined, showLogo: false },
+      userId,
+    );
   }
 
   /**
@@ -82,7 +100,8 @@ export class ReceiptSettingsService {
   async resetToDefaults(
     shopId: string | Types.ObjectId,
   ): Promise<ReceiptSettingsResponseDto> {
-    const shopObjectId = typeof shopId === 'string' ? new Types.ObjectId(shopId) : shopId;
+    const shopObjectId =
+      typeof shopId === 'string' ? new Types.ObjectId(shopId) : shopId;
 
     // Delete existing settings
     await this.receiptSettingsModel.deleteOne({ shopId: shopObjectId });
@@ -96,7 +115,9 @@ export class ReceiptSettingsService {
   /**
    * Create default settings for a new shop
    */
-  private async createDefaultSettings(shopId: Types.ObjectId): Promise<ReceiptSettingsDocument> {
+  private async createDefaultSettings(
+    shopId: Types.ObjectId,
+  ): Promise<ReceiptSettingsDocument> {
     const defaultSettings = new this.receiptSettingsModel({
       shopId,
       template: 'standard',
@@ -257,7 +278,12 @@ export class ReceiptSettingsService {
   /**
    * Get preset templates
    */
-  getPresets(): Array<{ id: string; name: string; description: string; preview: any }> {
+  getPresets(): Array<{
+    id: string;
+    name: string;
+    description: string;
+    preview: any;
+  }> {
     return [
       {
         id: 'minimal',
@@ -297,7 +323,8 @@ export class ReceiptSettingsService {
           showItemBarcode: true,
           showItemTax: true,
           showBarcode: true,
-          footerMessage: 'Thank you for your business! Returns accepted within 14 days with receipt.',
+          footerMessage:
+            'Thank you for your business! Returns accepted within 14 days with receipt.',
         },
       },
       {
@@ -323,7 +350,8 @@ export class ReceiptSettingsService {
           showShopAddress: true,
           showTaxPin: true,
           showBarcode: false,
-          footerMessage: 'Goods once sold cannot be returned. Thank you for shopping with us!',
+          footerMessage:
+            'Goods once sold cannot be returned. Thank you for shopping with us!',
         },
       },
       {
@@ -353,7 +381,7 @@ export class ReceiptSettingsService {
     userId?: string,
   ): Promise<ReceiptSettingsResponseDto> {
     const presets = this.getPresets();
-    const preset = presets.find(p => p.id === presetId);
+    const preset = presets.find((p) => p.id === presetId);
 
     if (!preset) {
       throw new NotFoundException(`Preset '${presetId}' not found`);

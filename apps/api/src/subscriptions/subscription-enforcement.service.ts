@@ -1,8 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Subscription, SubscriptionDocument, SubscriptionStatus } from './schemas/subscription.schema';
-import { SubscriptionPlan, SubscriptionPlanDocument } from './schemas/subscription-plan.schema';
+import {
+  Subscription,
+  SubscriptionDocument,
+  SubscriptionStatus,
+} from './schemas/subscription.schema';
+import {
+  SubscriptionPlan,
+  SubscriptionPlanDocument,
+} from './schemas/subscription-plan.schema';
 
 /**
  * Subscription Access Levels
@@ -65,7 +72,7 @@ export class SubscriptionEnforcementService {
   /**
    * Check subscription access level for a shop
    * This is the main method used by guards and frontend
-   * 
+   *
    * FREE_MODE: Always returns FULL access — SmartDuka is free for everyone.
    */
   async checkAccess(shopId: string): Promise<SubscriptionAccessResult> {
@@ -89,7 +96,8 @@ export class SubscriptionEnforcementService {
         return {
           accessLevel: SubscriptionAccessLevel.NONE,
           status: null,
-          message: 'No subscription found. Please subscribe to a plan to continue.',
+          message:
+            'No subscription found. Please subscribe to a plan to continue.',
           daysRemaining: 0,
           canMakePayment: true,
         };
@@ -101,7 +109,10 @@ export class SubscriptionEnforcementService {
       const now = new Date();
       const daysRemaining = Math.max(
         0,
-        Math.ceil((subscription.currentPeriodEnd.getTime() - now.getTime()) / (24 * 60 * 60 * 1000))
+        Math.ceil(
+          (subscription.currentPeriodEnd.getTime() - now.getTime()) /
+            (24 * 60 * 60 * 1000),
+        ),
       );
 
       const subscriptionInfo = {
@@ -115,11 +126,15 @@ export class SubscriptionEnforcementService {
       switch (subscription.status) {
         case SubscriptionStatus.ACTIVE:
           if (now > subscription.currentPeriodEnd) {
-            if (subscription.billingCycle === 'daily' || !subscription.autoRenew) {
+            if (
+              subscription.billingCycle === 'daily' ||
+              !subscription.autoRenew
+            ) {
               return {
                 accessLevel: SubscriptionAccessLevel.BLOCKED,
                 status: SubscriptionStatus.EXPIRED,
-                message: 'Your subscription period has ended. Please renew to continue using SmartDuka.',
+                message:
+                  'Your subscription period has ended. Please renew to continue using SmartDuka.',
                 daysRemaining: 0,
                 canMakePayment: true,
                 subscription: subscriptionInfo,
@@ -128,7 +143,8 @@ export class SubscriptionEnforcementService {
             return {
               accessLevel: SubscriptionAccessLevel.READ_ONLY,
               status: SubscriptionStatus.PAST_DUE,
-              message: 'Your subscription payment is due. Please pay to continue full operations.',
+              message:
+                'Your subscription payment is due. Please pay to continue full operations.',
               daysRemaining: 0,
               canMakePayment: true,
               subscription: subscriptionInfo,
@@ -144,12 +160,14 @@ export class SubscriptionEnforcementService {
           };
 
         case SubscriptionStatus.TRIAL:
-          const trialEnd = subscription.trialEndDate || subscription.currentPeriodEnd;
+          const trialEnd =
+            subscription.trialEndDate || subscription.currentPeriodEnd;
           if (now > trialEnd) {
             return {
               accessLevel: SubscriptionAccessLevel.BLOCKED,
               status: subscription.status,
-              message: 'Your 14-day trial has ended. Please upgrade to a paid plan to continue using SmartDuka.',
+              message:
+                'Your 14-day trial has ended. Please upgrade to a paid plan to continue using SmartDuka.',
               daysRemaining: 0,
               canMakePayment: true,
               subscription: subscriptionInfo,
@@ -157,7 +175,9 @@ export class SubscriptionEnforcementService {
           }
           const trialDaysRemaining = Math.max(
             0,
-            Math.ceil((trialEnd.getTime() - now.getTime()) / (24 * 60 * 60 * 1000))
+            Math.ceil(
+              (trialEnd.getTime() - now.getTime()) / (24 * 60 * 60 * 1000),
+            ),
           );
           return {
             accessLevel: SubscriptionAccessLevel.FULL,
@@ -172,7 +192,8 @@ export class SubscriptionEnforcementService {
           return {
             accessLevel: SubscriptionAccessLevel.BLOCKED,
             status: subscription.status,
-            message: 'Your subscription payment is overdue. All shop operations are blocked. Please pay immediately to restore access.',
+            message:
+              'Your subscription payment is overdue. All shop operations are blocked. Please pay immediately to restore access.',
             daysRemaining: 0,
             daysUntilSuspension: 0,
             canMakePayment: true,
@@ -183,7 +204,8 @@ export class SubscriptionEnforcementService {
           return {
             accessLevel: SubscriptionAccessLevel.BLOCKED,
             status: subscription.status,
-            message: 'Your subscription has been suspended due to non-payment. Please pay your outstanding invoice to restore access.',
+            message:
+              'Your subscription has been suspended due to non-payment. Please pay your outstanding invoice to restore access.',
             daysRemaining: 0,
             canMakePayment: true,
             subscription: subscriptionInfo,
@@ -193,7 +215,8 @@ export class SubscriptionEnforcementService {
           return {
             accessLevel: SubscriptionAccessLevel.BLOCKED,
             status: subscription.status,
-            message: 'Your subscription has expired. Please renew to continue using SmartDuka.',
+            message:
+              'Your subscription has expired. Please renew to continue using SmartDuka.',
             daysRemaining: 0,
             canMakePayment: true,
             subscription: subscriptionInfo,
@@ -203,7 +226,8 @@ export class SubscriptionEnforcementService {
           return {
             accessLevel: SubscriptionAccessLevel.BLOCKED,
             status: subscription.status,
-            message: 'Your subscription has been cancelled. Please reactivate to continue.',
+            message:
+              'Your subscription has been cancelled. Please reactivate to continue.',
             daysRemaining: 0,
             canMakePayment: true,
             subscription: subscriptionInfo,
@@ -213,25 +237,32 @@ export class SubscriptionEnforcementService {
           return {
             accessLevel: SubscriptionAccessLevel.BLOCKED,
             status: subscription.status,
-            message: 'Your subscription is pending payment. Please complete payment to activate.',
+            message:
+              'Your subscription is pending payment. Please complete payment to activate.',
             daysRemaining: 0,
             canMakePayment: true,
             subscription: subscriptionInfo,
           };
 
         default:
-          this.logger.error(`Unknown subscription status: ${subscription.status}`);
+          this.logger.error(
+            `Unknown subscription status: ${subscription.status}`,
+          );
           return {
             accessLevel: SubscriptionAccessLevel.BLOCKED,
             status: subscription.status,
-            message: 'Unable to verify subscription status. Please contact support.',
+            message:
+              'Unable to verify subscription status. Please contact support.',
             daysRemaining: 0,
             canMakePayment: true,
             subscription: subscriptionInfo,
           };
       }
     } catch (error) {
-      this.logger.error(`Error checking subscription access for shop ${shopId}:`, error);
+      this.logger.error(
+        `Error checking subscription access for shop ${shopId}:`,
+        error,
+      );
       return {
         accessLevel: SubscriptionAccessLevel.FULL,
         status: null,
@@ -277,10 +308,12 @@ export class SubscriptionEnforcementService {
       switch (subscription.status) {
         case SubscriptionStatus.ACTIVE:
           const activeDaysRemaining = Math.ceil(
-            (subscription.currentPeriodEnd.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)
+            (subscription.currentPeriodEnd.getTime() - now.getTime()) /
+              (24 * 60 * 60 * 1000),
           );
           const activeHoursRemaining = Math.ceil(
-            (subscription.currentPeriodEnd.getTime() - now.getTime()) / (60 * 60 * 1000)
+            (subscription.currentPeriodEnd.getTime() - now.getTime()) /
+              (60 * 60 * 1000),
           );
 
           // Check if subscription has actually expired
@@ -369,9 +402,10 @@ export class SubscriptionEnforcementService {
 
         case SubscriptionStatus.TRIAL:
           // Calculate trial days remaining
-          const trialEnd = subscription.trialEndDate || subscription.currentPeriodEnd;
+          const trialEnd =
+            subscription.trialEndDate || subscription.currentPeriodEnd;
           const trialDaysRemaining = Math.ceil(
-            (trialEnd.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)
+            (trialEnd.getTime() - now.getTime()) / (24 * 60 * 60 * 1000),
           );
 
           // Trial expired - critical warning
@@ -380,7 +414,8 @@ export class SubscriptionEnforcementService {
               type: 'expired',
               severity: 'critical',
               title: 'Trial Period Ended',
-              message: 'Your 14-day free trial has ended. Upgrade to a paid plan to continue using SmartDuka.',
+              message:
+                'Your 14-day free trial has ended. Upgrade to a paid plan to continue using SmartDuka.',
               daysRemaining: 0,
               actionRequired: true,
               actionLabel: 'Upgrade Now',
@@ -406,7 +441,8 @@ export class SubscriptionEnforcementService {
               type: 'expiring_soon',
               severity: 'error',
               title: 'Trial Ends Tomorrow',
-              message: 'Your free trial ends tomorrow! Upgrade now to avoid losing access to your shop.',
+              message:
+                'Your free trial ends tomorrow! Upgrade now to avoid losing access to your shop.',
               daysRemaining: 1,
               actionRequired: true,
               actionLabel: 'Upgrade Now',
@@ -434,7 +470,8 @@ export class SubscriptionEnforcementService {
             type: 'past_due',
             severity: 'critical',
             title: 'Payment Required - Account Blocked',
-            message: 'Your subscription payment is overdue. All shop operations are blocked until payment is completed. Pay now to restore access.',
+            message:
+              'Your subscription payment is overdue. All shop operations are blocked until payment is completed. Pay now to restore access.',
             daysUntilSuspension: 0,
             actionRequired: true,
             actionLabel: 'Pay Now',
@@ -447,7 +484,8 @@ export class SubscriptionEnforcementService {
             type: 'suspended',
             severity: 'critical',
             title: 'Account Suspended',
-            message: 'Your account has been suspended due to non-payment. All shop operations are disabled. Pay now to restore access.',
+            message:
+              'Your account has been suspended due to non-payment. All shop operations are disabled. Pay now to restore access.',
             actionRequired: true,
             actionLabel: 'Pay Now',
             actionUrl: '/admin/subscription',
@@ -459,7 +497,8 @@ export class SubscriptionEnforcementService {
             type: 'expired',
             severity: 'critical',
             title: 'Subscription Expired',
-            message: 'Your subscription has expired. Renew now to continue using SmartDuka.',
+            message:
+              'Your subscription has expired. Renew now to continue using SmartDuka.',
             actionRequired: true,
             actionLabel: 'Renew Subscription',
             actionUrl: '/admin/subscription',
@@ -471,7 +510,8 @@ export class SubscriptionEnforcementService {
             type: 'expired',
             severity: 'critical',
             title: 'Subscription Cancelled',
-            message: 'Your subscription has been cancelled. Reactivate to continue using SmartDuka.',
+            message:
+              'Your subscription has been cancelled. Reactivate to continue using SmartDuka.',
             actionRequired: true,
             actionLabel: 'Reactivate',
             actionUrl: '/admin/subscription',
@@ -483,7 +523,8 @@ export class SubscriptionEnforcementService {
             type: 'expired',
             severity: 'critical',
             title: 'Payment Required',
-            message: 'Complete your payment to activate your subscription and start using SmartDuka.',
+            message:
+              'Complete your payment to activate your subscription and start using SmartDuka.',
             actionRequired: true,
             actionLabel: 'Complete Payment',
             actionUrl: '/admin/subscription',
@@ -493,7 +534,10 @@ export class SubscriptionEnforcementService {
 
       return warnings;
     } catch (error) {
-      this.logger.error(`Error getting subscription warnings for shop ${shopId}:`, error);
+      this.logger.error(
+        `Error getting subscription warnings for shop ${shopId}:`,
+        error,
+      );
       return [];
     }
   }

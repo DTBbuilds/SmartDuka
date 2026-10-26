@@ -3,7 +3,12 @@ import { Document, Types } from 'mongoose';
 
 export type ConversationDocument = Conversation & Document;
 
-export type ConversationType = 'support' | 'inquiry' | 'billing' | 'technical' | 'general';
+export type ConversationType =
+  | 'support'
+  | 'inquiry'
+  | 'billing'
+  | 'technical'
+  | 'general';
 export type ConversationStatus = 'open' | 'pending' | 'resolved' | 'closed';
 
 @Schema({ timestamps: true })

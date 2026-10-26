@@ -51,7 +51,8 @@ export class DeviceFingerprint {
   expiresAt?: Date; // For temporary trusted devices
 }
 
-export const DeviceFingerprintSchema = SchemaFactory.createForClass(DeviceFingerprint);
+export const DeviceFingerprintSchema =
+  SchemaFactory.createForClass(DeviceFingerprint);
 
 // Indexes for performance
 DeviceFingerprintSchema.index({ userId: 1, fingerprint: 1 }, { unique: true });

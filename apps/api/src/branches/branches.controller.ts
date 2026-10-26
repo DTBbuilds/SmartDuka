@@ -1,4 +1,14 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Put,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { BranchesService } from './branches.service';
 import type { CreateBranchDto, UpdateBranchDto } from './branches.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -19,7 +29,11 @@ export class BranchesController {
   @Roles('admin', 'branch_admin')
   @Post()
   async create(@Body() dto: CreateBranchDto, @CurrentUser() user: any) {
-    const branch = await this.branchesService.create(user.shopId, user.sub, dto);
+    const branch = await this.branchesService.create(
+      user.shopId,
+      user.sub,
+      dto,
+    );
     return {
       success: true,
       message: 'Branch created successfully',
@@ -65,7 +79,9 @@ export class BranchesController {
   @Roles('admin', 'branch_admin')
   @Get('with-payment-config')
   async getBranchesWithPaymentConfig(@CurrentUser() user: any) {
-    const branches = await this.branchesService.getBranchesWithPaymentConfig(user.shopId);
+    const branches = await this.branchesService.getBranchesWithPaymentConfig(
+      user.shopId,
+    );
     return {
       success: true,
       data: branches,
@@ -80,7 +96,9 @@ export class BranchesController {
   @UseGuards(JwtAuthGuard)
   @Get('delivery')
   async getDeliveryBranches(@CurrentUser() user: any) {
-    const branches = await this.branchesService.getDeliveryBranches(user.shopId);
+    const branches = await this.branchesService.getDeliveryBranches(
+      user.shopId,
+    );
     return {
       success: true,
       data: branches,
@@ -94,11 +112,11 @@ export class BranchesController {
    */
   @UseGuards(JwtAuthGuard)
   @Get('by-county')
-  async getByCounty(
-    @Query('county') county: string,
-    @CurrentUser() user: any,
-  ) {
-    const branches = await this.branchesService.getByCounty(user.shopId, county);
+  async getByCounty(@Query('county') county: string, @CurrentUser() user: any) {
+    const branches = await this.branchesService.getByCounty(
+      user.shopId,
+      county,
+    );
     return {
       success: true,
       data: branches,
@@ -145,7 +163,10 @@ export class BranchesController {
     @Param('id') id: string,
     @CurrentUser() user: any,
   ) {
-    const status = await this.branchesService.getPaymentConfigStatus(id, user.shopId);
+    const status = await this.branchesService.getPaymentConfigStatus(
+      id,
+      user.shopId,
+    );
     return {
       success: true,
       data: status,
@@ -165,7 +186,12 @@ export class BranchesController {
     @Body() dto: UpdateBranchDto,
     @CurrentUser() user: any,
   ) {
-    const branch = await this.branchesService.update(id, user.shopId, user.sub, dto);
+    const branch = await this.branchesService.update(
+      id,
+      user.shopId,
+      user.sub,
+      dto,
+    );
     return {
       success: true,
       message: 'Branch updated successfully',
@@ -286,7 +312,11 @@ export class BranchesController {
   @Roles('admin')
   @Delete(':id')
   async delete(@Param('id') id: string, @CurrentUser() user: any) {
-    const deleted = await this.branchesService.delete(id, user.shopId, user.sub);
+    const deleted = await this.branchesService.delete(
+      id,
+      user.shopId,
+      user.sub,
+    );
     return {
       success: true,
       message: 'Branch deleted successfully',

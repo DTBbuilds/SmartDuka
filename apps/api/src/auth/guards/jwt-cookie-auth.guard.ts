@@ -18,7 +18,7 @@ export const IS_PUBLIC_KEY = 'isPublic';
  * Supports both:
  * 1. httpOnly cookies (preferred, more secure)
  * 2. Authorization header (for API clients, mobile apps)
- * 
+ *
  * Also validates session is still active in database
  */
 @Injectable()
@@ -47,10 +47,10 @@ export class JwtCookieAuthGuard extends AuthGuard('jwt') {
     }
 
     const request = context.switchToHttp().getRequest();
-    
+
     // Try to get token from cookie first, then header
     let token = this.cookieService.getAccessToken(request);
-    
+
     if (!token) {
       // Fallback to Authorization header
       const authHeader = request.headers.authorization;
@@ -71,12 +71,14 @@ export class JwtCookieAuthGuard extends AuthGuard('jwt') {
 
       // Validate session is still active (if sessionId exists)
       if (payload.sessionId) {
-        const isActive = await this.tokenService.isSessionActive(payload.sessionId);
+        const isActive = await this.tokenService.isSessionActive(
+          payload.sessionId,
+        );
         if (!isActive) {
           this.logger.warn(`Session ${payload.sessionId} is no longer active`);
           throw new UnauthorizedException('Session has been terminated');
         }
-        
+
         // Update session activity
         await this.tokenService.updateSessionActivity(payload.sessionId);
       }
@@ -88,15 +90,15 @@ export class JwtCookieAuthGuard extends AuthGuard('jwt') {
       if (error instanceof UnauthorizedException) {
         throw error;
       }
-      
+
       if (error.name === 'TokenExpiredError') {
         throw new UnauthorizedException('Token has expired');
       }
-      
+
       if (error.name === 'JsonWebTokenError') {
         throw new UnauthorizedException('Invalid token');
       }
-      
+
       this.logger.error('JWT validation error:', error);
       throw new UnauthorizedException('Authentication failed');
     }

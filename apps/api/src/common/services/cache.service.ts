@@ -69,14 +69,14 @@ export class CacheService {
   deletePattern(pattern: string): number {
     let deleted = 0;
     const regex = new RegExp(pattern.replace(/\*/g, '.*'));
-    
+
     for (const key of this.cache.keys()) {
       if (regex.test(key)) {
         this.cache.delete(key);
         deleted++;
       }
     }
-    
+
     return deleted;
   }
 
@@ -107,7 +107,11 @@ export class CacheService {
   /**
    * Generate cache key for shop-specific data
    */
-  static shopKey(shopId: string, resource: string, ...params: (string | number)[]): string {
+  static shopKey(
+    shopId: string,
+    resource: string,
+    ...params: (string | number)[]
+  ): string {
     const paramStr = params.length > 0 ? `:${params.join(':')}` : '';
     return `shop:${shopId}:${resource}${paramStr}`;
   }
@@ -129,16 +133,16 @@ export class CacheService {
 
 // Cache TTL constants (in milliseconds)
 export const CACHE_TTL = {
-  SHORT: 30 * 1000,        // 30 seconds - for frequently changing data
-  MEDIUM: 2 * 60 * 1000,   // 2 minutes - for moderately changing data
-  LONG: 10 * 60 * 1000,    // 10 minutes - for rarely changing data
-  STATS: 60 * 1000,        // 1 minute - for statistics/aggregations
+  SHORT: 30 * 1000, // 30 seconds - for frequently changing data
+  MEDIUM: 2 * 60 * 1000, // 2 minutes - for moderately changing data
+  LONG: 10 * 60 * 1000, // 10 minutes - for rarely changing data
+  STATS: 60 * 1000, // 1 minute - for statistics/aggregations
   CATEGORIES: 5 * 60 * 1000, // 5 minutes - for categories
-  PRODUCTS: 30 * 1000,     // 30 seconds - for product lists
+  PRODUCTS: 30 * 1000, // 30 seconds - for product lists
   // Super admin specific
-  ADMIN_STATS: 30 * 1000,  // 30 seconds - for admin dashboard stats
+  ADMIN_STATS: 30 * 1000, // 30 seconds - for admin dashboard stats
   ADMIN_COUNTS: 15 * 1000, // 15 seconds - for shop/subscription counts
-  ADMIN_LIST: 20 * 1000,   // 20 seconds - for admin lists (shops, invoices)
+  ADMIN_LIST: 20 * 1000, // 20 seconds - for admin lists (shops, invoices)
 };
 
 // Super admin cache key generators
@@ -146,7 +150,8 @@ export const ADMIN_CACHE_KEYS = {
   shopStats: () => 'admin:shops:stats',
   shopCounts: (status?: string) => `admin:shops:counts:${status || 'all'}`,
   subscriptionStats: () => 'admin:subscriptions:stats',
-  pendingInvoices: (skip: number, limit: number) => `admin:invoices:pending:${skip}:${limit}`,
+  pendingInvoices: (skip: number, limit: number) =>
+    `admin:invoices:pending:${skip}:${limit}`,
   revenueAnalytics: (period: string) => `admin:revenue:${period}`,
   emailStats: () => 'admin:emails:stats',
 };

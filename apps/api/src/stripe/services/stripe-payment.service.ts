@@ -146,7 +146,12 @@ export class StripePaymentService {
         }
         await this.paymentModel.updateOne(
           { _id: existingPayment._id },
-          { $set: { status: StripePaymentStatus.CANCELED, canceledAt: new Date() } },
+          {
+            $set: {
+              status: StripePaymentStatus.CANCELED,
+              canceledAt: new Date(),
+            },
+          },
         );
         this.logger.warn(
           `Stale pending intent ${existingPayment.stripePaymentIntentId} canceled (account changed/disconnected) — creating a fresh intent`,
@@ -170,7 +175,9 @@ export class StripePaymentService {
     // to the shop's own Stripe balance — the platform never touches the money.
     // FIX1-B1: the account context (id + the account's OWN publishable key)
     // is required to confirm the direct charge with Elements.
-    const accountContext = await this.connectService.getAccountContext(params.shopId);
+    const accountContext = await this.connectService.getAccountContext(
+      params.shopId,
+    );
     const connectedAccountId = accountContext.accountId;
     // FIX1-B1: test/live consistency — the connected account must be in the
     // same mode as the platform key (a live account on a test platform, or
@@ -178,7 +185,8 @@ export class StripePaymentService {
     const platformIsLive = this.configService
       .get<string>('STRIPE_SECRET_KEY', '')
       .startsWith('sk_live_');
-    const shopEnv = (await this.connectService.getStatus(params.shopId)).environment;
+    const shopEnv = (await this.connectService.getStatus(params.shopId))
+      .environment;
     if (shopEnv && (shopEnv === 'live') !== platformIsLive) {
       throw new BadRequestException(
         'Card payments are unavailable: the shop\u2019s connected Stripe account and the platform are in different modes. Reconnect the Stripe account.',
@@ -605,11 +613,15 @@ export class StripePaymentService {
       throw new NotFoundException('Payment not found');
     }
 
-    if (payment.status !== StripePaymentStatus.SUCCEEDED && payment.status !== StripePaymentStatus.PARTIALLY_REFUNDED) {
+    if (
+      payment.status !== StripePaymentStatus.SUCCEEDED &&
+      payment.status !== StripePaymentStatus.PARTIALLY_REFUNDED
+    ) {
       throw new BadRequestException('Can only refund succeeded payments');
     }
 
-    const refundAmount = params.amount ?? payment.amount - (payment.refundedAmount || 0);
+    const refundAmount =
+      params.amount ?? payment.amount - (payment.refundedAmount || 0);
     if (!Number.isFinite(refundAmount) || refundAmount <= 0) {
       throw new BadRequestException('Refund amount must be positive');
     }
@@ -628,7 +640,8 @@ export class StripePaymentService {
       'refund',
     );
     const existingRefund = (payment.refunds || []).find(
-      (r: any) => r.idempotencyKey === refundIdempotencyKey && r.status !== 'failed',
+      (r: any) =>
+        r.idempotencyKey === refundIdempotencyKey && r.status !== 'failed',
     );
     if (existingRefund) {
       this.logger.log(
@@ -654,7 +667,8 @@ export class StripePaymentService {
       // it locally as successful. The next status sync / charge.refunded
       // webhook converges the truth.
       const ambiguous =
-        err?.code === 'ETIMEDOUT' || err?.code === 'ECONNRESET' ||
+        err?.code === 'ETIMEDOUT' ||
+        err?.code === 'ECONNRESET' ||
         /timeout|network/i.test(err?.message || '');
       if (ambiguous) {
         this.logger.warn(
@@ -731,7 +745,9 @@ export class StripePaymentService {
     paymentIntentId: string,
     charge: { id: string; amount_refunded?: number; refunds?: any },
   ): Promise<void> {
-    const payment = await this.paymentModel.findOne({ stripePaymentIntentId: paymentIntentId });
+    const payment = await this.paymentModel.findOne({
+      stripePaymentIntentId: paymentIntentId,
+    });
     if (!payment) {
       return;
     }
@@ -740,21 +756,28 @@ export class StripePaymentService {
     if ((payment.refunds || []).some((r: any) => r.refundId === refundId)) {
       return; // idempotent
     }
-    const refundedAmount = charge.amount_refunded ?? (payment.refundedAmount || 0);
+    const refundedAmount =
+      charge.amount_refunded ?? (payment.refundedAmount || 0);
     const isFullyRefunded = refundedAmount >= payment.amount - 0.001;
     // RACE-SAFE (FIX1 gate): the refund-id guard makes concurrent webhook
     // redelivery + status-sync convergence accumulate exactly once.
     await this.paymentModel.updateOne(
-      { stripePaymentIntentId: paymentIntentId, 'refunds.refundId': { $ne: refundId } },
+      {
+        stripePaymentIntentId: paymentIntentId,
+        'refunds.refundId': { $ne: refundId },
+      },
       {
         $set: {
-          status: isFullyRefunded ? StripePaymentStatus.REFUNDED : StripePaymentStatus.PARTIALLY_REFUNDED,
+          status: isFullyRefunded
+            ? StripePaymentStatus.REFUNDED
+            : StripePaymentStatus.PARTIALLY_REFUNDED,
           refundedAmount,
         },
         $push: {
           refunds: {
             refundId,
-            amount: refund?.amount ?? refundedAmount - (payment.refundedAmount || 0),
+            amount:
+              refund?.amount ?? refundedAmount - (payment.refundedAmount || 0),
             reason: refund?.reason,
             status: refund?.status || 'succeeded',
             source: 'stripe_dashboard',
@@ -763,7 +786,9 @@ export class StripePaymentService {
         },
       },
     );
-    this.logger.log(`External refund converged for ${paymentIntentId} (charge ${charge.id})`);
+    this.logger.log(
+      `External refund converged for ${paymentIntentId} (charge ${charge.id})`,
+    );
   }
 
   /**
@@ -821,7 +846,12 @@ export class StripePaymentService {
       .findOne({ stripePaymentIntentId: paymentIntent.id })
       .select('connectedAccountId status shopId')
       .lean();
-    if (existing && event.account && existing.connectedAccountId && event.account !== existing.connectedAccountId) {
+    if (
+      existing &&
+      event.account &&
+      existing.connectedAccountId &&
+      event.account !== existing.connectedAccountId
+    ) {
       this.logger.warn(
         `Webhook event account ${event.account} does not match payment ${paymentIntent.id} bound account ${existing.connectedAccountId} — ignoring`,
       );
@@ -830,12 +860,22 @@ export class StripePaymentService {
 
     // FIX1-A3: terminal-state reorder guard — a duplicate/reordered event
     // must never regress a terminal state (succeeded/refunded/canceled).
-    const currentStatus = (existing as any)?.status as StripePaymentStatus | undefined;
+    const currentStatus = (existing as any)?.status as
+      | StripePaymentStatus
+      | undefined;
     const nextStatus = this.mapStripeStatus(paymentIntent.status);
     if (
       currentStatus &&
-      [StripePaymentStatus.SUCCEEDED, StripePaymentStatus.REFUNDED, StripePaymentStatus.PARTIALLY_REFUNDED, StripePaymentStatus.CANCELED].includes(currentStatus) &&
-      ![StripePaymentStatus.REFUNDED, StripePaymentStatus.PARTIALLY_REFUNDED].includes(nextStatus)
+      [
+        StripePaymentStatus.SUCCEEDED,
+        StripePaymentStatus.REFUNDED,
+        StripePaymentStatus.PARTIALLY_REFUNDED,
+        StripePaymentStatus.CANCELED,
+      ].includes(currentStatus) &&
+      ![
+        StripePaymentStatus.REFUNDED,
+        StripePaymentStatus.PARTIALLY_REFUNDED,
+      ].includes(nextStatus)
     ) {
       this.logger.log(
         `Webhook event would regress payment ${paymentIntent.id} from ${currentStatus} to ${nextStatus} — ignoring`,

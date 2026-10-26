@@ -24,10 +24,13 @@ export class AllExceptionsFilter implements ExceptionFilter {
     if (exception instanceof HttpException) {
       status = exception.getStatus();
       const exceptionResponse = exception.getResponse();
-      
+
       if (typeof exceptionResponse === 'string') {
         message = exceptionResponse;
-      } else if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
+      } else if (
+        typeof exceptionResponse === 'object' &&
+        exceptionResponse !== null
+      ) {
         const resp = exceptionResponse as any;
         message = resp.message || exception.message;
         // Handle validation errors array
@@ -36,14 +39,11 @@ export class AllExceptionsFilter implements ExceptionFilter {
           message = resp.message.join(', ');
         }
       }
-      
+
       this.logger.error(`${request.method} ${request.url}`, exception);
     } else if (exception instanceof Error) {
       message = exception.message;
-      this.logger.error(
-        `${request.method} ${request.url}`,
-        exception.stack,
-      );
+      this.logger.error(`${request.method} ${request.url}`, exception.stack);
     } else {
       this.logger.error(
         `${request.method} ${request.url}`,

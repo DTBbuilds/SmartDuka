@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 
 /**
  * WhatsApp Template Service
- * 
+ *
  * Formats reports and alerts for WhatsApp delivery.
  * Handles message chunking (WhatsApp limit: 4096 chars)
  */
@@ -18,7 +18,7 @@ export class WhatsAppTemplateService {
    */
   formatDailyReport(data: DailyReportData): string[] {
     const header = this.buildReportHeader('DAILY', data.shopName, data.date);
-    
+
     const sections = [
       this.buildExecutiveSummary(data),
       this.buildTopSellers(data.topProducts),
@@ -35,8 +35,12 @@ export class WhatsAppTemplateService {
    * Format a weekly report for WhatsApp
    */
   formatWeeklyReport(data: WeeklyReportData): string[] {
-    const header = this.buildReportHeader('WEEKLY', data.shopName, data.dateRange);
-    
+    const header = this.buildReportHeader(
+      'WEEKLY',
+      data.shopName,
+      data.dateRange,
+    );
+
     const sections = [
       this.buildWeekOverview(data),
       this.buildDailyBreakdown(data.dailyBreakdown),
@@ -53,7 +57,7 @@ export class WhatsAppTemplateService {
    */
   formatMonthlyReport(data: MonthlyReportData): string[] {
     const header = this.buildReportHeader('MONTHLY', data.shopName, data.month);
-    
+
     const sections = [
       this.buildMonthOverview(data),
       this.buildWeeklyTrends(data.weeklyBreakdown),
@@ -71,8 +75,8 @@ export class WhatsAppTemplateService {
    * Format low stock alert
    */
   formatLowStockAlert(data: LowStockAlertData): string {
-    const critical = data.products.filter(p => p.stock <= 5);
-    const warning = data.products.filter(p => p.stock > 5);
+    const critical = data.products.filter((p) => p.stock <= 5);
+    const warning = data.products.filter((p) => p.stock > 5);
 
     let message = `⚠️ *LOW STOCK ALERT*
 🏪 ${data.shopName}
@@ -81,13 +85,19 @@ export class WhatsAppTemplateService {
 
     if (critical.length > 0) {
       message += `🔴 *CRITICAL*\n`;
-      message += critical.slice(0, 5).map(p => `• ${p.name}: ${p.stock} left`).join('\n');
+      message += critical
+        .slice(0, 5)
+        .map((p) => `• ${p.name}: ${p.stock} left`)
+        .join('\n');
       message += '\n\n';
     }
 
     if (warning.length > 0) {
       message += `🟡 *WARNING*\n`;
-      message += warning.slice(0, 5).map(p => `• ${p.name}: ${p.stock} left`).join('\n');
+      message += warning
+        .slice(0, 5)
+        .map((p) => `• ${p.name}: ${p.stock} left`)
+        .join('\n');
       message += '\n\n';
     }
 
@@ -167,7 +177,11 @@ _SmartDuka Security_`;
 
   // ==================== PRIVATE HELPERS ====================
 
-  private buildReportHeader(type: string, shopName: string, date: string): string {
+  private buildReportHeader(
+    type: string,
+    shopName: string,
+    date: string,
+  ): string {
     const emoji = type === 'DAILY' ? '📊' : type === 'WEEKLY' ? '📈' : '📉';
     return `${emoji} *SmartDuka ${type} Report*
 🏪 ${shopName}
@@ -178,7 +192,7 @@ _SmartDuka Security_`;
   private buildExecutiveSummary(data: DailyReportData): string {
     const trend = data.revenueChange >= 0 ? '📈' : '📉';
     const changeStr = `${data.revenueChange >= 0 ? '+' : ''}${data.revenueChange.toFixed(1)}%`;
-    
+
     return `*📋 EXECUTIVE SUMMARY*
 
 💰 Revenue: KES ${data.totalRevenue.toLocaleString()} ${trend} ${changeStr}
@@ -192,20 +206,25 @@ _SmartDuka Security_`;
       return `*🏆 TOP SELLERS*\n\nNo sales recorded`;
     }
 
-    const list = products.slice(0, 5)
+    const list = products
+      .slice(0, 5)
       .map((p, i) => `${i + 1}. ${p.name} - ${p.quantity} sold`)
       .join('\n');
 
     return `*🏆 TOP SELLERS*\n\n${list}`;
   }
 
-  private buildInventoryStatus(lowStockCount: number, lowStockItems: LowStockItem[]): string {
+  private buildInventoryStatus(
+    lowStockCount: number,
+    lowStockItems: LowStockItem[],
+  ): string {
     if (lowStockCount === 0) {
       return `*📦 INVENTORY*\n\n✅ All products well stocked`;
     }
 
-    const items = lowStockItems.slice(0, 3)
-      .map(p => `• ${p.name}: ${p.stock} left`)
+    const items = lowStockItems
+      .slice(0, 3)
+      .map((p) => `• ${p.name}: ${p.stock} left`)
       .join('\n');
 
     return `*📦 INVENTORY*\n\n⚠️ ${lowStockCount} products low on stock\n${items}`;
@@ -216,8 +235,9 @@ _SmartDuka Security_`;
       return `*🔔 ALERTS*\n\n✅ No issues detected`;
     }
 
-    const list = alerts.slice(0, 5)
-      .map(a => `${a.icon} ${a.message}`)
+    const list = alerts
+      .slice(0, 5)
+      .map((a) => `${a.icon} ${a.message}`)
       .join('\n');
 
     return `*🔔 ALERTS*\n\n${list}`;
@@ -228,7 +248,8 @@ _SmartDuka Security_`;
       return `*💡 RECOMMENDATIONS*\n\n✅ Keep up the good work!`;
     }
 
-    const list = recommendations.slice(0, 4)
+    const list = recommendations
+      .slice(0, 4)
       .map((r, i) => `${i + 1}. ${r}`)
       .join('\n');
 
@@ -244,7 +265,7 @@ _Reply STOP to unsubscribe_`;
   private buildWeekOverview(data: WeeklyReportData): string {
     const trend = data.revenueChange >= 0 ? '📈' : '📉';
     const changeStr = `${data.revenueChange >= 0 ? '+' : ''}${data.revenueChange.toFixed(1)}%`;
-    
+
     return `*📋 WEEK OVERVIEW*
 
 💰 Total Revenue: KES ${data.totalRevenue.toLocaleString()}
@@ -255,23 +276,28 @@ _Reply STOP to unsubscribe_`;
 
   private buildDailyBreakdown(breakdown: DayBreakdown[]): string {
     const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const maxRevenue = Math.max(...breakdown.map(d => d.revenue));
-    
-    const list = breakdown.map(d => {
-      const icon = d.revenue === maxRevenue ? ' 🔥' : '';
-      return `${days[d.dayOfWeek]}: KES ${d.revenue.toLocaleString()} (${d.orders} orders)${icon}`;
-    }).join('\n');
+    const maxRevenue = Math.max(...breakdown.map((d) => d.revenue));
+
+    const list = breakdown
+      .map((d) => {
+        const icon = d.revenue === maxRevenue ? ' 🔥' : '';
+        return `${days[d.dayOfWeek]}: KES ${d.revenue.toLocaleString()} (${d.orders} orders)${icon}`;
+      })
+      .join('\n');
 
     return `*📅 DAILY BREAKDOWN*\n\n${list}`;
   }
 
   private buildWeeklyTopSellers(products: ProductSale[]): string {
-    return this.buildTopSellers(products).replace('TOP SELLERS', "WEEK'S TOP SELLERS");
+    return this.buildTopSellers(products).replace(
+      'TOP SELLERS',
+      "WEEK'S TOP SELLERS",
+    );
   }
 
   private buildWeeklyInsights(data: WeeklyReportData): string {
     const insights: string[] = [];
-    
+
     if (data.bestDay) {
       insights.push(`📈 ${data.bestDay} was your best day`);
     }
@@ -291,7 +317,7 @@ _Reply STOP to unsubscribe_`;
 
   private buildMonthOverview(data: MonthlyReportData): string {
     const trend = data.revenueChange >= 0 ? '📈' : '📉';
-    
+
     return `*📋 MONTH OVERVIEW*
 
 💰 Total Revenue: KES ${data.totalRevenue.toLocaleString()}
@@ -301,15 +327,21 @@ _Reply STOP to unsubscribe_`;
   }
 
   private buildWeeklyTrends(breakdown: WeekBreakdown[]): string {
-    const list = breakdown.map((w, i) => 
-      `Week ${i + 1}: KES ${w.revenue.toLocaleString()} (${w.orders} orders)`
-    ).join('\n');
+    const list = breakdown
+      .map(
+        (w, i) =>
+          `Week ${i + 1}: KES ${w.revenue.toLocaleString()} (${w.orders} orders)`,
+      )
+      .join('\n');
 
     return `*📅 WEEKLY TRENDS*\n\n${list}`;
   }
 
   private buildMonthlyTopSellers(products: ProductSale[]): string {
-    return this.buildTopSellers(products).replace('TOP SELLERS', "MONTH'S TOP SELLERS");
+    return this.buildTopSellers(products).replace(
+      'TOP SELLERS',
+      "MONTH'S TOP SELLERS",
+    );
   }
 
   private buildMonthlyInsights(data: MonthlyReportData): string {
@@ -326,7 +358,7 @@ _Reply STOP to unsubscribe_`;
 
     for (const section of sections) {
       const combined = currentMessage + '\n\n' + section;
-      
+
       if (combined.length > this.MAX_MESSAGE_LENGTH) {
         messages.push(currentMessage);
         currentMessage = section;

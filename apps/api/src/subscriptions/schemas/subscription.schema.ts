@@ -21,7 +21,7 @@ export enum BillingCycle {
 
 /**
  * Subscription Schema
- * 
+ *
  * Tracks individual shop subscriptions to SmartDuka POS
  * Supports M-Pesa billing for Kenyan market
  */
@@ -39,7 +39,11 @@ export class Subscription {
   @Prop({ required: true, enum: BillingCycle, default: BillingCycle.MONTHLY })
   billingCycle: BillingCycle;
 
-  @Prop({ required: true, enum: SubscriptionStatus, default: SubscriptionStatus.TRIAL })
+  @Prop({
+    required: true,
+    enum: SubscriptionStatus,
+    default: SubscriptionStatus.TRIAL,
+  })
   status: SubscriptionStatus;
 
   // Billing dates
@@ -203,6 +207,6 @@ SubscriptionSchema.index({ currentPeriodEnd: 1 });
 SubscriptionSchema.index({ nextBillingDate: 1 });
 SubscriptionSchema.index({ status: 1, currentPeriodEnd: 1 });
 // Compound indexes for super-admin queries
-SubscriptionSchema.index({ 'pendingUpgrade': 1 }); // For pending upgrades list
+SubscriptionSchema.index({ pendingUpgrade: 1 }); // For pending upgrades list
 SubscriptionSchema.index({ planCode: 1, status: 1 }); // For plan-based filtering
 SubscriptionSchema.index({ createdAt: -1 }); // For sorting by creation date

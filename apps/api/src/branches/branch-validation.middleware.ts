@@ -1,4 +1,9 @@
-import { Injectable, NestMiddleware, ForbiddenException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  NestMiddleware,
+  ForbiddenException,
+  Logger,
+} from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -6,7 +11,7 @@ import { Branch, BranchDocument } from './branch.schema';
 
 /**
  * PHASE 2: BRANCH VALIDATION MIDDLEWARE
- * 
+ *
  * Validates that user has access to the requested branch
  * Multi-tenant safe: ensures shopId matches
  */
@@ -15,7 +20,8 @@ export class BranchValidationMiddleware implements NestMiddleware {
   private readonly logger = new Logger(BranchValidationMiddleware.name);
 
   constructor(
-    @InjectModel(Branch.name) private readonly branchModel: Model<BranchDocument>,
+    @InjectModel(Branch.name)
+    private readonly branchModel: Model<BranchDocument>,
   ) {}
 
   async use(req: Request, res: Response, next: NextFunction) {
@@ -52,7 +58,7 @@ export class BranchValidationMiddleware implements NestMiddleware {
       }
 
       // Branch admin has access to assigned branches
-      if (userRole === 'branch_admin' && userBranches.includes(branchId as string)) {
+      if (userRole === 'branch_admin' && userBranches.includes(branchId)) {
         return next();
       }
 
@@ -62,7 +68,10 @@ export class BranchValidationMiddleware implements NestMiddleware {
       }
 
       // Cashier/Supervisor has access to assigned branch
-      if ((userRole === 'cashier' || userRole === 'supervisor') && userBranchId === branchId) {
+      if (
+        (userRole === 'cashier' || userRole === 'supervisor') &&
+        userBranchId === branchId
+      ) {
         return next();
       }
 

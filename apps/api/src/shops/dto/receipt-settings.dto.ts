@@ -1,6 +1,20 @@
-import { IsString, IsBoolean, IsEnum, IsOptional, IsNumber, IsObject, Min, Max, ValidateNested } from 'class-validator';
+import {
+  IsString,
+  IsBoolean,
+  IsEnum,
+  IsOptional,
+  IsNumber,
+  IsObject,
+  Min,
+  Max,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
-import { ReceiptTemplate, ReceiptWidth, BarcodeType } from '../schemas/receipt-settings.schema';
+import {
+  ReceiptTemplate,
+  ReceiptWidth,
+  BarcodeType,
+} from '../schemas/receipt-settings.schema';
 
 class SocialLinksDto {
   @IsOptional()
@@ -217,7 +231,12 @@ export class UpdateReceiptSettingsDto {
 
   @IsOptional()
   @IsString()
-  barcodeContent?: 'receipt_number' | 'transaction_id' | 'shop_url' | 'verify_url' | 'custom';
+  barcodeContent?:
+    | 'receipt_number'
+    | 'transaction_id'
+    | 'shop_url'
+    | 'verify_url'
+    | 'custom';
 
   @IsOptional()
   @IsString()

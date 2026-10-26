@@ -21,7 +21,8 @@ export class VarianceRecord {
   status?: string;
 }
 
-export const VarianceRecordSchema = SchemaFactory.createForClass(VarianceRecord);
+export const VarianceRecordSchema =
+  SchemaFactory.createForClass(VarianceRecord);
 
 @Schema({ timestamps: true })
 export class Reconciliation {
@@ -43,7 +44,10 @@ export class Reconciliation {
   @Prop({ required: true })
   variancePercentage: number;
 
-  @Prop({ enum: ['pending', 'reconciled', 'variance_pending'], default: 'pending' })
+  @Prop({
+    enum: ['pending', 'reconciled', 'variance_pending'],
+    default: 'pending',
+  })
   status: 'pending' | 'reconciled' | 'variance_pending';
 
   @Prop({ type: [VarianceRecordSchema], default: [] })
@@ -65,7 +69,8 @@ export class Reconciliation {
   approvalTime?: Date;
 }
 
-export const ReconciliationSchema = SchemaFactory.createForClass(Reconciliation);
+export const ReconciliationSchema =
+  SchemaFactory.createForClass(Reconciliation);
 
 // Create indexes for multi-tenant queries
 ReconciliationSchema.index({ shopId: 1, reconciliationDate: -1 });

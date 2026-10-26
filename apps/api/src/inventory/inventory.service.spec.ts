@@ -44,24 +44,36 @@ describe('InventoryService', () => {
       {
         find: jest.fn().mockReturnThis(),
         findOne: jest.fn((q: any) => ({
-          exec: jest.fn().mockResolvedValue(
-            !q || String(q._id) === mockProductId || !q._id ? mockProduct : null,
-          ),
-          lean: jest.fn(() => ({
-            exec: jest.fn().mockResolvedValue(
-              !q || String(q._id) === mockProductId || !q._id ? mockProduct : null,
+          exec: jest
+            .fn()
+            .mockResolvedValue(
+              !q || String(q._id) === mockProductId || !q._id
+                ? mockProduct
+                : null,
             ),
+          lean: jest.fn(() => ({
+            exec: jest
+              .fn()
+              .mockResolvedValue(
+                !q || String(q._id) === mockProductId || !q._id
+                  ? mockProduct
+                  : null,
+              ),
           })),
         })),
         findById: jest.fn((id: any) => {
           const chain = {
-            exec: jest.fn().mockResolvedValue(
-              String(id) === mockProductId ? mockProduct : null,
-            ),
-            lean: jest.fn(() => ({
-              exec: jest.fn().mockResolvedValue(
+            exec: jest
+              .fn()
+              .mockResolvedValue(
                 String(id) === mockProductId ? mockProduct : null,
               ),
+            lean: jest.fn(() => ({
+              exec: jest
+                .fn()
+                .mockResolvedValue(
+                  String(id) === mockProductId ? mockProduct : null,
+                ),
             })),
           };
           return chain;
@@ -85,7 +97,9 @@ describe('InventoryService', () => {
       sort: jest.fn().mockReturnThis(),
       lean: jest.fn().mockReturnThis(),
       exec: jest.fn().mockResolvedValue([]),
-      create: jest.fn().mockResolvedValue({ _id: 'cat1', name: 'Test Category' }),
+      create: jest
+        .fn()
+        .mockResolvedValue({ _id: 'cat1', name: 'Test Category' }),
     };
 
     const mockStockAdjustmentModel: any = Object.assign(
@@ -131,10 +145,15 @@ describe('InventoryService', () => {
         },
         {
           provide: getModelToken('Order'),
-          useValue: { findOne: jest.fn(), find: jest.fn(), countDocuments: jest.fn().mockResolvedValue(0) },
+          useValue: {
+            findOne: jest.fn(),
+            find: jest.fn(),
+            countDocuments: jest.fn().mockResolvedValue(0),
+          },
         },
         {
-          provide: require('./services/category-suggestion.service').CategorySuggestionService,
+          provide: require('./services/category-suggestion.service')
+            .CategorySuggestionService,
           useValue: { suggest: jest.fn().mockResolvedValue([]) },
         },
         {
@@ -184,7 +203,10 @@ describe('InventoryService', () => {
 
       await service.createProduct(mockShopId, createProductDto);
 
-      expect(subscriptionGuard.enforceLimit).toHaveBeenCalledWith(mockShopId, 'products');
+      expect(subscriptionGuard.enforceLimit).toHaveBeenCalledWith(
+        mockShopId,
+        'products',
+      );
     });
 
     it('should increment usage after creating product', async () => {
@@ -192,7 +214,10 @@ describe('InventoryService', () => {
 
       await service.createProduct(mockShopId, createProductDto);
 
-      expect(subscriptionGuard.incrementUsage).toHaveBeenCalledWith(mockShopId, 'products');
+      expect(subscriptionGuard.incrementUsage).toHaveBeenCalledWith(
+        mockShopId,
+        'products',
+      );
     });
   });
 
@@ -202,7 +227,11 @@ describe('InventoryService', () => {
         exec: jest.fn().mockResolvedValue(mockProduct),
       });
 
-      const result = await service.deleteProduct(mockShopId, mockProductId, mockUserId);
+      const result = await service.deleteProduct(
+        mockShopId,
+        mockProductId,
+        mockUserId,
+      );
 
       expect(productModel.updateOne).toHaveBeenCalledWith(
         { _id: expect.any(Types.ObjectId) },
@@ -211,7 +240,7 @@ describe('InventoryService', () => {
             deletedAt: expect.any(Date),
             status: 'inactive',
           }),
-        })
+        }),
       );
       expect(result.deleted).toBe(true);
     });
@@ -222,7 +251,7 @@ describe('InventoryService', () => {
       productModel.findOne.mockResolvedValue(null);
 
       await expect(
-        service.deleteProduct(mockShopId, mockProductId)
+        service.deleteProduct(mockShopId, mockProductId),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -233,7 +262,10 @@ describe('InventoryService', () => {
 
       await service.deleteProduct(mockShopId, mockProductId);
 
-      expect(subscriptionGuard.decrementUsage).toHaveBeenCalledWith(mockShopId, 'products');
+      expect(subscriptionGuard.decrementUsage).toHaveBeenCalledWith(
+        mockShopId,
+        'products',
+      );
     });
   });
 
@@ -251,7 +283,7 @@ describe('InventoryService', () => {
         expect.objectContaining({
           $unset: { deletedAt: 1, deletedBy: 1 },
           $set: { status: 'active' },
-        })
+        }),
       );
       expect(result.restored).toBe(true);
     });
@@ -264,7 +296,10 @@ describe('InventoryService', () => {
 
       await service.restoreProduct(mockShopId, mockProductId);
 
-      expect(subscriptionGuard.enforceLimit).toHaveBeenCalledWith(mockShopId, 'products');
+      expect(subscriptionGuard.enforceLimit).toHaveBeenCalledWith(
+        mockShopId,
+        'products',
+      );
     });
   });
 
@@ -301,7 +336,7 @@ describe('InventoryService', () => {
       expect(productModel.findOne).toHaveBeenCalledWith(
         expect.objectContaining({
           barcode: '1234567890123',
-        })
+        }),
       );
       expect(result).toBeDefined();
     });
@@ -329,7 +364,7 @@ describe('InventoryService', () => {
         expect.objectContaining({
           sku: { $regex: '^TEST-001$', $options: 'i' },
           status: 'active',
-        })
+        }),
       );
       expect(result).toBeDefined();
     });
@@ -344,7 +379,7 @@ describe('InventoryService', () => {
       expect(productModel.find).toHaveBeenCalledWith(
         expect.objectContaining({
           deletedAt: { $exists: false },
-        })
+        }),
       );
     });
 
@@ -356,7 +391,7 @@ describe('InventoryService', () => {
       expect(productModel.find).toHaveBeenCalledWith(
         expect.objectContaining({
           status: 'active',
-        })
+        }),
       );
     });
 
@@ -377,7 +412,7 @@ describe('InventoryService', () => {
         -5,
         'sale',
         mockUserId,
-        'Test adjustment'
+        'Test adjustment',
       );
 
       expect(stockAdjustmentModel).toHaveBeenCalledWith(
@@ -386,14 +421,18 @@ describe('InventoryService', () => {
           productId: expect.any(Types.ObjectId),
           quantityChange: -5,
           reason: 'sale',
-        })
+        }),
       );
     });
   });
 
   describe('getLowStockProducts', () => {
     it('should return products below threshold', async () => {
-      const lowStockProduct = { ...mockProduct, stock: 5, lowStockThreshold: 10 };
+      const lowStockProduct = {
+        ...mockProduct,
+        stock: 5,
+        lowStockThreshold: 10,
+      };
       productModel.exec.mockResolvedValue([lowStockProduct]);
 
       const result = await service.getLowStockProducts(mockShopId, 10);
@@ -402,4 +441,3 @@ describe('InventoryService', () => {
     });
   });
 });
-

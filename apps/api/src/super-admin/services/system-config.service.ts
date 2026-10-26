@@ -1,12 +1,16 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { SystemConfig, SystemConfigDocument, SystemConfigType } from '../schemas/system-config.schema';
+import {
+  SystemConfig,
+  SystemConfigDocument,
+  SystemConfigType,
+} from '../schemas/system-config.schema';
 import { MpesaEncryptionService } from '../../payments/services/mpesa-encryption.service';
 
 /**
  * System Configuration Service
- * 
+ *
  * Manages system-wide configurations that super admin can control.
  * Handles encryption/decryption of sensitive credentials.
  */
@@ -30,7 +34,9 @@ export class SystemConfigService {
   /**
    * Get configuration by type
    */
-  async getConfigByType(type: SystemConfigType): Promise<SystemConfigDocument | null> {
+  async getConfigByType(
+    type: SystemConfigType,
+  ): Promise<SystemConfigDocument | null> {
     return this.configModel.findOne({ type });
   }
 
@@ -47,8 +53,10 @@ export class SystemConfigService {
     consumerSecret?: string;
     passkey?: string;
   }> {
-    const config = await this.configModel.findOne({ type: SystemConfigType.MPESA });
-    
+    const config = await this.configModel.findOne({
+      type: SystemConfigType.MPESA,
+    });
+
     if (!config) {
       return {
         isConfigured: false,
@@ -63,21 +71,33 @@ export class SystemConfigService {
     let passkey = '';
 
     try {
-      if (config.config.consumerKey && config.config.consumerKeyIv && config.config.consumerKeyTag) {
+      if (
+        config.config.consumerKey &&
+        config.config.consumerKeyIv &&
+        config.config.consumerKeyTag
+      ) {
         consumerKey = this.encryptionService.decrypt(
           config.config.consumerKey,
           config.config.consumerKeyIv,
           config.config.consumerKeyTag,
         );
       }
-      if (config.config.consumerSecret && config.config.consumerSecretIv && config.config.consumerSecretTag) {
+      if (
+        config.config.consumerSecret &&
+        config.config.consumerSecretIv &&
+        config.config.consumerSecretTag
+      ) {
         consumerSecret = this.encryptionService.decrypt(
           config.config.consumerSecret,
           config.config.consumerSecretIv,
           config.config.consumerSecretTag,
         );
       }
-      if (config.config.passkey && config.config.passkeyIv && config.config.passkeyTag) {
+      if (
+        config.config.passkey &&
+        config.config.passkeyIv &&
+        config.config.passkeyTag
+      ) {
         passkey = this.encryptionService.decrypt(
           config.config.passkey,
           config.config.passkeyIv,
@@ -115,8 +135,12 @@ export class SystemConfigService {
     updatedByEmail?: string;
   }): Promise<SystemConfigDocument> {
     // Encrypt credentials
-    const encryptedConsumerKey = this.encryptionService.encrypt(data.consumerKey);
-    const encryptedConsumerSecret = this.encryptionService.encrypt(data.consumerSecret);
+    const encryptedConsumerKey = this.encryptionService.encrypt(
+      data.consumerKey,
+    );
+    const encryptedConsumerSecret = this.encryptionService.encrypt(
+      data.consumerSecret,
+    );
     const encryptedPasskey = this.encryptionService.encrypt(data.passkey);
 
     const configData = {
@@ -154,7 +178,11 @@ export class SystemConfigService {
   /**
    * Test M-Pesa configuration
    */
-  async testMpesaConfig(): Promise<{ success: boolean; message: string; error?: string }> {
+  async testMpesaConfig(): Promise<{
+    success: boolean;
+    message: string;
+    error?: string;
+  }> {
     const config = await this.getMpesaConfig();
 
     if (!config.isConfigured) {
@@ -168,12 +196,15 @@ export class SystemConfigService {
     try {
       // Test by getting access token
       const axios = require('axios');
-      const baseUrl = config.environment === 'production'
-        ? 'https://api.safaricom.co.ke'
-        : 'https://sandbox.safaricom.co.ke';
+      const baseUrl =
+        config.environment === 'production'
+          ? 'https://api.safaricom.co.ke'
+          : 'https://sandbox.safaricom.co.ke';
 
-      const auth = Buffer.from(`${config.consumerKey}:${config.consumerSecret}`).toString('base64');
-      
+      const auth = Buffer.from(
+        `${config.consumerKey}:${config.consumerSecret}`,
+      ).toString('base64');
+
       const response = await axios.get(
         `${baseUrl}/oauth/v1/generate?grant_type=client_credentials`,
         {
@@ -205,8 +236,9 @@ export class SystemConfigService {
 
       throw new Error('No access token received');
     } catch (error: any) {
-      const errorMessage = error.response?.data?.errorMessage || error.message || 'Unknown error';
-      
+      const errorMessage =
+        error.response?.data?.errorMessage || error.message || 'Unknown error';
+
       // Update test result
       await this.configModel.findOneAndUpdate(
         { type: SystemConfigType.MPESA },
@@ -230,7 +262,9 @@ export class SystemConfigService {
   /**
    * Toggle M-Pesa configuration active status
    */
-  async toggleMpesaActive(isActive: boolean): Promise<SystemConfigDocument | null> {
+  async toggleMpesaActive(
+    isActive: boolean,
+  ): Promise<SystemConfigDocument | null> {
     return this.configModel.findOneAndUpdate(
       { type: SystemConfigType.MPESA },
       { $set: { isActive } },
@@ -254,8 +288,10 @@ export class SystemConfigService {
     lastTestResult?: string;
     lastTestError?: string;
   }> {
-    const config = await this.configModel.findOne({ type: SystemConfigType.MPESA });
-    
+    const config = await this.configModel.findOne({
+      type: SystemConfigType.MPESA,
+    });
+
     if (!config) {
       return {
         isConfigured: false,
@@ -273,9 +309,15 @@ export class SystemConfigService {
       environment: config.environment,
       shortCode: config.config.shortCode,
       callbackUrl: config.config.callbackUrl,
-      consumerKeyMasked: decrypted.consumerKey ? this.maskString(decrypted.consumerKey) : undefined,
-      consumerSecretMasked: decrypted.consumerSecret ? this.maskString(decrypted.consumerSecret) : undefined,
-      passkeyMasked: decrypted.passkey ? this.maskString(decrypted.passkey) : undefined,
+      consumerKeyMasked: decrypted.consumerKey
+        ? this.maskString(decrypted.consumerKey)
+        : undefined,
+      consumerSecretMasked: decrypted.consumerSecret
+        ? this.maskString(decrypted.consumerSecret)
+        : undefined,
+      passkeyMasked: decrypted.passkey
+        ? this.maskString(decrypted.passkey)
+        : undefined,
       lastTestedAt: config.lastTestedAt,
       lastTestResult: config.lastTestResult,
       lastTestError: config.lastTestError,
@@ -297,8 +339,10 @@ export class SystemConfigService {
     name: string;
     description: string;
   }> {
-    const config = await this.configModel.findOne({ type: SystemConfigType.VAT });
-    
+    const config = await this.configModel.findOne({
+      type: SystemConfigType.VAT,
+    });
+
     // Default: VAT disabled
     if (!config) {
       return {
@@ -330,7 +374,8 @@ export class SystemConfigService {
     const configData = {
       type: SystemConfigType.VAT,
       name: 'VAT Configuration',
-      description: 'System-wide VAT settings for subscription payments and invoices',
+      description:
+        'System-wide VAT settings for subscription payments and invoices',
       isActive: data.enabled,
       environment: 'production' as const,
       config: {
@@ -348,16 +393,23 @@ export class SystemConfigService {
       { upsert: true, new: true },
     );
 
-    this.logger.log(`VAT configuration saved: enabled=${data.enabled}, rate=${data.rate ?? 0.16}`);
+    this.logger.log(
+      `VAT configuration saved: enabled=${data.enabled}, rate=${data.rate ?? 0.16}`,
+    );
     return result;
   }
 
   /**
    * Toggle VAT enabled/disabled
    */
-  async toggleVatEnabled(enabled: boolean, updatedByEmail?: string): Promise<SystemConfigDocument | null> {
-    const existing = await this.configModel.findOne({ type: SystemConfigType.VAT });
-    
+  async toggleVatEnabled(
+    enabled: boolean,
+    updatedByEmail?: string,
+  ): Promise<SystemConfigDocument | null> {
+    const existing = await this.configModel.findOne({
+      type: SystemConfigType.VAT,
+    });
+
     if (!existing) {
       // Create new config with default values
       return this.saveVatConfig({ enabled, updatedByEmail });
@@ -365,12 +417,12 @@ export class SystemConfigService {
 
     return this.configModel.findOneAndUpdate(
       { type: SystemConfigType.VAT },
-      { 
-        $set: { 
+      {
+        $set: {
           isActive: enabled,
           'config.vatEnabled': enabled,
           updatedByEmail,
-        } 
+        },
       },
       { new: true },
     );

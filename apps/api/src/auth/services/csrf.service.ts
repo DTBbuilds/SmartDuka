@@ -24,7 +24,7 @@ export class CsrfService {
     const hmac = crypto.createHmac('sha256', secret);
     hmac.update(data);
     const signature = hmac.digest('hex');
-    
+
     // Token format: timestamp.signature
     return `${timestamp}.${signature}`;
   }
@@ -40,7 +40,7 @@ export class CsrfService {
   ): boolean {
     try {
       const [timestamp, signature] = token.split('.');
-      
+
       if (!timestamp || !signature) {
         return false;
       }

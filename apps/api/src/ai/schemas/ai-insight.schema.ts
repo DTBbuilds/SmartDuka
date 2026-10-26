@@ -3,7 +3,12 @@ import { Document, Types } from 'mongoose';
 
 export type AiInsightDocument = AiInsight & Document;
 
-export type InsightType = 'demand_forecast' | 'anomaly_detection' | 'reorder_suggestion' | 'business_summary' | 'cash_variance_analysis';
+export type InsightType =
+  | 'demand_forecast'
+  | 'anomaly_detection'
+  | 'reorder_suggestion'
+  | 'business_summary'
+  | 'cash_variance_analysis';
 export type InsightPriority = 'low' | 'medium' | 'high' | 'critical';
 export type InsightStatus = 'active' | 'read' | 'dismissed' | 'actioned';
 
@@ -12,7 +17,16 @@ export class AiInsight {
   @Prop({ type: Types.ObjectId, required: true, index: true })
   shopId: Types.ObjectId;
 
-  @Prop({ required: true, enum: ['demand_forecast', 'anomaly_detection', 'reorder_suggestion', 'business_summary', 'cash_variance_analysis'] })
+  @Prop({
+    required: true,
+    enum: [
+      'demand_forecast',
+      'anomaly_detection',
+      'reorder_suggestion',
+      'business_summary',
+      'cash_variance_analysis',
+    ],
+  })
   type: InsightType;
 
   @Prop({ required: true })
@@ -27,7 +41,10 @@ export class AiInsight {
   @Prop({ enum: ['low', 'medium', 'high', 'critical'], default: 'medium' })
   priority: InsightPriority;
 
-  @Prop({ enum: ['active', 'read', 'dismissed', 'actioned'], default: 'active' })
+  @Prop({
+    enum: ['active', 'read', 'dismissed', 'actioned'],
+    default: 'active',
+  })
   status: InsightStatus;
 
   @Prop({ type: Types.ObjectId })

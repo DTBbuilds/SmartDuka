@@ -83,14 +83,23 @@ export class ReceiptSettingsController {
     if (!body.logoUrl) {
       throw new BadRequestException('logoUrl is required');
     }
-    return this.receiptSettingsService.updateLogo(req.user.shopId, body.logoUrl, req.user.userId);
+    return this.receiptSettingsService.updateLogo(
+      req.user.shopId,
+      body.logoUrl,
+      req.user.userId,
+    );
   }
 
   /**
    * Remove logo
    */
   @Post('logo/remove')
-  async removeLogo(@Request() req: { user: { shopId: string; userId: string } }) {
-    return this.receiptSettingsService.removeLogo(req.user.shopId, req.user.userId);
+  async removeLogo(
+    @Request() req: { user: { shopId: string; userId: string } },
+  ) {
+    return this.receiptSettingsService.removeLogo(
+      req.user.shopId,
+      req.user.userId,
+    );
   }
 }

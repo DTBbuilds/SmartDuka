@@ -15,7 +15,8 @@ export class CustomerPreferences {
   notes?: string;
 }
 
-export const CustomerPreferencesSchema = SchemaFactory.createForClass(CustomerPreferences);
+export const CustomerPreferencesSchema =
+  SchemaFactory.createForClass(CustomerPreferences);
 
 @Schema({ _id: false })
 export class ContactPreferences {
@@ -26,7 +27,8 @@ export class ContactPreferences {
   email?: boolean;
 }
 
-export const ContactPreferencesSchema = SchemaFactory.createForClass(ContactPreferences);
+export const ContactPreferencesSchema =
+  SchemaFactory.createForClass(ContactPreferences);
 
 @Schema({ timestamps: true })
 export class Customer {

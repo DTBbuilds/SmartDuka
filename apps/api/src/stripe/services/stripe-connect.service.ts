@@ -65,7 +65,10 @@ export class StripeConnectService {
   }
 
   private getRedirectUri(): string {
-    const uri = this.configService.get<string>('STRIPE_CONNECT_REDIRECT_URI', '');
+    const uri = this.configService.get<string>(
+      'STRIPE_CONNECT_REDIRECT_URI',
+      '',
+    );
     if (!uri) {
       throw new InternalServerErrorException(
         'Stripe Connect redirect URI not configured (STRIPE_CONNECT_REDIRECT_URI).',
@@ -109,7 +112,9 @@ export class StripeConnectService {
       nonce: crypto.randomBytes(16).toString('hex'),
       exp: Date.now() + 15 * 60 * 1000,
     };
-    const body = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+    const body = Buffer.from(JSON.stringify(payload), 'utf8').toString(
+      'base64url',
+    );
     const sig = crypto
       .createHmac('sha256', this.getStateSecret())
       .update(body)
@@ -123,11 +128,17 @@ export class StripeConnectService {
       .catch((err: any) => {
         // A duplicate nonce (crypto.randomBytes collision — practically
         // impossible) must not silently weaken replay protection.
-        throw new InternalServerErrorException(`Could not register OAuth state: ${err?.message}`);
+        throw new InternalServerErrorException(
+          `Could not register OAuth state: ${err?.message}`,
+        );
       });
   }
 
-  private verifyState(state: string): { shopId: string; userId: string; nonce: string } {
+  private verifyState(state: string): {
+    shopId: string;
+    userId: string;
+    nonce: string;
+  } {
     if (!state || typeof state !== 'string' || !state.includes('.')) {
       throw new BadRequestException('Invalid OAuth state token');
     }
@@ -152,12 +163,18 @@ export class StripeConnectService {
     }
 
     if (!payload.exp || Date.now() > payload.exp) {
-      throw new BadRequestException('OAuth state expired — please try connecting again');
+      throw new BadRequestException(
+        'OAuth state expired — please try connecting again',
+      );
     }
     if (!payload.shopId || !payload.userId || !payload.nonce) {
       throw new BadRequestException('OAuth state missing required fields');
     }
-    return { shopId: payload.shopId, userId: payload.userId, nonce: payload.nonce };
+    return {
+      shopId: payload.shopId,
+      userId: payload.userId,
+      nonce: payload.nonce,
+    };
   }
 
   /**
@@ -183,7 +200,10 @@ export class StripeConnectService {
       );
     }
     const user = await this.userModel
-      .findOne({ _id: new Types.ObjectId(userId), shopId: new Types.ObjectId(shopId) })
+      .findOne({
+        _id: new Types.ObjectId(userId),
+        shopId: new Types.ObjectId(shopId),
+      })
       .select('role')
       .lean()
       .exec();
@@ -202,7 +222,11 @@ export class StripeConnectService {
    * Build Stripe OAuth authorize URL for a shop to initiate connection.
    * Frontend should redirect the shop owner's browser to this URL.
    */
-  async buildAuthorizeUrl(params: { shopId: string; userId: string; email?: string }): Promise<string> {
+  async buildAuthorizeUrl(params: {
+    shopId: string;
+    userId: string;
+    email?: string;
+  }): Promise<string> {
     // Refuse to start if Stripe client isn't initialised on the platform side
     if (!this.stripeService.isStripeConfigured()) {
       throw new InternalServerErrorException(
@@ -228,7 +252,10 @@ export class StripeConnectService {
    * Exchange the authorization code for the shop's connected account ID.
    * Persists the link to shop.stripeConnect and triggers a capability sync.
    */
-  async handleOAuthCallback(code: string, state: string): Promise<ShopDocument> {
+  async handleOAuthCallback(
+    code: string,
+    state: string,
+  ): Promise<ShopDocument> {
     if (!code) {
       throw new BadRequestException('Missing authorization code from Stripe');
     }
@@ -260,7 +287,9 @@ export class StripeConnectService {
 
     const accountId = tokenResponse.stripe_user_id;
     if (!accountId) {
-      throw new BadRequestException('Stripe did not return a connected account ID');
+      throw new BadRequestException(
+        'Stripe did not return a connected account ID',
+      );
     }
 
     // Ensure the same Stripe account is not already linked to a different shop
@@ -283,7 +312,9 @@ export class StripeConnectService {
       environment: this.getEnvironment(),
       connectedAt: new Date(),
       disconnectedAt: undefined,
-      connectedByUserId: Types.ObjectId.isValid(userId) ? new Types.ObjectId(userId) : undefined,
+      connectedByUserId: Types.ObjectId.isValid(userId)
+        ? new Types.ObjectId(userId)
+        : undefined,
     };
     await shop.save();
 
@@ -291,7 +322,9 @@ export class StripeConnectService {
     try {
       await this.syncAccountStatus(shop._id.toString());
     } catch (err: any) {
-      this.logger.warn(`Initial account sync failed for shop ${shopId}: ${err?.message}`);
+      this.logger.warn(
+        `Initial account sync failed for shop ${shopId}: ${err?.message}`,
+      );
     }
 
     this.logger.log(`Shop ${shopId} connected to Stripe account ${accountId}`);
@@ -302,11 +335,17 @@ export class StripeConnectService {
    * Perform the OAuth code → token exchange.
    * Isolated so we can swap implementations (SDK `oauth.token` vs raw HTTPS) without touching callers.
    */
-  private async exchangeCode(stripe: Stripe, code: string): Promise<Stripe.OAuthToken> {
+  private async exchangeCode(
+    stripe: Stripe,
+    code: string,
+  ): Promise<Stripe.OAuthToken> {
     // Preferred: SDK helper (supported in modern stripe-node)
     const oauth = (stripe as any).oauth;
     if (oauth && typeof oauth.token === 'function') {
-      return (await oauth.token({ grant_type: 'authorization_code', code })) as Stripe.OAuthToken;
+      return (await oauth.token({
+        grant_type: 'authorization_code',
+        code,
+      })) as Stripe.OAuthToken;
     }
 
     // Fallback: hand-rolled POST to https://connect.stripe.com/oauth/token
@@ -321,9 +360,10 @@ export class StripeConnectService {
       body: params.toString(),
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     });
-    const data = (await response.json()) as any;
+    const data = await response.json();
     if (!response.ok) {
-      const msg = data?.error_description || data?.error || `HTTP ${response.status}`;
+      const msg =
+        data?.error_description || data?.error || `HTTP ${response.status}`;
       throw new Error(msg);
     }
     return data as Stripe.OAuthToken;
@@ -353,7 +393,9 @@ export class StripeConnectService {
     } catch (err: any) {
       // account_invalid usually means the shop deauthorized us on Stripe's side.
       if (err?.code === 'account_invalid' || err?.statusCode === 403) {
-        this.logger.warn(`Account ${accountId} is no longer accessible — treating as disconnected`);
+        this.logger.warn(
+          `Account ${accountId} is no longer accessible — treating as disconnected`,
+        );
         shop.stripeConnect = {
           ...(shop.stripeConnect || {}),
           chargesEnabled: false,
@@ -395,9 +437,13 @@ export class StripeConnectService {
    * without making an extra API round-trip.
    */
   async applyAccountUpdate(account: Stripe.Account): Promise<void> {
-    const shop = await this.shopModel.findOne({ 'stripeConnect.accountId': account.id }).exec();
+    const shop = await this.shopModel
+      .findOne({ 'stripeConnect.accountId': account.id })
+      .exec();
     if (!shop) {
-      this.logger.warn(`Received account.updated for unknown account ${account.id}`);
+      this.logger.warn(
+        `Received account.updated for unknown account ${account.id}`,
+      );
       return;
     }
     shop.stripeConnect = {
@@ -418,7 +464,9 @@ export class StripeConnectService {
    * We clear accountId so card payments are blocked on the next attempt.
    */
   async applyDeauthorization(accountId: string): Promise<void> {
-    const shop = await this.shopModel.findOne({ 'stripeConnect.accountId': accountId }).exec();
+    const shop = await this.shopModel
+      .findOne({ 'stripeConnect.accountId': accountId })
+      .exec();
     if (!shop) {
       this.logger.warn(`Received deauthorize for unknown account ${accountId}`);
       return;
@@ -433,7 +481,9 @@ export class StripeConnectService {
       lastSyncedAt: new Date(),
     };
     await shop.save();
-    this.logger.log(`Shop ${shop._id} disconnected from Stripe account ${accountId}`);
+    this.logger.log(
+      `Shop ${shop._id} disconnected from Stripe account ${accountId}`,
+    );
   }
 
   // ------------------------------------------------------------------
@@ -450,7 +500,9 @@ export class StripeConnectService {
       .select('stripeConnect.accountId stripeConnect.chargesEnabled')
       .lean()
       .exec();
-    return !!(shop?.stripeConnect?.accountId && shop.stripeConnect.chargesEnabled);
+    return !!(
+      shop?.stripeConnect?.accountId && shop.stripeConnect.chargesEnabled
+    );
   }
 
   /**
@@ -618,25 +670,35 @@ export class StripeConnectService {
         const params = new URLSearchParams();
         params.append('client_id', this.getClientId());
         params.append('stripe_user_id', accountId);
-        const secretKey = this.configService.get<string>('STRIPE_SECRET_KEY', '');
-        const response = await fetch('https://connect.stripe.com/oauth/deauthorize', {
-          method: 'POST',
-          body: params.toString(),
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            Authorization: `Bearer ${secretKey}`,
+        const secretKey = this.configService.get<string>(
+          'STRIPE_SECRET_KEY',
+          '',
+        );
+        const response = await fetch(
+          'https://connect.stripe.com/oauth/deauthorize',
+          {
+            method: 'POST',
+            body: params.toString(),
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              Authorization: `Bearer ${secretKey}`,
+            },
           },
-        });
+        );
         if (!response.ok) {
           const text = await response.text();
-          throw new Error(`Deauthorize failed: HTTP ${response.status} ${text}`);
+          throw new Error(
+            `Deauthorize failed: HTTP ${response.status} ${text}`,
+          );
         }
       }
     } catch (err: any) {
       // If Stripe says we're already deauthorized, treat as success
       const msg = (err?.message || '').toLowerCase();
       if (!msg.includes('not connected') && !msg.includes('invalid_grant')) {
-        this.logger.error(`Deauthorize API call failed for ${accountId}: ${err?.message}`);
+        this.logger.error(
+          `Deauthorize API call failed for ${accountId}: ${err?.message}`,
+        );
         throw new BadRequestException(
           `Could not disconnect Stripe account: ${err?.message || 'unknown error'}`,
         );

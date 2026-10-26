@@ -26,7 +26,10 @@ export class LoginHistory {
   @Prop({ required: true, enum: ['password', 'google', 'pin', 'super_admin'] })
   loginMethod: string;
 
-  @Prop({ required: true, enum: ['success', 'failed', 'otp_required', 'otp_verified'] })
+  @Prop({
+    required: true,
+    enum: ['success', 'failed', 'otp_required', 'otp_verified'],
+  })
   status: string;
 
   @Prop()

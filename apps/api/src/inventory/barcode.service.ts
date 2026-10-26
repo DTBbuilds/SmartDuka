@@ -42,7 +42,10 @@ export class BarcodeService {
         // Code 128 (variable length)
         format = 'code128';
         isValid = cleanBarcode.length >= 4 && cleanBarcode.length <= 20;
-      } else if (cleanBarcode.startsWith('http') || cleanBarcode.includes('://')) {
+      } else if (
+        cleanBarcode.startsWith('http') ||
+        cleanBarcode.includes('://')
+      ) {
         // QR code (URL)
         format = 'qr';
         isValid = true;
@@ -66,7 +69,10 @@ export class BarcodeService {
   /**
    * Scan barcode and return product
    */
-  async scanBarcode(barcode: string, shopId: string): Promise<ProductDocument | null> {
+  async scanBarcode(
+    barcode: string,
+    shopId: string,
+  ): Promise<ProductDocument | null> {
     try {
       const validation = this.validateBarcode(barcode);
 
@@ -84,10 +90,14 @@ export class BarcodeService {
         .exec();
 
       if (!product) {
-        throw new BadRequestException('Product not found for barcode: ' + validation.barcode);
+        throw new BadRequestException(
+          'Product not found for barcode: ' + validation.barcode,
+        );
       }
 
-      this.logger.log(`Barcode scanned: ${validation.barcode} -> ${product.name}`);
+      this.logger.log(
+        `Barcode scanned: ${validation.barcode} -> ${product.name}`,
+      );
 
       return product;
     } catch (error: any) {
@@ -174,7 +184,9 @@ export class BarcodeService {
             continue;
           }
 
-          const product = await this.productModel.findById(item.productId).exec();
+          const product = await this.productModel
+            .findById(item.productId)
+            .exec();
 
           if (!product) {
             failed++;

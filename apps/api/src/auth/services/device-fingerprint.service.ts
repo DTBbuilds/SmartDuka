@@ -1,13 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { DeviceFingerprint, DeviceFingerprintDocument } from '../schemas/device-fingerprint.schema';
+import {
+  DeviceFingerprint,
+  DeviceFingerprintDocument,
+} from '../schemas/device-fingerprint.schema';
 import * as crypto from 'crypto';
 
 @Injectable()
 export class DeviceFingerprintService {
   private readonly logger = new Logger(DeviceFingerprintService.name);
-  
+
   // Device becomes trusted after 1 successful OTP-verified login
   // (User asked: OTP only for new users/devices — once verified, never again)
   private readonly TRUSTED_DEVICE_THRESHOLD = 1;
@@ -29,7 +32,7 @@ export class DeviceFingerprintService {
       // Add more components as needed
       // navigator.userAgentData?.brands, screen resolution, etc.
     ].filter(Boolean);
-    
+
     return crypto
       .createHash('sha256')
       .update(components.join('|'))
@@ -53,7 +56,7 @@ export class DeviceFingerprintService {
     }
 
     const ua = userAgent.toLowerCase();
-    
+
     // Detect device type
     let deviceType: 'desktop' | 'mobile' | 'tablet' = 'desktop';
     if (ua.includes('mobile') || ua.includes('android')) {
@@ -76,7 +79,8 @@ export class DeviceFingerprintService {
     else if (ua.includes('mac')) os = 'macOS';
     else if (ua.includes('linux')) os = 'Linux';
     else if (ua.includes('android')) os = 'Android';
-    else if (ua.includes('ios') || ua.includes('iphone') || ua.includes('ipad')) os = 'iOS';
+    else if (ua.includes('ios') || ua.includes('iphone') || ua.includes('ipad'))
+      os = 'iOS';
 
     const deviceName = `${browser} on ${os}${deviceType !== 'desktop' ? ` (${deviceType})` : ''}`;
 
@@ -128,7 +132,7 @@ export class DeviceFingerprintService {
     otpRequired: boolean = true,
   ): Promise<DeviceFingerprint> {
     const deviceInfo = this.parseDeviceInfo(userAgent);
-    
+
     // Find existing device or create new one
     let device = await this.deviceFingerprintModel.findOne({
       userId,
@@ -148,11 +152,18 @@ export class DeviceFingerprintService {
       }
 
       // Check if device should become trusted
-      if (!device.isTrusted && device.loginCount >= this.TRUSTED_DEVICE_THRESHOLD) {
+      if (
+        !device.isTrusted &&
+        device.loginCount >= this.TRUSTED_DEVICE_THRESHOLD
+      ) {
         device.isTrusted = true;
         device.trustedAt = new Date();
-        device.expiresAt = new Date(Date.now() + this.TRUSTED_DEVICE_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
-        this.logger.log(`Device ${device.fingerprint} for user ${userId} is now trusted`);
+        device.expiresAt = new Date(
+          Date.now() + this.TRUSTED_DEVICE_EXPIRY_DAYS * 24 * 60 * 60 * 1000,
+        );
+        this.logger.log(
+          `Device ${device.fingerprint} for user ${userId} is now trusted`,
+        );
       }
 
       await device.save();
@@ -174,7 +185,9 @@ export class DeviceFingerprintService {
       });
 
       await device.save();
-      this.logger.log(`New device registered for user ${userId}: ${deviceInfo.deviceName}`);
+      this.logger.log(
+        `New device registered for user ${userId}: ${deviceInfo.deviceName}`,
+      );
     }
 
     return device;
@@ -193,14 +206,17 @@ export class DeviceFingerprintService {
   /**
    * Revoke trust from a device
    */
-  async revokeDeviceTrust(userId: string, fingerprint: string): Promise<boolean> {
+  async revokeDeviceTrust(
+    userId: string,
+    fingerprint: string,
+  ): Promise<boolean> {
     const result = await this.deviceFingerprintModel.updateOne(
       { userId, fingerprint },
-      { 
-        isTrusted: false, 
+      {
+        isTrusted: false,
         expiresAt: undefined,
-        $unset: { trustedAt: 1 }
-      }
+        $unset: { trustedAt: 1 },
+      },
     );
 
     return result.modifiedCount > 0;
@@ -209,10 +225,13 @@ export class DeviceFingerprintService {
   /**
    * Deactivate a device completely
    */
-  async deactivateDevice(userId: string, fingerprint: string): Promise<boolean> {
+  async deactivateDevice(
+    userId: string,
+    fingerprint: string,
+  ): Promise<boolean> {
     const result = await this.deviceFingerprintModel.updateOne(
       { userId, fingerprint },
-      { isActive: false, isTrusted: false }
+      { isActive: false, isTrusted: false },
     );
 
     return result.modifiedCount > 0;
@@ -221,7 +240,11 @@ export class DeviceFingerprintService {
   /**
    * Super-admin: list all devices across the platform with optional filters
    */
-  async getAllDevices(filters?: { isTrusted?: boolean; userId?: string; search?: string }): Promise<DeviceFingerprint[]> {
+  async getAllDevices(filters?: {
+    isTrusted?: boolean;
+    userId?: string;
+    search?: string;
+  }): Promise<DeviceFingerprint[]> {
     const query: any = { isActive: true };
     if (filters?.isTrusted !== undefined) query.isTrusted = filters.isTrusted;
     if (filters?.userId) query.userId = filters.userId;
@@ -247,7 +270,7 @@ export class DeviceFingerprintService {
   async revokeDeviceTrustById(deviceId: string): Promise<boolean> {
     const result = await this.deviceFingerprintModel.updateOne(
       { _id: deviceId },
-      { isTrusted: false, expiresAt: undefined, $unset: { trustedAt: 1 } }
+      { isTrusted: false, expiresAt: undefined, $unset: { trustedAt: 1 } },
     );
     return result.modifiedCount > 0;
   }
@@ -258,7 +281,7 @@ export class DeviceFingerprintService {
   async deactivateDeviceById(deviceId: string): Promise<boolean> {
     const result = await this.deviceFingerprintModel.updateOne(
       { _id: deviceId },
-      { isActive: false, isTrusted: false }
+      { isActive: false, isTrusted: false },
     );
     return result.modifiedCount > 0;
   }
@@ -266,10 +289,18 @@ export class DeviceFingerprintService {
   /**
    * Super-admin: aggregate stats
    */
-  async getDeviceStats(): Promise<{ total: number; trusted: number; active: number; learning: number }> {
+  async getDeviceStats(): Promise<{
+    total: number;
+    trusted: number;
+    active: number;
+    learning: number;
+  }> {
     const [total, trusted, active] = await Promise.all([
       this.deviceFingerprintModel.countDocuments({}),
-      this.deviceFingerprintModel.countDocuments({ isTrusted: true, isActive: true }),
+      this.deviceFingerprintModel.countDocuments({
+        isTrusted: true,
+        isActive: true,
+      }),
       this.deviceFingerprintModel.countDocuments({ isActive: true }),
     ]);
     return { total, trusted, active, learning: active - trusted };
@@ -280,7 +311,7 @@ export class DeviceFingerprintService {
    */
   async cleanupOldDevices(): Promise<void> {
     const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
-    
+
     const result = await this.deviceFingerprintModel.deleteMany({
       lastLoginAt: { $lt: ninetyDaysAgo },
       isActive: false,
@@ -301,7 +332,10 @@ export class DeviceFingerprintService {
   ): Promise<{ required: boolean; reason?: string }> {
     // Google OAuth users get more lenient treatment
     if (loginMethod === 'google') {
-      const { isTrusted, device } = await this.isDeviceTrusted(userId, fingerprint);
+      const { isTrusted, device } = await this.isDeviceTrusted(
+        userId,
+        fingerprint,
+      );
       if (isTrusted && device) {
         return { required: false };
       }
@@ -325,19 +359,22 @@ export class DeviceFingerprintService {
         return { required: false };
       } else {
         // Trust expired, require OTP again
-        await this.deviceFingerprintModel.findByIdAndUpdate(existingDevice._id, {
-          isTrusted: false,
-          expiresAt: undefined,
-        });
+        await this.deviceFingerprintModel.findByIdAndUpdate(
+          existingDevice._id,
+          {
+            isTrusted: false,
+            expiresAt: undefined,
+          },
+        );
         return { required: true, reason: 'trust_expired' };
       }
     }
 
     // For devices with fewer than threshold logins, require OTP
     if (existingDevice.loginCount < this.TRUSTED_DEVICE_THRESHOLD) {
-      return { 
-        required: true, 
-        reason: 'insufficient_logins'
+      return {
+        required: true,
+        reason: 'insufficient_logins',
       };
     }
 

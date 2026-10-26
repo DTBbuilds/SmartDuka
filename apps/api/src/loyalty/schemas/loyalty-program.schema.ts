@@ -56,7 +56,8 @@ export class LoyaltyProgram {
   status: 'active' | 'inactive';
 }
 
-export const LoyaltyProgramSchema = SchemaFactory.createForClass(LoyaltyProgram);
+export const LoyaltyProgramSchema =
+  SchemaFactory.createForClass(LoyaltyProgram);
 
 // Create indexes for multi-tenant queries
 LoyaltyProgramSchema.index({ shopId: 1, status: 1 });

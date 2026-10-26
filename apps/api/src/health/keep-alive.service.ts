@@ -17,7 +17,9 @@ export class KeepAliveService implements OnModuleInit {
 
   onModuleInit() {
     const nodeEnv = this.configService.get<string>('NODE_ENV', 'development');
-    const renderExternalUrl = this.configService.get<string>('RENDER_EXTERNAL_URL');
+    const renderExternalUrl = this.configService.get<string>(
+      'RENDER_EXTERNAL_URL',
+    );
     const port = this.configService.get<string>('PORT', '5000');
 
     // Only enable in production or when RENDER_EXTERNAL_URL is set
@@ -25,7 +27,9 @@ export class KeepAliveService implements OnModuleInit {
     this.baseUrl = renderExternalUrl || `http://localhost:${port}`;
 
     if (this.enabled) {
-      this.logger.log(`Keep-alive enabled — will ping ${this.baseUrl}/health every 5 minutes`);
+      this.logger.log(
+        `Keep-alive enabled — will ping ${this.baseUrl}/health every 5 minutes`,
+      );
     } else {
       this.logger.log('Keep-alive disabled (not in production)');
     }

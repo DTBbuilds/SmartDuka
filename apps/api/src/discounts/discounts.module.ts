@@ -3,7 +3,10 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { DiscountsService } from './discounts.service';
 import { DiscountsController } from './discounts.controller';
 import { Discount, DiscountSchema } from './schemas/discount.schema';
-import { DiscountAudit, DiscountAuditSchema } from './schemas/discount-audit.schema';
+import {
+  DiscountAudit,
+  DiscountAuditSchema,
+} from './schemas/discount-audit.schema';
 
 @Module({
   imports: [

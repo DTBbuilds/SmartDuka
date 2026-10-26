@@ -2,9 +2,20 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { ConfigService } from '@nestjs/config';
-import { Subscription, SubscriptionDocument, SubscriptionStatus } from './schemas/subscription.schema';
-import { SubscriptionPlan, SubscriptionPlanDocument } from './schemas/subscription-plan.schema';
-import { SubscriptionInvoice, SubscriptionInvoiceDocument, InvoiceStatus } from './schemas/subscription-invoice.schema';
+import {
+  Subscription,
+  SubscriptionDocument,
+  SubscriptionStatus,
+} from './schemas/subscription.schema';
+import {
+  SubscriptionPlan,
+  SubscriptionPlanDocument,
+} from './schemas/subscription-plan.schema';
+import {
+  SubscriptionInvoice,
+  SubscriptionInvoiceDocument,
+  InvoiceStatus,
+} from './schemas/subscription-invoice.schema';
 import { Shop, ShopDocument } from '../shops/schemas/shop.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -45,7 +56,9 @@ export class SubscriptionDunningService {
     private readonly emailService: EmailService,
     private readonly configService: ConfigService,
   ) {
-    this.frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'https://www.smartduka.org';
+    this.frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') ||
+      'https://www.smartduka.org';
   }
 
   /**
@@ -68,7 +81,9 @@ export class SubscriptionDunningService {
       const suspensionResults = await this.sendSuspensionNotices();
       results.push(...suspensionResults);
 
-      this.logger.log(`Dunning process completed: ${results.length} notifications processed`);
+      this.logger.log(
+        `Dunning process completed: ${results.length} notifications processed`,
+      );
     } catch (error) {
       this.logger.error('Error processing dunning notifications:', error);
     }
@@ -89,7 +104,7 @@ export class SubscriptionDunningService {
     for (const days of warningDays) {
       const targetDate = new Date(now);
       targetDate.setDate(targetDate.getDate() + days);
-      
+
       // Set to start and end of day
       const startOfDay = new Date(targetDate);
       startOfDay.setHours(0, 0, 0, 0);
@@ -107,7 +122,10 @@ export class SubscriptionDunningService {
           const result = await this.sendExpiryWarningEmail(subscription, days);
           results.push(result);
         } catch (error) {
-          this.logger.error(`Failed to send ${days}-day expiry warning for shop ${subscription.shopId}:`, error);
+          this.logger.error(
+            `Failed to send ${days}-day expiry warning for shop ${subscription.shopId}:`,
+            error,
+          );
           results.push({
             shopId: subscription.shopId.toString(),
             shopName: 'Unknown',
@@ -138,7 +156,8 @@ export class SubscriptionDunningService {
     for (const subscription of pastDueSubscriptions) {
       try {
         const daysUntilSuspension = Math.ceil(
-          (subscription.gracePeriodEndDate!.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)
+          (subscription.gracePeriodEndDate!.getTime() - now.getTime()) /
+            (24 * 60 * 60 * 1000),
         );
         const dayInGracePeriod = GRACE_PERIOD_DAYS - daysUntilSuspension;
 
@@ -153,17 +172,24 @@ export class SubscriptionDunningService {
             }
           }
 
-          const result = await this.sendGracePeriodReminderEmail(subscription, daysUntilSuspension, dayInGracePeriod);
+          const result = await this.sendGracePeriodReminderEmail(
+            subscription,
+            daysUntilSuspension,
+            dayInGracePeriod,
+          );
           results.push(result);
 
           // Update last reminder sent
           await this.subscriptionModel.updateOne(
             { _id: subscription._id },
-            { 'notifications.lastReminderSent': now }
+            { 'notifications.lastReminderSent': now },
           );
         }
       } catch (error) {
-        this.logger.error(`Failed to send grace period reminder for shop ${subscription.shopId}:`, error);
+        this.logger.error(
+          `Failed to send grace period reminder for shop ${subscription.shopId}:`,
+          error,
+        );
         results.push({
           shopId: subscription.shopId.toString(),
           shopName: 'Unknown',
@@ -205,10 +231,16 @@ export class SubscriptionDunningService {
         // Mark suspension notice as sent
         await this.subscriptionModel.updateOne(
           { _id: subscription._id },
-          { 'metadata.suspensionNoticeSent': true, 'metadata.suspensionNoticeDate': now }
+          {
+            'metadata.suspensionNoticeSent': true,
+            'metadata.suspensionNoticeDate': now,
+          },
         );
       } catch (error) {
-        this.logger.error(`Failed to send suspension notice for shop ${subscription.shopId}:`, error);
+        this.logger.error(
+          `Failed to send suspension notice for shop ${subscription.shopId}:`,
+          error,
+        );
         results.push({
           shopId: subscription.shopId.toString(),
           shopName: 'Unknown',
@@ -225,9 +257,15 @@ export class SubscriptionDunningService {
   /**
    * Send expiry warning email
    */
-  private async sendExpiryWarningEmail(subscription: SubscriptionDocument, daysRemaining: number): Promise<DunningResult> {
+  private async sendExpiryWarningEmail(
+    subscription: SubscriptionDocument,
+    daysRemaining: number,
+  ): Promise<DunningResult> {
     const shop = await this.shopModel.findById(subscription.shopId);
-    const admin = await this.userModel.findOne({ shopId: subscription.shopId, role: 'admin' });
+    const admin = await this.userModel.findOne({
+      shopId: subscription.shopId,
+      role: 'admin',
+    });
     const plan = await this.planModel.findById(subscription.planId);
 
     if (!shop || !admin) {
@@ -240,11 +278,12 @@ export class SubscriptionDunningService {
       };
     }
 
-    const templateName = daysRemaining === 7 
-      ? 'subscription_expiring_7days'
-      : daysRemaining === 3 
-        ? 'subscription_expiring_3days'
-        : 'subscription_expiring_1day';
+    const templateName =
+      daysRemaining === 7
+        ? 'subscription_expiring_7days'
+        : daysRemaining === 3
+          ? 'subscription_expiring_3days'
+          : 'subscription_expiring_1day';
 
     const template = EMAIL_TEMPLATES[templateName];
     if (!template) {
@@ -291,7 +330,9 @@ export class SubscriptionDunningService {
         data: { daysRemaining, renewUrl: vars.renewUrl },
       });
 
-      this.logger.log(`Sent ${daysRemaining}-day expiry warning to ${shop.name} (${admin.email})`);
+      this.logger.log(
+        `Sent ${daysRemaining}-day expiry warning to ${shop.name} (${admin.email})`,
+      );
 
       return {
         shopId: subscription.shopId.toString(),
@@ -300,7 +341,10 @@ export class SubscriptionDunningService {
         success: true,
       };
     } catch (error) {
-      this.logger.error(`Failed to send expiry warning email to ${admin.email}:`, error);
+      this.logger.error(
+        `Failed to send expiry warning email to ${admin.email}:`,
+        error,
+      );
       return {
         shopId: subscription.shopId.toString(),
         shopName: shop.name,
@@ -315,12 +359,15 @@ export class SubscriptionDunningService {
    * Send grace period reminder email
    */
   private async sendGracePeriodReminderEmail(
-    subscription: SubscriptionDocument, 
+    subscription: SubscriptionDocument,
     daysUntilSuspension: number,
-    dayInGracePeriod: number
+    dayInGracePeriod: number,
   ): Promise<DunningResult> {
     const shop = await this.shopModel.findById(subscription.shopId);
-    const admin = await this.userModel.findOne({ shopId: subscription.shopId, role: 'admin' });
+    const admin = await this.userModel.findOne({
+      shopId: subscription.shopId,
+      role: 'admin',
+    });
     const plan = await this.planModel.findById(subscription.planId);
 
     if (!shop || !admin) {
@@ -334,9 +381,10 @@ export class SubscriptionDunningService {
     }
 
     // Use day 1 or day 5 template based on urgency
-    const templateName = dayInGracePeriod >= 5 
-      ? 'subscription_past_due_day5'
-      : 'subscription_past_due_day1';
+    const templateName =
+      dayInGracePeriod >= 5
+        ? 'subscription_past_due_day5'
+        : 'subscription_past_due_day1';
 
     const template = EMAIL_TEMPLATES[templateName];
     if (!template) {
@@ -349,12 +397,15 @@ export class SubscriptionDunningService {
       };
     }
 
-    const suspensionDate = subscription.gracePeriodEndDate?.toLocaleDateString('en-KE', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
+    const suspensionDate = subscription.gracePeriodEndDate?.toLocaleDateString(
+      'en-KE',
+      {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      },
+    );
 
     const vars = {
       shopName: shop.name,
@@ -388,7 +439,9 @@ export class SubscriptionDunningService {
         data: { daysUntilSuspension, payUrl: vars.payUrl },
       });
 
-      this.logger.log(`Sent grace period reminder (day ${dayInGracePeriod}) to ${shop.name} (${admin.email})`);
+      this.logger.log(
+        `Sent grace period reminder (day ${dayInGracePeriod}) to ${shop.name} (${admin.email})`,
+      );
 
       return {
         shopId: subscription.shopId.toString(),
@@ -397,7 +450,10 @@ export class SubscriptionDunningService {
         success: true,
       };
     } catch (error) {
-      this.logger.error(`Failed to send grace period reminder to ${admin.email}:`, error);
+      this.logger.error(
+        `Failed to send grace period reminder to ${admin.email}:`,
+        error,
+      );
       return {
         shopId: subscription.shopId.toString(),
         shopName: shop.name,
@@ -411,9 +467,14 @@ export class SubscriptionDunningService {
   /**
    * Send suspension notice email
    */
-  private async sendSuspensionNoticeEmail(subscription: SubscriptionDocument): Promise<DunningResult> {
+  private async sendSuspensionNoticeEmail(
+    subscription: SubscriptionDocument,
+  ): Promise<DunningResult> {
     const shop = await this.shopModel.findById(subscription.shopId);
-    const admin = await this.userModel.findOne({ shopId: subscription.shopId, role: 'admin' });
+    const admin = await this.userModel.findOne({
+      shopId: subscription.shopId,
+      role: 'admin',
+    });
     const plan = await this.planModel.findById(subscription.planId);
 
     if (!shop || !admin) {
@@ -466,7 +527,9 @@ export class SubscriptionDunningService {
         data: { payUrl: vars.payUrl },
       });
 
-      this.logger.log(`Sent suspension notice to ${shop.name} (${admin.email})`);
+      this.logger.log(
+        `Sent suspension notice to ${shop.name} (${admin.email})`,
+      );
 
       return {
         shopId: subscription.shopId.toString(),
@@ -475,7 +538,10 @@ export class SubscriptionDunningService {
         success: true,
       };
     } catch (error) {
-      this.logger.error(`Failed to send suspension notice to ${admin.email}:`, error);
+      this.logger.error(
+        `Failed to send suspension notice to ${admin.email}:`,
+        error,
+      );
       return {
         shopId: subscription.shopId.toString(),
         shopName: shop.name,
@@ -490,10 +556,17 @@ export class SubscriptionDunningService {
    * Send reactivation confirmation email
    */
   async sendReactivationEmail(shopId: string): Promise<DunningResult> {
-    const subscription = await this.subscriptionModel.findOne({ shopId: new Types.ObjectId(shopId) });
+    const subscription = await this.subscriptionModel.findOne({
+      shopId: new Types.ObjectId(shopId),
+    });
     const shop = await this.shopModel.findById(shopId);
-    const admin = await this.userModel.findOne({ shopId: new Types.ObjectId(shopId), role: 'admin' });
-    const plan = subscription ? await this.planModel.findById(subscription.planId) : null;
+    const admin = await this.userModel.findOne({
+      shopId: new Types.ObjectId(shopId),
+      role: 'admin',
+    });
+    const plan = subscription
+      ? await this.planModel.findById(subscription.planId)
+      : null;
 
     if (!subscription || !shop || !admin) {
       return {
@@ -520,12 +593,13 @@ export class SubscriptionDunningService {
       shopName: shop.name,
       userName: admin.name || admin.email,
       planName: plan?.name || subscription.planCode,
-      nextBillingDate: subscription.nextBillingDate?.toLocaleDateString('en-KE', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-      }) || 'N/A',
+      nextBillingDate:
+        subscription.nextBillingDate?.toLocaleDateString('en-KE', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        }) || 'N/A',
       dashboardUrl: `${this.frontendUrl}/admin/dashboard`,
     };
 
@@ -549,7 +623,9 @@ export class SubscriptionDunningService {
         data: { dashboardUrl: vars.dashboardUrl },
       });
 
-      this.logger.log(`Sent reactivation confirmation to ${shop.name} (${admin.email})`);
+      this.logger.log(
+        `Sent reactivation confirmation to ${shop.name} (${admin.email})`,
+      );
 
       return {
         shopId,
@@ -558,7 +634,10 @@ export class SubscriptionDunningService {
         success: true,
       };
     } catch (error) {
-      this.logger.error(`Failed to send reactivation email to ${admin.email}:`, error);
+      this.logger.error(
+        `Failed to send reactivation email to ${admin.email}:`,
+        error,
+      );
       return {
         shopId,
         shopName: shop.name,

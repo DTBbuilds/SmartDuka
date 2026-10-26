@@ -28,7 +28,8 @@ export class InitiateMpesaPaymentDto {
   @IsString()
   @IsNotEmpty()
   @Matches(KENYAN_PHONE_REGEX, {
-    message: 'Phone number must be a valid Kenyan number (07XX, 01XX, or 254XX format)',
+    message:
+      'Phone number must be a valid Kenyan number (07XX, 01XX, or 254XX format)',
   })
   @Transform(({ value }) => formatPhoneNumber(value))
   phoneNumber: string;
@@ -270,7 +271,9 @@ export function getMpesaErrorMessage(resultCode: number): string {
     2001: 'Incorrect M-Pesa PIN entered. Please try again.',
   };
 
-  return errorMessages[resultCode] || `Payment failed (Error code: ${resultCode})`;
+  return (
+    errorMessages[resultCode] || `Payment failed (Error code: ${resultCode})`
+  );
 }
 
 /**

@@ -1,4 +1,9 @@
-import { Injectable, Logger, BadRequestException, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  BadRequestException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Otp, OtpDocument } from '../schemas/otp.schema';
@@ -24,23 +29,35 @@ export class OtpService {
   private generateOtpCode(): string {
     // Generate cryptographically secure random 6-digit code
     const randomBytes = crypto.randomBytes(3);
-    const code = (parseInt(randomBytes.toString('hex'), 16) % 900000 + 100000).toString();
+    const code = (
+      (parseInt(randomBytes.toString('hex'), 16) % 900000) +
+      100000
+    ).toString();
     return code;
   }
 
   /**
    * Check if user can request a new OTP (cooldown check)
    */
-  private async canRequestOtp(email: string, type: string): Promise<{ allowed: boolean; waitSeconds?: number }> {
-    const recentOtp = await this.otpModel.findOne({
-      email: email.toLowerCase().trim(),
-      type,
-      used: false,
-      createdAt: { $gte: new Date(Date.now() - this.OTP_COOLDOWN_MINUTES * 60 * 1000) },
-    }).sort({ createdAt: -1 });
+  private async canRequestOtp(
+    email: string,
+    type: string,
+  ): Promise<{ allowed: boolean; waitSeconds?: number }> {
+    const recentOtp = await this.otpModel
+      .findOne({
+        email: email.toLowerCase().trim(),
+        type,
+        used: false,
+        createdAt: {
+          $gte: new Date(Date.now() - this.OTP_COOLDOWN_MINUTES * 60 * 1000),
+        },
+      })
+      .sort({ createdAt: -1 });
 
     if (recentOtp) {
-      const waitMs = this.OTP_COOLDOWN_MINUTES * 60 * 1000 - (Date.now() - (recentOtp as any).createdAt.getTime());
+      const waitMs =
+        this.OTP_COOLDOWN_MINUTES * 60 * 1000 -
+        (Date.now() - (recentOtp as any).createdAt.getTime());
       return { allowed: false, waitSeconds: Math.ceil(waitMs / 1000) };
     }
 
@@ -59,7 +76,10 @@ export class OtpService {
     const normalizedEmail = email.toLowerCase().trim();
 
     // Check cooldown
-    const cooldownCheck = await this.canRequestOtp(normalizedEmail, 'registration');
+    const cooldownCheck = await this.canRequestOtp(
+      normalizedEmail,
+      'registration',
+    );
     if (!cooldownCheck.allowed) {
       throw new BadRequestException(
         `Please wait ${cooldownCheck.waitSeconds} seconds before requesting a new code.`,
@@ -74,7 +94,9 @@ export class OtpService {
 
     // Generate new OTP
     const code = this.generateOtpCode();
-    const expiresAt = new Date(Date.now() + this.OTP_EXPIRY_MINUTES * 60 * 1000);
+    const expiresAt = new Date(
+      Date.now() + this.OTP_EXPIRY_MINUTES * 60 * 1000,
+    );
 
     // Save OTP to database
     const otp = new this.otpModel({
@@ -96,13 +118,19 @@ export class OtpService {
       text: `Your SmartDuka verification code is: ${code}. This code expires in ${this.OTP_EXPIRY_MINUTES} minutes.`,
       category: 'authentication',
       templateName: 'otp_verification',
-      templateVariables: { code, shopName, expiryMinutes: this.OTP_EXPIRY_MINUTES },
+      templateVariables: {
+        code,
+        shopName,
+        expiryMinutes: this.OTP_EXPIRY_MINUTES,
+      },
       useSingleProvider: true,
       preferredProvider: 'resend', // Use Resend for OTP emails
     });
 
     if (!emailResult.success) {
-      this.logger.error(`Failed to send OTP email to ${normalizedEmail}: ${emailResult.error}`);
+      this.logger.error(
+        `Failed to send OTP email to ${normalizedEmail}: ${emailResult.error}`,
+      );
       // Don't reveal email sending failures to prevent enumeration
       // Still return success to not leak information
     }
@@ -122,31 +150,44 @@ export class OtpService {
   async verifyOtp(
     email: string,
     code: string,
-    type: 'registration' | 'password_reset' | 'email_verification' | 'login' | 'password_change',
+    type:
+      | 'registration'
+      | 'password_reset'
+      | 'email_verification'
+      | 'login'
+      | 'password_change',
   ): Promise<{ valid: boolean; message: string }> {
     const normalizedEmail = email.toLowerCase().trim();
     const normalizedCode = code.trim();
 
     // Find the most recent unused OTP for this email and type
-    const otp = await this.otpModel.findOne({
-      email: normalizedEmail,
-      type,
-      used: false,
-    }).sort({ createdAt: -1 });
+    const otp = await this.otpModel
+      .findOne({
+        email: normalizedEmail,
+        type,
+        used: false,
+      })
+      .sort({ createdAt: -1 });
 
     if (!otp) {
-      throw new UnauthorizedException('No verification code found. Please request a new code.');
+      throw new UnauthorizedException(
+        'No verification code found. Please request a new code.',
+      );
     }
 
     // Check if OTP is expired
     if (otp.expiresAt < new Date()) {
-      throw new UnauthorizedException('Verification code has expired. Please request a new code.');
+      throw new UnauthorizedException(
+        'Verification code has expired. Please request a new code.',
+      );
     }
 
     // Check if max attempts exceeded
     if (otp.attempts >= otp.maxAttempts) {
       await this.otpModel.findByIdAndUpdate(otp._id, { used: true });
-      throw new UnauthorizedException('Too many incorrect attempts. Please request a new code.');
+      throw new UnauthorizedException(
+        'Too many incorrect attempts. Please request a new code.',
+      );
     }
 
     // Increment attempt counter
@@ -195,11 +236,18 @@ export class OtpService {
   /**
    * Generate HTML email template for OTP
    */
-  private getOtpEmailTemplate(code: string, shopName: string, expiryMinutes: number): string {
+  private getOtpEmailTemplate(
+    code: string,
+    shopName: string,
+    expiryMinutes: number,
+  ): string {
     const digits = code.split('');
-    const digitBoxes = digits.map(d =>
-      `<td style="width:44px;height:52px;text-align:center;vertical-align:middle;font-size:28px;font-weight:700;font-family:'Menlo','Monaco','Courier New',monospace;color:#111827;background-color:#f3f4f6;border:1px solid #e5e7eb;border-radius:8px;padding:0;">${d}</td>`
-    ).join('<td style="width:8px;"></td>');
+    const digitBoxes = digits
+      .map(
+        (d) =>
+          `<td style="width:44px;height:52px;text-align:center;vertical-align:middle;font-size:28px;font-weight:700;font-family:'Menlo','Monaco','Courier New',monospace;color:#111827;background-color:#f3f4f6;border:1px solid #e5e7eb;border-radius:8px;padding:0;">${d}</td>`,
+      )
+      .join('<td style="width:8px;"></td>');
     const year = new Date().getFullYear();
     return `<!DOCTYPE html>
 <html lang="en">
@@ -290,7 +338,9 @@ export class OtpService {
 
     // Generate new OTP
     const code = this.generateOtpCode();
-    const expiresAt = new Date(Date.now() + this.OTP_EXPIRY_MINUTES * 60 * 1000);
+    const expiresAt = new Date(
+      Date.now() + this.OTP_EXPIRY_MINUTES * 60 * 1000,
+    );
 
     // Save OTP to database
     const otp = new this.otpModel({
@@ -308,17 +358,27 @@ export class OtpService {
     const emailResult = await this.emailService.sendEmail({
       to: normalizedEmail,
       subject: `Your SmartDuka Login Verification Code: ${code}`,
-      html: this.getLoginOtpEmailTemplate(code, userName, this.OTP_EXPIRY_MINUTES),
+      html: this.getLoginOtpEmailTemplate(
+        code,
+        userName,
+        this.OTP_EXPIRY_MINUTES,
+      ),
       text: `Your SmartDuka login verification code is: ${code}. This code expires in ${this.OTP_EXPIRY_MINUTES} minutes.`,
       category: 'authentication',
       templateName: 'otp_login_verification',
-      templateVariables: { code, userName, expiryMinutes: this.OTP_EXPIRY_MINUTES },
+      templateVariables: {
+        code,
+        userName,
+        expiryMinutes: this.OTP_EXPIRY_MINUTES,
+      },
       useSingleProvider: true,
       preferredProvider: 'resend', // Use Resend for OTP emails
     });
 
     if (!emailResult.success) {
-      this.logger.error(`Failed to send login OTP email to ${normalizedEmail}: ${emailResult.error}`);
+      this.logger.error(
+        `Failed to send login OTP email to ${normalizedEmail}: ${emailResult.error}`,
+      );
     }
 
     this.logger.log(`Login OTP sent to ${normalizedEmail}`);
@@ -333,11 +393,18 @@ export class OtpService {
   /**
    * Generate HTML email template for login OTP
    */
-  private getLoginOtpEmailTemplate(code: string, userName: string, expiryMinutes: number): string {
+  private getLoginOtpEmailTemplate(
+    code: string,
+    userName: string,
+    expiryMinutes: number,
+  ): string {
     const digits = code.split('');
-    const digitBoxes = digits.map(d =>
-      `<td style="width:44px;height:52px;text-align:center;vertical-align:middle;font-size:28px;font-weight:700;font-family:'Menlo','Monaco','Courier New',monospace;color:#111827;background-color:#f3f4f6;border:1px solid #e5e7eb;border-radius:8px;padding:0;">${d}</td>`
-    ).join('<td style="width:8px;"></td>');
+    const digitBoxes = digits
+      .map(
+        (d) =>
+          `<td style="width:44px;height:52px;text-align:center;vertical-align:middle;font-size:28px;font-weight:700;font-family:'Menlo','Monaco','Courier New',monospace;color:#111827;background-color:#f3f4f6;border:1px solid #e5e7eb;border-radius:8px;padding:0;">${d}</td>`,
+      )
+      .join('<td style="width:8px;"></td>');
     const year = new Date().getFullYear();
     return `<!DOCTYPE html>
 <html lang="en">
@@ -413,7 +480,10 @@ export class OtpService {
     const normalizedEmail = email.toLowerCase().trim();
 
     // Check cooldown
-    const cooldownCheck = await this.canRequestOtp(normalizedEmail, 'password_change');
+    const cooldownCheck = await this.canRequestOtp(
+      normalizedEmail,
+      'password_change',
+    );
     if (!cooldownCheck.allowed) {
       throw new BadRequestException(
         `Please wait ${cooldownCheck.waitSeconds} seconds before requesting a new code.`,
@@ -428,7 +498,9 @@ export class OtpService {
 
     // Generate new OTP
     const code = this.generateOtpCode();
-    const expiresAt = new Date(Date.now() + this.OTP_EXPIRY_MINUTES * 60 * 1000);
+    const expiresAt = new Date(
+      Date.now() + this.OTP_EXPIRY_MINUTES * 60 * 1000,
+    );
 
     // Save OTP to database
     const otp = new this.otpModel({
@@ -446,15 +518,25 @@ export class OtpService {
     const emailResult = await this.emailService.sendEmail({
       to: normalizedEmail,
       subject: `Your SmartDuka Password Change Code: ${code}`,
-      html: this.getPasswordChangeOtpEmailTemplate(code, userName, this.OTP_EXPIRY_MINUTES),
+      html: this.getPasswordChangeOtpEmailTemplate(
+        code,
+        userName,
+        this.OTP_EXPIRY_MINUTES,
+      ),
       text: `Your SmartDuka password change verification code is: ${code}. This code expires in ${this.OTP_EXPIRY_MINUTES} minutes.`,
       category: 'authentication',
       templateName: 'otp_password_change',
-      templateVariables: { code, userName, expiryMinutes: this.OTP_EXPIRY_MINUTES },
+      templateVariables: {
+        code,
+        userName,
+        expiryMinutes: this.OTP_EXPIRY_MINUTES,
+      },
     });
 
     if (!emailResult.success) {
-      this.logger.error(`Failed to send password change OTP email to ${normalizedEmail}: ${emailResult.error}`);
+      this.logger.error(
+        `Failed to send password change OTP email to ${normalizedEmail}: ${emailResult.error}`,
+      );
     }
 
     this.logger.log(`Password change OTP sent to ${normalizedEmail}`);
@@ -469,11 +551,18 @@ export class OtpService {
   /**
    * Generate HTML email template for password change OTP
    */
-  private getPasswordChangeOtpEmailTemplate(code: string, userName: string, expiryMinutes: number): string {
+  private getPasswordChangeOtpEmailTemplate(
+    code: string,
+    userName: string,
+    expiryMinutes: number,
+  ): string {
     const digits = code.split('');
-    const digitBoxes = digits.map(d =>
-      `<td style="width:44px;height:52px;text-align:center;vertical-align:middle;font-size:28px;font-weight:700;font-family:'Menlo','Monaco','Courier New',monospace;color:#111827;background-color:#f3f4f6;border:1px solid #e5e7eb;border-radius:8px;padding:0;">${d}</td>`
-    ).join('<td style="width:8px;"></td>');
+    const digitBoxes = digits
+      .map(
+        (d) =>
+          `<td style="width:44px;height:52px;text-align:center;vertical-align:middle;font-size:28px;font-weight:700;font-family:'Menlo','Monaco','Courier New',monospace;color:#111827;background-color:#f3f4f6;border:1px solid #e5e7eb;border-radius:8px;padding:0;">${d}</td>`,
+      )
+      .join('<td style="width:8px;"></td>');
     const year = new Date().getFullYear();
     return `<!DOCTYPE html>
 <html lang="en">
@@ -535,7 +624,12 @@ export class OtpService {
   async resendOtp(
     email: string,
     shopName: string,
-    type: 'registration' | 'password_reset' | 'email_verification' | 'login' | 'password_change',
+    type:
+      | 'registration'
+      | 'password_reset'
+      | 'email_verification'
+      | 'login'
+      | 'password_change',
     ipAddress?: string,
     userAgent?: string,
   ): Promise<{ success: boolean; message: string; expiresIn?: number }> {

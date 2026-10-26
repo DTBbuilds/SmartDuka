@@ -1,7 +1,21 @@
-import { Injectable, BadRequestException, Logger, Inject, forwardRef, Optional } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  Logger,
+  Inject,
+  forwardRef,
+  Optional,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Branch, BranchDocument, BranchPaymentConfig, BranchLocation, BranchOperations, BranchContacts } from './branch.schema';
+import {
+  Branch,
+  BranchDocument,
+  BranchPaymentConfig,
+  BranchLocation,
+  BranchOperations,
+  BranchContacts,
+} from './branch.schema';
 import { AuditLog, AuditLogDocument } from '../audit/audit-log.schema';
 import { SubscriptionGuardService } from '../subscriptions/subscription-guard.service';
 import { Order, OrderDocument } from '../sales/schemas/order.schema';
@@ -19,7 +33,7 @@ export interface CreateBranchDto {
   openingTime?: string;
   closingTime?: string;
   timezone?: string;
-  
+
   // Payment configuration
   paymentConfig?: {
     enabled?: boolean;
@@ -31,7 +45,7 @@ export interface CreateBranchDto {
     consumerSecret?: string;
     passkey?: string;
   };
-  
+
   // Location details
   location?: {
     county?: string;
@@ -45,10 +59,13 @@ export interface CreateBranchDto {
     googleMapsUrl?: string;
     deliveryRadius?: number;
   };
-  
+
   // Operations
   operations?: {
-    operatingHours?: Record<number, { open: string; close: string; closed?: boolean }>;
+    operatingHours?: Record<
+      number,
+      { open: string; close: string; closed?: boolean }
+    >;
     holidays?: string[];
     acceptsWalkIn?: boolean;
     acceptsDelivery?: boolean;
@@ -61,7 +78,7 @@ export interface CreateBranchDto {
     receiptFooter?: string;
     receiptLogo?: string;
   };
-  
+
   // Contacts
   contacts?: {
     primaryPhone?: string;
@@ -70,16 +87,16 @@ export interface CreateBranchDto {
     email?: string;
     supportEmail?: string;
   };
-  
+
   // Management
   managerId?: string;
   maxStaff?: number;
-  
+
   // Financial
   targetRevenue?: number;
   costCenter?: string;
   taxExempt?: boolean;
-  
+
   metadata?: Record<string, any>;
 }
 
@@ -95,7 +112,7 @@ export interface UpdateBranchDto {
   openingTime?: string;
   closingTime?: string;
   timezone?: string;
-  
+
   // Payment configuration
   paymentConfig?: {
     enabled?: boolean;
@@ -107,7 +124,7 @@ export interface UpdateBranchDto {
     consumerSecret?: string;
     passkey?: string;
   };
-  
+
   // Location details
   location?: {
     county?: string;
@@ -121,10 +138,13 @@ export interface UpdateBranchDto {
     googleMapsUrl?: string;
     deliveryRadius?: number;
   };
-  
+
   // Operations
   operations?: {
-    operatingHours?: Record<number, { open: string; close: string; closed?: boolean }>;
+    operatingHours?: Record<
+      number,
+      { open: string; close: string; closed?: boolean }
+    >;
     holidays?: string[];
     acceptsWalkIn?: boolean;
     acceptsDelivery?: boolean;
@@ -137,7 +157,7 @@ export interface UpdateBranchDto {
     receiptFooter?: string;
     receiptLogo?: string;
   };
-  
+
   // Contacts
   contacts?: {
     primaryPhone?: string;
@@ -146,16 +166,16 @@ export interface UpdateBranchDto {
     email?: string;
     supportEmail?: string;
   };
-  
+
   // Management
   managerId?: string;
   maxStaff?: number;
-  
+
   // Financial
   targetRevenue?: number;
   costCenter?: string;
   taxExempt?: boolean;
-  
+
   metadata?: Record<string, any>;
 }
 
@@ -164,12 +184,18 @@ export class BranchesService {
   private readonly logger = new Logger(BranchesService.name);
 
   constructor(
-    @InjectModel(Branch.name) private readonly branchModel: Model<BranchDocument>,
-    @InjectModel(AuditLog.name) private readonly auditModel: Model<AuditLogDocument>,
+    @InjectModel(Branch.name)
+    private readonly branchModel: Model<BranchDocument>,
+    @InjectModel(AuditLog.name)
+    private readonly auditModel: Model<AuditLogDocument>,
     @Inject(forwardRef(() => SubscriptionGuardService))
     private readonly subscriptionGuard: SubscriptionGuardService,
-    @Optional() @InjectModel(Order.name) private readonly orderModel: Model<OrderDocument>,
-    @Optional() @InjectModel(Product.name) private readonly productModel: Model<ProductDocument>,
+    @Optional()
+    @InjectModel(Order.name)
+    private readonly orderModel: Model<OrderDocument>,
+    @Optional()
+    @InjectModel(Product.name)
+    private readonly productModel: Model<ProductDocument>,
   ) {}
 
   /**
@@ -240,7 +266,7 @@ export class BranchesService {
       // a separate PaymentConfig document for the branch
       if (dto.paymentConfig.consumerKey) {
         this.logger.warn(
-          'Branch payment credentials provided - consider using PaymentConfig service for proper encryption'
+          'Branch payment credentials provided - consider using PaymentConfig service for proper encryption',
         );
       }
     }
@@ -257,7 +283,9 @@ export class BranchesService {
       auditData.paymentConfig = {
         ...auditData.paymentConfig,
         consumerKey: auditData.paymentConfig.consumerKey ? '****' : undefined,
-        consumerSecret: auditData.paymentConfig.consumerSecret ? '****' : undefined,
+        consumerSecret: auditData.paymentConfig.consumerSecret
+          ? '****'
+          : undefined,
         passkey: auditData.paymentConfig.passkey ? '****' : undefined,
       };
     }
@@ -274,7 +302,9 @@ export class BranchesService {
       },
     });
 
-    this.logger.log(`Branch created: ${created.name} (${created.code}) in shop ${shopId}`);
+    this.logger.log(
+      `Branch created: ${created.name} (${created.code}) in shop ${shopId}`,
+    );
 
     return created;
   }
@@ -294,7 +324,10 @@ export class BranchesService {
    * Get single branch
    * Multi-tenant safe: filters by shopId
    */
-  async findById(branchId: string, shopId: string): Promise<BranchDocument | null> {
+  async findById(
+    branchId: string,
+    shopId: string,
+  ): Promise<BranchDocument | null> {
     return this.branchModel
       .findOne({
         _id: new Types.ObjectId(branchId),
@@ -307,7 +340,10 @@ export class BranchesService {
    * Get branch by code
    * Multi-tenant safe: filters by shopId
    */
-  async findByCode(code: string, shopId: string): Promise<BranchDocument | null> {
+  async findByCode(
+    code: string,
+    shopId: string,
+  ): Promise<BranchDocument | null> {
     return this.branchModel
       .findOne({
         code,
@@ -365,7 +401,11 @@ export class BranchesService {
    * Delete branch
    * Multi-tenant safe: filters by shopId
    */
-  async delete(branchId: string, shopId: string, userId: string): Promise<boolean> {
+  async delete(
+    branchId: string,
+    shopId: string,
+    userId: string,
+  ): Promise<boolean> {
     const branch = await this.findById(branchId, shopId);
     if (!branch) {
       throw new BadRequestException('Branch not found');
@@ -427,7 +467,9 @@ export class BranchesService {
   /**
    * Get branches with their own payment configuration
    */
-  async getBranchesWithPaymentConfig(shopId: string): Promise<BranchDocument[]> {
+  async getBranchesWithPaymentConfig(
+    shopId: string,
+  ): Promise<BranchDocument[]> {
     return this.branchModel
       .find({
         shopId: new Types.ObjectId(shopId),
@@ -494,7 +536,9 @@ export class BranchesService {
       },
     });
 
-    this.logger.log(`Branch payment config updated: ${branchId} in shop ${shopId}`);
+    this.logger.log(
+      `Branch payment config updated: ${branchId} in shop ${shopId}`,
+    );
 
     return updated;
   }
@@ -502,7 +546,10 @@ export class BranchesService {
   /**
    * Get branch payment configuration status
    */
-  async getPaymentConfigStatus(branchId: string, shopId: string): Promise<{
+  async getPaymentConfigStatus(
+    branchId: string,
+    shopId: string,
+  ): Promise<{
     hasOwnConfig: boolean;
     usesShopConfig: boolean;
     isConfigured: boolean;
@@ -516,7 +563,7 @@ export class BranchesService {
     }
 
     const config = branch.paymentConfig;
-    
+
     return {
       hasOwnConfig: !!(config?.enabled && !config?.useShopConfig),
       usesShopConfig: config?.useShopConfig ?? true,
@@ -591,7 +638,9 @@ export class BranchesService {
 
     // Check max staff limit
     if (branch.maxStaff && (branch.staffIds?.length || 0) >= branch.maxStaff) {
-      throw new BadRequestException(`Branch has reached maximum staff limit of ${branch.maxStaff}`);
+      throw new BadRequestException(
+        `Branch has reached maximum staff limit of ${branch.maxStaff}`,
+      );
     }
 
     const updated = await this.branchModel
@@ -673,7 +722,10 @@ export class BranchesService {
    * Get branch statistics
    * Returns sales, orders, staff count, and inventory stats for a branch
    */
-  async getBranchStats(branchId: string, shopId: string): Promise<{
+  async getBranchStats(
+    branchId: string,
+    shopId: string,
+  ): Promise<{
     totalSales: number;
     todaySales: number;
     totalOrders: number;
@@ -756,7 +808,9 @@ export class BranchesService {
           todayOrders = todayAgg[0].todayOrders || 0;
         }
       } catch (err) {
-        this.logger.warn(`Failed to get order stats for branch ${branchId}: ${err.message}`);
+        this.logger.warn(
+          `Failed to get order stats for branch ${branchId}: ${err.message}`,
+        );
       }
     }
 
@@ -788,7 +842,9 @@ export class BranchesService {
           $expr: { $lte: ['$stock', '$lowStockThreshold'] },
         });
       } catch (err) {
-        this.logger.warn(`Failed to get product stats for branch ${branchId}: ${err.message}`);
+        this.logger.warn(
+          `Failed to get product stats for branch ${branchId}: ${err.message}`,
+        );
       }
     }
 

@@ -11,8 +11,22 @@ export class Otp {
   @Prop({ required: true })
   code: string;
 
-  @Prop({ required: true, enum: ['registration', 'password_reset', 'email_verification', 'login', 'password_change'] })
-  type: 'registration' | 'password_reset' | 'email_verification' | 'login' | 'password_change';
+  @Prop({
+    required: true,
+    enum: [
+      'registration',
+      'password_reset',
+      'email_verification',
+      'login',
+      'password_change',
+    ],
+  })
+  type:
+    | 'registration'
+    | 'password_reset'
+    | 'email_verification'
+    | 'login'
+    | 'password_change';
 
   @Prop({ required: true })
   expiresAt: Date;

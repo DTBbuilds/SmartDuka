@@ -144,7 +144,15 @@ describe('P0-3C checkout idempotency', () => {
       providers: [
         SalesService,
         { provide: getModelToken(Order.name), useValue: mockOrderModel },
-        { provide: getModelToken(Shop.name), useValue: { findById: jest.fn().mockReturnThis(), select: jest.fn().mockReturnThis(), lean: jest.fn().mockReturnThis(), exec: jest.fn().mockResolvedValue({ currency: 'KES' }) } },
+        {
+          provide: getModelToken(Shop.name),
+          useValue: {
+            findById: jest.fn().mockReturnThis(),
+            select: jest.fn().mockReturnThis(),
+            lean: jest.fn().mockReturnThis(),
+            exec: jest.fn().mockResolvedValue({ currency: 'KES' }),
+          },
+        },
         {
           provide: getConnectionToken(),
           useValue: { startSession: jest.fn() },
@@ -253,7 +261,12 @@ describe('P0-3C checkout idempotency', () => {
 
       expect(orderStore.size).toBe(1);
       expect(updateStock).toHaveBeenCalledTimes(1);
-      expect(updateStock).toHaveBeenCalledWith(SHOP_A, PRODUCT_A, -3, expect.objectContaining({ reason: 'sale' }));
+      expect(updateStock).toHaveBeenCalledWith(
+        SHOP_A,
+        PRODUCT_A,
+        -3,
+        expect.objectContaining({ reason: 'sale' }),
+      );
       expect(retry._id).toBe(first._id);
     });
 
@@ -840,7 +853,12 @@ describe('P0-3C checkout idempotency', () => {
       }
       expect(orderStore.size).toBe(1);
       expect(updateStock).toHaveBeenCalledTimes(1);
-      expect(updateStock).toHaveBeenCalledWith(SHOP_A, PRODUCT_A, -3, expect.objectContaining({ reason: 'sale' }));
+      expect(updateStock).toHaveBeenCalledWith(
+        SHOP_A,
+        PRODUCT_A,
+        -3,
+        expect.objectContaining({ reason: 'sale' }),
+      );
       // P0-2: the audit projection lives inside updateStock (mocked here).
       expect(createStockAdjustment).toHaveBeenCalledTimes(0);
       expect(last.items[0].quantity).toBe(3);

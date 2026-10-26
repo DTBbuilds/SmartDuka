@@ -1,14 +1,22 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Subscription, SubscriptionDocument, SubscriptionStatus, BillingCycle } from './schemas/subscription.schema';
-import { SubscriptionPlan, SubscriptionPlanDocument } from './schemas/subscription-plan.schema';
+import {
+  Subscription,
+  SubscriptionDocument,
+  SubscriptionStatus,
+  BillingCycle,
+} from './schemas/subscription.schema';
+import {
+  SubscriptionPlan,
+  SubscriptionPlanDocument,
+} from './schemas/subscription-plan.schema';
 import { Shop, ShopDocument } from '../shops/schemas/shop.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 
 /**
  * Migration Service for Subscription System
- * 
+ *
  * This service handles:
  * 1. Creating subscriptions for existing shops that don't have one
  * 2. Syncing usage counts (branches, employees, products)
@@ -32,7 +40,7 @@ export class SubscriptionMigrationService implements OnModuleInit {
   async onModuleInit() {
     // Run migration asynchronously - don't block startup
     setImmediate(() => {
-      this.migrateExistingShops().catch(err => {
+      this.migrateExistingShops().catch((err) => {
         this.logger.error('Subscription migration failed:', err);
       });
     });
@@ -50,7 +58,10 @@ export class SubscriptionMigrationService implements OnModuleInit {
       this.logger.log(`Found ${shops.length} shops to check`);
 
       // Get default plan (starter)
-      const defaultPlan = await this.planModel.findOne({ code: 'starter', status: 'active' });
+      const defaultPlan = await this.planModel.findOne({
+        code: 'starter',
+        status: 'active',
+      });
       if (!defaultPlan) {
         this.logger.warn('No default plan found. Skipping migration.');
         return;
@@ -69,18 +80,23 @@ export class SubscriptionMigrationService implements OnModuleInit {
 
           if (existingSubscription) {
             // Update usage counts for existing subscription
-            await this.syncUsageCountsForShop(shop._id.toString(), existingSubscription);
-            
+            await this.syncUsageCountsForShop(
+              shop._id.toString(),
+              existingSubscription,
+            );
+
             // Update shop reference fields
             await this.updateShopSubscriptionFields(shop, existingSubscription);
-            
+
             updated++;
             continue;
           }
 
           // Create new subscription for shop
           const now = new Date();
-          const trialEndDate = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000); // 14 days trial
+          const trialEndDate = new Date(
+            now.getTime() + 14 * 24 * 60 * 60 * 1000,
+          ); // 14 days trial
           const periodEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days
 
           const subscription = new this.subscriptionModel({
@@ -88,7 +104,10 @@ export class SubscriptionMigrationService implements OnModuleInit {
             planId: defaultPlan._id,
             planCode: defaultPlan.code,
             billingCycle: BillingCycle.MONTHLY,
-            status: shop.status === 'active' ? SubscriptionStatus.ACTIVE : SubscriptionStatus.TRIAL,
+            status:
+              shop.status === 'active'
+                ? SubscriptionStatus.ACTIVE
+                : SubscriptionStatus.TRIAL,
             startDate: (shop as any).createdAt || now,
             currentPeriodStart: now,
             currentPeriodEnd: periodEnd,
@@ -110,20 +129,27 @@ export class SubscriptionMigrationService implements OnModuleInit {
           const savedSubscription = await subscription.save();
 
           // Sync usage counts
-          await this.syncUsageCountsForShop(shop._id.toString(), savedSubscription);
+          await this.syncUsageCountsForShop(
+            shop._id.toString(),
+            savedSubscription,
+          );
 
           // Update shop with subscription reference
           await this.updateShopSubscriptionFields(shop, savedSubscription);
 
           created++;
-          this.logger.log(`Created subscription for shop: ${shop.name} (${shop.shopId})`);
+          this.logger.log(
+            `Created subscription for shop: ${shop.name} (${shop.shopId})`,
+          );
         } catch (error) {
           this.logger.error(`Failed to migrate shop ${shop.shopId}:`, error);
           skipped++;
         }
       }
 
-      this.logger.log(`Migration complete: ${created} created, ${updated} updated, ${skipped} skipped`);
+      this.logger.log(
+        `Migration complete: ${created} created, ${updated} updated, ${skipped} skipped`,
+      );
     } catch (error) {
       this.logger.error('Migration failed:', error);
     }
@@ -149,11 +175,16 @@ export class SubscriptionMigrationService implements OnModuleInit {
 
       // Update subscription with actual counts
       subscription.currentEmployeeCount = employeeCount;
-      subscription.currentShopCount = Math.max(1, subscription.currentShopCount); // At least 1
-      
+      subscription.currentShopCount = Math.max(
+        1,
+        subscription.currentShopCount,
+      ); // At least 1
+
       await subscription.save();
 
-      this.logger.debug(`Synced usage for shop ${shopId}: employees=${employeeCount}`);
+      this.logger.debug(
+        `Synced usage for shop ${shopId}: employees=${employeeCount}`,
+      );
     } catch (error) {
       this.logger.error(`Failed to sync usage for shop ${shopId}:`, error);
     }
@@ -179,12 +210,15 @@ export class SubscriptionMigrationService implements OnModuleInit {
               SubscriptionStatus.ACTIVE,
               SubscriptionStatus.TRIAL,
               SubscriptionStatus.PAST_DUE,
-            ].includes(subscription.status as SubscriptionStatus),
+            ].includes(subscription.status),
           },
         },
       );
     } catch (error) {
-      this.logger.error(`Failed to update shop ${shop.shopId} subscription fields:`, error);
+      this.logger.error(
+        `Failed to update shop ${shop.shopId} subscription fields:`,
+        error,
+      );
     }
   }
 
@@ -198,12 +232,20 @@ export class SubscriptionMigrationService implements OnModuleInit {
     message: string;
   }> {
     this.logger.log('Manual migration triggered');
-    
+
     const shops = await this.shopModel.find().exec();
-    const defaultPlan = await this.planModel.findOne({ code: 'starter', status: 'active' });
-    
+    const defaultPlan = await this.planModel.findOne({
+      code: 'starter',
+      status: 'active',
+    });
+
     if (!defaultPlan) {
-      return { created: 0, updated: 0, skipped: 0, message: 'No default plan found' };
+      return {
+        created: 0,
+        updated: 0,
+        skipped: 0,
+        message: 'No default plan found',
+      };
     }
 
     let created = 0;
@@ -217,7 +259,10 @@ export class SubscriptionMigrationService implements OnModuleInit {
         });
 
         if (existingSubscription) {
-          await this.syncUsageCountsForShop(shop._id.toString(), existingSubscription);
+          await this.syncUsageCountsForShop(
+            shop._id.toString(),
+            existingSubscription,
+          );
           await this.updateShopSubscriptionFields(shop, existingSubscription);
           updated++;
         } else {
@@ -230,7 +275,10 @@ export class SubscriptionMigrationService implements OnModuleInit {
             planId: defaultPlan._id,
             planCode: defaultPlan.code,
             billingCycle: BillingCycle.MONTHLY,
-            status: shop.status === 'active' ? SubscriptionStatus.ACTIVE : SubscriptionStatus.TRIAL,
+            status:
+              shop.status === 'active'
+                ? SubscriptionStatus.ACTIVE
+                : SubscriptionStatus.TRIAL,
             startDate: (shop as any).createdAt || now,
             currentPeriodStart: now,
             currentPeriodEnd: periodEnd,
@@ -268,10 +316,12 @@ export class SubscriptionMigrationService implements OnModuleInit {
    */
   async syncAllProductCounts(): Promise<void> {
     this.logger.log('Syncing product counts for all subscriptions...');
-    
+
     // This would need access to the Product model
     // For now, log a message
-    this.logger.log('Product count sync should be triggered from inventory service');
+    this.logger.log(
+      'Product count sync should be triggered from inventory service',
+    );
   }
 
   /**
@@ -286,7 +336,7 @@ export class SubscriptionMigrationService implements OnModuleInit {
     details: string[];
   }> {
     this.logger.log('Starting fix for daily subscription periods...');
-    
+
     const details: string[] = [];
     let fixed = 0;
     let skipped = 0;
@@ -294,35 +344,42 @@ export class SubscriptionMigrationService implements OnModuleInit {
 
     try {
       // Find all daily subscriptions
-      const dailySubscriptions = await this.subscriptionModel.find({
-        billingCycle: BillingCycle.DAILY,
-      }).exec();
+      const dailySubscriptions = await this.subscriptionModel
+        .find({
+          billingCycle: BillingCycle.DAILY,
+        })
+        .exec();
 
-      this.logger.log(`Found ${dailySubscriptions.length} daily subscriptions to check`);
+      this.logger.log(
+        `Found ${dailySubscriptions.length} daily subscriptions to check`,
+      );
 
       for (const subscription of dailySubscriptions) {
         try {
           const now = new Date();
           const periodEnd = subscription.currentPeriodEnd;
-          const lastPayment = subscription.lastPaymentDate || subscription.currentPeriodStart;
-          
+          const lastPayment =
+            subscription.lastPaymentDate || subscription.currentPeriodStart;
+
           // Calculate days between last payment and period end
           const daysBetween = Math.ceil(
-            (periodEnd.getTime() - lastPayment.getTime()) / (24 * 60 * 60 * 1000)
+            (periodEnd.getTime() - lastPayment.getTime()) /
+              (24 * 60 * 60 * 1000),
           );
-          
+
           // If period is more than 7 days, it's likely incorrectly set to monthly
           if (daysBetween > 7) {
             const numberOfDays = subscription.numberOfDays || 1;
             const correctPeriodEnd = new Date(lastPayment);
             correctPeriodEnd.setDate(correctPeriodEnd.getDate() + numberOfDays);
-            
+
             // Only fix if the correct period end is in the future or recently passed
             // Don't fix very old subscriptions
             const daysSinceCorrectEnd = Math.ceil(
-              (now.getTime() - correctPeriodEnd.getTime()) / (24 * 60 * 60 * 1000)
+              (now.getTime() - correctPeriodEnd.getTime()) /
+                (24 * 60 * 60 * 1000),
             );
-            
+
             if (daysSinceCorrectEnd < 30) {
               // Update the subscription
               await this.subscriptionModel.updateOne(
@@ -335,17 +392,17 @@ export class SubscriptionMigrationService implements OnModuleInit {
                   },
                 },
               );
-              
+
               const shopId = subscription.shopId.toString();
               details.push(
                 `Fixed shop ${shopId}: ${daysBetween} days -> ${numberOfDays} day(s), ` +
-                `new end: ${correctPeriodEnd.toISOString()}`
+                  `new end: ${correctPeriodEnd.toISOString()}`,
               );
               fixed++;
               this.logger.log(`Fixed daily subscription for shop ${shopId}`);
             } else {
               details.push(
-                `Skipped shop ${subscription.shopId}: correct period ended ${daysSinceCorrectEnd} days ago`
+                `Skipped shop ${subscription.shopId}: correct period ended ${daysSinceCorrectEnd} days ago`,
               );
               skipped++;
             }
@@ -354,12 +411,19 @@ export class SubscriptionMigrationService implements OnModuleInit {
           }
         } catch (error: any) {
           errors++;
-          details.push(`Error processing subscription ${subscription._id}: ${error.message}`);
-          this.logger.error(`Error fixing subscription ${subscription._id}:`, error);
+          details.push(
+            `Error processing subscription ${subscription._id}: ${error.message}`,
+          );
+          this.logger.error(
+            `Error fixing subscription ${subscription._id}:`,
+            error,
+          );
         }
       }
 
-      this.logger.log(`Daily subscription fix complete: ${fixed} fixed, ${skipped} skipped, ${errors} errors`);
+      this.logger.log(
+        `Daily subscription fix complete: ${fixed} fixed, ${skipped} skipped, ${errors} errors`,
+      );
     } catch (error: any) {
       this.logger.error('Failed to fix daily subscriptions:', error);
       throw error;

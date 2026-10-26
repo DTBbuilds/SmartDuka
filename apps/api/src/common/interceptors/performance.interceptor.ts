@@ -20,10 +20,7 @@ export class PerformanceInterceptor implements NestInterceptor {
     return next.handle().pipe(
       tap(() => {
         const duration = Date.now() - startTime;
-        this.logger.log(
-          `${method} ${url} - ${duration}ms`,
-          'Performance',
-        );
+        this.logger.log(`${method} ${url} - ${duration}ms`, 'Performance');
 
         // Log slow requests (> 500ms)
         if (duration > 500) {

@@ -14,7 +14,7 @@ import { SubscriptionAuditService } from './subscription-audit.service';
 
 /**
  * Subscription Audit Controller
- * 
+ *
  * Super admin endpoints for auditing and fixing subscription data
  */
 @Controller('subscriptions/audit')
@@ -36,13 +36,13 @@ export class SubscriptionAuditController {
   async runAudit(@Query('dryRun') dryRunParam?: string) {
     const dryRun = dryRunParam !== 'false';
     this.logger.log(`Running subscription audit (dryRun: ${dryRun})`);
-    
+
     const results = await this.auditService.runFullAudit(dryRun);
-    
+
     return {
       success: true,
-      message: dryRun 
-        ? 'Audit complete (dry run - no changes made)' 
+      message: dryRun
+        ? 'Audit complete (dry run - no changes made)'
         : `Audit complete - ${results.summary.issuesFixed} issues fixed`,
       results,
     };
@@ -69,11 +69,11 @@ export class SubscriptionAuditController {
   async auditDailySubscriptions(@Query('dryRun') dryRunParam?: string) {
     const dryRun = dryRunParam !== 'false';
     const results = await this.auditService.auditDailySubscriptions(dryRun);
-    
+
     return {
       success: true,
-      message: dryRun 
-        ? `Found ${results.issues.length} daily subscription issues (dry run)` 
+      message: dryRun
+        ? `Found ${results.issues.length} daily subscription issues (dry run)`
         : `Fixed ${results.fixed} of ${results.issues.length} daily subscription issues`,
       issues: results.issues,
       fixed: results.fixed,
@@ -88,11 +88,11 @@ export class SubscriptionAuditController {
   async auditExpiredTrials(@Query('dryRun') dryRunParam?: string) {
     const dryRun = dryRunParam !== 'false';
     const results = await this.auditService.auditExpiredTrials(dryRun);
-    
+
     return {
       success: true,
-      message: dryRun 
-        ? `Found ${results.issues.length} expired trials (dry run)` 
+      message: dryRun
+        ? `Found ${results.issues.length} expired trials (dry run)`
         : `Fixed ${results.fixed} of ${results.issues.length} expired trials`,
       issues: results.issues,
       fixed: results.fixed,
@@ -106,12 +106,13 @@ export class SubscriptionAuditController {
   @Get('expired')
   async auditExpiredActive(@Query('dryRun') dryRunParam?: string) {
     const dryRun = dryRunParam !== 'false';
-    const results = await this.auditService.auditExpiredActiveSubscriptions(dryRun);
-    
+    const results =
+      await this.auditService.auditExpiredActiveSubscriptions(dryRun);
+
     return {
       success: true,
-      message: dryRun 
-        ? `Found ${results.issues.length} expired active subscriptions (dry run)` 
+      message: dryRun
+        ? `Found ${results.issues.length} expired active subscriptions (dry run)`
         : `Fixed ${results.fixed} of ${results.issues.length} expired active subscriptions`,
       issues: results.issues,
       fixed: results.fixed,
@@ -125,9 +126,9 @@ export class SubscriptionAuditController {
   @Post('fix-all')
   async fixAllIssues() {
     this.logger.warn('Running subscription audit with LIVE FIX mode');
-    
+
     const results = await this.auditService.runFullAudit(false);
-    
+
     return {
       success: true,
       message: `Fixed ${results.summary.issuesFixed} of ${results.summary.issuesFound} issues`,

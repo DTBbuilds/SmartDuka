@@ -3,7 +3,7 @@ import { Document, Types } from 'mongoose';
 
 export type NotificationDocument = Notification & Document;
 
-export type NotificationType = 
+export type NotificationType =
   // Account & Registration
   | 'welcome'
   | 'account_verified'

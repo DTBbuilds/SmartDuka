@@ -1,4 +1,11 @@
-import { IsEmail, IsEnum, IsOptional, IsString, MinLength, IsMongoId } from 'class-validator';
+import {
+  IsEmail,
+  IsEnum,
+  IsOptional,
+  IsString,
+  MinLength,
+  IsMongoId,
+} from 'class-validator';
 
 export class CreateUserDto {
   @IsMongoId()

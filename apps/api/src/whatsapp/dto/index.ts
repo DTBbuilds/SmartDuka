@@ -1,4 +1,14 @@
-import { IsString, IsEnum, IsOptional, IsBoolean, IsNumber, Min, Max, Matches, IsArray } from 'class-validator';
+import {
+  IsString,
+  IsEnum,
+  IsOptional,
+  IsBoolean,
+  IsNumber,
+  Min,
+  Max,
+  Matches,
+  IsArray,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 // ==================== NESTED DTOs (must be defined first) ====================
@@ -18,7 +28,9 @@ export class ReportScheduleDto {
 
   @IsOptional()
   @IsString()
-  @Matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, { message: 'Time must be in HH:MM format' })
+  @Matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, {
+    message: 'Time must be in HH:MM format',
+  })
   dailyTime?: string;
 
   @IsOptional()
@@ -76,7 +88,9 @@ export class QuietHoursDto {
 
 export class SendTextMessageDto {
   @IsString()
-  @Matches(/^\+[1-9]\d{1,14}$/, { message: 'Phone number must be in E.164 format (e.g., +254712345678)' })
+  @Matches(/^\+[1-9]\d{1,14}$/, {
+    message: 'Phone number must be in E.164 format (e.g., +254712345678)',
+  })
   to: string;
 
   @IsString()
@@ -90,7 +104,13 @@ export class SendTextMessageDto {
   reportType?: string;
 
   @IsOptional()
-  @IsEnum(['low_stock', 'sales_anomaly', 'cash_variance', 'payment_issue', 'high_sales'])
+  @IsEnum([
+    'low_stock',
+    'sales_anomaly',
+    'cash_variance',
+    'payment_issue',
+    'high_sales',
+  ])
   alertType?: string;
 }
 
@@ -114,7 +134,9 @@ export class SendTemplateMessageDto {
 export class UpdateWhatsAppConfigDto {
   @IsOptional()
   @IsString()
-  @Matches(/^\+[1-9]\d{1,14}$/, { message: 'Phone number must be in E.164 format' })
+  @Matches(/^\+[1-9]\d{1,14}$/, {
+    message: 'Phone number must be in E.164 format',
+  })
   adminPhone?: string;
 
   @IsOptional()
@@ -149,7 +171,9 @@ export class UpdateWhatsAppConfigDto {
 
 export class VerifyPhoneDto {
   @IsString()
-  @Matches(/^\+[1-9]\d{1,14}$/, { message: 'Phone number must be in E.164 format' })
+  @Matches(/^\+[1-9]\d{1,14}$/, {
+    message: 'Phone number must be in E.164 format',
+  })
   phoneNumber: string;
 }
 

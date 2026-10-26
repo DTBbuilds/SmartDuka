@@ -29,13 +29,18 @@ import {
 
 // Type for Meta webhook value structure
 type MetaWebhookValue = {
-  statuses?: Array<{ id: string; status: string; timestamp: string; errors?: Array<{ title?: string }> }>;
+  statuses?: Array<{
+    id: string;
+    status: string;
+    timestamp: string;
+    errors?: Array<{ title?: string }>;
+  }>;
   messages?: Array<{ from?: string; type?: string; text?: { body?: string } }>;
 };
 
 /**
  * WhatsApp Controller
- * 
+ *
  * Handles WhatsApp configuration, verification, and webhooks.
  */
 @Controller('whatsapp')
@@ -59,18 +64,20 @@ export class WhatsAppController {
     const config = await this.whatsAppService.getConfig(user.shopId);
     return {
       success: true,
-      data: config ? {
-        adminPhone: config.adminPhone,
-        isOptedIn: config.isOptedIn,
-        isVerified: config.isVerified,
-        reportSchedule: config.reportSchedule,
-        alertPreferences: config.alertPreferences,
-        deliveryChannel: config.deliveryChannel,
-        quietHours: config.quietHours,
-        maxMessagesPerDay: config.maxMessagesPerDay,
-        totalMessagesSent: config.totalMessagesSent,
-        totalMessagesDelivered: config.totalMessagesDelivered,
-      } : null,
+      data: config
+        ? {
+            adminPhone: config.adminPhone,
+            isOptedIn: config.isOptedIn,
+            isVerified: config.isVerified,
+            reportSchedule: config.reportSchedule,
+            alertPreferences: config.alertPreferences,
+            deliveryChannel: config.deliveryChannel,
+            quietHours: config.quietHours,
+            maxMessagesPerDay: config.maxMessagesPerDay,
+            totalMessagesSent: config.totalMessagesSent,
+            totalMessagesDelivered: config.totalMessagesDelivered,
+          }
+        : null,
     };
   }
 
@@ -84,7 +91,10 @@ export class WhatsAppController {
     @CurrentUser() user: JwtPayload,
     @Body() dto: UpdateWhatsAppConfigDto,
   ) {
-    const config = await this.whatsAppService.upsertConfig(user.shopId, dto as Partial<import('./schemas/whatsapp-config.schema').WhatsAppConfig>);
+    const config = await this.whatsAppService.upsertConfig(
+      user.shopId,
+      dto as Partial<import('./schemas/whatsapp-config.schema').WhatsAppConfig>,
+    );
     return {
       success: true,
       data: config,
@@ -106,7 +116,7 @@ export class WhatsAppController {
   ) {
     // Get shop name for the OTP message
     const shopName = 'Your Shop'; // TODO: Fetch from shop service
-    
+
     const result = await this.whatsAppService.sendVerificationOtp(
       user.shopId,
       dto.phoneNumber,
@@ -137,7 +147,10 @@ export class WhatsAppController {
     @CurrentUser() user: JwtPayload,
     @Body() dto: ConfirmVerificationDto,
   ) {
-    const result = await this.whatsAppService.confirmVerification(user.shopId, dto.otp);
+    const result = await this.whatsAppService.confirmVerification(
+      user.shopId,
+      dto.otp,
+    );
 
     if (!result.success) {
       return {

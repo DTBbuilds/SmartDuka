@@ -28,7 +28,10 @@ describe('P1-13B — JwtStrategy session-revocation enforcement', () => {
     const strategy = makeStrategy(svc);
     await expect(
       strategy.validate({
-        sub: 'u1', email: 'a@b.c', role: 'admin', shopId: 's1',
+        sub: 'u1',
+        email: 'a@b.c',
+        role: 'admin',
+        shopId: 's1',
         sessionId: 'dead-session',
       } as any),
     ).rejects.toThrow(UnauthorizedException);
@@ -39,7 +42,10 @@ describe('P1-13B — JwtStrategy session-revocation enforcement', () => {
     const svc = { isSessionActive: jest.fn(async () => true) };
     const strategy = makeStrategy(svc);
     const payload = {
-      sub: 'u1', email: 'a@b.c', role: 'admin', shopId: 's1',
+      sub: 'u1',
+      email: 'a@b.c',
+      role: 'admin',
+      shopId: 's1',
       sessionId: 'live-session',
     } as any;
     expect(await strategy.validate(payload)).toBe(payload);
@@ -48,7 +54,12 @@ describe('P1-13B — JwtStrategy session-revocation enforcement', () => {
   it('token WITHOUT sessionId (legacy) skips the session check', async () => {
     const svc = { isSessionActive: jest.fn() };
     const strategy = makeStrategy(svc);
-    const payload = { sub: 'u1', email: 'a@b.c', role: 'admin', shopId: 's1' } as any;
+    const payload = {
+      sub: 'u1',
+      email: 'a@b.c',
+      role: 'admin',
+      shopId: 's1',
+    } as any;
     expect(await strategy.validate(payload)).toBe(payload);
     expect(svc.isSessionActive).not.toHaveBeenCalled();
   });
@@ -56,19 +67,33 @@ describe('P1-13B — JwtStrategy session-revocation enforcement', () => {
   it('P1-13C FAIL-CLOSED: tokenService unavailable → session-bound token REJECTED', async () => {
     const strategy = makeStrategy(null);
     const payload = {
-      sub: 'u1', email: 'a@b.c', role: 'admin', shopId: 's1',
+      sub: 'u1',
+      email: 'a@b.c',
+      role: 'admin',
+      shopId: 's1',
       sessionId: 'whatever',
     } as any;
-    await expect(strategy.validate(payload)).rejects.toThrow(UnauthorizedException);
+    await expect(strategy.validate(payload)).rejects.toThrow(
+      UnauthorizedException,
+    );
   });
 
   it('P1-13C FAIL-CLOSED: session LOOKUP FAILURE → token REJECTED', async () => {
-    const svc = { isSessionActive: jest.fn(async () => { throw new Error('db down'); }) };
+    const svc = {
+      isSessionActive: jest.fn(async () => {
+        throw new Error('db down');
+      }),
+    };
     const strategy = makeStrategy(svc);
     const payload = {
-      sub: 'u1', email: 'a@b.c', role: 'admin', shopId: 's1',
+      sub: 'u1',
+      email: 'a@b.c',
+      role: 'admin',
+      shopId: 's1',
       sessionId: 'live-session',
     } as any;
-    await expect(strategy.validate(payload)).rejects.toThrow(UnauthorizedException);
+    await expect(strategy.validate(payload)).rejects.toThrow(
+      UnauthorizedException,
+    );
   });
 });

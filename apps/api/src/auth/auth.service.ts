@@ -1,5 +1,12 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unused-vars */
-import { Injectable, UnauthorizedException, BadRequestException, ServiceUnavailableException, Optional, Inject, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  BadRequestException,
+  ServiceUnavailableException,
+  Optional,
+  Inject,
+  Logger,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -17,7 +24,10 @@ import { LoginAttemptService } from './services/login-attempt.service';
 import { DeviceFingerprintService } from './services/device-fingerprint.service';
 import { EmailService } from '../notifications/email.service';
 import { validatePhoneForCountry } from '../common/phone-validation';
-import { LoginHistory, LoginHistoryDocument } from './schemas/login-history.schema';
+import {
+  LoginHistory,
+  LoginHistoryDocument,
+} from './schemas/login-history.schema';
 import * as bcryptjs from 'bcryptjs';
 
 @Injectable()
@@ -29,14 +39,18 @@ export class AuthService {
     private readonly shopsService: ShopsService,
     private readonly jwtService: JwtService,
     private readonly shopSettingsService: ShopSettingsService,
-    @InjectModel(LoginHistory.name) private readonly loginHistoryModel: Model<LoginHistoryDocument>,
+    @InjectModel(LoginHistory.name)
+    private readonly loginHistoryModel: Model<LoginHistoryDocument>,
     @Optional() private readonly tokenService?: TokenService,
-    @Optional() @Inject('ActivityService') private readonly activityService?: any,
+    @Optional()
+    @Inject('ActivityService')
+    private readonly activityService?: any,
     @InjectModel('SuperAdmin') private readonly superAdminModel?: Model<any>,
     @Optional() private readonly systemEventManager?: SystemEventManagerService,
     @Optional() private readonly subscriptionsService?: SubscriptionsService,
     @Optional() private readonly otpService?: OtpService,
-    @Optional() private readonly deviceFingerprintService?: DeviceFingerprintService,
+    @Optional()
+    private readonly deviceFingerprintService?: DeviceFingerprintService,
     @Optional() private readonly emailService?: EmailService,
     @Optional() private readonly loginAttemptService?: LoginAttemptService,
   ) {}
@@ -45,26 +59,40 @@ export class AuthService {
     // Enforce email OTP verification before registration
     // SECURITY: If OtpService is unavailable, block registration entirely to prevent bypass
     if (!this.otpService) {
-      this.logger.error('OtpService not available — blocking registration to prevent OTP bypass');
-      throw new BadRequestException('Email verification service is temporarily unavailable. Please try again later.');
+      this.logger.error(
+        'OtpService not available — blocking registration to prevent OTP bypass',
+      );
+      throw new BadRequestException(
+        'Email verification service is temporarily unavailable. Please try again later.',
+      );
     }
-    const isVerified = await this.otpService.isEmailRecentlyVerified(dto.admin.email, 'registration');
+    const isVerified = await this.otpService.isEmailRecentlyVerified(
+      dto.admin.email,
+      'registration',
+    );
     if (!isVerified) {
-      throw new BadRequestException('Email not verified. Please verify your email with OTP before registering.');
+      throw new BadRequestException(
+        'Email not verified. Please verify your email with OTP before registering.',
+      );
     }
 
     // P1-13A: authoritative country-aware phone validation (mirrors the
     // frontend rules; the backend never relies on the frontend alone).
-    const phoneCheck = validatePhoneForCountry(dto.shop.country, dto.admin.phone);
+    const phoneCheck = validatePhoneForCountry(
+      dto.shop.country,
+      dto.admin.phone,
+    );
     if (!phoneCheck.valid) {
-      throw new BadRequestException(phoneCheck.error || 'Please enter a valid phone number');
+      throw new BadRequestException(
+        phoneCheck.error || 'Please enter a valid phone number',
+      );
     }
 
     // Create shop with proper shop name and admin contact info
     const shopData: any = {
-      name: dto.shop.shopName,  // Use the actual shop name provided
-      email: dto.admin.email,   // Use admin email as shop contact email
-      phone: dto.admin.phone,   // Use admin phone as shop contact phone
+      name: dto.shop.shopName, // Use the actual shop name provided
+      email: dto.admin.email, // Use admin email as shop contact email
+      phone: dto.admin.phone, // Use admin phone as shop contact phone
       businessType: dto.shop.businessType,
       country: dto.shop.country,
       county: dto.shop.county,
@@ -81,7 +109,9 @@ export class AuthService {
 
     // Initialize shop settings with receipt info from registration
     try {
-      await this.shopSettingsService.syncReceiptSettingsFromShop((shop as any).shopId);
+      await this.shopSettingsService.syncReceiptSettingsFromShop(
+        (shop as any).shopId,
+      );
     } catch (err) {
       console.error('Failed to initialize shop settings:', err);
     }
@@ -92,7 +122,9 @@ export class AuthService {
         (shop as any).shopId,
         dto.shop.businessType,
       );
-      this.logger.log(`Business type config applied for shop ${shop.name}: ${dto.shop.businessType}`);
+      this.logger.log(
+        `Business type config applied for shop ${shop.name}: ${dto.shop.businessType}`,
+      );
     } catch (err) {
       this.logger.error('Failed to apply business type config:', err);
     }
@@ -106,10 +138,13 @@ export class AuthService {
       maxEmployees: 3,
       maxProducts: 100,
     };
-    
+
     if (this.subscriptionsService && dto.shop.subscriptionPlanCode) {
       try {
-        const billingCycle = dto.shop.billingCycle === 'annual' ? BillingCycle.ANNUAL : BillingCycle.MONTHLY;
+        const billingCycle =
+          dto.shop.billingCycle === 'annual'
+            ? BillingCycle.ANNUAL
+            : BillingCycle.MONTHLY;
         const subscription = await this.subscriptionsService.createSubscription(
           (shop as any)._id.toString(),
           {
@@ -117,20 +152,24 @@ export class AuthService {
             billingCycle,
           },
         );
-        subscriptionPlanName = subscription?.planName || dto.shop.subscriptionPlanCode;
-        
+        subscriptionPlanName =
+          subscription?.planName || dto.shop.subscriptionPlanCode;
+
         // Get plan details for email
         if (subscription) {
           subscriptionDetails = {
             planPrice: subscription.currentPrice || 0,
-            billingCycle: billingCycle === BillingCycle.ANNUAL ? 'year' : 'month',
+            billingCycle:
+              billingCycle === BillingCycle.ANNUAL ? 'year' : 'month',
             maxShops: subscription.usage?.shops?.limit || 1,
             maxEmployees: subscription.usage?.employees?.limit || 3,
             maxProducts: subscription.usage?.products?.limit || 100,
           };
         }
-        
-        this.logger.log(`Subscription created for shop ${shop.name}: ${subscriptionPlanName}`);
+
+        this.logger.log(
+          `Subscription created for shop ${shop.name}: ${subscriptionPlanName}`,
+        );
       } catch (err) {
         this.logger.error('Failed to create subscription:', err);
         // Don't fail registration if subscription creation fails - will default to trial
@@ -149,13 +188,23 @@ export class AuthService {
 
     // Mark email as verified since OTP was validated before registration
     try {
-      await this.usersService.updateEmailVerified((user as any)._id.toString(), true);
+      await this.usersService.updateEmailVerified(
+        (user as any)._id.toString(),
+        true,
+      );
     } catch (err) {
-      this.logger.warn(`Failed to set emailVerified for ${dto.admin.email}: ${err}`);
+      this.logger.warn(
+        `Failed to set emailVerified for ${dto.admin.email}: ${err}`,
+      );
     }
 
     // Send notification to super admin about new shop registration
-    this.notifySuperAdminNewShop(shop.name, dto.admin.name, dto.admin.email, dto.admin.phone);
+    this.notifySuperAdminNewShop(
+      shop.name,
+      dto.admin.name,
+      dto.admin.email,
+      dto.admin.phone,
+    );
 
     // Generate JWT token
     const token = this.jwtService.sign({
@@ -167,32 +216,43 @@ export class AuthService {
     });
 
     // Send welcome email - fire and forget (don't block registration)
-    if (this.systemEventManager && false) { // FREE_MODE: Welcome emails disabled - system is free
+    // FREE_MODE: Welcome emails disabled - system is free (constant flag
+    // instead of `&& false` so the condition is not a lint error).
+    const WELCOME_EMAILS_DISABLED = false as const;
+    if (this.systemEventManager && WELCOME_EMAILS_DISABLED) {
       // Use setImmediate to defer email sending to next tick - doesn't block response
-      const eventManager = this.systemEventManager!;
+      const eventManager = this.systemEventManager;
       setImmediate(() => {
-        eventManager.queueEvent({
-          type: 'welcome',
-          shop: {
-            shopId: (shop as any)._id.toString(),
-            shopName: shop.name,
-            shopEmail: shop.email,
-          },
-          user: {
-            userId: (user as any)._id.toString(),
-            userName: dto.admin.name,
-            userEmail: dto.admin.email,
-          },
-          data: {
-            planName: subscriptionPlanName,
-            trialDays: 14,
-            ...subscriptionDetails,
-          },
-        }).then(() => {
-          this.logger.debug(`Welcome email event processed for ${dto.admin.email}`);
-        }).catch((err) => {
-          this.logger.error(`Failed to queue welcome email for ${dto.admin.email}:`, err.message);
-        });
+        eventManager
+          .queueEvent({
+            type: 'welcome',
+            shop: {
+              shopId: (shop as any)._id.toString(),
+              shopName: shop.name,
+              shopEmail: shop.email,
+            },
+            user: {
+              userId: (user as any)._id.toString(),
+              userName: dto.admin.name,
+              userEmail: dto.admin.email,
+            },
+            data: {
+              planName: subscriptionPlanName,
+              trialDays: 14,
+              ...subscriptionDetails,
+            },
+          })
+          .then(() => {
+            this.logger.debug(
+              `Welcome email event processed for ${dto.admin.email}`,
+            );
+          })
+          .catch((err) => {
+            this.logger.error(
+              `Failed to queue welcome email for ${dto.admin.email}:`,
+              err.message,
+            );
+          });
       });
       this.logger.log(`Welcome email queued (async) for ${dto.admin.email}`);
     }
@@ -200,7 +260,7 @@ export class AuthService {
     return {
       shop: {
         id: (shop as any)._id,
-        shopId: (shop as any).shopId,  // Human-readable shop ID
+        shopId: (shop as any).shopId, // Human-readable shop ID
         name: shop.name,
         status: shop.status,
         email: shop.email,
@@ -233,9 +293,14 @@ export class AuthService {
     }
 
     // Validate password
-    const isValid = await this.usersService.validatePassword(user, dto.password);
+    const isValid = await this.usersService.validatePassword(
+      user,
+      dto.password,
+    );
     if (!isValid) {
-      console.log(`[Auth] Login failed: Invalid password for user ${dto.email}`);
+      console.log(
+        `[Auth] Login failed: Invalid password for user ${dto.email}`,
+      );
       this.loginAttemptService?.recordFailure(dto.email);
       throw new UnauthorizedException('Invalid credentials');
     }
@@ -250,7 +315,9 @@ export class AuthService {
 
     // Validate role if provided
     if (dto.role && user.role !== dto.role) {
-      throw new UnauthorizedException(`User role is ${user.role}, not ${dto.role}`);
+      throw new UnauthorizedException(
+        `User role is ${user.role}, not ${dto.role}`,
+      );
     }
 
     // Validate shopId if provided
@@ -259,7 +326,9 @@ export class AuthService {
     }
 
     // Get shop info
-    const shop = await this.shopsService.findById((user as any).shopId.toString());
+    const shop = await this.shopsService.findById(
+      (user as any).shopId.toString(),
+    );
     if (!shop) {
       throw new UnauthorizedException('Shop not found');
     }
@@ -279,7 +348,9 @@ export class AuthService {
           userAgent,
         );
       } catch (err: any) {
-        this.logger.warn(`Login OTP send issue for ${user.email}: ${err.message}`);
+        this.logger.warn(
+          `Login OTP send issue for ${user.email}: ${err.message}`,
+        );
       }
 
       return {
@@ -347,18 +418,23 @@ export class AuthService {
     // Check if super admin model is available
     if (!this.superAdminModel) {
       console.error('[SuperAdmin Login] Model not available');
-      throw new UnauthorizedException('Super admin authentication not available');
+      throw new UnauthorizedException(
+        'Super admin authentication not available',
+      );
     }
 
     console.log('[SuperAdmin Login] Model available, searching for user...');
 
     // Find super admin by email (case-insensitive)
-    const superAdmin = await this.superAdminModel.findOne({ 
-      email: dto.email.toLowerCase().trim() 
+    const superAdmin = await this.superAdminModel.findOne({
+      email: dto.email.toLowerCase().trim(),
     });
-    
-    console.log('[SuperAdmin Login] Search result:', superAdmin ? 'Found' : 'Not found');
-    
+
+    console.log(
+      '[SuperAdmin Login] Search result:',
+      superAdmin ? 'Found' : 'Not found',
+    );
+
     if (!superAdmin) {
       console.error('[SuperAdmin Login] User not found:', dto.email);
       this.loginAttemptService?.recordFailure(dto.email);
@@ -412,7 +488,12 @@ export class AuthService {
     };
   }
 
-  async loginWithPin(pin: string, shopId: string, ipAddress?: string, userAgent?: string) {
+  async loginWithPin(
+    pin: string,
+    shopId: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
     // Find user by PIN and shop
     const user = await this.usersService.findByPin(pin, shopId);
     if (!user) {
@@ -425,7 +506,9 @@ export class AuthService {
     }
 
     // Get shop info
-    const shop = await this.shopsService.findById((user as any).shopId.toString());
+    const shop = await this.shopsService.findById(
+      (user as any).shopId.toString(),
+    );
     if (!shop) {
       throw new UnauthorizedException('Shop not found');
     }
@@ -505,7 +588,11 @@ export class AuthService {
    * Refresh token - issues a new token with extended expiry
    * Called when current token is still valid but approaching expiry
    */
-  async refreshToken(currentUser: any, deviceId?: string, deviceFingerprint?: string) {
+  async refreshToken(
+    currentUser: any,
+    deviceId?: string,
+    deviceFingerprint?: string,
+  ) {
     // Validate user still exists and is active
     const user = await this.usersService.findById(currentUser.sub);
     if (!user || user.status !== 'active') {
@@ -543,7 +630,9 @@ export class AuthService {
 
     const newToken = this.jwtService.sign(tokenPayload);
 
-    this.logger.log(`Token refreshed for user ${currentUser.email} (device: ${deviceId || 'unknown'})`);
+    this.logger.log(
+      `Token refreshed for user ${currentUser.email} (device: ${deviceId || 'unknown'})`,
+    );
 
     return {
       token: newToken,
@@ -560,20 +649,24 @@ export class AuthService {
     };
   }
 
-  async googleLogin(googleUser: { 
-    googleId: string; 
-    email: string; 
-    name: string; 
-    avatarUrl?: string;
-  }, ipAddress?: string, userAgent?: string) {
+  async googleLogin(
+    googleUser: {
+      googleId: string;
+      email: string;
+      name: string;
+      avatarUrl?: string;
+    },
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
     // First, try to find user by Google ID
     let user = await this.usersService.findByGoogleId(googleUser.googleId);
-    
+
     if (!user) {
       // Try to find by email (existing user linking Google account)
       user = await this.usersService.findByEmail(googleUser.email);
     }
-    
+
     if (!user) {
       // No existing user - return special response for shop registration flow
       return {
@@ -606,11 +699,15 @@ export class AuthService {
 
     // Google users are email-verified by default
     if (!(user as any).emailVerified) {
-      await this.usersService.updateEmailVerified((user as any)._id.toString(), true).catch(() => {});
+      await this.usersService
+        .updateEmailVerified((user as any)._id.toString(), true)
+        .catch(() => {});
     }
 
     // Get shop info
-    const shop = await this.shopsService.findById((user as any).shopId.toString());
+    const shop = await this.shopsService.findById(
+      (user as any).shopId.toString(),
+    );
     if (!shop) {
       throw new UnauthorizedException('Shop not found');
     }
@@ -671,20 +768,24 @@ export class AuthService {
   /**
    * Google login with secure token pair
    */
-  async googleLoginWithTokens(googleUser: { 
-    googleId: string; 
-    email: string; 
-    name: string; 
-    avatarUrl?: string;
-  }, ipAddress?: string, userAgent?: string) {
+  async googleLoginWithTokens(
+    googleUser: {
+      googleId: string;
+      email: string;
+      name: string;
+      avatarUrl?: string;
+    },
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
     // First, try to find user by Google ID
     let user = await this.usersService.findByGoogleId(googleUser.googleId);
-    
+
     if (!user) {
       // Try to find by email (existing user linking Google account)
       user = await this.usersService.findByEmail(googleUser.email);
     }
-    
+
     if (!user) {
       // No existing user - return special response for shop registration flow
       return {
@@ -717,11 +818,15 @@ export class AuthService {
 
     // Google users are email-verified by default
     if (!(user as any).emailVerified) {
-      await this.usersService.updateEmailVerified((user as any)._id.toString(), true).catch(() => {});
+      await this.usersService
+        .updateEmailVerified((user as any)._id.toString(), true)
+        .catch(() => {});
     }
 
     // Get shop info
-    const shop = await this.shopsService.findById((user as any).shopId.toString());
+    const shop = await this.shopsService.findById(
+      (user as any).shopId.toString(),
+    );
     if (!shop) {
       throw new UnauthorizedException('Shop not found');
     }
@@ -736,18 +841,23 @@ export class AuthService {
     let otpReason = 'security_required';
 
     if (this.deviceFingerprintService && this.otpService) {
-      const fingerprint = this.deviceFingerprintService.generateFingerprint(userAgent, ipAddress);
-      
+      const fingerprint = this.deviceFingerprintService.generateFingerprint(
+        userAgent,
+        ipAddress,
+      );
+
       const otpCheck = await this.deviceFingerprintService.shouldRequireOtp(
         (user as any)._id.toString(),
         fingerprint,
-        'google'
+        'google',
       );
-      
+
       requiresOtp = otpCheck.required;
       otpReason = otpCheck.reason || 'security_required';
-      
-      this.logger.log(`Google OTP check for ${user.email}: required=${requiresOtp}, reason=${otpReason}`);
+
+      this.logger.log(
+        `Google OTP check for ${user.email}: required=${requiresOtp}, reason=${otpReason}`,
+      );
     }
 
     if (requiresOtp && this.otpService) {
@@ -758,14 +868,21 @@ export class AuthService {
           ipAddress,
           userAgent,
         );
-        this.logger.log(`Login OTP sent to ${user.email} (Google OAuth, reason: ${otpReason})`);
+        this.logger.log(
+          `Login OTP sent to ${user.email} (Google OAuth, reason: ${otpReason})`,
+        );
       } catch (err: any) {
-        this.logger.warn(`Login OTP send issue for ${user.email}: ${err.message}`);
+        this.logger.warn(
+          `Login OTP send issue for ${user.email}: ${err.message}`,
+        );
       }
 
       // Record device and login attempt
       if (this.deviceFingerprintService && userAgent && ipAddress) {
-        const fingerprint = this.deviceFingerprintService.generateFingerprint(userAgent, ipAddress);
+        const fingerprint = this.deviceFingerprintService.generateFingerprint(
+          userAgent,
+          ipAddress,
+        );
         await this.deviceFingerprintService.recordLoginAttempt(
           (user as any)._id.toString(),
           fingerprint,
@@ -804,7 +921,10 @@ export class AuthService {
 
     // Record device when OTP is not required
     if (this.deviceFingerprintService && userAgent && ipAddress) {
-      const fingerprint = this.deviceFingerprintService.generateFingerprint(userAgent, ipAddress);
+      const fingerprint = this.deviceFingerprintService.generateFingerprint(
+        userAgent,
+        ipAddress,
+      );
       await this.deviceFingerprintService.recordLoginAttempt(
         (user as any)._id.toString(),
         fingerprint,
@@ -843,7 +963,11 @@ export class AuthService {
         (user as any).name || user.email,
         user.role,
         'login_google',
-        { email: user.email, method: 'Google OAuth', deviceTrusted: !requiresOtp },
+        {
+          email: user.email,
+          method: 'Google OAuth',
+          deviceTrusted: !requiresOtp,
+        },
         ipAddress,
         userAgent,
         (user as any).branchId?.toString(),
@@ -873,8 +997,24 @@ export class AuthService {
   }
 
   async registerShopWithGoogle(
-    googleProfile: { googleId: string; email: string; name: string; avatarUrl?: string },
-    shopData: { shopName: string; businessType: string; country: string; county: string; city: string; currency: string; address?: string; kraPin?: string; description?: string; phone?: string },
+    googleProfile: {
+      googleId: string;
+      email: string;
+      name: string;
+      avatarUrl?: string;
+    },
+    shopData: {
+      shopName: string;
+      businessType: string;
+      country: string;
+      county: string;
+      city: string;
+      currency: string;
+      address?: string;
+      kraPin?: string;
+      description?: string;
+      phone?: string;
+    },
     ipAddress?: string,
     userAgent?: string,
   ) {
@@ -883,9 +1023,14 @@ export class AuthService {
       throw new BadRequestException('Phone number is required');
     }
     // P1-13A: authoritative country-aware phone validation (Google path)
-    const phoneCheck = validatePhoneForCountry(shopData.country, shopData.phone);
+    const phoneCheck = validatePhoneForCountry(
+      shopData.country,
+      shopData.phone,
+    );
     if (!phoneCheck.valid) {
-      throw new BadRequestException(phoneCheck.error || 'Please enter a valid phone number');
+      throw new BadRequestException(
+        phoneCheck.error || 'Please enter a valid phone number',
+      );
     }
 
     // Create shop
@@ -908,7 +1053,9 @@ export class AuthService {
 
     // Initialize shop settings with receipt info from registration
     try {
-      await this.shopSettingsService.syncReceiptSettingsFromShop((shop as any).shopId);
+      await this.shopSettingsService.syncReceiptSettingsFromShop(
+        (shop as any).shopId,
+      );
     } catch (err) {
       console.error('Failed to initialize shop settings:', err);
     }
@@ -919,7 +1066,9 @@ export class AuthService {
         (shop as any).shopId,
         shopData.businessType,
       );
-      this.logger.log(`Business type config applied for shop ${shop.name}: ${shopData.businessType}`);
+      this.logger.log(
+        `Business type config applied for shop ${shop.name}: ${shopData.businessType}`,
+      );
     } catch (err) {
       this.logger.error('Failed to apply business type config:', err);
     }
@@ -990,7 +1139,7 @@ export class AuthService {
 
   /**
    * Link Google account to existing cashier using PIN verification
-   * 
+   *
    * Security flow:
    * 1. Cashier must have been created by admin (has PIN)
    * 2. Cashier provides Google profile + PIN + shopId
@@ -999,7 +1148,12 @@ export class AuthService {
    * 5. Future logins use Google OAuth directly
    */
   async linkGoogleToCashier(
-    googleProfile: { googleId: string; email: string; name: string; avatarUrl?: string },
+    googleProfile: {
+      googleId: string;
+      email: string;
+      name: string;
+      avatarUrl?: string;
+    },
     pin: string,
     shopId: string,
     ipAddress?: string,
@@ -1014,7 +1168,9 @@ export class AuthService {
     }
 
     // Check if Google account is already linked to another user
-    const existingGoogleUser = await this.usersService.findByGoogleId(googleProfile.googleId);
+    const existingGoogleUser = await this.usersService.findByGoogleId(
+      googleProfile.googleId,
+    );
     if (existingGoogleUser) {
       // Already linked - just log them in
       return this.googleLoginWithTokens(googleProfile, ipAddress, userAgent);
@@ -1023,17 +1179,23 @@ export class AuthService {
     // Find cashier by PIN in the specified shop
     const cashier = await this.usersService.findByPin(pin, shopId);
     if (!cashier) {
-      throw new UnauthorizedException('Invalid PIN. Please check your PIN and try again.');
+      throw new UnauthorizedException(
+        'Invalid PIN. Please check your PIN and try again.',
+      );
     }
 
     // Verify cashier is active
     if (cashier.status !== 'active') {
-      throw new UnauthorizedException('Account is disabled. Contact your admin.');
+      throw new UnauthorizedException(
+        'Account is disabled. Contact your admin.',
+      );
     }
 
     // Verify cashier role
     if (cashier.role !== 'cashier') {
-      throw new UnauthorizedException('This PIN is not for a cashier account. Use email login instead.');
+      throw new UnauthorizedException(
+        'This PIN is not for a cashier account. Use email login instead.',
+      );
     }
 
     // Check if cashier already has a Google account linked
@@ -1096,7 +1258,7 @@ export class AuthService {
         (cashier as any).name || cashier.email,
         cashier.role,
         'google_account_linked',
-        { 
+        {
           googleEmail: googleProfile.email,
           method: 'PIN verification',
         },
@@ -1106,7 +1268,9 @@ export class AuthService {
       );
     }
 
-    this.logger.log(`Google account linked for cashier ${(cashier as any).cashierId} in shop ${shopId}`);
+    this.logger.log(
+      `Google account linked for cashier ${(cashier as any).cashierId} in shop ${shopId}`,
+    );
 
     return {
       user: {
@@ -1133,15 +1297,22 @@ export class AuthService {
   /**
    * Request password reset - generates token and sends email
    */
-  async requestPasswordReset(email: string, ipAddress?: string, userAgent?: string) {
+  async requestPasswordReset(
+    email: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
     // Find user by email
     const user = await this.usersService.findByEmail(email);
-    
+
     // Always return success to prevent email enumeration attacks
     if (!user) {
-      this.logger.warn(`Password reset requested for non-existent email: ${email}`);
-      return { 
-        message: 'If an account exists with this email, a password reset link has been sent.',
+      this.logger.warn(
+        `Password reset requested for non-existent email: ${email}`,
+      );
+      return {
+        message:
+          'If an account exists with this email, a password reset link has been sent.',
       };
     }
 
@@ -1183,7 +1354,12 @@ export class AuthService {
       to: user.email,
       subject: 'Reset your SmartDuka password',
       html: this.buildPasswordResetEmailHtml(resetLink),
-      text: 'Reset your SmartDuka password: ' + resetLink + '\n' + '\n' + 'If you did not request this, you can ignore this email.',
+      text:
+        'Reset your SmartDuka password: ' +
+        resetLink +
+        '\n' +
+        '\n' +
+        'If you did not request this, you can ignore this email.',
       category: 'password_reset',
       triggeredBy: 'user_request',
       // P1-13B: single-provider send for password reset — the default
@@ -1193,8 +1369,8 @@ export class AuthService {
       preferredProvider: 'resend',
       redactPatterns: [
         // token in query strings and bare token material
-        /token=[A-Za-z0-9_\-]+/g,
-        new RegExp(resetToken.replace(/[\.\*\+\?\$\(\)\{\}\(\)\|\[\]\\]/g, '\\$&'), 'g'),
+        /token=[A-Za-z0-9_-]+/g,
+        new RegExp(resetToken.replace(/[.*+?${}()|[\]\\]/g, '\\$&'), 'g'),
       ],
     });
 
@@ -1207,7 +1383,8 @@ export class AuthService {
         `Password reset email FAILED for a registered account (provider error: ${sent.error || 'unknown'})`,
       );
       return {
-        message: 'If an account exists with this email, a password reset link has been sent.',
+        message:
+          'If an account exists with this email, a password reset link has been sent.',
       };
     }
 
@@ -1216,7 +1393,8 @@ export class AuthService {
     );
 
     return {
-      message: 'If an account exists with this email, a password reset link has been sent.',
+      message:
+        'If an account exists with this email, a password reset link has been sent.',
     };
   }
 
@@ -1284,7 +1462,10 @@ If you did not request a password reset, you can safely ignore this email — yo
 
     this.logger.log(`Password reset successful for user ${userId}`);
 
-    return { message: 'Password has been reset successfully. Please log in with your new password.' };
+    return {
+      message:
+        'Password has been reset successfully. Please log in with your new password.',
+    };
   }
 
   // ==================== Secure Token Methods ====================
@@ -1295,7 +1476,7 @@ If you did not request a password reset, you can safely ignore this email — yo
   async registerShopWithTokens(dto: RegisterShopDto) {
     // Use existing registerShop logic
     const result = await this.registerShop(dto);
-    
+
     if (!this.tokenService) {
       return { ...result, tokens: null };
     }
@@ -1340,7 +1521,10 @@ If you did not request a password reset, you can safely ignore this email — yo
     }
 
     // Validate password
-    const isValid = await this.usersService.validatePassword(user, dto.password);
+    const isValid = await this.usersService.validatePassword(
+      user,
+      dto.password,
+    );
     if (!isValid) {
       this.loginAttemptService?.recordFailure(dto.email);
       throw new UnauthorizedException('Invalid credentials');
@@ -1356,7 +1540,9 @@ If you did not request a password reset, you can safely ignore this email — yo
 
     // Validate role if provided
     if (dto.role && user.role !== dto.role) {
-      throw new UnauthorizedException(`User role is ${user.role}, not ${dto.role}`);
+      throw new UnauthorizedException(
+        `User role is ${user.role}, not ${dto.role}`,
+      );
     }
 
     // Validate shopId if provided
@@ -1365,7 +1551,9 @@ If you did not request a password reset, you can safely ignore this email — yo
     }
 
     // Get shop info
-    const shop = await this.shopsService.findById((user as any).shopId.toString());
+    const shop = await this.shopsService.findById(
+      (user as any).shopId.toString(),
+    );
     if (!shop) {
       throw new UnauthorizedException('Shop not found');
     }
@@ -1380,18 +1568,23 @@ If you did not request a password reset, you can safely ignore this email — yo
     let otpReason = 'security_required';
 
     if (this.deviceFingerprintService && this.otpService) {
-      const fingerprint = this.deviceFingerprintService.generateFingerprint(userAgent, ipAddress);
-      
+      const fingerprint = this.deviceFingerprintService.generateFingerprint(
+        userAgent,
+        ipAddress,
+      );
+
       const otpCheck = await this.deviceFingerprintService.shouldRequireOtp(
         (user as any)._id.toString(),
         fingerprint,
-        'password'
+        'password',
       );
-      
+
       requiresOtp = otpCheck.required;
       otpReason = otpCheck.reason || 'security_required';
-      
-      this.logger.log(`OTP check for ${user.email}: required=${requiresOtp}, reason=${otpReason}`);
+
+      this.logger.log(
+        `OTP check for ${user.email}: required=${requiresOtp}, reason=${otpReason}`,
+      );
     }
 
     if (requiresOtp && this.otpService) {
@@ -1402,14 +1595,21 @@ If you did not request a password reset, you can safely ignore this email — yo
           ipAddress,
           userAgent,
         );
-        this.logger.log(`Login OTP sent to ${user.email} (reason: ${otpReason})`);
+        this.logger.log(
+          `Login OTP sent to ${user.email} (reason: ${otpReason})`,
+        );
       } catch (err: any) {
-        this.logger.warn(`Login OTP send issue for ${user.email}: ${err.message}`);
+        this.logger.warn(
+          `Login OTP send issue for ${user.email}: ${err.message}`,
+        );
       }
 
       // Record device and login attempt
       if (this.deviceFingerprintService && userAgent && ipAddress) {
-        const fingerprint = this.deviceFingerprintService.generateFingerprint(userAgent, ipAddress);
+        const fingerprint = this.deviceFingerprintService.generateFingerprint(
+          userAgent,
+          ipAddress,
+        );
         await this.deviceFingerprintService.recordLoginAttempt(
           (user as any)._id.toString(),
           fingerprint,
@@ -1446,7 +1646,10 @@ If you did not request a password reset, you can safely ignore this email — yo
 
     // Record device when OTP is not required
     if (this.deviceFingerprintService && userAgent && ipAddress) {
-      const fingerprint = this.deviceFingerprintService.generateFingerprint(userAgent, ipAddress);
+      const fingerprint = this.deviceFingerprintService.generateFingerprint(
+        userAgent,
+        ipAddress,
+      );
       await this.deviceFingerprintService.recordLoginAttempt(
         (user as any)._id.toString(),
         fingerprint,
@@ -1544,7 +1747,10 @@ If you did not request a password reset, you can safely ignore this email — yo
 
     // Mark email as verified
     try {
-      await this.usersService.updateEmailVerified((user as any)._id.toString(), true);
+      await this.usersService.updateEmailVerified(
+        (user as any)._id.toString(),
+        true,
+      );
       this.logger.log(`Email verified for user ${email}`);
     } catch (err) {
       this.logger.warn(`Failed to set emailVerified for ${email}: ${err}`);
@@ -1554,7 +1760,10 @@ If you did not request a password reset, you can safely ignore this email — yo
     // (User asked: OTP only once on new device — never again on same device)
     if (this.deviceFingerprintService && userAgent && ipAddress) {
       try {
-        const fingerprint = this.deviceFingerprintService.generateFingerprint(userAgent, ipAddress);
+        const fingerprint = this.deviceFingerprintService.generateFingerprint(
+          userAgent,
+          ipAddress,
+        );
         await this.deviceFingerprintService.recordLoginAttempt(
           (user as any)._id.toString(),
           fingerprint,
@@ -1569,7 +1778,9 @@ If you did not request a password reset, you can safely ignore this email — yo
     }
 
     // Get shop info
-    const shop = await this.shopsService.findById((user as any).shopId.toString());
+    const shop = await this.shopsService.findById(
+      (user as any).shopId.toString(),
+    );
     if (!shop) {
       throw new UnauthorizedException('Shop not found');
     }
@@ -1615,7 +1826,7 @@ If you did not request a password reset, you can safely ignore this email — yo
     const hasGoogleAuth = !!(user as any).googleId;
     const hasPin = !!(user as any).pinHash;
     let loginMethod = 'password';
-    
+
     // If user has Google auth, assume Google login
     if (hasGoogleAuth) {
       loginMethod = 'google';
@@ -1623,7 +1834,7 @@ If you did not request a password reset, you can safely ignore this email — yo
       // If user has PIN but no Google, it's a PIN login
       loginMethod = 'pin';
     }
-    
+
     await this.saveLoginHistory({
       userId: (user as any)._id,
       email: user.email,
@@ -1712,36 +1923,49 @@ If you did not request a password reset, you can safely ignore this email — yo
 </body></html>`,
         category: 'admin_notification',
         templateName: 'new_shop_registration_alert',
-      }).then(() => {
-        this.logger.log(`Super admin notified about new shop: ${shopName}`);
-      }).catch((err) => {
-        this.logger.error(`Failed to notify super admin about new shop ${shopName}: ${err.message}`);
-      });
+      })
+        .then(() => {
+          this.logger.log(`Super admin notified about new shop: ${shopName}`);
+        })
+        .catch((err) => {
+          this.logger.error(
+            `Failed to notify super admin about new shop ${shopName}: ${err.message}`,
+          );
+        });
     });
   }
 
   /**
    * Super admin login with tokens
    */
-  private async loginSuperAdminWithTokens(dto: LoginDto, ipAddress?: string, userAgent?: string) {
+  private async loginSuperAdminWithTokens(
+    dto: LoginDto,
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
     // Lockout already checked by caller (loginWithTokens), but double-check
     // for any direct callers in the future.
     this.loginAttemptService?.ensureNotLocked(dto.email);
 
     if (!this.superAdminModel) {
-      throw new UnauthorizedException('Super admin authentication not available');
+      throw new UnauthorizedException(
+        'Super admin authentication not available',
+      );
     }
 
-    const superAdmin = await this.superAdminModel.findOne({ 
-      email: dto.email.toLowerCase().trim() 
+    const superAdmin = await this.superAdminModel.findOne({
+      email: dto.email.toLowerCase().trim(),
     });
-    
+
     if (!superAdmin) {
       this.loginAttemptService?.recordFailure(dto.email);
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const isValid = await bcryptjs.compare(dto.password, superAdmin.passwordHash);
+    const isValid = await bcryptjs.compare(
+      dto.password,
+      superAdmin.passwordHash,
+    );
     if (!isValid) {
       this.loginAttemptService?.recordFailure(dto.email);
       throw new UnauthorizedException('Invalid credentials');
@@ -1784,7 +2008,12 @@ If you did not request a password reset, you can safely ignore this email — yo
   /**
    * Login with PIN and return secure tokens
    */
-  async loginWithPinAndTokens(pin: string, shopId: string, ipAddress?: string, userAgent?: string) {
+  async loginWithPinAndTokens(
+    pin: string,
+    shopId: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
     const user = await this.usersService.findByPin(pin, shopId);
     if (!user) {
       throw new UnauthorizedException('Invalid PIN');
@@ -1794,7 +2023,9 @@ If you did not request a password reset, you can safely ignore this email — yo
       throw new UnauthorizedException('Account is disabled');
     }
 
-    const shop = await this.shopsService.findById((user as any).shopId.toString());
+    const shop = await this.shopsService.findById(
+      (user as any).shopId.toString(),
+    );
     if (!shop) {
       throw new UnauthorizedException('Shop not found');
     }
@@ -1814,7 +2045,9 @@ If you did not request a password reset, you can safely ignore this email — yo
         );
         this.logger.log(`PIN Login OTP sent to ${user.email}`);
       } catch (err: any) {
-        this.logger.warn(`PIN Login OTP send issue for ${user.email}: ${err.message}`);
+        this.logger.warn(
+          `PIN Login OTP send issue for ${user.email}: ${err.message}`,
+        );
       }
 
       // Record login attempt in history
@@ -1915,10 +2148,15 @@ If you did not request a password reset, you can safely ignore this email — yo
     }
 
     // This will validate the refresh token and rotate it
-    const partialTokens = await this.tokenService.refreshAccessToken(refreshToken, deviceInfo);
+    const partialTokens = await this.tokenService.refreshAccessToken(
+      refreshToken,
+      deviceInfo,
+    );
 
     // Get session to find user info
-    const session = await this.tokenService.isSessionActive(partialTokens.sessionId)
+    const session = (await this.tokenService.isSessionActive(
+      partialTokens.sessionId,
+    ))
       ? await this.getUserFromSession(partialTokens.sessionId)
       : null;
 
@@ -2027,7 +2265,9 @@ If you did not request a password reset, you can safely ignore this email — yo
         }
       }
 
-      this.logger.warn(`User not found for session: ${sessionId} (userId: ${userId})`);
+      this.logger.warn(
+        `User not found for session: ${sessionId} (userId: ${userId})`,
+      );
       return null;
     } catch (err) {
       this.logger.error(`Failed to get user from session: ${err}`);
@@ -2055,11 +2295,15 @@ If you did not request a password reset, you can safely ignore this email — yo
   }): Promise<void> {
     try {
       const record = new this.loginHistoryModel({
-        userId: data.userId ? new Types.ObjectId(data.userId.toString()) : undefined,
+        userId: data.userId
+          ? new Types.ObjectId(data.userId.toString())
+          : undefined,
         email: data.email,
         name: data.name,
         role: data.role,
-        shopId: data.shopId ? new Types.ObjectId(data.shopId.toString()) : undefined,
+        shopId: data.shopId
+          ? new Types.ObjectId(data.shopId.toString())
+          : undefined,
         shopName: data.shopName,
         loginMethod: data.loginMethod,
         status: data.status,

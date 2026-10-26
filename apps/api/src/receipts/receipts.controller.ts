@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Post, Put, Param, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Put,
+  Param,
+  UseGuards,
+} from '@nestjs/common';
 import { ReceiptsService } from './receipts.service';
 import { CreateReceiptTemplateDto } from './dto/create-receipt-template.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';

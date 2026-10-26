@@ -41,7 +41,7 @@ export enum PaymentAttemptType {
 
 /**
  * Payment Attempt Schema
- * 
+ *
  * Tracks all payment attempts for subscriptions.
  * Super admin can view all attempts across all shops.
  */
@@ -65,7 +65,12 @@ export class PaymentAttempt {
   @Prop({ required: true, enum: PaymentAttemptType, index: true })
   type: PaymentAttemptType;
 
-  @Prop({ required: true, enum: PaymentAttemptStatus, default: PaymentAttemptStatus.INITIATED, index: true })
+  @Prop({
+    required: true,
+    enum: PaymentAttemptStatus,
+    default: PaymentAttemptStatus.INITIATED,
+    index: true,
+  })
   status: PaymentAttemptStatus;
 
   @Prop({ required: true })
@@ -158,7 +163,8 @@ export class PaymentAttempt {
   updatedAt?: Date;
 }
 
-export const PaymentAttemptSchema = SchemaFactory.createForClass(PaymentAttempt);
+export const PaymentAttemptSchema =
+  SchemaFactory.createForClass(PaymentAttempt);
 
 // Indexes for efficient querying
 PaymentAttemptSchema.index({ createdAt: -1 });

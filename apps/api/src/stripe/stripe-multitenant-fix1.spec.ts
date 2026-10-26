@@ -44,7 +44,8 @@ describe('SMARTDUKA_STRIPE_MULTITENANT_FIX1 — Stripe acceptance suite', () => 
           // must match (foreign AND unknown references → null).
           const matches =
             (!shopId || String(shopId) === String(payment.shopId)) &&
-            (!stripePaymentIntentId || stripePaymentIntentId === payment.stripePaymentIntentId);
+            (!stripePaymentIntentId ||
+              stripePaymentIntentId === payment.stripePaymentIntentId);
           return Promise.resolve(matches ? payment : null);
         }),
         updateOne: jest.fn(async (f: any, u: any) => {
@@ -52,12 +53,16 @@ describe('SMARTDUKA_STRIPE_MULTITENANT_FIX1 — Stripe acceptance suite', () => 
           // — when the refund is already recorded, the update matches
           // NOTHING (never double-accumulates).
           const guard = f['refunds.idempotencyKey'];
-          if (guard?.$ne && payment.refunds.some((r: any) => r.idempotencyKey === guard.$ne)) {
+          if (
+            guard?.$ne &&
+            payment.refunds.some((r: any) => r.idempotencyKey === guard.$ne)
+          ) {
             return { matchedCount: 0, modifiedCount: 0 };
           }
           updates.push(u);
           if (u.$set?.status) payment.status = u.$set.status;
-          if (u.$set?.refundedAmount !== undefined) payment.refundedAmount = u.$set.refundedAmount;
+          if (u.$set?.refundedAmount !== undefined)
+            payment.refundedAmount = u.$set.refundedAmount;
           if (u.$push?.refunds) payment.refunds.push(u.$push.refunds);
           return { matchedCount: 1, modifiedCount: 1 };
         }),
@@ -68,9 +73,16 @@ describe('SMARTDUKA_STRIPE_MULTITENANT_FIX1 — Stripe acceptance suite', () => 
           if (opts.stripeError) throw opts.stripeError;
           // Simulate Stripe's IDEMPOTENCY-KEY behaviour: the same key
           // returns the SAME refund object (never a second provider refund).
-          const existing = refundsCreated.find((r) => r.idempotencyKey === p.idempotencyKey);
+          const existing = refundsCreated.find(
+            (r) => r.idempotencyKey === p.idempotencyKey,
+          );
           if (existing) return existing;
-          const refund = { id: `re_${refundsCreated.length + 1}`, status: 'succeeded', amount: p.amount, idempotencyKey: p.idempotencyKey };
+          const refund = {
+            id: `re_${refundsCreated.length + 1}`,
+            status: 'succeeded',
+            amount: p.amount,
+            idempotencyKey: p.idempotencyKey,
+          };
           refundsCreated.push(refund);
           return refund;
         }),
@@ -80,7 +92,7 @@ describe('SMARTDUKA_STRIPE_MULTITENANT_FIX1 — Stripe acceptance suite', () => 
         {} as any, // customerService
         { requireConnectedAccountId: jest.fn() } as any, // connectService
         { get: jest.fn().mockReturnValue('sk_test_x') } as any, // configService
-        paymentModel as any,
+        paymentModel,
         {} as any, // orderModel
         {} as any, // paymentTransactionService
         {} as any, // orderPaymentAuthority
@@ -101,7 +113,10 @@ describe('SMARTDUKA_STRIPE_MULTITENANT_FIX1 — Stripe acceptance suite', () => 
     it('an unknown payment reference gets the same safe 404', async () => {
       const { service, refundsCreated } = bootRefund(makePaymentDoc());
       await expect(
-        service.refundPayment({ shopId: SHOP_A, paymentIntentId: 'pi_unknown' }),
+        service.refundPayment({
+          shopId: SHOP_A,
+          paymentIntentId: 'pi_unknown',
+        }),
       ).rejects.toThrow(NotFoundException);
       expect(refundsCreated).toHaveLength(0);
     });
@@ -110,7 +125,11 @@ describe('SMARTDUKA_STRIPE_MULTITENANT_FIX1 — Stripe acceptance suite', () => 
       const payment = makePaymentDoc({ refundedAmount: 6000 }); // 4000 remaining
       const { service, refundsCreated } = bootRefund(payment);
       await expect(
-        service.refundPayment({ shopId: SHOP_A, paymentIntentId: 'pi_111', amount: 5000 }),
+        service.refundPayment({
+          shopId: SHOP_A,
+          paymentIntentId: 'pi_111',
+          amount: 5000,
+        }),
       ).rejects.toThrow(/remaining refundable balance/);
       expect(refundsCreated).toHaveLength(0);
     });
@@ -118,10 +137,18 @@ describe('SMARTDUKA_STRIPE_MULTITENANT_FIX1 — Stripe acceptance suite', () => 
     it('a non-positive refund amount is rejected BEFORE Stripe', async () => {
       const { service, refundsCreated } = bootRefund(makePaymentDoc());
       await expect(
-        service.refundPayment({ shopId: SHOP_A, paymentIntentId: 'pi_111', amount: 0 }),
+        service.refundPayment({
+          shopId: SHOP_A,
+          paymentIntentId: 'pi_111',
+          amount: 0,
+        }),
       ).rejects.toThrow(/positive/);
       await expect(
-        service.refundPayment({ shopId: SHOP_A, paymentIntentId: 'pi_111', amount: -5 }),
+        service.refundPayment({
+          shopId: SHOP_A,
+          paymentIntentId: 'pi_111',
+          amount: -5,
+        }),
       ).rejects.toThrow(/positive/);
       expect(refundsCreated).toHaveLength(0);
     });
@@ -129,10 +156,18 @@ describe('SMARTDUKA_STRIPE_MULTITENANT_FIX1 — Stripe acceptance suite', () => 
     it('repeated identical refunds are IDEMPOTENT (one Stripe call, one record)', async () => {
       const payment = makePaymentDoc();
       const { service, refundsCreated } = bootRefund(payment);
-      await service.refundPayment({ shopId: SHOP_A, paymentIntentId: 'pi_111', amount: 4000 });
+      await service.refundPayment({
+        shopId: SHOP_A,
+        paymentIntentId: 'pi_111',
+        amount: 4000,
+      });
       const afterFirst = payment.refunds.length;
       const callsAfterFirst = refundsCreated.length;
-      await service.refundPayment({ shopId: SHOP_A, paymentIntentId: 'pi_111', amount: 4000 });
+      await service.refundPayment({
+        shopId: SHOP_A,
+        paymentIntentId: 'pi_111',
+        amount: 4000,
+      });
       expect(refundsCreated.length).toBe(callsAfterFirst); // no second Stripe call
       expect(payment.refunds.length).toBe(afterFirst);
     });
@@ -144,21 +179,39 @@ describe('SMARTDUKA_STRIPE_MULTITENANT_FIX1 — Stripe acceptance suite', () => 
       // returns the SAME refund object to both; the race-safe guarded
       // update must accumulate it exactly once.
       await Promise.all([
-        service.refundPayment({ shopId: SHOP_A, paymentIntentId: 'pi_111', amount: 4000 }),
-        service.refundPayment({ shopId: SHOP_A, paymentIntentId: 'pi_111', amount: 4000 }),
+        service.refundPayment({
+          shopId: SHOP_A,
+          paymentIntentId: 'pi_111',
+          amount: 4000,
+        }),
+        service.refundPayment({
+          shopId: SHOP_A,
+          paymentIntentId: 'pi_111',
+          amount: 4000,
+        }),
       ]);
       expect(refundsCreated).toHaveLength(1); // Stripe idempotency: one provider refund
       expect(payment.refundedAmount).toBe(4000); // NOT 8000
-      expect(payment.refunds.filter((r: any) => r.idempotencyKey)).toHaveLength(1);
+      expect(payment.refunds.filter((r: any) => r.idempotencyKey)).toHaveLength(
+        1,
+      );
     });
 
     it('partial refunds accumulate; the status transitions correctly', async () => {
       const payment = makePaymentDoc();
       const { service } = bootRefund(payment);
-      await service.refundPayment({ shopId: SHOP_A, paymentIntentId: 'pi_111', amount: 4000 });
+      await service.refundPayment({
+        shopId: SHOP_A,
+        paymentIntentId: 'pi_111',
+        amount: 4000,
+      });
       expect(payment.status).toBe(StripePaymentStatus.PARTIALLY_REFUNDED);
       expect(payment.refundedAmount).toBe(4000);
-      await service.refundPayment({ shopId: SHOP_A, paymentIntentId: 'pi_111', amount: 6000 });
+      await service.refundPayment({
+        shopId: SHOP_A,
+        paymentIntentId: 'pi_111',
+        amount: 6000,
+      });
       expect(payment.status).toBe(StripePaymentStatus.REFUNDED);
       expect(payment.refundedAmount).toBe(10000);
     });
@@ -166,10 +219,16 @@ describe('SMARTDUKA_STRIPE_MULTITENANT_FIX1 — Stripe acceptance suite', () => 
     it('an AMBIGUOUS provider outcome never marks the refund successful locally', async () => {
       const payment = makePaymentDoc();
       const { service, updates } = bootRefund(payment, {
-        stripeError: Object.assign(new Error('network timeout'), { code: 'ETIMEDOUT' }),
+        stripeError: Object.assign(new Error('network timeout'), {
+          code: 'ETIMEDOUT',
+        }),
       });
       await expect(
-        service.refundPayment({ shopId: SHOP_A, paymentIntentId: 'pi_111', amount: 4000 }),
+        service.refundPayment({
+          shopId: SHOP_A,
+          paymentIntentId: 'pi_111',
+          amount: 4000,
+        }),
       ).rejects.toThrow(/unknown/i);
       expect(updates).toHaveLength(0); // nothing recorded
       expect(payment.refundedAmount).toBe(0);
@@ -208,14 +267,20 @@ describe('SMARTDUKA_STRIPE_MULTITENANT_FIX1 — Stripe acceptance suite', () => 
     });
 
     it('an OWNED payment method detaches successfully', async () => {
-      const { customerService, detached } = bootCustomer(['pm_owned_1', 'pm_owned_2']);
+      const { customerService, detached } = bootCustomer([
+        'pm_owned_1',
+        'pm_owned_2',
+      ]);
       await customerService.detachPaymentMethodOwned('cus_A', 'pm_owned_2');
       expect(detached).toEqual(['pm_owned_2']);
     });
   });
 
   describe('A3: webhook authentication + bindings', () => {
-    function bootWebhook(payment: any | null, opts: { secret?: string; configured?: boolean } = {}) {
+    function bootWebhook(
+      payment: any | null,
+      opts: { secret?: string; configured?: boolean } = {},
+    ) {
       const updates: any[] = [];
       const webhookEventModel: any = Object.assign(jest.fn(), {
         findOne: jest.fn().mockResolvedValue(null),
@@ -231,14 +296,18 @@ describe('SMARTDUKA_STRIPE_MULTITENANT_FIX1 — Stripe acceptance suite', () => 
       });
       const stripeService = {
         isStripeConfigured: () => opts.configured ?? true,
-        constructWebhookEvent: jest.fn((_raw: any, _sig: string, _secret: string) => {
-          if (_sig !== 'valid_sig') throw new Error('Invalid signature');
-          return {
-            id: 'evt_1',
-            type: 'payment_intent.succeeded',
-            data: { object: { id: 'pi_111', status: 'succeeded', metadata: {} } },
-          };
-        }),
+        constructWebhookEvent: jest.fn(
+          (_raw: any, _sig: string, _secret: string) => {
+            if (_sig !== 'valid_sig') throw new Error('Invalid signature');
+            return {
+              id: 'evt_1',
+              type: 'payment_intent.succeeded',
+              data: {
+                object: { id: 'pi_111', status: 'succeeded', metadata: {} },
+              },
+            };
+          },
+        ),
       };
       const controller = new StripeWebhookController(
         stripeService as any,
@@ -254,9 +323,13 @@ describe('SMARTDUKA_STRIPE_MULTITENANT_FIX1 — Stripe acceptance suite', () => 
     }
 
     it('an INVALID signature is rejected with non-2xx (no event stored, no processing)', async () => {
-      const { controller, webhookEventModel } = bootWebhook(makePaymentDoc(), { secret: 'whsec_x' });
+      const { controller, webhookEventModel } = bootWebhook(makePaymentDoc(), {
+        secret: 'whsec_x',
+      });
       await expect(
-        controller.handleWebhook('bad_sig', { rawBody: Buffer.from('{}') } as any),
+        controller.handleWebhook('bad_sig', {
+          rawBody: Buffer.from('{}'),
+        } as any),
       ).rejects.toThrow(/Invalid webhook signature/);
       expect(webhookEventModel.create).not.toHaveBeenCalled();
     });
@@ -264,12 +337,16 @@ describe('SMARTDUKA_STRIPE_MULTITENANT_FIX1 — Stripe acceptance suite', () => 
     it('a MISSING secret is rejected with non-2xx', async () => {
       const { controller } = bootWebhook(makePaymentDoc(), { secret: '' });
       await expect(
-        controller.handleWebhook('valid_sig', { rawBody: Buffer.from('{}') } as any),
+        controller.handleWebhook('valid_sig', {
+          rawBody: Buffer.from('{}'),
+        } as any),
       ).rejects.toThrow(/Missing webhook signature/);
     });
 
     it('a MISSING raw body is rejected with non-2xx', async () => {
-      const { controller } = bootWebhook(makePaymentDoc(), { secret: 'whsec_x' });
+      const { controller } = bootWebhook(makePaymentDoc(), {
+        secret: 'whsec_x',
+      });
       await expect(
         controller.handleWebhook('valid_sig', {} as any),
       ).rejects.toThrow(/Malformed webhook payload/);
@@ -277,7 +354,9 @@ describe('SMARTDUKA_STRIPE_MULTITENANT_FIX1 — Stripe acceptance suite', () => 
 
     it('a connected-account event for a MISMATCHED account never mutates the payment', async () => {
       const payment = makePaymentDoc({ connectedAccountId: 'acct_A' });
-      const { controller, stripeService } = bootWebhook(payment, { secret: 'whsec_x' });
+      const { controller, stripeService } = bootWebhook(payment, {
+        secret: 'whsec_x',
+      });
       // The event carries a foreign account context.
       stripeService.constructWebhookEvent = jest.fn().mockReturnValue({
         id: 'evt_1',
@@ -285,7 +364,9 @@ describe('SMARTDUKA_STRIPE_MULTITENANT_FIX1 — Stripe acceptance suite', () => 
         account: 'acct_FOREIGN',
         data: { object: { id: 'pi_111', status: 'succeeded', metadata: {} } },
       });
-      await controller.handleWebhook('valid_sig', { rawBody: Buffer.from('{}') } as any);
+      await controller.handleWebhook('valid_sig', {
+        rawBody: Buffer.from('{}'),
+      } as any);
       // handlePaymentIntentEvent's binding guard runs inside the payment
       // service — verified separately below; here the controller stored and
       // processed the event, and the service guard rejects the mutation.
@@ -307,7 +388,11 @@ describe('SMARTDUKA_STRIPE_MULTITENANT_FIX1 — Stripe acceptance suite', () => 
       const paymentModel: any = Object.assign(jest.fn(), {
         findOne: jest.fn(() => ({
           select: jest.fn(() => ({
-            lean: jest.fn().mockResolvedValue({ connectedAccountId: payment.connectedAccountId, status: payment.status, shopId: payment.shopId }),
+            lean: jest.fn().mockResolvedValue({
+              connectedAccountId: payment.connectedAccountId,
+              status: payment.status,
+              shopId: payment.shopId,
+            }),
           })),
         })),
         updateOne: jest.fn(async (_f: any, u: any) => {
@@ -320,7 +405,7 @@ describe('SMARTDUKA_STRIPE_MULTITENANT_FIX1 — Stripe acceptance suite', () => 
         {} as any, // customerService
         {} as any, // connectService
         { get: jest.fn().mockReturnValue('sk_test_x') } as any, // configService
-        paymentModel as any,
+        paymentModel,
         {} as any, // orderModel
         {} as any, // paymentTransactionService
         {} as any, // orderPaymentAuthority
@@ -331,7 +416,10 @@ describe('SMARTDUKA_STRIPE_MULTITENANT_FIX1 — Stripe acceptance suite', () => 
   });
 
   describe('A4: OAuth state single-use + membership revalidation', () => {
-    function bootConnect(states: Array<{ nonce: string; shopId: string; userId: string }>, user: any | null) {
+    function bootConnect(
+      states: Array<{ nonce: string; shopId: string; userId: string }>,
+      user: any | null,
+    ) {
       const shopModel = {
         findById: jest.fn().mockResolvedValue({ _id: SHOP_A, save: jest.fn() }),
         findOne: jest.fn().mockResolvedValue(null),
@@ -365,43 +453,71 @@ describe('SMARTDUKA_STRIPE_MULTITENANT_FIX1 — Stripe acceptance suite', () => 
     }
 
     it('a REPLAYED state nonce is rejected (single-use, atomic consumption)', async () => {
-      const states = [{ nonce: 'n1', shopId: SHOP_A, userId: '507f1f77bcf86cd799439071' }];
+      const states = [
+        { nonce: 'n1', shopId: SHOP_A, userId: '507f1f77bcf86cd799439071' },
+      ];
       const { service, states: live } = bootConnect(states, { role: 'admin' });
       // First consumption succeeds…
-      await (service as any).consumeStateNonce('n1', SHOP_A, '507f1f77bcf86cd799439071');
+      await (service as any).consumeStateNonce(
+        'n1',
+        SHOP_A,
+        '507f1f77bcf86cd799439071',
+      );
       expect(live).toHaveLength(0);
       // …the replay finds nothing.
       await expect(
-        (service as any).consumeStateNonce('n1', SHOP_A, '507f1f77bcf86cd799439071'),
+        (service as any).consumeStateNonce(
+          'n1',
+          SHOP_A,
+          '507f1f77bcf86cd799439071',
+        ),
       ).rejects.toThrow(/already used or is unknown/);
     });
 
     it('a user REMOVED from the shop or DOWNGRADED cannot complete the connection', async () => {
-      const states = [{ nonce: 'n2', shopId: SHOP_A, userId: '507f1f77bcf86cd799439071' }];
+      const states = [
+        { nonce: 'n2', shopId: SHOP_A, userId: '507f1f77bcf86cd799439071' },
+      ];
       const { service } = bootConnect(states, { role: 'cashier' }); // downgraded since initiation
       await expect(
-        (service as any).consumeStateNonce('n2', SHOP_A, '507f1f77bcf86cd799439071'),
+        (service as any).consumeStateNonce(
+          'n2',
+          SHOP_A,
+          '507f1f77bcf86cd799439071',
+        ),
       ).rejects.toThrow(/no longer an administrator/);
       expect(states).toHaveLength(0); // consumed regardless — no reuse
     });
   });
 
   describe('B1/C: initiation gates', () => {
-    function bootInitiate(shopCfg: any, opts: { platformKey?: string; existing?: any } = {}) {
+    function bootInitiate(
+      shopCfg: any,
+      opts: { platformKey?: string; existing?: any } = {},
+    ) {
       const created: any[] = [];
       const ready = !!(shopCfg.accountId && shopCfg.chargesEnabled);
       const connectService = {
         getAccountContext: jest.fn(() =>
           ready
-            ? Promise.resolve({ accountId: shopCfg.accountId, publishableKey: 'pk_acct_A' })
-            : Promise.reject(new BadRequestException('Card payments are disabled')),
+            ? Promise.resolve({
+                accountId: shopCfg.accountId,
+                publishableKey: 'pk_acct_A',
+              })
+            : Promise.reject(
+                new BadRequestException('Card payments are disabled'),
+              ),
         ),
         requireConnectedAccountId: jest.fn(() =>
           ready
             ? Promise.resolve(shopCfg.accountId)
-            : Promise.reject(new BadRequestException('Card payments are disabled')),
+            : Promise.reject(
+                new BadRequestException('Card payments are disabled'),
+              ),
         ),
-        getStatus: jest.fn().mockResolvedValue({ environment: shopCfg.environment }),
+        getStatus: jest
+          .fn()
+          .mockResolvedValue({ environment: shopCfg.environment }),
       };
       const paymentModel: any = Object.assign(
         jest.fn().mockImplementation((data: any) => ({
@@ -412,7 +528,8 @@ describe('SMARTDUKA_STRIPE_MULTITENANT_FIX1 — Stripe acceptance suite', () => 
           findOne: jest.fn().mockResolvedValue(opts.existing ?? null),
           countDocuments: jest.fn().mockResolvedValue(0),
           updateOne: jest.fn(async (_f: any, u: any) => {
-            if (opts.existing && u.$set?.status) opts.existing.status = u.$set.status;
+            if (opts.existing && u.$set?.status)
+              opts.existing.status = u.$set.status;
             return { modifiedCount: 1 };
           }),
           create: jest.fn(async (d: any) => {
@@ -435,7 +552,7 @@ describe('SMARTDUKA_STRIPE_MULTITENANT_FIX1 — Stripe acceptance suite', () => 
         {} as any, // customerService
         connectService as any,
         { get: jest.fn(() => opts.platformKey ?? 'sk_test_x') } as any, // configService
-        paymentModel as any,
+        paymentModel,
         {} as any, // orderModel
         {} as any, // paymentTransactionService
         {} as any, // orderPaymentAuthority
@@ -445,19 +562,33 @@ describe('SMARTDUKA_STRIPE_MULTITENANT_FIX1 — Stripe acceptance suite', () => 
     }
 
     it('a DISCONNECTED shop cannot initiate card payments', async () => {
-      const { service } = bootInitiate({ accountId: null, chargesEnabled: false });
+      const { service } = bootInitiate({
+        accountId: null,
+        chargesEnabled: false,
+      });
       await expect(
         service.createPOSPayment({
-          shopId: SHOP_A, orderId: ORDER_A, orderNumber: 'STK-A-1', amount: 10000, currency: 'kes',
+          shopId: SHOP_A,
+          orderId: ORDER_A,
+          orderNumber: 'STK-A-1',
+          amount: 10000,
+          currency: 'kes',
         }),
       ).rejects.toThrow(/disabled/);
     });
 
     it('a RESTRICTED (charges-disabled) account cannot initiate card payments', async () => {
-      const { service } = bootInitiate({ accountId: 'acct_A', chargesEnabled: false });
+      const { service } = bootInitiate({
+        accountId: 'acct_A',
+        chargesEnabled: false,
+      });
       await expect(
         service.createPOSPayment({
-          shopId: SHOP_A, orderId: ORDER_A, orderNumber: 'STK-A-1', amount: 10000, currency: 'kes',
+          shopId: SHOP_A,
+          orderId: ORDER_A,
+          orderNumber: 'STK-A-1',
+          amount: 10000,
+          currency: 'kes',
         }),
       ).rejects.toThrow(/disabled/);
     });
@@ -469,15 +600,27 @@ describe('SMARTDUKA_STRIPE_MULTITENANT_FIX1 — Stripe acceptance suite', () => 
       );
       await expect(
         service.createPOSPayment({
-          shopId: SHOP_A, orderId: ORDER_A, orderNumber: 'STK-A-1', amount: 10000, currency: 'kes',
+          shopId: SHOP_A,
+          orderId: ORDER_A,
+          orderNumber: 'STK-A-1',
+          amount: 10000,
+          currency: 'kes',
         }),
       ).rejects.toThrow(/different modes/);
     });
 
     it('the initiation response carries the CONNECTED-ACCOUNT context (pk + account)', async () => {
-      const { service } = bootInitiate({ accountId: 'acct_A', chargesEnabled: true, environment: 'test' });
+      const { service } = bootInitiate({
+        accountId: 'acct_A',
+        chargesEnabled: true,
+        environment: 'test',
+      });
       const result = await service.createPOSPayment({
-        shopId: SHOP_A, orderId: ORDER_A, orderNumber: 'STK-A-1', amount: 10000, currency: 'kes',
+        shopId: SHOP_A,
+        orderId: ORDER_A,
+        orderNumber: 'STK-A-1',
+        amount: 10000,
+        currency: 'kes',
       });
       expect(result.stripeAccount).toBe('acct_A');
       // RELEASE-GATE CORRECTED: no account-pk retrieval dependency — the
@@ -495,7 +638,11 @@ describe('SMARTDUKA_STRIPE_MULTITENANT_FIX1 — Stripe acceptance suite', () => 
         { existing: stale },
       );
       const result = await service.createPOSPayment({
-        shopId: SHOP_A, orderId: ORDER_A, orderNumber: 'STK-A-1', amount: 10000, currency: 'kes',
+        shopId: SHOP_A,
+        orderId: ORDER_A,
+        orderNumber: 'STK-A-1',
+        amount: 10000,
+        currency: 'kes',
       });
       expect(stripeService.cancelPaymentIntent).toHaveBeenCalledWith('pi_111');
       expect(result.paymentIntentId).toBe('pi_new'); // fresh intent
@@ -503,10 +650,28 @@ describe('SMARTDUKA_STRIPE_MULTITENANT_FIX1 — Stripe acceptance suite', () => 
     });
 
     it('deterministic idempotency keys: the same attempt returns the SAME key', async () => {
-      const { service } = bootInitiate({ accountId: 'acct_A', chargesEnabled: true, environment: 'test' });
-      await service.createPOSPayment({ shopId: SHOP_A, orderId: ORDER_A, orderNumber: 'STK-A-1', amount: 10000, currency: 'kes' });
-      const key1 = (service as any).generateIdempotencyKey(SHOP_A, `${ORDER_A}_0`, 'pos');
-      const key2 = (service as any).generateIdempotencyKey(SHOP_A, `${ORDER_A}_0`, 'pos');
+      const { service } = bootInitiate({
+        accountId: 'acct_A',
+        chargesEnabled: true,
+        environment: 'test',
+      });
+      await service.createPOSPayment({
+        shopId: SHOP_A,
+        orderId: ORDER_A,
+        orderNumber: 'STK-A-1',
+        amount: 10000,
+        currency: 'kes',
+      });
+      const key1 = (service as any).generateIdempotencyKey(
+        SHOP_A,
+        `${ORDER_A}_0`,
+        'pos',
+      );
+      const key2 = (service as any).generateIdempotencyKey(
+        SHOP_A,
+        `${ORDER_A}_0`,
+        'pos',
+      );
       expect(key1).toBe(key2); // no Date.now() — retries reuse the key
       expect(key1).not.toContain('17'); // no timestamp embedded
     });

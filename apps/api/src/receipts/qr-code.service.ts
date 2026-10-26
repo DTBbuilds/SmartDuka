@@ -14,7 +14,9 @@ export class QRCodeService {
       const encodedData = encodeURIComponent(data);
       const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodedData}`;
 
-      this.logger.log(`QR code generated for data: ${data.substring(0, 50)}...`);
+      this.logger.log(
+        `QR code generated for data: ${data.substring(0, 50)}...`,
+      );
 
       return qrCodeUrl;
     } catch (error: any) {
@@ -44,7 +46,11 @@ export class QRCodeService {
   /**
    * Generate QR code for order/receipt
    */
-  generateOrderQRCode(orderId: string, orderNumber: string, total: number): string {
+  generateOrderQRCode(
+    orderId: string,
+    orderNumber: string,
+    total: number,
+  ): string {
     try {
       const data = JSON.stringify({
         type: 'order',
@@ -82,7 +88,11 @@ export class QRCodeService {
   /**
    * Generate QR code for payment
    */
-  generatePaymentQRCode(orderId: string, amount: number, phoneNumber: string): string {
+  generatePaymentQRCode(
+    orderId: string,
+    amount: number,
+    phoneNumber: string,
+  ): string {
     try {
       // M-Pesa payment QR code
       const data = `BEGIN:VCARD

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/require-await, @typescript-eslint/no-unused-vars */
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
@@ -23,14 +22,17 @@ export class AiOrchestratorService {
   @Cron('0 6 * * *')
   async runDailyAnalysis(): Promise<void> {
     this.logger.log('Starting daily AI analysis...');
-    
+
     try {
-      const shops = await this.shopModel.find({ status: 'active' }).select('_id name').lean();
-      
+      const shops = await this.shopModel
+        .find({ status: 'active' })
+        .select('_id name')
+        .lean();
+
       for (const shop of shops) {
         await this.analyzeShop((shop as any)._id.toString());
       }
-      
+
       this.logger.log(`Daily analysis completed for ${shops.length} shops`);
     } catch (error: any) {
       this.logger.error(`Daily analysis failed: ${error.message}`);
@@ -44,7 +46,7 @@ export class AiOrchestratorService {
 
   async analyzeShop(shopId: string): Promise<void> {
     this.logger.debug(`Analyzing shop ${shopId}`);
-    
+
     try {
       await Promise.all([
         this.anomalyService.detectSalesAnomalies(shopId),
@@ -56,7 +58,9 @@ export class AiOrchestratorService {
     }
   }
 
-  async triggerManualAnalysis(shopId: string): Promise<{ success: boolean; message: string }> {
+  async triggerManualAnalysis(
+    shopId: string,
+  ): Promise<{ success: boolean; message: string }> {
     try {
       await this.analyzeShop(shopId);
       return { success: true, message: 'Analysis completed successfully' };

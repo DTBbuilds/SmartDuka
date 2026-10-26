@@ -55,7 +55,9 @@ export class StripeConnectController {
   @Roles('admin')
   @Get('oauth-url')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get Stripe Connect OAuth authorize URL for this shop' })
+  @ApiOperation({
+    summary: 'Get Stripe Connect OAuth authorize URL for this shop',
+  })
   async getOAuthUrl(
     @CurrentUser() user: JwtPayload,
   ): Promise<{ success: boolean; url: string }> {
@@ -79,7 +81,9 @@ export class StripeConnectController {
    * parameter so the frontend can show a toast.
    */
   @Get('callback')
-  @ApiOperation({ summary: 'Stripe OAuth redirect target (public, state-signed)' })
+  @ApiOperation({
+    summary: 'Stripe OAuth redirect target (public, state-signed)',
+  })
   async oauthCallback(
     @Query('code') code: string,
     @Query('state') state: string,
@@ -94,7 +98,9 @@ export class StripeConnectController {
     const settingsUrl = `${webBase.replace(/\/$/, '')}/settings?tab=stripe`;
 
     if (error) {
-      this.logger.warn(`Stripe OAuth returned error: ${error} - ${errorDescription}`);
+      this.logger.warn(
+        `Stripe OAuth returned error: ${error} - ${errorDescription}`,
+      );
       return res.redirect(
         `${settingsUrl}&stripe_connect=error&reason=${encodeURIComponent(error)}`,
       );
@@ -117,7 +123,9 @@ export class StripeConnectController {
   @UseGuards(JwtAuthGuard)
   @Get('status')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get the current Stripe Connect status for this shop' })
+  @ApiOperation({
+    summary: 'Get the current Stripe Connect status for this shop',
+  })
   async getStatus(@CurrentUser() user: JwtPayload) {
     if (!user?.shopId) {
       return { success: true, isConnected: false, isCardReady: false };
@@ -135,7 +143,9 @@ export class StripeConnectController {
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Re-sync Stripe Connect account status for this shop' })
+  @ApiOperation({
+    summary: 'Re-sync Stripe Connect account status for this shop',
+  })
   async refresh(@CurrentUser() user: JwtPayload) {
     if (!user?.shopId) throw new BadRequestException('No shop context');
     await this.connectService.syncAccountStatus(user.shopId);
@@ -152,7 +162,9 @@ export class StripeConnectController {
   @Roles('admin')
   @Get('dashboard-link')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get URL to the shop owner\u0027s Stripe dashboard' })
+  @ApiOperation({
+    summary: 'Get URL to the shop owner\u0027s Stripe dashboard',
+  })
   async dashboardLink(@CurrentUser() user: JwtPayload) {
     if (!user?.shopId) throw new BadRequestException('No shop context');
     const url = await this.connectService.getDashboardUrl(user.shopId);

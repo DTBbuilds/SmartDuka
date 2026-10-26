@@ -33,10 +33,14 @@ export class SuppliersService {
   private readonly logger = new Logger(SuppliersService.name);
 
   constructor(
-    @InjectModel(Supplier.name) private readonly supplierModel: Model<SupplierDocument>,
+    @InjectModel(Supplier.name)
+    private readonly supplierModel: Model<SupplierDocument>,
   ) {}
 
-  async create(shopId: string, dto: CreateSupplierDto): Promise<SupplierDocument> {
+  async create(
+    shopId: string,
+    dto: CreateSupplierDto,
+  ): Promise<SupplierDocument> {
     const supplier = new this.supplierModel({
       ...dto,
       shopId: new Types.ObjectId(shopId),
@@ -52,7 +56,10 @@ export class SuppliersService {
       .exec();
   }
 
-  async findById(supplierId: string, shopId: string): Promise<SupplierDocument | null> {
+  async findById(
+    supplierId: string,
+    shopId: string,
+  ): Promise<SupplierDocument | null> {
     return this.supplierModel
       .findOne({
         _id: new Types.ObjectId(supplierId),

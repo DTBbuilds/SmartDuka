@@ -16,7 +16,10 @@ describe('AuthService', () => {
         AuthService,
         { provide: UsersService, useValue: {} },
         { provide: ShopsService, useValue: {} },
-        { provide: JwtService, useValue: { sign: jest.fn(() => 't'), verify: jest.fn() } },
+        {
+          provide: JwtService,
+          useValue: { sign: jest.fn(() => 't'), verify: jest.fn() },
+        },
         { provide: ShopSettingsService, useValue: {} },
         { provide: getModelToken(LoginHistory.name), useValue: {} },
         { provide: getModelToken('SuperAdmin'), useValue: {} },

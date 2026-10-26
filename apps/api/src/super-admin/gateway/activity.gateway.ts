@@ -21,7 +21,8 @@ import { ActivityMonitorService } from '../services/activity-monitor.service';
   namespace: '/super-admin-activity',
 })
 export class ActivityGateway
-  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
+  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
+{
   @WebSocketServer() server: Server;
   private logger: Logger = new Logger('ActivityGateway');
   private connectedSuperAdmins = new Map<string, Socket>();
@@ -38,30 +39,38 @@ export class ActivityGateway
   async handleConnection(client: Socket, ...args: any[]) {
     try {
       // Verify JWT token from handshake
-      const token = client.handshake.auth.token || client.handshake.headers.authorization?.replace('Bearer ', '');
-      
+      const token =
+        client.handshake.auth.token ||
+        client.handshake.headers.authorization?.replace('Bearer ', '');
+
       if (!token) {
-        this.logger.warn(`Connection rejected: No token provided for client ${client.id}`);
+        this.logger.warn(
+          `Connection rejected: No token provided for client ${client.id}`,
+        );
         client.disconnect();
         return;
       }
 
       const payload = this.jwtService.verify(token);
-      
+
       // Only allow super admins
       if (payload.role !== 'super_admin') {
-        this.logger.warn(`Connection rejected: User ${payload.sub} is not a super admin`);
+        this.logger.warn(
+          `Connection rejected: User ${payload.sub} is not a super admin`,
+        );
         client.disconnect();
         return;
       }
 
       // Store connected super admin
       this.connectedSuperAdmins.set(client.id, client);
-      
+
       // Send initial activity data
       const stats = await this.activityMonitorService.getActivityStats();
-      const shopActivities = await this.activityMonitorService.getAllShopActivities();
-      const activeSessions = await this.activityMonitorService.getActiveSessions();
+      const shopActivities =
+        await this.activityMonitorService.getAllShopActivities();
+      const activeSessions =
+        await this.activityMonitorService.getActiveSessions();
 
       client.emit('activity-update', {
         type: 'initial',
@@ -92,9 +101,14 @@ export class ActivityGateway
     try {
       // Send specific shop activity if requested
       if (data.shopId) {
-        const shopActivity = await this.activityMonitorService.getShopActivity(data.shopId);
-        const shopSessions = await this.activityMonitorService.getActiveSessionsForShop(data.shopId);
-        
+        const shopActivity = await this.activityMonitorService.getShopActivity(
+          data.shopId,
+        );
+        const shopSessions =
+          await this.activityMonitorService.getActiveSessionsForShop(
+            data.shopId,
+          );
+
         client.emit('shop-activity-update', {
           shopId: data.shopId,
           data: {
@@ -107,7 +121,9 @@ export class ActivityGateway
       client.emit('subscribed', { type: 'activity', shopId: data.shopId });
     } catch (error) {
       this.logger.error('Error handling subscribe-activity:', error);
-      client.emit('error', { message: 'Failed to subscribe to activity updates' });
+      client.emit('error', {
+        message: 'Failed to subscribe to activity updates',
+      });
     }
   }
 
@@ -116,10 +132,12 @@ export class ActivityGateway
     try {
       await this.activityMonitorService.refreshActiveSessions();
       await this.activityMonitorService.refreshShopActivities();
-      
+
       const stats = await this.activityMonitorService.getActivityStats();
-      const shopActivities = await this.activityMonitorService.getAllShopActivities();
-      const activeSessions = await this.activityMonitorService.getActiveSessions();
+      const shopActivities =
+        await this.activityMonitorService.getAllShopActivities();
+      const activeSessions =
+        await this.activityMonitorService.getActiveSessions();
 
       // Broadcast to all connected super admins
       this.broadcastActivityUpdate({

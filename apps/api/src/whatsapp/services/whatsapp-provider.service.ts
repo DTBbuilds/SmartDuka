@@ -1,12 +1,17 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { WhatsAppProvider, MessageResult, MessageStatus, TemplateParams } from '../providers/whatsapp-provider.interface';
+import {
+  WhatsAppProvider,
+  MessageResult,
+  MessageStatus,
+  TemplateParams,
+} from '../providers/whatsapp-provider.interface';
 import { MetaCloudProvider } from '../providers/meta-cloud.provider';
 import { TwilioProvider } from '../providers/twilio.provider';
 
 /**
  * WhatsApp Provider Service
- * 
+ *
  * Factory/facade that selects and uses the appropriate WhatsApp provider
  * based on configuration. Supports fallback between providers.
  */
@@ -30,12 +35,17 @@ export class WhatsAppProviderService {
     this.providers.set('twilio', this.twilioProvider);
 
     // Select active provider based on config
-    const preferredProvider = this.configService.get<string>('WHATSAPP_PROVIDER', 'meta');
-    
+    const preferredProvider = this.configService.get<string>(
+      'WHATSAPP_PROVIDER',
+      'meta',
+    );
+
     // Try preferred provider first
     if (this.providers.get(preferredProvider)?.isAvailable()) {
       this.activeProvider = this.providers.get(preferredProvider)!;
-      this.logger.log(`✅ Active WhatsApp provider: ${this.activeProvider.name}`);
+      this.logger.log(
+        `✅ Active WhatsApp provider: ${this.activeProvider.name}`,
+      );
       return;
     }
 
@@ -48,7 +58,9 @@ export class WhatsAppProviderService {
       }
     }
 
-    this.logger.log('WhatsApp providers not configured - set META_WHATSAPP_TOKEN and META_WHATSAPP_PHONE_ID to enable');
+    this.logger.log(
+      'WhatsApp providers not configured - set META_WHATSAPP_TOKEN and META_WHATSAPP_PHONE_ID to enable',
+    );
   }
 
   /**
@@ -73,19 +85,26 @@ export class WhatsAppProviderService {
       return { success: false, error: 'No WhatsApp provider available' };
     }
 
-    this.logger.debug(`Sending message to ${to} via ${this.activeProvider.name}`);
+    this.logger.debug(
+      `Sending message to ${to} via ${this.activeProvider.name}`,
+    );
     return this.activeProvider.sendTextMessage(to, message);
   }
 
   /**
    * Send a template message
    */
-  async sendTemplateMessage(to: string, template: TemplateParams): Promise<MessageResult> {
+  async sendTemplateMessage(
+    to: string,
+    template: TemplateParams,
+  ): Promise<MessageResult> {
     if (!this.activeProvider) {
       return { success: false, error: 'No WhatsApp provider available' };
     }
 
-    this.logger.debug(`Sending template ${template.name} to ${to} via ${this.activeProvider.name}`);
+    this.logger.debug(
+      `Sending template ${template.name} to ${to} via ${this.activeProvider.name}`,
+    );
     return this.activeProvider.sendTemplateMessage(to, template);
   }
 
@@ -103,9 +122,13 @@ export class WhatsAppProviderService {
   /**
    * Verify webhook signature
    */
-  verifyWebhookSignature(payload: string, signature: string, provider?: string): boolean {
-    const targetProvider = provider 
-      ? this.providers.get(provider) 
+  verifyWebhookSignature(
+    payload: string,
+    signature: string,
+    provider?: string,
+  ): boolean {
+    const targetProvider = provider
+      ? this.providers.get(provider)
       : this.activeProvider;
 
     if (!targetProvider) return false;

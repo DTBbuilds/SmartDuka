@@ -42,14 +42,21 @@ export const InvoiceItemSchema = SchemaFactory.createForClass(InvoiceItem);
  * - rejected: Super admin rejected the payment
  * - auto_approved: Automatically approved (e.g., cash payments at POS)
  */
-export type PaymentApprovalStatus = 'pending' | 'approved' | 'rejected' | 'auto_approved';
+export type PaymentApprovalStatus =
+  | 'pending'
+  | 'approved'
+  | 'rejected'
+  | 'auto_approved';
 
 @Schema({ _id: false })
 export class InvoicePayment {
   @Prop({ required: true })
   date: Date;
 
-  @Prop({ required: true, enum: ['cash', 'mpesa', 'card', 'bank_transfer', 'cheque', 'other'] })
+  @Prop({
+    required: true,
+    enum: ['cash', 'mpesa', 'card', 'bank_transfer', 'cheque', 'other'],
+  })
   method: string;
 
   @Prop({ required: true, min: 0 })
@@ -62,9 +69,9 @@ export class InvoicePayment {
   notes?: string;
 
   // Approval workflow for manual payments
-  @Prop({ 
-    enum: ['pending', 'approved', 'rejected', 'auto_approved'], 
-    default: 'auto_approved' 
+  @Prop({
+    enum: ['pending', 'approved', 'rejected', 'auto_approved'],
+    default: 'auto_approved',
   })
   approvalStatus: PaymentApprovalStatus;
 
@@ -88,7 +95,8 @@ export class InvoicePayment {
   paymentId?: string;
 }
 
-export const InvoicePaymentSchema = SchemaFactory.createForClass(InvoicePayment);
+export const InvoicePaymentSchema =
+  SchemaFactory.createForClass(InvoicePayment);
 
 @Schema({ timestamps: true })
 export class Invoice {
@@ -108,7 +116,11 @@ export class Invoice {
   orderNumber?: string;
 
   // Invoice type
-  @Prop({ required: true, enum: ['sale', 'proforma', 'credit', 'debit'], default: 'sale' })
+  @Prop({
+    required: true,
+    enum: ['sale', 'proforma', 'credit', 'debit'],
+    default: 'sale',
+  })
   type: 'sale' | 'proforma' | 'credit' | 'debit';
 
   // Business details (seller)
@@ -192,12 +204,27 @@ export class Invoice {
   @Prop({ required: true, min: 0 })
   amountDue: number;
 
-  @Prop({ required: true, enum: ['unpaid', 'partial', 'paid', 'overdue', 'cancelled'], default: 'unpaid' })
+  @Prop({
+    required: true,
+    enum: ['unpaid', 'partial', 'paid', 'overdue', 'cancelled'],
+    default: 'unpaid',
+  })
   paymentStatus: 'unpaid' | 'partial' | 'paid' | 'overdue' | 'cancelled';
 
   // Status
-  @Prop({ required: true, enum: ['draft', 'sent', 'viewed', 'paid', 'overdue', 'cancelled', 'void'], default: 'draft' })
-  status: 'draft' | 'sent' | 'viewed' | 'paid' | 'overdue' | 'cancelled' | 'void';
+  @Prop({
+    required: true,
+    enum: ['draft', 'sent', 'viewed', 'paid', 'overdue', 'cancelled', 'void'],
+    default: 'draft',
+  })
+  status:
+    | 'draft'
+    | 'sent'
+    | 'viewed'
+    | 'paid'
+    | 'overdue'
+    | 'cancelled'
+    | 'void';
 
   // Additional info
   @Prop()

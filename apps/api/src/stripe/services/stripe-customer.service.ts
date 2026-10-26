@@ -3,11 +3,14 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import Stripe from 'stripe';
 import { StripeService } from '../stripe.service';
-import { StripeCustomer, StripeCustomerDocument } from '../schemas/stripe-customer.schema';
+import {
+  StripeCustomer,
+  StripeCustomerDocument,
+} from '../schemas/stripe-customer.schema';
 
 /**
  * Stripe Customer Service
- * 
+ *
  * Manages Stripe customers and syncs with local database.
  * Supports both shop-level and user-level customers.
  */
@@ -66,7 +69,9 @@ export class StripeCustomerService {
 
     await customer.save();
 
-    this.logger.log(`Created Stripe customer ${stripeCustomer.id} for shop ${params.shopId}`);
+    this.logger.log(
+      `Created Stripe customer ${stripeCustomer.id} for shop ${params.shopId}`,
+    );
 
     return customer;
   }
@@ -74,7 +79,9 @@ export class StripeCustomerService {
   /**
    * Get customer by shop ID
    */
-  async getCustomerByShopId(shopId: string): Promise<StripeCustomerDocument | null> {
+  async getCustomerByShopId(
+    shopId: string,
+  ): Promise<StripeCustomerDocument | null> {
     return this.customerModel.findOne({
       shopId: new Types.ObjectId(shopId),
       isActive: true,
@@ -84,7 +91,9 @@ export class StripeCustomerService {
   /**
    * Get customer by Stripe customer ID
    */
-  async getCustomerByStripeId(stripeCustomerId: string): Promise<StripeCustomerDocument | null> {
+  async getCustomerByStripeId(
+    stripeCustomerId: string,
+  ): Promise<StripeCustomerDocument | null> {
     return this.customerModel.findOne({ stripeCustomerId });
   }
 
@@ -160,7 +169,9 @@ export class StripeCustomerService {
       );
     }
 
-    this.logger.log(`Attached payment method ${paymentMethodId} to customer ${stripeCustomerId}`);
+    this.logger.log(
+      `Attached payment method ${paymentMethodId} to customer ${stripeCustomerId}`,
+    );
   }
 
   /**
@@ -211,7 +222,9 @@ export class StripeCustomerService {
   /**
    * Create a setup intent for saving payment methods
    */
-  async createSetupIntent(stripeCustomerId: string): Promise<Stripe.SetupIntent> {
+  async createSetupIntent(
+    stripeCustomerId: string,
+  ): Promise<Stripe.SetupIntent> {
     const stripe = this.stripeService.getClient();
 
     const setupIntent = await stripe.setupIntents.create({
@@ -250,7 +263,8 @@ export class StripeCustomerService {
           phone: stripeCustomer.phone || '',
           delinquent: stripeCustomer.delinquent,
           defaultPaymentMethodId:
-            typeof stripeCustomer.invoice_settings?.default_payment_method === 'string'
+            typeof stripeCustomer.invoice_settings?.default_payment_method ===
+            'string'
               ? stripeCustomer.invoice_settings.default_payment_method
               : stripeCustomer.invoice_settings?.default_payment_method?.id,
         },

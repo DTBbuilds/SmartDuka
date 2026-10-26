@@ -1,24 +1,30 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/require-await, @typescript-eslint/restrict-template-expressions, @typescript-eslint/no-unused-vars */
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { ConfigService } from '@nestjs/config';
 import { Shop, ShopDocument } from '../../shops/schemas/shop.schema';
 import { AiDataService } from './ai-data.service';
-import { BusinessSummaryService, DailyMetrics } from './business-summary.service';
+import {
+  BusinessSummaryService,
+  DailyMetrics,
+} from './business-summary.service';
 import { WhatsAppService } from '../../whatsapp/services/whatsapp.service';
-import { WhatsAppTemplateService, DailyReportData, WeeklyReportData } from '../../whatsapp/services/whatsapp-template.service';
+import {
+  WhatsAppTemplateService,
+  DailyReportData,
+  WeeklyReportData,
+} from '../../whatsapp/services/whatsapp-template.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { ReportsService } from '../../reports/reports.service';
 
 /**
  * AI Report Scheduler Service
- * 
+ *
  * Coordinates the generation and delivery of AI-powered reports via:
  * - WhatsApp
  * - Email
  * - In-app notifications
- * 
+ *
  * Schedules:
  * - Daily reports: 8 PM local time
  * - Weekly reports: Sunday 8 AM
@@ -41,8 +47,11 @@ export class AiReportSchedulerService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    this.isEnabled = this.configService.get<string>('AI_REPORTS_ENABLED', 'true') === 'true';
-    this.logger.log(`AI Report Scheduler ${this.isEnabled ? 'ENABLED' : 'DISABLED'}`);
+    this.isEnabled =
+      this.configService.get<string>('AI_REPORTS_ENABLED', 'true') === 'true';
+    this.logger.log(
+      `AI Report Scheduler ${this.isEnabled ? 'ENABLED' : 'DISABLED'}`,
+    );
   }
 
   // ==================== SCHEDULED JOBS ====================
@@ -65,39 +74,55 @@ export class AiReportSchedulerService implements OnModuleInit {
     yesterday.setDate(yesterday.getDate() - 1);
 
     // Get metrics from AI data service
-    const metrics = await this.aiDataService.getDailySalesMetrics(shopId, yesterday);
+    const metrics = await this.aiDataService.getDailySalesMetrics(
+      shopId,
+      yesterday,
+    );
     const twoDaysAgo = new Date(yesterday);
     twoDaysAgo.setDate(twoDaysAgo.getDate() - 1);
-    const previousDay = await this.aiDataService.getDailySalesMetrics(shopId, twoDaysAgo);
+    const previousDay = await this.aiDataService.getDailySalesMetrics(
+      shopId,
+      twoDaysAgo,
+    );
 
     // Get low stock items
-    const lowStockProducts = await this.aiDataService.getLowStockProducts(shopId);
+    const lowStockProducts =
+      await this.aiDataService.getLowStockProducts(shopId);
 
     // Build report data
     const reportData: DailyReportData = {
       shopName: shop.name,
-      date: yesterday.toLocaleDateString('en-KE', { 
-        weekday: 'long', 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
+      date: yesterday.toLocaleDateString('en-KE', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
       }),
       totalRevenue: metrics.revenue,
-      revenueChange: previousDay.revenue > 0
-        ? ((metrics.revenue - previousDay.revenue) / previousDay.revenue) * 100
-        : 0,
+      revenueChange:
+        previousDay.revenue > 0
+          ? ((metrics.revenue - previousDay.revenue) / previousDay.revenue) *
+            100
+          : 0,
       totalOrders: metrics.orders,
-      averageOrderValue: metrics.orders > 0 ? metrics.revenue / metrics.orders : 0,
+      averageOrderValue:
+        metrics.orders > 0 ? metrics.revenue / metrics.orders : 0,
       newCustomers: 0,
       topProducts: [],
       lowStockCount: lowStockProducts.length,
-      lowStockItems: lowStockProducts.slice(0, 5).map(p => ({
+      lowStockItems: lowStockProducts.slice(0, 5).map((p) => ({
         name: p.name,
         stock: p.stock || 0,
         reorderPoint: p.reorderPoint,
       })),
-      alerts: this.buildAlerts({ ...metrics, lowStockCount: lowStockProducts.length }),
-      recommendations: this.buildRecommendations({ ...metrics, lowStockCount: lowStockProducts.length }),
+      alerts: this.buildAlerts({
+        ...metrics,
+        lowStockCount: lowStockProducts.length,
+      }),
+      recommendations: this.buildRecommendations({
+        ...metrics,
+        lowStockCount: lowStockProducts.length,
+      }),
     };
 
     // Send via WhatsApp
@@ -116,7 +141,7 @@ export class AiReportSchedulerService implements OnModuleInit {
    */
   async generateAndSendWeeklyReport(shop: ShopDocument): Promise<void> {
     const shopId = (shop as any)._id.toString();
-    
+
     // Get last 7 days data
     const endDate = new Date();
     endDate.setDate(endDate.getDate() - 1); // Yesterday
@@ -124,25 +149,38 @@ export class AiReportSchedulerService implements OnModuleInit {
     startDate.setDate(startDate.getDate() - 6); // 7 days ago
 
     // Get weekly report from reports service
-    const weeklyReport = await this.reportsService.getWeeklySalesReport(shopId, startDate);
+    const weeklyReport = await this.reportsService.getWeeklySalesReport(
+      shopId,
+      startDate,
+    );
 
     // Calculate week-over-week change
     const previousWeekStart = new Date(startDate);
     previousWeekStart.setDate(previousWeekStart.getDate() - 7);
-    const previousWeekReport = await this.reportsService.getWeeklySalesReport(shopId, previousWeekStart);
-    
-    const revenueChange = previousWeekReport.revenue > 0
-      ? ((weeklyReport.revenue - previousWeekReport.revenue) / previousWeekReport.revenue) * 100
-      : 0;
+    const previousWeekReport = await this.reportsService.getWeeklySalesReport(
+      shopId,
+      previousWeekStart,
+    );
+
+    const revenueChange =
+      previousWeekReport.revenue > 0
+        ? ((weeklyReport.revenue - previousWeekReport.revenue) /
+            previousWeekReport.revenue) *
+          100
+        : 0;
 
     // Find best and worst days
-    const dailyRevenues = weeklyReport.dailyBreakdown.map((d, i) => ({ 
-      day: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][new Date(startDate.getTime() + i * 24 * 60 * 60 * 1000).getDay()],
+    const dailyRevenues = weeklyReport.dailyBreakdown.map((d, i) => ({
+      day: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][
+        new Date(startDate.getTime() + i * 24 * 60 * 60 * 1000).getDay()
+      ],
       revenue: d.revenue,
       orders: d.orders,
     }));
-    
-    const sortedByRevenue = [...dailyRevenues].sort((a, b) => b.revenue - a.revenue);
+
+    const sortedByRevenue = [...dailyRevenues].sort(
+      (a, b) => b.revenue - a.revenue,
+    );
     const bestDay = sortedByRevenue[0]?.day;
     const worstDay = sortedByRevenue[sortedByRevenue.length - 1]?.day;
 
@@ -155,23 +193,28 @@ export class AiReportSchedulerService implements OnModuleInit {
       totalOrders: weeklyReport.orders,
       avgDailyRevenue: weeklyReport.revenue / 7,
       dailyBreakdown: dailyRevenues.map((d, i) => ({
-        dayOfWeek: new Date(startDate.getTime() + i * 24 * 60 * 60 * 1000).getDay(),
-        date: new Date(startDate.getTime() + i * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        dayOfWeek: new Date(
+          startDate.getTime() + i * 24 * 60 * 60 * 1000,
+        ).getDay(),
+        date: new Date(startDate.getTime() + i * 24 * 60 * 60 * 1000)
+          .toISOString()
+          .split('T')[0],
         revenue: d.revenue,
         orders: d.orders,
       })),
-      topProducts: weeklyReport.topProducts.map(p => ({
+      topProducts: weeklyReport.topProducts.map((p) => ({
         name: p.productName,
         quantity: p.quantity,
         revenue: p.revenue,
       })),
       bestDay,
       worstDay,
-      growthTrend: revenueChange > 5 
-        ? 'Revenue is trending up - keep the momentum!' 
-        : revenueChange < -5 
-          ? 'Consider promotional activities to boost sales'
-          : 'Stable performance this week',
+      growthTrend:
+        revenueChange > 5
+          ? 'Revenue is trending up - keep the momentum!'
+          : revenueChange < -5
+            ? 'Consider promotional activities to boost sales'
+            : 'Stable performance this week',
     };
 
     // Send via WhatsApp
@@ -185,18 +228,25 @@ export class AiReportSchedulerService implements OnModuleInit {
    */
   async generateAndSendMonthlyReport(shop: ShopDocument): Promise<void> {
     const shopId = (shop as any)._id.toString();
-    
+
     // Get previous month
     const now = new Date();
-    const year = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
+    const year =
+      now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
     const month = now.getMonth() === 0 ? 12 : now.getMonth();
 
     // Get monthly report
-    const monthlyReport = await this.reportsService.getMonthlySalesReport(shopId, year, month);
+    const monthlyReport = await this.reportsService.getMonthlySalesReport(
+      shopId,
+      year,
+      month,
+    );
 
     // TODO: Send monthly report via WhatsApp
     // For now, just log
-    this.logger.debug(`Monthly report generated for shop ${shopId}: ${monthlyReport.month} ${monthlyReport.year}`);
+    this.logger.debug(
+      `Monthly report generated for shop ${shopId}: ${monthlyReport.month} ${monthlyReport.year}`,
+    );
   }
 
   // ==================== MANUAL TRIGGERS ====================
@@ -226,10 +276,12 @@ export class AiReportSchedulerService implements OnModuleInit {
   // ==================== HELPERS ====================
 
   private async getActiveShops(): Promise<ShopDocument[]> {
-    return this.shopModel.find({
-      status: { $in: ['active', 'verified'] },
-      isSubscriptionActive: true,
-    }).exec();
+    return this.shopModel
+      .find({
+        status: { $in: ['active', 'verified'] },
+        isSubscriptionActive: true,
+      })
+      .exec();
   }
 
   private buildAlerts(metrics: any): Array<{ icon: string; message: string }> {
@@ -261,8 +313,10 @@ export class AiReportSchedulerService implements OnModuleInit {
 
     if (metrics.orders === 0) {
       recommendations.push('No sales today - consider promotional activities');
-    } else if ((metrics.revenue / metrics.orders) < 500) {
-      recommendations.push('Consider upselling strategies to increase order value');
+    } else if (metrics.revenue / metrics.orders < 500) {
+      recommendations.push(
+        'Consider upselling strategies to increase order value',
+      );
     }
 
     if (recommendations.length === 0) {

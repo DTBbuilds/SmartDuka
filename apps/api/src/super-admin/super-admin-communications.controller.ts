@@ -14,12 +14,15 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { SuperAdminCommunicationsService } from './services/super-admin-communications.service';
-import { SendManualEmailDto, CreateManualInvoiceDto } from './dto/communications.dto';
+import {
+  SendManualEmailDto,
+  CreateManualInvoiceDto,
+} from './dto/communications.dto';
 import { EmailService } from '../notifications/email.service';
 
 /**
  * Super Admin Communications Controller
- * 
+ *
  * Endpoints for manual email sending and invoice generation:
  * - Send manual emails to shop owners
  * - Create manual invoices
@@ -72,15 +75,25 @@ export class SuperAdminCommunicationsController {
       throw new BadRequestException('Subject and content are required');
     }
 
-    if (dto.recipientType === 'shop' && (!dto.shopIds || dto.shopIds.length === 0)) {
+    if (
+      dto.recipientType === 'shop' &&
+      (!dto.shopIds || dto.shopIds.length === 0)
+    ) {
       throw new BadRequestException('At least one shop must be selected');
     }
 
-    if (dto.recipientType === 'custom' && (!dto.customEmails || dto.customEmails.length === 0)) {
+    if (
+      dto.recipientType === 'custom' &&
+      (!dto.customEmails || dto.customEmails.length === 0)
+    ) {
       throw new BadRequestException('At least one email address is required');
     }
 
-    return this.communicationsService.sendManualEmail(dto, user.sub, user.email);
+    return this.communicationsService.sendManualEmail(
+      dto,
+      user.sub,
+      user.email,
+    );
   }
 
   /**
@@ -149,7 +162,11 @@ export class SuperAdminCommunicationsController {
       throw new BadRequestException('Due date is required');
     }
 
-    return this.communicationsService.createManualInvoice(dto, user.sub, user.email);
+    return this.communicationsService.createManualInvoice(
+      dto,
+      user.sub,
+      user.email,
+    );
   }
 
   /**
@@ -160,7 +177,13 @@ export class SuperAdminCommunicationsController {
     @Param('id') invoiceId: string,
     @CurrentUser() user: any,
   ) {
-    this.logger.log(`Super admin ${user.email} resending invoice email for ${invoiceId}`);
-    return this.communicationsService.resendInvoiceEmail(invoiceId, user.sub, user.email);
+    this.logger.log(
+      `Super admin ${user.email} resending invoice email for ${invoiceId}`,
+    );
+    return this.communicationsService.resendInvoiceEmail(
+      invoiceId,
+      user.sub,
+      user.email,
+    );
   }
 }

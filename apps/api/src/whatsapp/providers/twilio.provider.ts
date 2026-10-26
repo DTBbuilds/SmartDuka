@@ -1,10 +1,20 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
-import { WhatsAppProvider, MessageResult, MessageStatus, TemplateParams } from './whatsapp-provider.interface';
+import {
+  WhatsAppProvider,
+  MessageResult,
+  MessageStatus,
+  TemplateParams,
+} from './whatsapp-provider.interface';
 
 // Response types for Twilio API
-type TwilioSendResponse = { sid?: string; message?: string; code?: number; status?: string };
+type TwilioSendResponse = {
+  sid?: string;
+  message?: string;
+  code?: number;
+  status?: string;
+};
 type TwilioStatusResponse = { status?: string };
 
 @Injectable()
@@ -20,7 +30,10 @@ export class TwilioProvider implements WhatsAppProvider {
   constructor(private readonly configService: ConfigService) {
     this.accountSid = this.configService.get<string>('TWILIO_ACCOUNT_SID', '');
     this.authToken = this.configService.get<string>('TWILIO_AUTH_TOKEN', '');
-    this.whatsappNumber = this.configService.get<string>('TWILIO_WHATSAPP_NUMBER', '');
+    this.whatsappNumber = this.configService.get<string>(
+      'TWILIO_WHATSAPP_NUMBER',
+      '',
+    );
 
     if (this.isAvailable()) {
       this.logger.log('✅ Twilio WhatsApp provider initialized');
@@ -37,25 +50,34 @@ export class TwilioProvider implements WhatsAppProvider {
     }
 
     try {
-      const credentials = Buffer.from(`${this.accountSid}:${this.authToken}`).toString('base64');
+      const credentials = Buffer.from(
+        `${this.accountSid}:${this.authToken}`,
+      ).toString('base64');
       const formData = new URLSearchParams();
       formData.append('From', `whatsapp:${this.whatsappNumber}`);
       formData.append('To', `whatsapp:${to}`);
       formData.append('Body', message);
 
-      const response = await fetch(`${this.baseUrl}/Accounts/${this.accountSid}/Messages.json`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Basic ${credentials}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
+      const response = await fetch(
+        `${this.baseUrl}/Accounts/${this.accountSid}/Messages.json`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Basic ${credentials}`,
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: formData.toString(),
         },
-        body: formData.toString(),
-      });
+      );
 
       const data = (await response.json()) as TwilioSendResponse;
 
       if (!response.ok) {
-        return { success: false, error: data.message ?? 'Unknown error', errorCode: data.code?.toString() };
+        return {
+          success: false,
+          error: data.message ?? 'Unknown error',
+          errorCode: data.code?.toString(),
+        };
       }
 
       return { success: true, messageId: data.sid };
@@ -65,7 +87,10 @@ export class TwilioProvider implements WhatsAppProvider {
     }
   }
 
-  async sendTemplateMessage(to: string, template: TemplateParams): Promise<MessageResult> {
+  async sendTemplateMessage(
+    to: string,
+    template: TemplateParams,
+  ): Promise<MessageResult> {
     return this.sendTextMessage(to, `Template: ${template.name}`);
   }
 
@@ -75,14 +100,25 @@ export class TwilioProvider implements WhatsAppProvider {
     }
 
     try {
-      const credentials = Buffer.from(`${this.accountSid}:${this.authToken}`).toString('base64');
-      const response = await fetch(`${this.baseUrl}/Accounts/${this.accountSid}/Messages/${messageId}.json`, {
-        headers: { 'Authorization': `Basic ${credentials}` },
-      });
+      const credentials = Buffer.from(
+        `${this.accountSid}:${this.authToken}`,
+      ).toString('base64');
+      const response = await fetch(
+        `${this.baseUrl}/Accounts/${this.accountSid}/Messages/${messageId}.json`,
+        {
+          headers: { Authorization: `Basic ${credentials}` },
+        },
+      );
 
       const data = (await response.json()) as TwilioStatusResponse;
       const statusMap: Record<string, MessageStatus['status']> = {
-        queued: 'queued', sending: 'sent', sent: 'sent', delivered: 'delivered', read: 'read', failed: 'failed', undelivered: 'failed',
+        queued: 'queued',
+        sending: 'sent',
+        sent: 'sent',
+        delivered: 'delivered',
+        read: 'read',
+        failed: 'failed',
+        undelivered: 'failed',
       };
 
       return { messageId, status: statusMap[data.status ?? ''] || 'sent' };
@@ -94,7 +130,10 @@ export class TwilioProvider implements WhatsAppProvider {
 
   verifyWebhookSignature(payload: string, signature: string): boolean {
     if (!this.authToken) return true;
-    const expectedSignature = crypto.createHmac('sha1', this.authToken).update(payload).digest('base64');
+    const expectedSignature = crypto
+      .createHmac('sha1', this.authToken)
+      .update(payload)
+      .digest('base64');
     return expectedSignature === signature;
   }
 }

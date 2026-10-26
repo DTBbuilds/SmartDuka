@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, BadRequestException, Optional } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  Optional,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { nanoid } from 'nanoid';
@@ -34,9 +39,12 @@ export interface ReceiptFilters {
 @Injectable()
 export class ReceiptService {
   constructor(
-    @InjectModel(Receipt.name) private readonly receiptModel: Model<ReceiptDocument>,
+    @InjectModel(Receipt.name)
+    private readonly receiptModel: Model<ReceiptDocument>,
     @InjectModel(Order.name) private readonly orderModel: Model<OrderDocument>,
-    @Optional() @InjectModel('Branch') private readonly branchModel?: Model<BranchDocument>,
+    @Optional()
+    @InjectModel('Branch')
+    private readonly branchModel?: Model<BranchDocument>,
     @Optional() @InjectModel('Shop') private readonly shopModel?: Model<any>,
   ) {}
 
@@ -53,7 +61,11 @@ export class ReceiptService {
    * Create receipt from order
    * Supports branch-specific receipt customization (header, footer, logo)
    */
-  async createFromOrder(shopId: string, branchId: string | undefined, dto: CreateReceiptDto): Promise<ReceiptDocument> {
+  async createFromOrder(
+    shopId: string,
+    branchId: string | undefined,
+    dto: CreateReceiptDto,
+  ): Promise<ReceiptDocument> {
     // Get order
     const order = await this.orderModel.findById(dto.orderId).exec();
     if (!order) {
@@ -66,11 +78,13 @@ export class ReceiptService {
     }
 
     // Check if receipt already exists for this order
-    const existingReceipt = await this.receiptModel.findOne({
-      shopId: new Types.ObjectId(shopId),
-      orderId: new Types.ObjectId(dto.orderId),
-      status: 'active',
-    }).exec();
+    const existingReceipt = await this.receiptModel
+      .findOne({
+        shopId: new Types.ObjectId(shopId),
+        orderId: new Types.ObjectId(dto.orderId),
+        status: 'active',
+      })
+      .exec();
 
     if (existingReceipt) {
       // Return existing receipt instead of creating duplicate
@@ -104,14 +118,20 @@ export class ReceiptService {
 
     // Use branch-specific customization if available
     const headerMessage = branchReceiptSettings?.receiptHeader;
-    const footerMessage = branchReceiptSettings?.receiptFooter || dto.footerMessage || 'Thank you for your purchase!';
+    const footerMessage =
+      branchReceiptSettings?.receiptFooter ||
+      dto.footerMessage ||
+      'Thank you for your purchase!';
     const shopLogo = branchReceiptSettings?.receiptLogo || dto.shopLogo;
 
     // Fetch shop currency if available
     let currency: string | undefined;
     if (this.shopModel) {
       try {
-        const shop = await this.shopModel.findById(shopId).select('currency').exec();
+        const shop = await this.shopModel
+          .findById(shopId)
+          .select('currency')
+          .exec();
         currency = shop?.currency;
       } catch {
         // Ignore shop lookup errors, currency will be undefined
@@ -134,7 +154,7 @@ export class ReceiptService {
       currency,
       branchName: branchName,
       headerMessage: headerMessage,
-      items: order.items.map(item => ({
+      items: order.items.map((item) => ({
         name: item.name,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
@@ -143,15 +163,18 @@ export class ReceiptService {
       subtotal: order.subtotal,
       tax: order.tax,
       total: order.total,
-      payments: order.payments?.map(p => ({
-        method: p.method,
-        amount: p.amount,
-        reference: p.reference,
-        mpesaReceiptNumber: p.mpesaReceiptNumber,
-      })) || [],
+      payments:
+        order.payments?.map((p) => ({
+          method: p.method,
+          amount: p.amount,
+          reference: p.reference,
+          mpesaReceiptNumber: p.mpesaReceiptNumber,
+        })) || [],
       primaryPaymentMethod,
       customerName: order.customerName,
-      cashierId: order.cashierId ? new Types.ObjectId(order.cashierId) : undefined,
+      cashierId: order.cashierId
+        ? new Types.ObjectId(order.cashierId)
+        : undefined,
       cashierName: order.cashierName,
       notes: order.notes,
       footerMessage: footerMessage,
@@ -166,10 +189,12 @@ export class ReceiptService {
    * Get receipt by ID
    */
   async getById(shopId: string, receiptId: string): Promise<ReceiptDocument> {
-    const receipt = await this.receiptModel.findOne({
-      _id: new Types.ObjectId(receiptId),
-      shopId: new Types.ObjectId(shopId),
-    }).exec();
+    const receipt = await this.receiptModel
+      .findOne({
+        _id: new Types.ObjectId(receiptId),
+        shopId: new Types.ObjectId(shopId),
+      })
+      .exec();
 
     if (!receipt) {
       throw new NotFoundException('Receipt not found');
@@ -181,18 +206,26 @@ export class ReceiptService {
   /**
    * Get receipt by order ID
    */
-  async getByOrderId(shopId: string, orderId: string): Promise<ReceiptDocument | null> {
-    return await this.receiptModel.findOne({
-      shopId: new Types.ObjectId(shopId),
-      orderId: new Types.ObjectId(orderId),
-      status: 'active',
-    }).exec();
+  async getByOrderId(
+    shopId: string,
+    orderId: string,
+  ): Promise<ReceiptDocument | null> {
+    return await this.receiptModel
+      .findOne({
+        shopId: new Types.ObjectId(shopId),
+        orderId: new Types.ObjectId(orderId),
+        status: 'active',
+      })
+      .exec();
   }
 
   /**
    * Get receipts with filters
    */
-  async getReceipts(shopId: string, filters?: ReceiptFilters): Promise<ReceiptDocument[]> {
+  async getReceipts(
+    shopId: string,
+    filters?: ReceiptFilters,
+  ): Promise<ReceiptDocument[]> {
     const query: any = { shopId: new Types.ObjectId(shopId) };
 
     if (filters?.paymentMethod && filters.paymentMethod !== 'all') {
@@ -231,7 +264,12 @@ export class ReceiptService {
   /**
    * Void a receipt
    */
-  async voidReceipt(shopId: string, receiptId: string, userId: string, reason: string): Promise<ReceiptDocument> {
+  async voidReceipt(
+    shopId: string,
+    receiptId: string,
+    userId: string,
+    reason: string,
+  ): Promise<ReceiptDocument> {
     const receipt = await this.getById(shopId, receiptId);
 
     if (receipt.status === 'voided') {
@@ -249,7 +287,10 @@ export class ReceiptService {
   /**
    * Track reprint
    */
-  async trackReprint(shopId: string, receiptId: string): Promise<ReceiptDocument> {
+  async trackReprint(
+    shopId: string,
+    receiptId: string,
+  ): Promise<ReceiptDocument> {
     const receipt = await this.getById(shopId, receiptId);
 
     receipt.reprintCount = (receipt.reprintCount || 0) + 1;
@@ -271,24 +312,26 @@ export class ReceiptService {
       if (to) matchStage.createdAt.$lte = new Date(to);
     }
 
-    const stats = await this.receiptModel.aggregate([
-      { $match: matchStage },
-      {
-        $group: {
-          _id: null,
-          totalReceipts: { $sum: 1 },
-          totalAmount: { $sum: '$total' },
-          averageAmount: { $avg: '$total' },
-          totalTax: { $sum: '$tax' },
-          byPaymentMethod: {
-            $push: {
-              method: '$primaryPaymentMethod',
-              amount: '$total',
+    const stats = await this.receiptModel
+      .aggregate([
+        { $match: matchStage },
+        {
+          $group: {
+            _id: null,
+            totalReceipts: { $sum: 1 },
+            totalAmount: { $sum: '$total' },
+            averageAmount: { $avg: '$total' },
+            totalTax: { $sum: '$tax' },
+            byPaymentMethod: {
+              $push: {
+                method: '$primaryPaymentMethod',
+                amount: '$total',
+              },
             },
           },
         },
-      },
-    ]).exec();
+      ])
+      .exec();
 
     if (stats.length === 0) {
       return {
@@ -331,12 +374,12 @@ export class ReceiptService {
     // Header
     lines.push(divider);
     lines.push(this.centerText(receipt.shopName.toUpperCase(), width));
-    
+
     // Branch name if available
     if ((receipt as any).branchName) {
       lines.push(this.centerText((receipt as any).branchName, width));
     }
-    
+
     if (receipt.shopAddress) {
       lines.push(this.centerText(receipt.shopAddress, width));
     }
@@ -346,20 +389,22 @@ export class ReceiptService {
     if (receipt.shopTaxPin) {
       lines.push(this.centerText(`PIN: ${receipt.shopTaxPin}`, width));
     }
-    
+
     // Branch-specific header message
     if ((receipt as any).headerMessage) {
       lines.push(thinDivider);
       lines.push(this.centerText((receipt as any).headerMessage, width));
     }
-    
+
     lines.push(divider);
 
     // Receipt info
     lines.push(`Receipt: ${receipt.receiptNumber}`);
     lines.push(`Order: ${receipt.orderNumber}`);
     const currencyConfig = getCurrencyConfig(receipt.currency);
-    lines.push(`Date: ${new Date(receipt.createdAt!).toLocaleString(currencyConfig.locale)}`);
+    lines.push(
+      `Date: ${new Date(receipt.createdAt!).toLocaleString(currencyConfig.locale)}`,
+    );
     if (receipt.cashierName) {
       lines.push(`Cashier: ${receipt.cashierName}`);
     }
@@ -382,29 +427,77 @@ export class ReceiptService {
 
     // Totals
     lines.push(thinDivider);
-    lines.push(this.formatLine('Subtotal:', this.formatCurrency(receipt.subtotal, receipt.currency), width));
+    lines.push(
+      this.formatLine(
+        'Subtotal:',
+        this.formatCurrency(receipt.subtotal, receipt.currency),
+        width,
+      ),
+    );
     if (receipt.taxRate) {
-      lines.push(this.formatLine(`Tax (${(receipt.taxRate * 100).toFixed(0)}%):`, this.formatCurrency(receipt.tax, receipt.currency), width));
+      lines.push(
+        this.formatLine(
+          `Tax (${(receipt.taxRate * 100).toFixed(0)}%):`,
+          this.formatCurrency(receipt.tax, receipt.currency),
+          width,
+        ),
+      );
     } else {
-      lines.push(this.formatLine('Tax:', this.formatCurrency(receipt.tax, receipt.currency), width));
+      lines.push(
+        this.formatLine(
+          'Tax:',
+          this.formatCurrency(receipt.tax, receipt.currency),
+          width,
+        ),
+      );
     }
     if (receipt.discount && receipt.discount > 0) {
-      lines.push(this.formatLine('Discount:', `-${this.formatCurrency(receipt.discount, receipt.currency)}`, width));
+      lines.push(
+        this.formatLine(
+          'Discount:',
+          `-${this.formatCurrency(receipt.discount, receipt.currency)}`,
+          width,
+        ),
+      );
     }
     lines.push(divider);
-    lines.push(this.formatLine('TOTAL:', this.formatCurrency(receipt.total, receipt.currency), width));
+    lines.push(
+      this.formatLine(
+        'TOTAL:',
+        this.formatCurrency(receipt.total, receipt.currency),
+        width,
+      ),
+    );
     lines.push(divider);
 
     // Payment info
     for (const payment of receipt.payments) {
       const methodLabel = this.getPaymentMethodLabel(payment.method);
-      lines.push(this.formatLine(methodLabel + ':', this.formatCurrency(payment.amount, receipt.currency), width));
+      lines.push(
+        this.formatLine(
+          methodLabel + ':',
+          this.formatCurrency(payment.amount, receipt.currency),
+          width,
+        ),
+      );
       if (payment.mpesaReceiptNumber) {
         lines.push(`  Ref: ${payment.mpesaReceiptNumber}`);
       }
       if (payment.amountTendered && payment.change) {
-        lines.push(this.formatLine('Tendered:', this.formatCurrency(payment.amountTendered, receipt.currency), width));
-        lines.push(this.formatLine('Change:', this.formatCurrency(payment.change, receipt.currency), width));
+        lines.push(
+          this.formatLine(
+            'Tendered:',
+            this.formatCurrency(payment.amountTendered, receipt.currency),
+            width,
+          ),
+        );
+        lines.push(
+          this.formatLine(
+            'Change:',
+            this.formatCurrency(payment.change, receipt.currency),
+            width,
+          ),
+        );
       }
     }
 

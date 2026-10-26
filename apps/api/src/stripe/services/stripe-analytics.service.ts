@@ -2,12 +2,21 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { StripeService } from '../stripe.service';
-import { StripePayment, StripePaymentDocument, StripePaymentStatus, StripePaymentType } from '../schemas/stripe-payment.schema';
-import { StripeSubscription, StripeSubscriptionDocument, StripeSubscriptionStatus } from '../schemas/stripe-subscription.schema';
+import {
+  StripePayment,
+  StripePaymentDocument,
+  StripePaymentStatus,
+  StripePaymentType,
+} from '../schemas/stripe-payment.schema';
+import {
+  StripeSubscription,
+  StripeSubscriptionDocument,
+  StripeSubscriptionStatus,
+} from '../schemas/stripe-subscription.schema';
 
 /**
  * Stripe Analytics Service
- * 
+ *
  * Provides analytics and reporting for Stripe payments.
  * Supports super admin dashboard and shop-level analytics.
  */
@@ -63,7 +72,8 @@ export class StripeAnalyticsService {
 
     payments.forEach((payment) => {
       // Count by status
-      stats.byStatus[payment.status] = (stats.byStatus[payment.status] || 0) + 1;
+      stats.byStatus[payment.status] =
+        (stats.byStatus[payment.status] || 0) + 1;
 
       if (payment.status === StripePaymentStatus.SUCCEEDED) {
         stats.successfulPayments++;
@@ -86,9 +96,10 @@ export class StripeAnalyticsService {
       }
     });
 
-    stats.averageTransactionValue = stats.successfulPayments > 0
-      ? Math.round(stats.totalRevenue / stats.successfulPayments)
-      : 0;
+    stats.averageTransactionValue =
+      stats.successfulPayments > 0
+        ? Math.round(stats.totalRevenue / stats.successfulPayments)
+        : 0;
 
     return stats;
   }
@@ -130,7 +141,7 @@ export class StripeAnalyticsService {
 
       if (sub.status === StripeSubscriptionStatus.ACTIVE) {
         stats.totalActiveSubscriptions++;
-        
+
         // Calculate MRR
         let monthlyAmount = sub.amount;
         if (sub.interval === 'year') {
@@ -163,16 +174,20 @@ export class StripeAnalyticsService {
       if (sub.canceledAt && sub.canceledAt >= thirtyDaysAgo) {
         canceledLast30Days++;
       }
-      if (sub.createdAt && sub.createdAt < thirtyDaysAgo && 
-          (sub.status === StripeSubscriptionStatus.ACTIVE || sub.canceledAt)) {
+      if (
+        sub.createdAt &&
+        sub.createdAt < thirtyDaysAgo &&
+        (sub.status === StripeSubscriptionStatus.ACTIVE || sub.canceledAt)
+      ) {
         activeLast30Days++;
       }
     });
 
     stats.annualRecurringRevenue = stats.monthlyRecurringRevenue * 12;
-    stats.churnRate = activeLast30Days > 0
-      ? Math.round((canceledLast30Days / activeLast30Days) * 100 * 100) / 100
-      : 0;
+    stats.churnRate =
+      activeLast30Days > 0
+        ? Math.round((canceledLast30Days / activeLast30Days) * 100 * 100) / 100
+        : 0;
 
     return stats;
   }
@@ -197,7 +212,10 @@ export class StripeAnalyticsService {
       query.shopId = new Types.ObjectId(shopId);
     }
 
-    const payments = await this.paymentModel.find(query).sort({ createdAt: 1 }).exec();
+    const payments = await this.paymentModel
+      .find(query)
+      .sort({ createdAt: 1 })
+      .exec();
 
     // Group by period
     const grouped = new Map<string, { revenue: number; count: number }>();
@@ -283,7 +301,9 @@ export class StripeAnalyticsService {
   async getPaymentMethodDistribution(
     shopId?: string,
     dateRange?: { from: Date; to: Date },
-  ): Promise<Record<string, { count: number; amount: number; percentage: number }>> {
+  ): Promise<
+    Record<string, { count: number; amount: number; percentage: number }>
+  > {
     const query: any = { status: StripePaymentStatus.SUCCEEDED };
 
     if (shopId) {
@@ -313,11 +333,17 @@ export class StripeAnalyticsService {
     });
 
     // Calculate percentages
-    const result: Record<string, { count: number; amount: number; percentage: number }> = {};
+    const result: Record<
+      string,
+      { count: number; amount: number; percentage: number }
+    > = {};
     Object.entries(distribution).forEach(([method, data]) => {
       result[method] = {
         ...data,
-        percentage: totalCount > 0 ? Math.round((data.count / totalCount) * 100 * 100) / 100 : 0,
+        percentage:
+          totalCount > 0
+            ? Math.round((data.count / totalCount) * 100 * 100) / 100
+            : 0,
       };
     });
 

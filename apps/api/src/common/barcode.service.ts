@@ -2,7 +2,13 @@ import { Injectable } from '@nestjs/common';
 import * as QRCode from 'qrcode';
 import * as bwipjs from 'bwip-js';
 
-export type BarcodeType = 'qr_code' | 'code128' | 'code39' | 'ean13' | 'upca' | 'code93';
+export type BarcodeType =
+  | 'qr_code'
+  | 'code128'
+  | 'code39'
+  | 'ean13'
+  | 'upca'
+  | 'code93';
 
 export interface BarcodeOptions {
   width?: number;
@@ -17,7 +23,10 @@ export class BarcodeService {
   /**
    * Generate QR code as data URL
    */
-  async generateQRCode(text: string, options: { width?: number; margin?: number } = {}): Promise<string> {
+  async generateQRCode(
+    text: string,
+    options: { width?: number; margin?: number } = {},
+  ): Promise<string> {
     try {
       const dataUrl = await QRCode.toDataURL(text, {
         width: options.width || 200,
@@ -44,7 +53,7 @@ export class BarcodeService {
     try {
       // Map our types to bwip-js types
       const bwipType = this.mapBarcodeType(type);
-      
+
       const params: any = {
         bcid: bwipType,
         text: text,
@@ -89,7 +98,12 @@ export class BarcodeService {
    * Generate barcode content based on type
    */
   generateBarcodeContent(
-    type: 'receipt_number' | 'transaction_id' | 'shop_url' | 'verify_url' | 'custom',
+    type:
+      | 'receipt_number'
+      | 'transaction_id'
+      | 'shop_url'
+      | 'verify_url'
+      | 'custom',
     data: {
       receiptNumber?: string;
       transactionId?: string;
@@ -105,7 +119,9 @@ export class BarcodeService {
       case 'shop_url':
         return data.shopUrl || '';
       case 'verify_url':
-        return data.receiptNumber ? `${data.shopUrl}/verify/${data.receiptNumber}` : '';
+        return data.receiptNumber
+          ? `${data.shopUrl}/verify/${data.receiptNumber}`
+          : '';
       case 'custom':
         return data.customText || '';
       default:
@@ -151,11 +167,11 @@ export class BarcodeService {
   ): Promise<string> {
     const dataUrl = await this.generateBarcodeDataUrl(type, text, options);
     const { alt = 'Barcode', className = '' } = options;
-    
+
     if (type === 'qr_code') {
       return `<img src="${dataUrl}" alt="${alt}" class="${className}" style="max-width: 150px;" />`;
     }
-    
+
     return `<img src="${dataUrl}" alt="${alt}" class="${className}" style="max-width: 100%; height: auto;" />`;
   }
 
@@ -186,31 +202,31 @@ export class BarcodeService {
     // ESC/POS barcode commands
     const GS = '\x1D';
     const ESC = '\x1B';
-    
+
     let commands = '';
-    
+
     // Set barcode height
     commands += `${GS}h${String.fromCharCode(100)}`; // Height 100 dots
-    
+
     // Set barcode width
     const barcodeWidth = width === 58 ? 2 : 3;
     commands += `${GS}w${String.fromCharCode(barcodeWidth)}`;
-    
+
     // Select barcode type and print
     const barcodeTypeCode = this.getThermalBarcodeTypeCode(type);
     commands += `${GS}k${String.fromCharCode(barcodeTypeCode)}${String.fromCharCode(text.length)}${text}`;
-    
+
     return commands;
   }
 
   private getThermalBarcodeTypeCode(type: BarcodeType): number {
     const codes: Record<BarcodeType, number> = {
-      'upca': 0,
-      'ean13': 2,
-      'code39': 4,
-      'code128': 73,
-      'code93': 72,
-      'qr_code': 0, // QR not standard in ESC/POS, handled differently
+      upca: 0,
+      ean13: 2,
+      code39: 4,
+      code128: 73,
+      code93: 72,
+      qr_code: 0, // QR not standard in ESC/POS, handled differently
     };
     return codes[type] || 73; // Default to Code 128
   }

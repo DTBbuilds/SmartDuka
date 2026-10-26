@@ -7,7 +7,7 @@ import { Purchase, PurchaseSchema } from '../purchases/purchase.schema';
 
 /**
  * PHASE 3: REORDER AUTOMATION MODULE
- * 
+ *
  * Provides automatic purchase order creation when stock falls below reorder point
  */
 @Module({

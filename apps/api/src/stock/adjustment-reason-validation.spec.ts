@@ -27,7 +27,11 @@ const makeService = () => {
     findOne: jest.fn(async () => null),
     // P0-9: exactly-once insert via mutationId unique index
     findOneAndUpdate: jest.fn((filter: any, doc: any) => ({
-      exec: async () => ({ ...doc, _id: 'adj1', mutationId: filter.mutationId }),
+      exec: async () => ({
+        ...doc,
+        _id: 'adj1',
+        mutationId: filter.mutationId,
+      }),
     })),
   };
   // ctor order: (adjustmentModel, productModel, inventoryService)
@@ -69,7 +73,9 @@ describe('FIX1-B — stock-adjustment reason validation', () => {
     } as any);
     expect(res).toBeTruthy();
     expect(inventoryService.updateStock).toHaveBeenCalledWith(
-      SHOP, PRODUCT_ID, 1,
+      SHOP,
+      PRODUCT_ID,
+      1,
       expect.objectContaining({ mutationId: 'stock-adjustment:k-1' }),
     );
     // P0-9: exactly-once via upsert on (shopId, mutationId) — not create()
@@ -81,7 +87,11 @@ describe('FIX1-B — stock-adjustment reason validation', () => {
     const { svc, adjustmentModel, inventoryService } = makeService();
     // Replay: the upsert filter matches the EXISTING row → Mongo returns
     // it unchanged ($setOnInsert ignored) — the original record.
-    const original = { _id: 'adj0', mutationId: 'stock-adjustment:k-1', delta: 1 };
+    const original = {
+      _id: 'adj0',
+      mutationId: 'stock-adjustment:k-1',
+      delta: 1,
+    };
     adjustmentModel.findOneAndUpdate = jest.fn(() => ({
       exec: async () => original,
     }));

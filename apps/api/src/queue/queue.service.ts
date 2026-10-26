@@ -1,4 +1,10 @@
-import { Injectable, Logger, OnModuleInit, Optional, Inject } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleInit,
+  Optional,
+  Inject,
+} from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { ConfigService } from '@nestjs/config';
@@ -15,7 +21,7 @@ export interface WhatsAppMessageJobData {
 
 /**
  * Queue Service - Centralized queue management
- * 
+ *
  * Provides methods to add jobs to various queues with proper error handling
  * Falls back to synchronous processing if Redis is unavailable
  */
@@ -25,13 +31,15 @@ export class QueueService implements OnModuleInit {
   private isQueueAvailable = false;
 
   constructor(
-    @Optional() @InjectQueue('notifications') private notificationQueue: Queue | null,
+    @Optional()
+    @InjectQueue('notifications')
+    private notificationQueue: Queue | null,
     private configService: ConfigService,
   ) {}
 
   async onModuleInit() {
     const redisUrl = this.configService.get<string>('REDIS_URL');
-    
+
     if (!redisUrl || !this.notificationQueue) {
       this.isQueueAvailable = false;
       return;
@@ -68,7 +76,7 @@ export class QueueService implements OnModuleInit {
         priority: data.priority === 'high' ? 1 : 5,
         attempts: 3,
       });
-      
+
       return job.id || null;
     } catch (error: any) {
       this.logger.error(`Failed to queue notification: ${error.message}`);
@@ -79,9 +87,13 @@ export class QueueService implements OnModuleInit {
   /**
    * Add WhatsApp message to sending queue
    */
-  async addWhatsAppMessage(data: WhatsAppMessageJobData): Promise<string | null> {
+  async addWhatsAppMessage(
+    data: WhatsAppMessageJobData,
+  ): Promise<string | null> {
     if (!this.isQueueAvailable) {
-      this.logger.debug('Queue unavailable - WhatsApp message will be processed synchronously');
+      this.logger.debug(
+        'Queue unavailable - WhatsApp message will be processed synchronously',
+      );
       return null;
     }
 
@@ -151,11 +163,14 @@ export interface NotificationJobData {
  */
 export interface QueueStats {
   available: boolean;
-  queues: Record<string, {
-    waiting?: number;
-    active?: number;
-    completed?: number;
-    failed?: number;
-    delayed?: number;
-  }>;
+  queues: Record<
+    string,
+    {
+      waiting?: number;
+      active?: number;
+      completed?: number;
+      failed?: number;
+      delayed?: number;
+    }
+  >;
 }

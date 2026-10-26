@@ -29,7 +29,10 @@ export class SupportTicket {
   @Prop({ required: true, trim: true })
   description: string;
 
-  @Prop({ enum: ['open', 'in-progress', 'resolved', 'closed'], default: 'open' })
+  @Prop({
+    enum: ['open', 'in-progress', 'resolved', 'closed'],
+    default: 'open',
+  })
   status: string;
 
   @Prop({ enum: ['low', 'medium', 'high', 'urgent'], default: 'medium' })

@@ -7,7 +7,12 @@ export interface DailyMetrics {
   orders: number;
   items: number;
   avgOrderValue: number;
-  topProducts: Array<{ productId: string; productName: string; quantity: number; revenue: number }>;
+  topProducts: Array<{
+    productId: string;
+    productName: string;
+    quantity: number;
+    revenue: number;
+  }>;
 }
 
 export interface WeeklySummary {
@@ -27,9 +32,12 @@ export class BusinessSummaryService {
 
   constructor(private readonly aiDataService: AiDataService) {}
 
-  async generateDailySummary(shopId: string, date: Date = new Date()): Promise<DailyMetrics> {
+  async generateDailySummary(
+    shopId: string,
+    date: Date = new Date(),
+  ): Promise<DailyMetrics> {
     const metrics = await this.aiDataService.getDailySalesMetrics(shopId, date);
-    
+
     return {
       date,
       revenue: metrics.revenue,
@@ -40,7 +48,10 @@ export class BusinessSummaryService {
     };
   }
 
-  async generateWeeklySummary(shopId: string, weekEndDate: Date = new Date()): Promise<WeeklySummary> {
+  async generateWeeklySummary(
+    shopId: string,
+    weekEndDate: Date = new Date(),
+  ): Promise<WeeklySummary> {
     const weekEnd = new Date(weekEndDate);
     const weekStart = new Date(weekEnd);
     weekStart.setDate(weekStart.getDate() - 6);
@@ -55,8 +66,11 @@ export class BusinessSummaryService {
     for (let i = 0; i < 7; i++) {
       const date = new Date(weekStart);
       date.setDate(date.getDate() + i);
-      const metrics = await this.aiDataService.getDailySalesMetrics(shopId, date);
-      
+      const metrics = await this.aiDataService.getDailySalesMetrics(
+        shopId,
+        date,
+      );
+
       totalRevenue += metrics.revenue;
       totalOrders += metrics.orders;
 
@@ -86,8 +100,13 @@ export class BusinessSummaryService {
   }
 
   formatDailySummaryMessage(metrics: DailyMetrics, shopName: string): string {
-    const dateStr = metrics.date.toLocaleDateString('en-KE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-    
+    const dateStr = metrics.date.toLocaleDateString('en-KE', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+
     return `📊 *Daily Summary - ${shopName}*
 📅 ${dateStr}
 

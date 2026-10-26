@@ -1,5 +1,17 @@
-import { Controller, Get, Query, UseGuards, ParseIntPipe, DefaultValuePipe } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import {
+  Controller,
+  Get,
+  Query,
+  UseGuards,
+  ParseIntPipe,
+  DefaultValuePipe,
+} from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -15,15 +27,51 @@ export class LoginHistoryController {
 
   @Get()
   @ApiOperation({ summary: 'Get login history with filters' })
-  @ApiQuery({ name: 'userId', required: false, description: 'Filter by user ID' })
-  @ApiQuery({ name: 'email', required: false, description: 'Filter by email (partial match)' })
-  @ApiQuery({ name: 'role', required: false, description: 'Filter by role (admin, manager, cashier)' })
-  @ApiQuery({ name: 'status', required: false, description: 'Filter by status (success, failed, otp_required)' })
-  @ApiQuery({ name: 'loginMethod', required: false, description: 'Filter by method (password, google)' })
-  @ApiQuery({ name: 'fromDate', required: false, description: 'Filter from date (ISO format)' })
-  @ApiQuery({ name: 'toDate', required: false, description: 'Filter to date (ISO format)' })
-  @ApiQuery({ name: 'limit', required: false, description: 'Number of records to return (default: 50)' })
-  @ApiQuery({ name: 'offset', required: false, description: 'Number of records to skip (default: 0)' })
+  @ApiQuery({
+    name: 'userId',
+    required: false,
+    description: 'Filter by user ID',
+  })
+  @ApiQuery({
+    name: 'email',
+    required: false,
+    description: 'Filter by email (partial match)',
+  })
+  @ApiQuery({
+    name: 'role',
+    required: false,
+    description: 'Filter by role (admin, manager, cashier)',
+  })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    description: 'Filter by status (success, failed, otp_required)',
+  })
+  @ApiQuery({
+    name: 'loginMethod',
+    required: false,
+    description: 'Filter by method (password, google)',
+  })
+  @ApiQuery({
+    name: 'fromDate',
+    required: false,
+    description: 'Filter from date (ISO format)',
+  })
+  @ApiQuery({
+    name: 'toDate',
+    required: false,
+    description: 'Filter to date (ISO format)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Number of records to return (default: 50)',
+  })
+  @ApiQuery({
+    name: 'offset',
+    required: false,
+    description: 'Number of records to skip (default: 0)',
+  })
   async getLoginHistory(
     @Query('userId') userId?: string,
     @Query('email') email?: string,

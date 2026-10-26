@@ -7,8 +7,14 @@ import { ExpiryTrackingService } from './services/expiry-tracking.service';
 import { ExpiryTrackingController } from './controllers/expiry-tracking.controller';
 import { Product, ProductSchema } from './schemas/product.schema';
 import { Category, CategorySchema } from './schemas/category.schema';
-import { StockAdjustment, StockAdjustmentSchema } from './schemas/stock-adjustment.schema';
-import { StockReconciliation, StockReconciliationSchema } from './schemas/stock-reconciliation.schema';
+import {
+  StockAdjustment,
+  StockAdjustmentSchema,
+} from './schemas/stock-adjustment.schema';
+import {
+  StockReconciliation,
+  StockReconciliationSchema,
+} from './schemas/stock-reconciliation.schema';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 import { Order, OrderSchema } from '../sales/schemas/order.schema';
 import { CloudinaryModule } from '../cloudinary/cloudinary.module';
@@ -25,7 +31,11 @@ import { CloudinaryModule } from '../cloudinary/cloudinary.module';
     forwardRef(() => SubscriptionsModule),
     CloudinaryModule,
   ],
-  providers: [InventoryService, CategorySuggestionService, ExpiryTrackingService],
+  providers: [
+    InventoryService,
+    CategorySuggestionService,
+    ExpiryTrackingService,
+  ],
   controllers: [InventoryController, ExpiryTrackingController],
   exports: [InventoryService, CategorySuggestionService, ExpiryTrackingService],
 })

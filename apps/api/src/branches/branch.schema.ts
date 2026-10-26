@@ -196,7 +196,11 @@ export class Branch {
   @Prop({ type: Types.ObjectId, ref: 'User' })
   createdBy: Types.ObjectId;
 
-  @Prop({ enum: ['active', 'inactive', 'suspended'], default: 'active', index: true })
+  @Prop({
+    enum: ['active', 'inactive', 'suspended'],
+    default: 'active',
+    index: true,
+  })
   status: 'active' | 'inactive' | 'suspended';
 
   // ============================================
@@ -332,13 +336,13 @@ BranchSchema.virtual('isPaymentConfigured').get(function () {
 
 BranchSchema.virtual('isOpen').get(function () {
   if (this.status !== 'active') return false;
-  
+
   const now = new Date();
   const day = now.getDay();
   const hours = this.operations?.operatingHours?.[day];
-  
+
   if (!hours || hours.closed) return false;
-  
+
   const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
   return currentTime >= hours.open && currentTime <= hours.close;
 });

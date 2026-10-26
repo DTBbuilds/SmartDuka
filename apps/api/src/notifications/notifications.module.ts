@@ -10,7 +10,10 @@ import { ExpiryAlertService } from './expiry-alert.service';
 import { ExpiryTrackingService } from '../inventory/services/expiry-tracking.service';
 import { Notification, NotificationSchema } from './notification.schema';
 import { EmailTemplate, EmailTemplateSchema } from './email-template.schema';
-import { EmailLog, EmailLogSchema } from '../super-admin/schemas/email-log.schema';
+import {
+  EmailLog,
+  EmailLogSchema,
+} from '../super-admin/schemas/email-log.schema';
 import { Product, ProductSchema } from '../inventory/schemas/product.schema';
 import { Shop, ShopSchema } from '../shops/schemas/shop.schema';
 
@@ -24,8 +27,23 @@ import { Shop, ShopSchema } from '../shops/schemas/shop.schema';
       { name: Shop.name, schema: ShopSchema },
     ]),
   ],
-  providers: [EmailService, NotificationsService, SystemEventManagerService, ExpiryAlertService, ExpiryTrackingService],
-  controllers: [NotificationsController, EmailAdminController, EmailWebhookController],
-  exports: [EmailService, NotificationsService, SystemEventManagerService, ExpiryAlertService],
+  providers: [
+    EmailService,
+    NotificationsService,
+    SystemEventManagerService,
+    ExpiryAlertService,
+    ExpiryTrackingService,
+  ],
+  controllers: [
+    NotificationsController,
+    EmailAdminController,
+    EmailWebhookController,
+  ],
+  exports: [
+    EmailService,
+    NotificationsService,
+    SystemEventManagerService,
+    ExpiryAlertService,
+  ],
 })
 export class NotificationsModule {}

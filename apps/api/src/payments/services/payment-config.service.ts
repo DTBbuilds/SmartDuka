@@ -1,4 +1,9 @@
-import { Injectable, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+  Logger,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types, ClientSession } from 'mongoose';
 import { ConfigService } from '@nestjs/config';
@@ -88,7 +93,7 @@ export interface UpdatePaymentConfigDto {
 
 /**
  * Payment Configuration Service
- * 
+ *
  * Handles:
  * - CRUD operations for payment configurations
  * - Runtime till resolution with failover
@@ -118,12 +123,12 @@ export class PaymentConfigService {
 
   /**
    * Get the active payment configuration for a tenant
-   * 
+   *
    * Resolution order:
    * 1. Branch-specific config (if branchId provided)
    * 2. Shop-level config
    * 3. Failover to next priority if primary fails
-   * 
+   *
    * @param shopId - The tenant's shop ID
    * @param provider - Payment provider (e.g., MPESA_TILL)
    * @param branchId - Optional branch ID for branch-level config
@@ -138,16 +143,23 @@ export class PaymentConfigService {
     const env = environment || this.getDefaultEnvironment();
 
     this.logger.debug(
-      `Resolving active till for shop=${shopId}, provider=${provider}, branch=${branchId}, env=${env}`
+      `Resolving active till for shop=${shopId}, provider=${provider}, branch=${branchId}, env=${env}`,
     );
 
     // Step 1: Try branch-specific config first
     if (branchId) {
-      const branchConfig = await this.findActiveConfig(shopId, provider, env, branchId);
+      const branchConfig = await this.findActiveConfig(
+        shopId,
+        provider,
+        env,
+        branchId,
+      );
       if (branchConfig) {
-        this.logger.log(`Using branch-level config for shop ${shopId}, branch ${branchId}`);
+        this.logger.log(
+          `Using branch-level config for shop ${shopId}, branch ${branchId}`,
+        );
         return {
-          ...await this.prepareConfigResponse(branchConfig),
+          ...(await this.prepareConfigResponse(branchConfig)),
           source: 'branch',
         };
       }
@@ -158,7 +170,7 @@ export class PaymentConfigService {
     if (shopConfig) {
       this.logger.log(`Using shop-level config for shop ${shopId}`);
       return {
-        ...await this.prepareConfigResponse(shopConfig),
+        ...(await this.prepareConfigResponse(shopConfig)),
         source: 'shop',
       };
     }
@@ -166,7 +178,7 @@ export class PaymentConfigService {
     // Step 3: No config found
     throw new BadRequestException(
       `No active ${provider} configuration found for this shop. ` +
-      `Please configure your payment settings in Settings → M-Pesa.`
+        `Please configure your payment settings in Settings → M-Pesa.`,
     );
   }
 
@@ -211,10 +223,13 @@ export class PaymentConfigService {
   /**
    * Prepare config response with decrypted credentials
    */
-  private async prepareConfigResponse(
-    config: PaymentConfigDocument
-  ): Promise<{ config: PaymentConfigDocument; decryptedCredentials: DecryptedCredentials }> {
-    const decrypted = this.encryptionService.decryptMpesaConfig(config.credentials);
+  private async prepareConfigResponse(config: PaymentConfigDocument): Promise<{
+    config: PaymentConfigDocument;
+    decryptedCredentials: DecryptedCredentials;
+  }> {
+    const decrypted = this.encryptionService.decryptMpesaConfig(
+      config.credentials,
+    );
 
     return {
       config,
@@ -241,7 +256,7 @@ export class PaymentConfigService {
       status?: ConfigStatus;
       branchId?: string;
       isActive?: boolean;
-    }
+    },
   ): Promise<PaymentConfigDocument[]> {
     const query: any = { shopId: new Types.ObjectId(shopId) };
 
@@ -262,11 +277,16 @@ export class PaymentConfigService {
   /**
    * Get a specific config by ID
    */
-  async getConfig(shopId: string, configId: string): Promise<PaymentConfigDocument> {
-    const config = await this.configModel.findOne({
-      _id: new Types.ObjectId(configId),
-      shopId: new Types.ObjectId(shopId),
-    }).exec();
+  async getConfig(
+    shopId: string,
+    configId: string,
+  ): Promise<PaymentConfigDocument> {
+    const config = await this.configModel
+      .findOne({
+        _id: new Types.ObjectId(configId),
+        shopId: new Types.ObjectId(shopId),
+      })
+      .exec();
 
     if (!config) {
       throw new NotFoundException('Payment configuration not found');
@@ -282,7 +302,7 @@ export class PaymentConfigService {
     shopId: string,
     userId: string,
     dto: CreatePaymentConfigDto,
-    requestInfo?: { ipAddress?: string; userAgent?: string }
+    requestInfo?: { ipAddress?: string; userAgent?: string },
   ): Promise<PaymentConfigDocument> {
     // Validate uniqueness
     const uniqueness = await this.validateTillUniqueness(
@@ -290,13 +310,13 @@ export class PaymentConfigService {
       dto.shortCode,
       dto.provider,
       dto.environment,
-      dto.branchId
+      dto.branchId,
     );
 
     if (!uniqueness.isUnique) {
       throw new BadRequestException(
         `This ${dto.provider} short code (${dto.shortCode}) is already configured. ` +
-        `Each till/paybill can only be used once per environment.`
+          `Each till/paybill can only be used once per environment.`,
       );
     }
 
@@ -363,7 +383,7 @@ export class PaymentConfigService {
     configId: string,
     userId: string,
     dto: UpdatePaymentConfigDto,
-    requestInfo?: { ipAddress?: string; userAgent?: string }
+    requestInfo?: { ipAddress?: string; userAgent?: string },
   ): Promise<PaymentConfigDocument> {
     const config = await this.getConfig(shopId, configId);
     const previousState = createMaskedSnapshot(config.toObject());
@@ -371,7 +391,11 @@ export class PaymentConfigService {
 
     // Track changes
     if (dto.name && dto.name !== config.name) {
-      changes.push({ field: 'name', oldValue: config.name, newValue: dto.name });
+      changes.push({
+        field: 'name',
+        oldValue: config.name,
+        newValue: dto.name,
+      });
       config.name = dto.name;
     }
 
@@ -383,38 +407,56 @@ export class PaymentConfigService {
         config.provider,
         config.environment,
         config.branchId?.toString(),
-        configId
+        configId,
       );
 
       if (!uniqueness.isUnique) {
         throw new BadRequestException(
-          `This short code (${dto.shortCode}) is already in use.`
+          `This short code (${dto.shortCode}) is already in use.`,
         );
       }
 
-      changes.push({ field: 'shortCode', oldValue: config.shortCode, newValue: dto.shortCode });
+      changes.push({
+        field: 'shortCode',
+        oldValue: config.shortCode,
+        newValue: dto.shortCode,
+      });
       config.shortCode = dto.shortCode;
     }
 
     if (dto.accountPrefix !== undefined) {
-      changes.push({ field: 'accountPrefix', oldValue: config.accountPrefix, newValue: dto.accountPrefix });
+      changes.push({
+        field: 'accountPrefix',
+        oldValue: config.accountPrefix,
+        newValue: dto.accountPrefix,
+      });
       config.accountPrefix = dto.accountPrefix;
     }
 
     if (dto.callbackUrl !== undefined) {
-      changes.push({ field: 'callbackUrl', oldValue: config.callbackUrl, newValue: dto.callbackUrl });
+      changes.push({
+        field: 'callbackUrl',
+        oldValue: config.callbackUrl,
+        newValue: dto.callbackUrl,
+      });
       config.callbackUrl = dto.callbackUrl;
     }
 
     if (dto.priority !== undefined) {
-      changes.push({ field: 'priority', oldValue: config.priority, newValue: dto.priority });
+      changes.push({
+        field: 'priority',
+        oldValue: config.priority,
+        newValue: dto.priority,
+      });
       config.priority = dto.priority;
     }
 
     // Handle credential updates
     let credentialsUpdated = false;
     if (dto.consumerKey || dto.consumerSecret || dto.passkey) {
-      const currentDecrypted = this.encryptionService.decryptMpesaConfig(config.credentials);
+      const currentDecrypted = this.encryptionService.decryptMpesaConfig(
+        config.credentials,
+      );
 
       const newCredentials = {
         consumerKey: dto.consumerKey || currentDecrypted.consumerKey,
@@ -422,14 +464,18 @@ export class PaymentConfigService {
         passkey: dto.passkey || currentDecrypted.passkey,
       };
 
-      const encrypted = this.encryptionService.encryptMpesaConfig(newCredentials);
+      const encrypted =
+        this.encryptionService.encryptMpesaConfig(newCredentials);
       config.credentials = encrypted;
       credentialsUpdated = true;
 
       if (dto.consumerKey) {
         changes.push({
           field: 'consumerKey',
-          oldValue: maskSensitiveValue(currentDecrypted.consumerKey, 'consumerKey'),
+          oldValue: maskSensitiveValue(
+            currentDecrypted.consumerKey,
+            'consumerKey',
+          ),
           newValue: maskSensitiveValue(dto.consumerKey, 'consumerKey'),
           isSensitive: true,
         });
@@ -501,13 +547,13 @@ export class PaymentConfigService {
     configId: string,
     userId: string,
     reason?: string,
-    requestInfo?: { ipAddress?: string; userAgent?: string }
+    requestInfo?: { ipAddress?: string; userAgent?: string },
   ): Promise<void> {
     const config = await this.getConfig(shopId, configId);
 
     if (config.isActive) {
       throw new BadRequestException(
-        'Cannot delete an active configuration. Please deactivate it first.'
+        'Cannot delete an active configuration. Please deactivate it first.',
       );
     }
 
@@ -546,13 +592,13 @@ export class PaymentConfigService {
     shopId: string,
     configId: string,
     userId: string,
-    requestInfo?: { ipAddress?: string; userAgent?: string }
+    requestInfo?: { ipAddress?: string; userAgent?: string },
   ): Promise<PaymentConfigDocument> {
     const config = await this.getConfig(shopId, configId);
 
     if (config.status !== ConfigStatus.VERIFIED) {
       throw new BadRequestException(
-        'Configuration must be verified before activation. Please verify your credentials first.'
+        'Configuration must be verified before activation. Please verify your credentials first.',
       );
     }
 
@@ -589,7 +635,7 @@ export class PaymentConfigService {
     configId: string,
     userId: string,
     reason?: string,
-    requestInfo?: { ipAddress?: string; userAgent?: string }
+    requestInfo?: { ipAddress?: string; userAgent?: string },
   ): Promise<PaymentConfigDocument> {
     const config = await this.getConfig(shopId, configId);
 
@@ -614,7 +660,9 @@ export class PaymentConfigService {
       shortCode: config.shortCode,
     });
 
-    this.logger.log(`Deactivated payment config ${configId} for shop ${shopId}`);
+    this.logger.log(
+      `Deactivated payment config ${configId} for shop ${shopId}`,
+    );
 
     return config;
   }
@@ -626,21 +674,23 @@ export class PaymentConfigService {
     shopId: string,
     configId: string,
     userId: string,
-    requestInfo?: { ipAddress?: string; userAgent?: string }
+    requestInfo?: { ipAddress?: string; userAgent?: string },
   ): Promise<PaymentConfigDocument> {
     const config = await this.getConfig(shopId, configId);
 
     // Remove default from other configs of same provider/environment
-    await this.configModel.updateMany(
-      {
-        shopId: new Types.ObjectId(shopId),
-        provider: config.provider,
-        environment: config.environment,
-        branchId: config.branchId,
-        _id: { $ne: config._id },
-      },
-      { $set: { isDefault: false } }
-    ).exec();
+    await this.configModel
+      .updateMany(
+        {
+          shopId: new Types.ObjectId(shopId),
+          provider: config.provider,
+          environment: config.environment,
+          branchId: config.branchId,
+          _id: { $ne: config._id },
+        },
+        { $set: { isDefault: false } },
+      )
+      .exec();
 
     config.isDefault = true;
     config.updatedBy = new Types.ObjectId(userId);
@@ -708,10 +758,12 @@ export class PaymentConfigService {
     }
 
     // Check if till is used by different shop (not allowed by default)
-    const otherShopConfig = await this.configModel.findOne({
-      ...query,
-      shopId: { $ne: new Types.ObjectId(shopId) },
-    }).exec();
+    const otherShopConfig = await this.configModel
+      .findOne({
+        ...query,
+        shopId: { $ne: new Types.ObjectId(shopId) },
+      })
+      .exec();
 
     if (otherShopConfig) {
       return {
@@ -752,10 +804,7 @@ export class PaymentConfigService {
       query.branchId = { $exists: false };
     }
 
-    return this.configModel
-      .findOne(query)
-      .sort({ priority: 1 })
-      .exec();
+    return this.configModel.findOne(query).sort({ priority: 1 }).exec();
   }
 
   // ============================================
@@ -813,7 +862,7 @@ export class PaymentConfigService {
   async getAuditLogs(
     shopId: string,
     configId?: string,
-    limit = 50
+    limit = 50,
   ): Promise<ConfigAuditLogDocument[]> {
     const query: any = { shopId: new Types.ObjectId(shopId) };
     if (configId) {
@@ -846,7 +895,10 @@ export class PaymentConfigService {
    * Get default callback URL
    */
   private getDefaultCallbackUrl(): string {
-    const baseUrl = this.configService.get<string>('API_BASE_URL', 'http://localhost:3001');
+    const baseUrl = this.configService.get<string>(
+      'API_BASE_URL',
+      'http://localhost:3001',
+    );
     return `${baseUrl}/api/payments/mpesa/callback`;
   }
 
@@ -855,7 +907,7 @@ export class PaymentConfigService {
    */
   async updateTransactionStats(
     configId: string,
-    success: boolean
+    success: boolean,
   ): Promise<void> {
     const update: any = {
       $inc: { totalTransactions: 1 },
@@ -868,9 +920,8 @@ export class PaymentConfigService {
       update.$inc.failedTransactions = 1;
     }
 
-    await this.configModel.updateOne(
-      { _id: new Types.ObjectId(configId) },
-      update
-    ).exec();
+    await this.configModel
+      .updateOne({ _id: new Types.ObjectId(configId) }, update)
+      .exec();
   }
 }

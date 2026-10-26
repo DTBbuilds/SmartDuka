@@ -7,12 +7,15 @@ import {
   SubscriptionStatus,
   BillingCycle,
 } from './schemas/subscription.schema';
-import { SubscriptionPlan, SubscriptionPlanDocument } from './schemas/subscription-plan.schema';
+import {
+  SubscriptionPlan,
+  SubscriptionPlanDocument,
+} from './schemas/subscription-plan.schema';
 import { Shop, ShopDocument } from '../shops/schemas/shop.schema';
 
 /**
  * Subscription Audit Service
- * 
+ *
  * Provides comprehensive auditing and fixing of subscription data:
  * - Identify daily subscriptions with incorrect end dates
  * - Find expired trials that are still marked as active
@@ -49,7 +52,9 @@ export class SubscriptionAuditService {
     orphanedShops: any[];
     statusMismatches: any[];
   }> {
-    this.logger.log(`=== STARTING SUBSCRIPTION AUDIT (${dryRun ? 'DRY RUN' : 'LIVE FIX'}) ===`);
+    this.logger.log(
+      `=== STARTING SUBSCRIPTION AUDIT (${dryRun ? 'DRY RUN' : 'LIVE FIX'}) ===`,
+    );
 
     const results = {
       summary: {
@@ -66,7 +71,8 @@ export class SubscriptionAuditService {
     };
 
     // Count total subscriptions
-    results.summary.totalSubscriptions = await this.subscriptionModel.countDocuments();
+    results.summary.totalSubscriptions =
+      await this.subscriptionModel.countDocuments();
 
     // 1. Audit daily subscriptions
     const dailyIssues = await this.auditDailySubscriptions(dryRun);
@@ -99,7 +105,9 @@ export class SubscriptionAuditService {
     results.summary.issuesFixed += statusIssues.fixed;
 
     this.logger.log(`=== AUDIT COMPLETE ===`);
-    this.logger.log(`Total subscriptions: ${results.summary.totalSubscriptions}`);
+    this.logger.log(
+      `Total subscriptions: ${results.summary.totalSubscriptions}`,
+    );
     this.logger.log(`Issues found: ${results.summary.issuesFound}`);
     this.logger.log(`Issues fixed: ${results.summary.issuesFixed}`);
 
@@ -110,17 +118,22 @@ export class SubscriptionAuditService {
    * Audit daily subscriptions for incorrect end dates
    * Daily subscriptions should expire after numberOfDays (default 1), not 30 days
    */
-  async auditDailySubscriptions(dryRun = true): Promise<{ issues: any[]; fixed: number }> {
+  async auditDailySubscriptions(
+    dryRun = true,
+  ): Promise<{ issues: any[]; fixed: number }> {
     this.logger.log('Auditing daily subscriptions...');
     const issues: any[] = [];
     let fixed = 0;
 
-    const dailySubscriptions = await this.subscriptionModel.find({
-      billingCycle: BillingCycle.DAILY,
-    }).exec();
+    const dailySubscriptions = await this.subscriptionModel
+      .find({
+        billingCycle: BillingCycle.DAILY,
+      })
+      .exec();
 
     for (const subscription of dailySubscriptions) {
-      const lastPayment = subscription.lastPaymentDate || subscription.currentPeriodStart;
+      const lastPayment =
+        subscription.lastPaymentDate || subscription.currentPeriodStart;
       const currentEnd = subscription.currentPeriodEnd;
       const numberOfDays = subscription.numberOfDays || 1;
 
@@ -130,7 +143,7 @@ export class SubscriptionAuditService {
 
       // Calculate days between last payment and period end
       const actualDays = Math.ceil(
-        (currentEnd.getTime() - lastPayment.getTime()) / (24 * 60 * 60 * 1000)
+        (currentEnd.getTime() - lastPayment.getTime()) / (24 * 60 * 60 * 1000),
       );
 
       // If actual duration is more than expected (with 1 day tolerance), flag as issue
@@ -152,8 +165,11 @@ export class SubscriptionAuditService {
         if (!dryRun) {
           // Fix the subscription
           const now = new Date();
-          const newStatus = now > expectedEnd ? SubscriptionStatus.EXPIRED : subscription.status;
-          
+          const newStatus =
+            now > expectedEnd
+              ? SubscriptionStatus.EXPIRED
+              : subscription.status;
+
           await this.subscriptionModel.updateOne(
             { _id: subscription._id },
             {
@@ -166,31 +182,39 @@ export class SubscriptionAuditService {
             },
           );
           fixed++;
-          this.logger.log(`Fixed daily subscription ${subscription._id}: ${actualDays} days -> ${numberOfDays} days`);
+          this.logger.log(
+            `Fixed daily subscription ${subscription._id}: ${actualDays} days -> ${numberOfDays} days`,
+          );
         }
       }
     }
 
-    this.logger.log(`Daily subscription audit: ${issues.length} issues found, ${fixed} fixed`);
+    this.logger.log(
+      `Daily subscription audit: ${issues.length} issues found, ${fixed} fixed`,
+    );
     return { issues, fixed };
   }
 
   /**
    * Audit expired trials that are still marked as TRIAL status
    */
-  async auditExpiredTrials(dryRun = true): Promise<{ issues: any[]; fixed: number }> {
+  async auditExpiredTrials(
+    dryRun = true,
+  ): Promise<{ issues: any[]; fixed: number }> {
     this.logger.log('Auditing expired trials...');
     const issues: any[] = [];
     let fixed = 0;
     const now = new Date();
 
-    const expiredTrials = await this.subscriptionModel.find({
-      status: SubscriptionStatus.TRIAL,
-      $or: [
-        { trialEndDate: { $lte: now } },
-        { currentPeriodEnd: { $lte: now } },
-      ],
-    }).exec();
+    const expiredTrials = await this.subscriptionModel
+      .find({
+        status: SubscriptionStatus.TRIAL,
+        $or: [
+          { trialEndDate: { $lte: now } },
+          { currentPeriodEnd: { $lte: now } },
+        ],
+      })
+      .exec();
 
     for (const subscription of expiredTrials) {
       const issue = {
@@ -210,31 +234,40 @@ export class SubscriptionAuditService {
           { $set: { status: SubscriptionStatus.EXPIRED } },
         );
         fixed++;
-        this.logger.log(`Expired trial marked as EXPIRED: shop ${subscription.shopId}`);
+        this.logger.log(
+          `Expired trial marked as EXPIRED: shop ${subscription.shopId}`,
+        );
       }
     }
 
-    this.logger.log(`Expired trials audit: ${issues.length} issues found, ${fixed} fixed`);
+    this.logger.log(
+      `Expired trials audit: ${issues.length} issues found, ${fixed} fixed`,
+    );
     return { issues, fixed };
   }
 
   /**
    * Audit active subscriptions that have actually expired (period end has passed)
    */
-  async auditExpiredActiveSubscriptions(dryRun = true): Promise<{ issues: any[]; fixed: number }> {
+  async auditExpiredActiveSubscriptions(
+    dryRun = true,
+  ): Promise<{ issues: any[]; fixed: number }> {
     this.logger.log('Auditing expired active subscriptions...');
     const issues: any[] = [];
     let fixed = 0;
     const now = new Date();
 
-    const expiredActive = await this.subscriptionModel.find({
-      status: SubscriptionStatus.ACTIVE,
-      currentPeriodEnd: { $lte: now },
-    }).exec();
+    const expiredActive = await this.subscriptionModel
+      .find({
+        status: SubscriptionStatus.ACTIVE,
+        currentPeriodEnd: { $lte: now },
+      })
+      .exec();
 
     for (const subscription of expiredActive) {
       const daysSinceExpiry = Math.ceil(
-        (now.getTime() - subscription.currentPeriodEnd.getTime()) / (24 * 60 * 60 * 1000)
+        (now.getTime() - subscription.currentPeriodEnd.getTime()) /
+          (24 * 60 * 60 * 1000),
       );
 
       const issue = {
@@ -246,7 +279,8 @@ export class SubscriptionAuditService {
         daysSinceExpiry,
         autoRenew: subscription.autoRenew,
         status: subscription.status,
-        action: daysSinceExpiry > 7 ? 'SHOULD_BE_EXPIRED' : 'SHOULD_BE_PAST_DUE',
+        action:
+          daysSinceExpiry > 7 ? 'SHOULD_BE_EXPIRED' : 'SHOULD_BE_PAST_DUE',
       };
       issues.push(issue);
 
@@ -255,7 +289,9 @@ export class SubscriptionAuditService {
         let newStatus: SubscriptionStatus;
         if (daysSinceExpiry > 7) {
           // Past grace period - suspend or expire
-          newStatus = subscription.autoRenew ? SubscriptionStatus.SUSPENDED : SubscriptionStatus.EXPIRED;
+          newStatus = subscription.autoRenew
+            ? SubscriptionStatus.SUSPENDED
+            : SubscriptionStatus.EXPIRED;
         } else {
           // Within grace period
           newStatus = SubscriptionStatus.PAST_DUE;
@@ -274,28 +310,38 @@ export class SubscriptionAuditService {
           },
         );
         fixed++;
-        this.logger.log(`Updated expired active subscription ${subscription._id}: ${subscription.status} -> ${newStatus}`);
+        this.logger.log(
+          `Updated expired active subscription ${subscription._id}: ${subscription.status} -> ${newStatus}`,
+        );
       }
     }
 
-    this.logger.log(`Expired active subscriptions audit: ${issues.length} issues found, ${fixed} fixed`);
+    this.logger.log(
+      `Expired active subscriptions audit: ${issues.length} issues found, ${fixed} fixed`,
+    );
     return { issues, fixed };
   }
 
   /**
    * Audit shops without subscriptions
    */
-  async auditOrphanedShops(dryRun = true): Promise<{ issues: any[]; fixed: number }> {
+  async auditOrphanedShops(
+    dryRun = true,
+  ): Promise<{ issues: any[]; fixed: number }> {
     this.logger.log('Auditing orphaned shops...');
     const issues: any[] = [];
     let fixed = 0;
 
     // Get all shop IDs
     const shops = await this.shopModel.find({}, { _id: 1, name: 1 }).exec();
-    
+
     // Get all subscription shop IDs
-    const subscriptions = await this.subscriptionModel.find({}, { shopId: 1 }).exec();
-    const subscribedShopIds = new Set(subscriptions.map(s => s.shopId.toString()));
+    const subscriptions = await this.subscriptionModel
+      .find({}, { shopId: 1 })
+      .exec();
+    const subscribedShopIds = new Set(
+      subscriptions.map((s) => s.shopId.toString()),
+    );
 
     for (const shop of shops) {
       if (!subscribedShopIds.has(shop._id.toString())) {
@@ -308,7 +354,10 @@ export class SubscriptionAuditService {
 
         if (!dryRun) {
           // Create a trial subscription for orphaned shops
-          const trialPlan = await this.planModel.findOne({ code: 'trial', status: 'active' });
+          const trialPlan = await this.planModel.findOne({
+            code: 'trial',
+            status: 'active',
+          });
           if (trialPlan) {
             const now = new Date();
             const trialEnd = new Date(now);
@@ -328,29 +377,38 @@ export class SubscriptionAuditService {
               currentPrice: 0,
             });
             fixed++;
-            this.logger.log(`Created trial subscription for orphaned shop ${shop._id}`);
+            this.logger.log(
+              `Created trial subscription for orphaned shop ${shop._id}`,
+            );
           }
         }
       }
     }
 
-    this.logger.log(`Orphaned shops audit: ${issues.length} issues found, ${fixed} fixed`);
+    this.logger.log(
+      `Orphaned shops audit: ${issues.length} issues found, ${fixed} fixed`,
+    );
     return { issues, fixed };
   }
 
   /**
    * Audit status mismatches (e.g., planCode doesn't match planId)
    */
-  async auditStatusMismatches(dryRun = true): Promise<{ issues: any[]; fixed: number }> {
+  async auditStatusMismatches(
+    dryRun = true,
+  ): Promise<{ issues: any[]; fixed: number }> {
     this.logger.log('Auditing status mismatches...');
     const issues: any[] = [];
     let fixed = 0;
 
-    const subscriptions = await this.subscriptionModel.find().populate('planId').exec();
+    const subscriptions = await this.subscriptionModel
+      .find()
+      .populate('planId')
+      .exec();
 
     for (const subscription of subscriptions) {
       const plan = await this.planModel.findById(subscription.planId);
-      
+
       if (!plan) {
         issues.push({
           subscriptionId: subscription._id.toString(),
@@ -380,12 +438,16 @@ export class SubscriptionAuditService {
             { $set: { planCode: plan.code } },
           );
           fixed++;
-          this.logger.log(`Fixed plan code mismatch: ${subscription.planCode} -> ${plan.code}`);
+          this.logger.log(
+            `Fixed plan code mismatch: ${subscription.planCode} -> ${plan.code}`,
+          );
         }
       }
     }
 
-    this.logger.log(`Status mismatches audit: ${issues.length} issues found, ${fixed} fixed`);
+    this.logger.log(
+      `Status mismatches audit: ${issues.length} issues found, ${fixed} fixed`,
+    );
     return { issues, fixed };
   }
 
@@ -423,15 +485,22 @@ export class SubscriptionAuditService {
       stats.byPlan[sub.planCode] = (stats.byPlan[sub.planCode] || 0) + 1;
 
       // Count by billing cycle
-      stats.byBillingCycle[sub.billingCycle] = (stats.byBillingCycle[sub.billingCycle] || 0) + 1;
+      stats.byBillingCycle[sub.billingCycle] =
+        (stats.byBillingCycle[sub.billingCycle] || 0) + 1;
 
       // Count expiring in 7 days
-      if (sub.currentPeriodEnd <= sevenDaysFromNow && sub.currentPeriodEnd > now) {
+      if (
+        sub.currentPeriodEnd <= sevenDaysFromNow &&
+        sub.currentPeriodEnd > now
+      ) {
         stats.expiringIn7Days++;
       }
 
       // Count expired but still active
-      if (sub.currentPeriodEnd <= now && sub.status === SubscriptionStatus.ACTIVE) {
+      if (
+        sub.currentPeriodEnd <= now &&
+        sub.status === SubscriptionStatus.ACTIVE
+      ) {
         stats.expiredButActive++;
       }
     }

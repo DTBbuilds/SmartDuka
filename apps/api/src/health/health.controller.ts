@@ -60,9 +60,7 @@ export class HealthController {
   @Get('ready')
   @HealthCheck()
   readiness() {
-    return this.health.check([
-      () => this.mongoose.pingCheck('mongodb'),
-    ]);
+    return this.health.check([() => this.mongoose.pingCheck('mongodb')]);
   }
 
   /**
@@ -78,8 +76,10 @@ export class HealthController {
       version: process.env.npm_package_version || '0.0.1',
       node: process.version,
       memory: {
-        heapUsed: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + 'MB',
-        heapTotal: Math.round(process.memoryUsage().heapTotal / 1024 / 1024) + 'MB',
+        heapUsed:
+          Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + 'MB',
+        heapTotal:
+          Math.round(process.memoryUsage().heapTotal / 1024 / 1024) + 'MB',
         rss: Math.round(process.memoryUsage().rss / 1024 / 1024) + 'MB',
       },
     };

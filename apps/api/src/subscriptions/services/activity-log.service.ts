@@ -1,7 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { ActivityLog, ActivityLogDocument, ActivityType } from '../schemas/activity-log.schema';
+import {
+  ActivityLog,
+  ActivityLogDocument,
+  ActivityType,
+} from '../schemas/activity-log.schema';
 
 @Injectable()
 export class ActivityLogService {

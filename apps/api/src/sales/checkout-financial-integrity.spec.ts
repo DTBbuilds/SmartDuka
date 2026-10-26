@@ -116,7 +116,15 @@ describe('QUALITY-CORE1 checkout financial integrity', () => {
       providers: [
         SalesService,
         { provide: getModelToken(Order.name), useValue: mockOrderModel },
-        { provide: getModelToken(Shop.name), useValue: { findById: jest.fn().mockReturnThis(), select: jest.fn().mockReturnThis(), lean: jest.fn().mockReturnThis(), exec: jest.fn().mockResolvedValue({ currency: 'KES' }) } },
+        {
+          provide: getModelToken(Shop.name),
+          useValue: {
+            findById: jest.fn().mockReturnThis(),
+            select: jest.fn().mockReturnThis(),
+            lean: jest.fn().mockReturnThis(),
+            exec: jest.fn().mockResolvedValue({ currency: 'KES' }),
+          },
+        },
         {
           provide: getConnectionToken(),
           useValue: { startSession: jest.fn() },
@@ -140,10 +148,12 @@ describe('QUALITY-CORE1 checkout financial integrity', () => {
         {
           provide: PaymentTransactionService,
           useValue: {
-            createTransaction: jest.fn().mockImplementation(async (dto: any) => {
-              paymentTxnArgs.push(dto);
-              return {};
-            }),
+            createTransaction: jest
+              .fn()
+              .mockImplementation(async (dto: any) => {
+                paymentTxnArgs.push(dto);
+                return {};
+              }),
           },
         },
         {
@@ -183,7 +193,9 @@ describe('QUALITY-CORE1 checkout financial integrity', () => {
             findByIdForShop: jest
               .fn()
               .mockImplementation(async (_shopId: string, id: string) =>
-                id === '507f1f77bcf86cd799439071' ? { _id: id, shopId: SHOP } : null,
+                id === '507f1f77bcf86cd799439071'
+                  ? { _id: id, shopId: SHOP }
+                  : null,
               ),
             updatePurchaseStats: jest.fn().mockResolvedValue({}),
           },
@@ -291,7 +303,9 @@ describe('QUALITY-CORE1 checkout financial integrity', () => {
 
     it('loyalty redemption failure: client-subtracted discount is ignored, external charge covers the full total', async () => {
       await boot({
-        loyaltyRedeem: jest.fn().mockRejectedValue(new Error('insufficient points')),
+        loyaltyRedeem: jest
+          .fn()
+          .mockRejectedValue(new Error('insufficient points')),
       });
       const order = await service.checkout(SHOP, USER_A, undefined, {
         items: incidentItems(),
@@ -352,7 +366,9 @@ describe('QUALITY-CORE1 checkout financial integrity', () => {
           { method: 'mpesa', amount: 50, status: 'pending' },
         ],
       });
-      expect(order.payments.find((p: any) => p.method === 'mpesa')).toBeUndefined();
+      expect(
+        order.payments.find((p: any) => p.method === 'mpesa'),
+      ).toBeUndefined();
       expect(order.paymentStatus).toBe('paid');
       expect(order.status).toBe('completed');
     });
@@ -397,8 +413,18 @@ describe('QUALITY-CORE1 checkout financial integrity', () => {
       });
       const order = await service.checkout(SHOP, USER_A, undefined, {
         items: [
-          { productId: PRODUCT, name: 'Exempt Medicine', quantity: 1, unitPrice: 500 },
-          { productId: PRODUCT_B, name: 'Taxable Soda', quantity: 1, unitPrice: 305 },
+          {
+            productId: PRODUCT,
+            name: 'Exempt Medicine',
+            quantity: 1,
+            unitPrice: 500,
+          },
+          {
+            productId: PRODUCT_B,
+            name: 'Taxable Soda',
+            quantity: 1,
+            unitPrice: 305,
+          },
         ],
         payments: [{ method: 'cash', amount: 853.8 }],
       });

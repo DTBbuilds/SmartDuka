@@ -4,13 +4,13 @@ import * as crypto from 'crypto';
 
 /**
  * M-Pesa Credential Encryption Service
- * 
+ *
  * Provides AES-256-GCM encryption for sensitive M-Pesa credentials.
  * Used to encrypt/decrypt:
  * - Consumer Key
  * - Consumer Secret
  * - Passkey
- * 
+ *
  * Security Features:
  * - AES-256-GCM authenticated encryption
  * - Random IV for each encryption
@@ -34,11 +34,11 @@ export class MpesaEncryptionService implements OnModuleInit {
    */
   private initializeKey(): void {
     const keyHex = this.configService.get<string>('MPESA_ENCRYPTION_KEY');
-    
+
     if (!keyHex) {
       this.logger.warn(
         'MPESA_ENCRYPTION_KEY not set. M-Pesa credentials will be stored in plain text. ' +
-        'Generate a key with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"'
+          "Generate a key with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"",
       );
       this.isConfigured = false;
       return;
@@ -47,7 +47,8 @@ export class MpesaEncryptionService implements OnModuleInit {
     if (keyHex.length !== 64) {
       this.logger.error(
         'MPESA_ENCRYPTION_KEY must be 64 hex characters (32 bytes). ' +
-        'Current length: ' + keyHex.length
+          'Current length: ' +
+          keyHex.length,
       );
       this.isConfigured = false;
       return;
@@ -58,7 +59,9 @@ export class MpesaEncryptionService implements OnModuleInit {
       this.isConfigured = true;
       this.logger.log('M-Pesa encryption key initialized successfully');
     } catch (error: any) {
-      this.logger.error('Failed to initialize encryption key: ' + error.message);
+      this.logger.error(
+        'Failed to initialize encryption key: ' + error.message,
+      );
       this.isConfigured = false;
     }
   }
@@ -72,7 +75,7 @@ export class MpesaEncryptionService implements OnModuleInit {
 
   /**
    * Encrypt a plaintext string
-   * 
+   *
    * @param plaintext - The string to encrypt
    * @returns Encrypted data with IV and auth tag, or original if encryption disabled
    */
@@ -95,10 +98,10 @@ export class MpesaEncryptionService implements OnModuleInit {
     try {
       const iv = crypto.randomBytes(16);
       const cipher = crypto.createCipheriv(this.algorithm, this.key, iv);
-      
+
       let encrypted = cipher.update(plaintext, 'utf8', 'hex');
       encrypted += cipher.final('hex');
-      
+
       const tag = cipher.getAuthTag();
 
       return {
@@ -115,7 +118,7 @@ export class MpesaEncryptionService implements OnModuleInit {
 
   /**
    * Decrypt an encrypted string
-   * 
+   *
    * @param encrypted - The encrypted hex string
    * @param iv - The initialization vector (hex)
    * @param tag - The authentication tag (hex)
@@ -138,12 +141,12 @@ export class MpesaEncryptionService implements OnModuleInit {
         this.key,
         Buffer.from(iv, 'hex'),
       );
-      
+
       decipher.setAuthTag(Buffer.from(tag, 'hex'));
-      
+
       let decrypted = decipher.update(encrypted, 'hex', 'utf8');
       decrypted += decipher.final('utf8');
-      
+
       return decrypted;
     } catch (error: any) {
       this.logger.error('Decryption failed: ' + error.message);
@@ -237,7 +240,11 @@ export class MpesaEncryptionService implements OnModuleInit {
       );
     }
 
-    if (config.consumerSecret && config.consumerSecretIv && config.consumerSecretTag) {
+    if (
+      config.consumerSecret &&
+      config.consumerSecretIv &&
+      config.consumerSecretTag
+    ) {
       result.consumerSecret = this.decrypt(
         config.consumerSecret,
         config.consumerSecretIv,

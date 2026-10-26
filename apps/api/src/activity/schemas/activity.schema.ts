@@ -17,7 +17,10 @@ export class Activity {
   @Prop({ required: true, trim: true })
   userName: string;
 
-  @Prop({ required: true, enum: ['admin', 'cashier', 'branch_admin', 'branch_manager'] })
+  @Prop({
+    required: true,
+    enum: ['admin', 'cashier', 'branch_admin', 'branch_manager'],
+  })
   userRole: 'admin' | 'cashier' | 'branch_admin' | 'branch_manager';
 
   @Prop({

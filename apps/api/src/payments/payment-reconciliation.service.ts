@@ -57,7 +57,8 @@ export class PaymentReconciliationService {
 
       // Calculate variance
       const variance = actualCash - expectedCash;
-      const variancePercentage = expectedCash > 0 ? (variance / expectedCash) * 100 : 0;
+      const variancePercentage =
+        expectedCash > 0 ? (variance / expectedCash) * 100 : 0;
 
       // Determine status
       let status: 'pending' | 'reconciled' | 'variance_pending' = 'reconciled';
@@ -152,15 +153,17 @@ export class PaymentReconciliationService {
       for (const transaction of mpesaTransactions) {
         const matchedOrder = orders.some(
           (o) =>
-            new Date((o as any).createdAt || new Date()).toDateString() === new Date(transaction.createdAt).toDateString() &&
-            o.total === transaction.amount
+            new Date((o as any).createdAt || new Date()).toDateString() ===
+              new Date(transaction.createdAt).toDateString() &&
+            o.total === transaction.amount,
         );
 
         if (matchedOrder) {
           const order = orders.find(
             (o) =>
-              new Date((o as any).createdAt || new Date()).toDateString() === new Date(transaction.createdAt).toDateString() &&
-              o.total === transaction.amount
+              new Date((o as any).createdAt || new Date()).toDateString() ===
+                new Date(transaction.createdAt).toDateString() &&
+              o.total === transaction.amount,
           );
           matched.push({ order, transaction });
         } else {
@@ -177,8 +180,9 @@ export class PaymentReconciliationService {
       for (const order of orders) {
         const matchedTransaction = mpesaTransactions.some(
           (t) =>
-            new Date(t.createdAt).toDateString() === new Date((order as any).createdAt || new Date()).toDateString() &&
-            t.amount === order.total
+            new Date(t.createdAt).toDateString() ===
+              new Date((order as any).createdAt || new Date()).toDateString() &&
+            t.amount === order.total,
         );
 
         if (!matchedTransaction) {

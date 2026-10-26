@@ -1,7 +1,10 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { ReceiptTemplate, ReceiptTemplateDocument } from './schemas/receipt-template.schema';
+import {
+  ReceiptTemplate,
+  ReceiptTemplateDocument,
+} from './schemas/receipt-template.schema';
 import { CreateReceiptTemplateDto } from './dto/create-receipt-template.dto';
 
 @Injectable()
@@ -82,7 +85,12 @@ export class ReceiptsService {
     template: ReceiptTemplateDocument,
     orderData: {
       orderNumber: string;
-      items: Array<{ name: string; quantity: number; price: number; total: number }>;
+      items: Array<{
+        name: string;
+        quantity: number;
+        price: number;
+        total: number;
+      }>;
       subtotal: number;
       tax: number;
       discount: number;
@@ -163,18 +171,26 @@ export class ReceiptsService {
             <span>Subtotal:</span>
             <span>Ksh ${orderData.subtotal.toLocaleString()}</span>
           </div>
-          ${template.showTaxBreakdown && orderData.tax > 0 ? `
+          ${
+            template.showTaxBreakdown && orderData.tax > 0
+              ? `
             <div class="summary-row">
               <span>Tax:</span>
               <span>Ksh ${orderData.tax.toLocaleString()}</span>
             </div>
-          ` : ''}
-          ${orderData.discount > 0 ? `
+          `
+              : ''
+          }
+          ${
+            orderData.discount > 0
+              ? `
             <div class="summary-row">
               <span>Discount:</span>
               <span>-Ksh ${orderData.discount.toLocaleString()}</span>
             </div>
-          ` : ''}
+          `
+              : ''
+          }
           <div class="summary-row total">
             <span>Total:</span>
             <span>Ksh ${orderData.total.toLocaleString()}</span>
@@ -185,18 +201,26 @@ export class ReceiptsService {
           </div>
         </div>
 
-        ${template.showQRCode && template.qrCodeContent ? `
+        ${
+          template.showQRCode && template.qrCodeContent
+            ? `
           <div class="qr-code">
             <img src="${template.qrCodeContent}" alt="QR Code" style="width: 150px; height: 150px;">
           </div>
-        ` : ''}
+        `
+            : ''
+        }
 
-        ${template.showThankYouMessage ? `
+        ${
+          template.showThankYouMessage
+            ? `
           <div class="footer">
             <p>${template.thankYouMessage || 'Thank you for your purchase!'}</p>
             ${template.footer ? `<p>${template.footer}</p>` : ''}
           </div>
-        ` : ''}
+        `
+            : ''
+        }
       </body>
       </html>
     `;

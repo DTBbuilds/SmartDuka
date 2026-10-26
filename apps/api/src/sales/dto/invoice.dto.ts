@@ -1,4 +1,14 @@
-import { IsString, IsOptional, IsEnum, IsNumber, IsArray, IsDate, ValidateNested, Min, IsBoolean } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsEnum,
+  IsNumber,
+  IsArray,
+  IsDate,
+  ValidateNested,
+  Min,
+  IsBoolean,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class InvoiceItemDto {

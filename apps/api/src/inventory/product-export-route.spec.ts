@@ -16,7 +16,10 @@ import { InventoryService } from './inventory.service';
 
 describe('FIX1-A — product export route reliability', () => {
   it('products/export is declared BEFORE products/:id (no route shadowing)', () => {
-    const proto = InventoryController.prototype as unknown as Record<string, unknown>;
+    const proto = InventoryController.prototype as unknown as Record<
+      string,
+      unknown
+    >;
     const order = Object.getOwnPropertyNames(proto);
     const exportIdx = order.indexOf('exportProducts');
     const getByIdx = order.indexOf('getProduct');
@@ -28,10 +31,12 @@ describe('FIX1-A — product export route reliability', () => {
   it('route paths are distinct: export is not captured by :id', () => {
     const exportPath = Reflect.getMetadata(
       'path',
+      // eslint-disable-next-line @typescript-eslint/unbound-method
       InventoryController.prototype.exportProducts,
     );
     const idPath = Reflect.getMetadata(
       'path',
+      // eslint-disable-next-line @typescript-eslint/unbound-method
       InventoryController.prototype.getProduct,
     );
     expect(exportPath).toBe('products/export');
@@ -42,9 +47,18 @@ describe('FIX1-A — product export route reliability', () => {
   it('service export filters by the caller shop and writes CSV with headers', async () => {
     const rows = [
       {
-        _id: 'p1', name: 'Tea Leaves', sku: 'TSL-OI98', barcode: 'BC1',
-        price: 50, cost: 30, stock: 100, categoryId: 'c1', brand: '',
-        tax: 0, status: 'active', description: 'test',
+        _id: 'p1',
+        name: 'Tea Leaves',
+        sku: 'TSL-OI98',
+        barcode: 'BC1',
+        price: 50,
+        cost: 30,
+        stock: 100,
+        categoryId: 'c1',
+        brand: '',
+        tax: 0,
+        status: 'active',
+        description: 'test',
       },
     ];
     const productModel: any = {
@@ -71,13 +85,20 @@ describe('FIX1-A — product export route reliability', () => {
     const svc: any = new InventoryService(
       productModel,
       categoryModel,
-      {} as any, {} as any, {} as any, {} as any, {} as any, {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
     );
     const chunks: string[] = [];
     const res: any = {
       headersSent: false,
       setHeader: jest.fn(),
-      send: jest.fn((c: string) => { chunks.push(c); }),
+      send: jest.fn((c: string) => {
+        chunks.push(c);
+      }),
       end: jest.fn(),
       status: jest.fn(() => res),
       json: jest.fn(),
@@ -110,14 +131,25 @@ describe('FIX1-A — product export route reliability', () => {
       })),
     };
     const svc: any = new InventoryService(
-      productModel, categoryModel,
-      {} as any, {} as any, {} as any, {} as any, {} as any, {} as any,
+      productModel,
+      categoryModel,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
     );
     const chunks: string[] = [];
     const res: any = {
-      headersSent: false, setHeader: jest.fn(),
-      send: jest.fn((c: string) => { chunks.push(c); }),
-      end: jest.fn(), status: jest.fn(() => res), json: jest.fn(),
+      headersSent: false,
+      setHeader: jest.fn(),
+      send: jest.fn((c: string) => {
+        chunks.push(c);
+      }),
+      end: jest.fn(),
+      status: jest.fn(() => res),
+      json: jest.fn(),
     };
     await svc.exportProducts('507f1f77bcf86cd7994390bb', res, undefined);
     const csv = chunks.join('');

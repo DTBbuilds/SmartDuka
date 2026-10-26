@@ -28,18 +28,18 @@ export enum ConfigEnvironment {
  * Configuration Status - Lifecycle states
  */
 export enum ConfigStatus {
-  DRAFT = 'draft',           // Initial state, not yet verified
-  PENDING = 'pending',       // Submitted for verification
-  VERIFIED = 'verified',     // Credentials verified successfully
-  FAILED = 'failed',         // Verification failed
-  SUSPENDED = 'suspended',   // Temporarily disabled
-  EXPIRED = 'expired',       // Credentials expired
-  ROTATED = 'rotated',       // Replaced by new version
+  DRAFT = 'draft', // Initial state, not yet verified
+  PENDING = 'pending', // Submitted for verification
+  VERIFIED = 'verified', // Credentials verified successfully
+  FAILED = 'failed', // Verification failed
+  SUSPENDED = 'suspended', // Temporarily disabled
+  EXPIRED = 'expired', // Credentials expired
+  ROTATED = 'rotated', // Replaced by new version
 }
 
 /**
  * Payment Configuration Schema
- * 
+ *
  * Supports:
  * - Multiple tills per shop
  * - Branch-level overrides
@@ -53,7 +53,7 @@ export class PaymentConfig {
   // ============================================
   // TENANT ASSOCIATION
   // ============================================
-  
+
   @Prop({ required: true, type: Types.ObjectId, ref: 'Shop' })
   shopId: Types.ObjectId;
 
@@ -71,7 +71,11 @@ export class PaymentConfig {
   @Prop({ required: true, enum: PaymentProvider })
   provider: PaymentProvider;
 
-  @Prop({ required: true, enum: ConfigEnvironment, default: ConfigEnvironment.SANDBOX })
+  @Prop({
+    required: true,
+    enum: ConfigEnvironment,
+    default: ConfigEnvironment.SANDBOX,
+  })
   environment: ConfigEnvironment;
 
   /**
@@ -111,11 +115,11 @@ export class PaymentConfig {
     consumerKey?: string;
     consumerKeyIv?: string;
     consumerKeyTag?: string;
-    
+
     consumerSecret?: string;
     consumerSecretIv?: string;
     consumerSecretTag?: string;
-    
+
     passkey?: string;
     passkeyIv?: string;
     passkeyTag?: string;
@@ -124,11 +128,11 @@ export class PaymentConfig {
     clientId?: string;
     clientIdIv?: string;
     clientIdTag?: string;
-    
+
     clientSecret?: string;
     clientSecretIv?: string;
     clientSecretTag?: string;
-    
+
     // Generic encrypted blob for future providers
     encryptedBlob?: string;
     encryptedBlobIv?: string;
@@ -288,11 +292,17 @@ export const PaymentConfigSchema = SchemaFactory.createForClass(PaymentConfig);
 // Unique constraint: One config per provider per environment per shop/branch with same shortCode
 PaymentConfigSchema.index(
   { shopId: 1, branchId: 1, provider: 1, environment: 1, shortCode: 1 },
-  { unique: true, name: 'unique_config_per_tenant' }
+  { unique: true, name: 'unique_config_per_tenant' },
 );
 
 // Query optimization for runtime resolution
-PaymentConfigSchema.index({ shopId: 1, provider: 1, environment: 1, isActive: 1, status: 1 });
+PaymentConfigSchema.index({
+  shopId: 1,
+  provider: 1,
+  environment: 1,
+  isActive: 1,
+  status: 1,
+});
 PaymentConfigSchema.index({ shopId: 1, branchId: 1, provider: 1, isActive: 1 });
 
 // Find configs by shortCode (for uniqueness validation)

@@ -19,12 +19,15 @@ if (process.env.NODE_ENV !== 'production') {
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
   // Immediate startup signal - if this doesn't appear in logs, the crash is pre-bootstrap
-  console.log(`[Bootstrap] Starting SmartDuka API... NODE_ENV=${process.env.NODE_ENV} PORT=${process.env.PORT}`);
+  console.log(
+    `[Bootstrap] Starting SmartDuka API... NODE_ENV=${process.env.NODE_ENV} PORT=${process.env.PORT}`,
+  );
   console.log(`[Bootstrap] MONGODB_URI set: ${!!process.env.MONGODB_URI}`);
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
-    logger: process.env.NODE_ENV === 'production' 
-      ? ['error', 'warn', 'log'] 
-      : ['error', 'warn', 'log', 'debug', 'verbose'],
+    logger:
+      process.env.NODE_ENV === 'production'
+        ? ['error', 'warn', 'log']
+        : ['error', 'warn', 'log', 'debug', 'verbose'],
     rawBody: true,
   });
 
@@ -36,7 +39,7 @@ async function bootstrap() {
   // This ensures preflight requests work correctly
   const isDev = process.env.NODE_ENV !== 'production';
   app.enableCors({
-    origin: isDev 
+    origin: isDev
       ? true // Allow all origins in development (for mobile testing on same network)
       : [
           'http://localhost:3000',
@@ -49,14 +52,22 @@ async function bootstrap() {
         ].filter((o): o is string => typeof o === 'string'),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'X-CSRF-Token', 'x-csrf-token'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'Cache-Control',
+      'X-CSRF-Token',
+      'x-csrf-token',
+    ],
     exposedHeaders: ['Content-Type', 'Authorization', 'Cache-Control'],
   });
 
   // Security: HTTP headers protection (after CORS)
-  app.use(helmet({
-    crossOriginResourcePolicy: { policy: 'cross-origin' },
-  }));
+  app.use(
+    helmet({
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+    }),
+  );
 
   // Performance: Response compression
   app.use(compression());
@@ -88,10 +99,10 @@ async function bootstrap() {
       'robots.txt',
       'favicon.ico',
       // Health endpoints
-      'health', 
-      'health/ready', 
+      'health',
+      'health/ready',
       'health/live',
-      'ping', 
+      'ping',
       'api/docs',
       // M-Pesa callback must be accessible without prefix (external webhook)
       'payments/mpesa/callback',
@@ -118,7 +129,7 @@ async function bootstrap() {
 ## Authentication
 All endpoints (except /health and /auth) require JWT authentication.
 Include the token in the Authorization header: \`Bearer <token>\`
-      `
+      `,
     )
     .setVersion('1.0')
     .addBearerAuth(
@@ -152,10 +163,10 @@ Include the token in the Authorization header: \`Bearer <token>\`
   });
 
   const port = process.env.PORT ?? 5000;
-  
+
   // Graceful shutdown handling
   app.enableShutdownHooks();
-  
+
   // Handle uncaught exceptions
   process.on('uncaughtException', (error) => {
     logger.error(`Uncaught Exception: ${error.message}`, error.stack);
@@ -167,12 +178,12 @@ Include the token in the Authorization header: \`Bearer <token>\`
   });
 
   await app.listen(port);
-  
+
   // Signal PM2 that app is ready
   if (process.send) {
     process.send('ready');
   }
-  
+
   logger.log(`🚀 Backend API running on http://localhost:${port}`);
   logger.log(`📚 API Docs available at http://localhost:${port}/api/docs`);
   logger.log(`❤️ Health check at http://localhost:${port}/health`);

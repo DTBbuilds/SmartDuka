@@ -3,9 +3,19 @@ import { Document, Types } from 'mongoose';
 
 export type WhatsAppMessageDocument = WhatsAppMessage & Document;
 
-export type MessageCategory = 'report' | 'alert' | 'notification' | 'verification' | 'test';
+export type MessageCategory =
+  | 'report'
+  | 'alert'
+  | 'notification'
+  | 'verification'
+  | 'test';
 export type ReportType = 'daily' | 'weekly' | 'monthly';
-export type AlertType = 'low_stock' | 'sales_anomaly' | 'cash_variance' | 'payment_issue' | 'high_sales';
+export type AlertType =
+  | 'low_stock'
+  | 'sales_anomaly'
+  | 'cash_variance'
+  | 'payment_issue'
+  | 'high_sales';
 export type MessageStatus = 'queued' | 'sent' | 'delivered' | 'read' | 'failed';
 
 @Schema({ timestamps: true, collection: 'whatsapp_messages' })
@@ -28,7 +38,11 @@ export class WhatsAppMessage {
   @Prop({ required: true })
   content: string;
 
-  @Prop({ type: String, enum: ['queued', 'sent', 'delivered', 'read', 'failed'], default: 'queued' })
+  @Prop({
+    type: String,
+    enum: ['queued', 'sent', 'delivered', 'read', 'failed'],
+    default: 'queued',
+  })
   status: MessageStatus;
 
   @Prop()
@@ -37,13 +51,24 @@ export class WhatsAppMessage {
   @Prop()
   provider: string;
 
-  @Prop({ required: true, enum: ['report', 'alert', 'notification', 'verification', 'test'] })
+  @Prop({
+    required: true,
+    enum: ['report', 'alert', 'notification', 'verification', 'test'],
+  })
   category: MessageCategory;
 
   @Prop({ enum: ['daily', 'weekly', 'monthly'] })
   reportType?: ReportType;
 
-  @Prop({ enum: ['low_stock', 'sales_anomaly', 'cash_variance', 'payment_issue', 'high_sales'] })
+  @Prop({
+    enum: [
+      'low_stock',
+      'sales_anomaly',
+      'cash_variance',
+      'payment_issue',
+      'high_sales',
+    ],
+  })
   alertType?: AlertType;
 
   @Prop()
@@ -71,7 +96,8 @@ export class WhatsAppMessage {
   readAt?: Date;
 }
 
-export const WhatsAppMessageSchema = SchemaFactory.createForClass(WhatsAppMessage);
+export const WhatsAppMessageSchema =
+  SchemaFactory.createForClass(WhatsAppMessage);
 
 WhatsAppMessageSchema.index({ shopId: 1, createdAt: -1 });
 WhatsAppMessageSchema.index({ status: 1, nextRetryAt: 1 });

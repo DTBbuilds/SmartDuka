@@ -13,7 +13,10 @@ import { SubscriptionsService } from './subscriptions.service';
 import { BillingEffectsReconciliationService } from './services/billing-effects-reconciliation.service';
 import { SubscriptionMpesaService } from './subscription-mpesa.service';
 import { PaymentAttemptService } from './services/payment-attempt.service';
-import { PaymentMethod, PaymentAttemptType } from './schemas/payment-attempt.schema';
+import {
+  PaymentMethod,
+  PaymentAttemptType,
+} from './schemas/payment-attempt.schema';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -24,7 +27,7 @@ import { SubscriptionPaymentDto } from './dto/subscription.dto';
 
 /**
  * Subscription Payment Controller
- * 
+ *
  * Handles M-Pesa payments for subscription invoices
  * Payment options:
  * 1. STK Push - Automated payment prompt
@@ -44,7 +47,7 @@ export class SubscriptionPaymentController {
 
   /**
    * Initiate M-Pesa STK Push payment for an invoice
-   * 
+   *
    * This endpoint triggers an STK push to the customer's phone
    * for subscription payment to SmartDuka (0727068107)
    */
@@ -75,7 +78,7 @@ export class SubscriptionPaymentController {
 
   /**
    * Initiate M-Pesa STK Push for plan upgrade
-   * 
+   *
    * This endpoint initiates payment WITHOUT changing the plan.
    * The plan will only be upgraded after payment is confirmed via callback.
    */
@@ -85,9 +88,10 @@ export class SubscriptionPaymentController {
   @HttpCode(HttpStatus.OK)
   async initiateUpgradePayment(
     @CurrentUser() user: JwtPayload,
-    @Body() dto: { 
-      phoneNumber: string; 
-      planCode: string; 
+    @Body()
+    dto: {
+      phoneNumber: string;
+      planCode: string;
       billingCycle: 'monthly' | 'annual';
       amount: number;
     },
@@ -98,7 +102,9 @@ export class SubscriptionPaymentController {
     merchantRequestId?: string;
     error?: string;
   }> {
-    this.logger.log(`Initiating upgrade payment for shop ${user.shopId} to plan ${dto.planCode}`);
+    this.logger.log(
+      `Initiating upgrade payment for shop ${user.shopId} to plan ${dto.planCode}`,
+    );
 
     // Track payment attempt
     const attempt = await this.paymentAttemptService.createAttempt({
@@ -141,7 +147,7 @@ export class SubscriptionPaymentController {
 
   /**
    * Get manual payment instructions
-   * 
+   *
    * Returns instructions for sending money directly to 0727068107
    */
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -158,7 +164,10 @@ export class SubscriptionPaymentController {
     instructions?: string[];
     message?: string;
   }> {
-    const invoice = await this.subscriptionsService.getInvoice(user.shopId, invoiceId);
+    const invoice = await this.subscriptionsService.getInvoice(
+      user.shopId,
+      invoiceId,
+    );
 
     if (!invoice) {
       return {
@@ -187,7 +196,7 @@ export class SubscriptionPaymentController {
 
   /**
    * Confirm manual M-Pesa payment
-   * 
+   *
    * Customer enters their M-Pesa receipt number and sender phone number after sending money
    */
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -196,13 +205,21 @@ export class SubscriptionPaymentController {
   @HttpCode(HttpStatus.OK)
   async confirmManualPayment(
     @CurrentUser() user: JwtPayload,
-    @Body() dto: { invoiceId: string; mpesaReceiptNumber: string; senderPhoneNumber?: string; paidAmount: number },
+    @Body()
+    dto: {
+      invoiceId: string;
+      mpesaReceiptNumber: string;
+      senderPhoneNumber?: string;
+      paidAmount: number;
+    },
   ): Promise<{
     success: boolean;
     message: string;
     mpesaReceiptNumber?: string;
   }> {
-    this.logger.log(`Confirming manual payment for invoice ${dto.invoiceId} from phone ${dto.senderPhoneNumber || 'not provided'}`);
+    this.logger.log(
+      `Confirming manual payment for invoice ${dto.invoiceId} from phone ${dto.senderPhoneNumber || 'not provided'}`,
+    );
 
     const result = await this.mpesaService.confirmManualPayment(
       dto.invoiceId,
@@ -217,7 +234,7 @@ export class SubscriptionPaymentController {
 
   /**
    * Submit manual M-Pesa payment for plan upgrade
-   * 
+   *
    * IMPORTANT: This does NOT activate the upgrade immediately!
    * Payment is marked as 'pending_verification' and requires super admin approval.
    * Plan change only occurs after verification.
@@ -228,15 +245,18 @@ export class SubscriptionPaymentController {
   @HttpCode(HttpStatus.OK)
   async submitManualUpgradePayment(
     @CurrentUser() user: JwtPayload,
-    @Body() dto: { 
-      mpesaReceiptNumber: string; 
+    @Body()
+    dto: {
+      mpesaReceiptNumber: string;
       amount: number;
     },
   ): Promise<{
     success: boolean;
     message: string;
   }> {
-    this.logger.log(`Submitting manual upgrade payment for shop ${user.shopId}`);
+    this.logger.log(
+      `Submitting manual upgrade payment for shop ${user.shopId}`,
+    );
 
     // Track payment attempt
     const attempt = await this.paymentAttemptService.createAttempt({
@@ -245,7 +265,7 @@ export class SubscriptionPaymentController {
       method: PaymentMethod.MPESA_MANUAL,
       type: PaymentAttemptType.UPGRADE,
       amount: dto.amount,
-      metadata: { 
+      metadata: {
         source: 'subscription_upgrade_manual',
         mpesaReceiptNumber: dto.mpesaReceiptNumber,
         status: 'pending_verification',
@@ -278,7 +298,7 @@ export class SubscriptionPaymentController {
 
   /**
    * M-Pesa callback for subscription payments
-   * 
+   *
    * This endpoint receives payment confirmation from M-Pesa
    * Note: This is a public endpoint (no auth) as M-Pesa sends callbacks directly
    */
@@ -312,7 +332,10 @@ export class SubscriptionPaymentController {
     paidAt?: Date;
     paymentReference?: string;
   }> {
-    const invoice = await this.subscriptionsService.getInvoice(user.shopId, invoiceId);
+    const invoice = await this.subscriptionsService.getInvoice(
+      user.shopId,
+      invoiceId,
+    );
 
     return {
       invoiceId: invoice.id,
@@ -369,7 +392,10 @@ export class SubscriptionPaymentController {
     sendMoneyInstructions?: string[];
     message?: string;
   }> {
-    const invoice = await this.subscriptionsService.getInvoice(user.shopId, invoiceId);
+    const invoice = await this.subscriptionsService.getInvoice(
+      user.shopId,
+      invoiceId,
+    );
 
     if (!invoice) {
       return {
@@ -417,7 +443,8 @@ export class SubscriptionPaymentController {
     success: boolean;
     payments: any[];
   }> {
-    const payments = await this.subscriptionsService.getPendingVerificationPayments();
+    const payments =
+      await this.subscriptionsService.getPendingVerificationPayments();
     return {
       success: true,
       payments,
@@ -454,17 +481,25 @@ export class SubscriptionPaymentController {
     @Param('invoiceId') invoiceId: string,
     @Body() dto: { approved: boolean; notes?: string },
   ): Promise<{ success: boolean; message: string }> {
-    this.logger.log(`Super admin ${user.email} verifying payment for invoice ${invoiceId}`);
+    this.logger.log(
+      `Super admin ${user.email} verifying payment for invoice ${invoiceId}`,
+    );
 
     try {
       if (dto.approved) {
-        await this.subscriptionsService.verifyAndActivatePayment(invoiceId, user.sub);
+        await this.subscriptionsService.verifyAndActivatePayment(
+          invoiceId,
+          user.sub,
+        );
         return {
           success: true,
           message: 'Payment verified and subscription activated',
         };
       } else {
-        await this.subscriptionsService.rejectPayment(invoiceId, dto.notes || 'Payment rejected by admin');
+        await this.subscriptionsService.rejectPayment(
+          invoiceId,
+          dto.notes || 'Payment rejected by admin',
+        );
         return {
           success: true,
           message: 'Payment rejected',

@@ -21,24 +21,37 @@ describe('EMAIL-REPORTS-CORE1 email delivery', () => {
     category: 'notification',
   };
 
-  function boot(opts: { resend?: boolean; smtp?: boolean; priorSent?: any; duplicateKeyError?: boolean } = {}) {
+  function boot(
+    opts: {
+      resend?: boolean;
+      smtp?: boolean;
+      priorSent?: any;
+      duplicateKeyError?: boolean;
+    } = {},
+  ) {
     const sentVia: string[] = [];
     const logUpdates: any[] = [];
 
-    const transporter = opts.smtp === false ? null : ({
-      sendMail: jest.fn(async (mail: any) => {
-        sentVia.push(`smtp:${mail.to}`);
-        return { messageId: 'smtp-111' };
-      }),
-    } as any);
-    const resend = opts.resend === false ? null : ({
-      emails: {
-        send: jest.fn(async (mail: any) => {
-          sentVia.push(`resend:${mail.to}`);
-          return { data: { id: 'resend-222' } };
-        }),
-      },
-    } as any);
+    const transporter =
+      opts.smtp === false
+        ? null
+        : ({
+            sendMail: jest.fn(async (mail: any) => {
+              sentVia.push(`smtp:${mail.to}`);
+              return { messageId: 'smtp-111' };
+            }),
+          } as any);
+    const resend =
+      opts.resend === false
+        ? null
+        : ({
+            emails: {
+              send: jest.fn(async (mail: any) => {
+                sentVia.push(`resend:${mail.to}`);
+                return { data: { id: 'resend-222' } };
+              }),
+            },
+          } as any);
 
     const emailLogModel: any = Object.assign(
       jest.fn().mockImplementation((data: any) => ({
@@ -54,7 +67,9 @@ describe('EMAIL-REPORTS-CORE1 email delivery', () => {
         }),
       })),
       {
-        findOne: jest.fn(() => ({ lean: jest.fn().mockResolvedValue(opts.priorSent ?? null) })),
+        findOne: jest.fn(() => ({
+          lean: jest.fn().mockResolvedValue(opts.priorSent ?? null),
+        })),
         findByIdAndUpdate: jest.fn(async (_id: any, update: any) => {
           logUpdates.push(update);
           return {};
@@ -93,11 +108,17 @@ describe('EMAIL-REPORTS-CORE1 email delivery', () => {
 
   it('all providers failing is reported accurately (no false success)', async () => {
     const { service, sentVia, transporter, resend } = boot();
-    resend!.emails.send = jest.fn(async () => { throw new Error('resend down'); });
-    transporter!.sendMail = jest.fn(async () => { throw new Error('smtp down'); });
+    resend!.emails.send = jest.fn(async () => {
+      throw new Error('resend down');
+    });
+    transporter!.sendMail = jest.fn(async () => {
+      throw new Error('smtp down');
+    });
     const result = await service.sendEmail({ ...BASE });
     expect(result.success).toBe(false);
-    expect(result.error).toMatch(/resend down;? ?(smtp: )?smtp down|resend down/);
+    expect(result.error).toMatch(
+      /resend down;? ?(smtp: )?smtp down|resend down/,
+    );
     expect(sentVia).toHaveLength(0);
   });
 
@@ -112,7 +133,10 @@ describe('EMAIL-REPORTS-CORE1 email delivery', () => {
     const { service, sentVia, emailLogModel } = boot({
       priorSent: { _id: 'log-0', status: 'sent', messageId: 'resend-000' },
     });
-    const result = await service.sendEmail({ ...BASE, idempotencyKey: 'run-1' });
+    const result = await service.sendEmail({
+      ...BASE,
+      idempotencyKey: 'run-1',
+    });
     expect(result.success).toBe(true);
     expect(result.messageId).toBe('resend-000');
     expect(result.emailLogId).toBe('log-0');
@@ -124,7 +148,10 @@ describe('EMAIL-REPORTS-CORE1 email delivery', () => {
 
   it('concurrent same-key send is refused via the unique index (no duplicate delivery)', async () => {
     const { service, sentVia } = boot({ duplicateKeyError: true });
-    const result = await service.sendEmail({ ...BASE, idempotencyKey: 'run-2' });
+    const result = await service.sendEmail({
+      ...BASE,
+      idempotencyKey: 'run-2',
+    });
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/Duplicate send prevented/);
     expect(sentVia).toHaveLength(0);
@@ -143,7 +170,16 @@ describe('EMAIL-REPORTS-CORE1 email delivery', () => {
   it('attachments survive the Resend path (base64-encoded)', async () => {
     const { service, resend } = boot();
     const pdf = Buffer.from('%PDF-1.4 test');
-    await service.sendEmail({ ...BASE, attachments: [{ filename: 'report.pdf', content: pdf, contentType: 'application/pdf' }] });
+    await service.sendEmail({
+      ...BASE,
+      attachments: [
+        {
+          filename: 'report.pdf',
+          content: pdf,
+          contentType: 'application/pdf',
+        },
+      ],
+    });
     const call = resend!.emails.send.mock.calls[0][0];
     expect(call.attachments).toHaveLength(1);
     expect(call.attachments[0].filename).toBe('report.pdf');
@@ -183,7 +219,10 @@ describe('EMAIL-REPORTS-CORE1 email delivery', () => {
       err.code = 'ETIMEDOUT';
       throw err;
     });
-    const result = await service.sendEmail({ ...BASE, preferredProvider: 'smtp' });
+    const result = await service.sendEmail({
+      ...BASE,
+      preferredProvider: 'smtp',
+    });
     expect((result as any).ambiguous).toBe(true);
     expect(transporter!.sendMail).toHaveBeenCalledTimes(1); // no SMTP retry loop
     expect(resend!.emails.send).not.toHaveBeenCalled(); // no fallback

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/require-await, @typescript-eslint/no-unused-vars */
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -22,7 +21,11 @@ export class DemandForecastService {
     @InjectModel(AiInsight.name) private insightModel: Model<AiInsight>,
   ) {}
 
-  async forecastDemand(shopId: string, productId: string, daysAhead: number = 7): Promise<ForecastResult | null> {
+  async forecastDemand(
+    shopId: string,
+    productId: string,
+    daysAhead: number = 7,
+  ): Promise<ForecastResult | null> {
     try {
       return null;
     } catch (error: any) {
@@ -44,15 +47,18 @@ export class DemandForecastService {
   calculateTrend(values: number[]): number {
     if (values.length < 2) return 0;
     const n = values.length;
-    let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
-    
+    let sumX = 0,
+      sumY = 0,
+      sumXY = 0,
+      sumX2 = 0;
+
     for (let i = 0; i < n; i++) {
       sumX += i;
       sumY += values[i];
       sumXY += i * values[i];
       sumX2 += i * i;
     }
-    
+
     const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
     return slope;
   }

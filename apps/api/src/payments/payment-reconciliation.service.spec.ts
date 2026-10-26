@@ -23,7 +23,9 @@ describe('PaymentReconciliationService', () => {
       ],
     }).compile();
 
-    service = module.get<PaymentReconciliationService>(PaymentReconciliationService);
+    service = module.get<PaymentReconciliationService>(
+      PaymentReconciliationService,
+    );
   });
 
   it('should be defined', () => {
@@ -113,14 +115,14 @@ describe('PaymentReconciliationService', () => {
   describe('matchTransactions', () => {
     it('should match transactions correctly', async () => {
       const shopId = '507f1f77bcf86cd799439011';
-      const orders = [
-        { total: 5000, createdAt: new Date() },
-      ];
-      const transactions = [
-        { amount: 5000, createdAt: new Date() },
-      ];
+      const orders = [{ total: 5000, createdAt: new Date() }];
+      const transactions = [{ amount: 5000, createdAt: new Date() }];
 
-      const result = await service.matchTransactions(shopId, orders as any, transactions);
+      const result = await service.matchTransactions(
+        shopId,
+        orders as any,
+        transactions,
+      );
 
       expect(result.matched).toBe(1);
       expect(result.unmatched).toBe(0);
@@ -130,11 +132,13 @@ describe('PaymentReconciliationService', () => {
     it('should identify unmatched transactions', async () => {
       const shopId = '507f1f77bcf86cd799439011';
       const orders = [];
-      const transactions = [
-        { amount: 5000, createdAt: new Date() },
-      ];
+      const transactions = [{ amount: 5000, createdAt: new Date() }];
 
-      const result = await service.matchTransactions(shopId, orders as any, transactions);
+      const result = await service.matchTransactions(
+        shopId,
+        orders,
+        transactions,
+      );
 
       expect(result.matched).toBe(0);
       expect(result.unmatched).toBe(1);

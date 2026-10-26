@@ -24,8 +24,8 @@ export class CookieService {
 
   constructor(private readonly configService: ConfigService) {
     this.isProduction = configService.get('NODE_ENV') === 'production';
-    this.cookieDomain = this.isProduction 
-      ? configService.get('COOKIE_DOMAIN') 
+    this.cookieDomain = this.isProduction
+      ? configService.get('COOKIE_DOMAIN')
       : undefined;
     // In production with no shared domain, we need sameSite=none + secure
     // In development, we use sameSite=lax which works for same-site (localhost)
@@ -143,7 +143,7 @@ export class CookieService {
     res.clearCookie(CookieService.ACCESS_TOKEN_COOKIE, clearOptions);
     res.clearCookie(CookieService.REFRESH_TOKEN_COOKIE, {
       ...clearOptions,
-      sameSite: (this.isCrossOrigin ? 'none' : 'lax') as 'none' | 'lax',
+      sameSite: this.isCrossOrigin ? 'none' : 'lax',
       path: this.isProduction ? '/api/v1/auth' : '/',
     });
     res.clearCookie(CookieService.CSRF_TOKEN_COOKIE, {
@@ -179,11 +179,11 @@ export class CookieService {
   validateCsrfToken(req: Request): boolean {
     const cookieToken = this.getCsrfToken(req);
     const headerToken = req.headers['x-csrf-token'] as string;
-    
+
     if (!cookieToken || !headerToken) {
       return false;
     }
-    
+
     return cookieToken === headerToken;
   }
 }

@@ -1,9 +1,23 @@
-import { Controller, Get, Post, Body, UseGuards, Query, Param } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  UseGuards,
+  Query,
+  Param,
+} from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { DeviceFingerprintService } from '../auth/services/device-fingerprint.service';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiQuery,
+} from '@nestjs/swagger';
 
 @ApiTags('Super Admin - Devices')
 @Controller('super-admin/devices')
@@ -11,7 +25,9 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@ne
 @Roles('super_admin')
 @ApiBearerAuth()
 export class SuperAdminDevicesController {
-  constructor(private readonly deviceFingerprintService: DeviceFingerprintService) {}
+  constructor(
+    private readonly deviceFingerprintService: DeviceFingerprintService,
+  ) {}
 
   @Get('stats')
   @ApiOperation({ summary: 'System-wide device stats' })
@@ -49,7 +65,7 @@ export class SuperAdminDevicesController {
     return {
       success: true,
       total: devices.length,
-      trusted: devices.filter(d => d.isTrusted).length,
+      trusted: devices.filter((d) => d.isTrusted).length,
       devices,
     };
   }
@@ -60,10 +76,14 @@ export class SuperAdminDevicesController {
     if (!body?.deviceId) {
       return { success: false, message: 'deviceId required' };
     }
-    const success = await this.deviceFingerprintService.revokeDeviceTrustById(body.deviceId);
+    const success = await this.deviceFingerprintService.revokeDeviceTrustById(
+      body.deviceId,
+    );
     return {
       success,
-      message: success ? 'Device trust revoked' : 'Device not found or already revoked',
+      message: success
+        ? 'Device trust revoked'
+        : 'Device not found or already revoked',
     };
   }
 
@@ -73,7 +93,9 @@ export class SuperAdminDevicesController {
     if (!body?.deviceId) {
       return { success: false, message: 'deviceId required' };
     }
-    const success = await this.deviceFingerprintService.deactivateDeviceById(body.deviceId);
+    const success = await this.deviceFingerprintService.deactivateDeviceById(
+      body.deviceId,
+    );
     return {
       success,
       message: success ? 'Device deactivated' : 'Device not found',

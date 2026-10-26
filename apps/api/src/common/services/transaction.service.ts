@@ -4,7 +4,7 @@ import { Connection, ClientSession } from 'mongoose';
 
 /**
  * Transaction Service - MongoDB transaction helper with replica set detection
- * 
+ *
  * Features:
  * - Automatic replica set detection
  * - Graceful fallback for standalone MongoDB
@@ -16,9 +16,7 @@ export class TransactionService {
   private readonly logger = new Logger(TransactionService.name);
   private supportsTransactions: boolean | null = null;
 
-  constructor(
-    @InjectConnection() private readonly connection: Connection,
-  ) {}
+  constructor(@InjectConnection() private readonly connection: Connection) {}
 
   /**
    * Check if MongoDB supports transactions (requires replica set)
@@ -36,22 +34,30 @@ export class TransactionService {
         return false;
       }
 
-      const status = await admin.command({ replSetGetStatus: 1 }).catch(() => null);
-      
+      const status = await admin
+        .command({ replSetGetStatus: 1 })
+        .catch(() => null);
+
       if (status) {
         this.supportsTransactions = true;
-        this.logger.log('✅ MongoDB replica set detected - transactions enabled');
+        this.logger.log(
+          '✅ MongoDB replica set detected - transactions enabled',
+        );
       } else {
         // Check if it's MongoDB Atlas (which always supports transactions)
-        const serverStatus = await admin.command({ serverStatus: 1 }).catch(() => null);
+        const serverStatus = await admin
+          .command({ serverStatus: 1 })
+          .catch(() => null);
         const isAtlas = serverStatus?.host?.includes('mongodb.net');
-        
+
         if (isAtlas) {
           this.supportsTransactions = true;
           this.logger.log('✅ MongoDB Atlas detected - transactions enabled');
         } else {
           this.supportsTransactions = false;
-          this.logger.warn('⚠️ Standalone MongoDB detected - transactions disabled (requires replica set)');
+          this.logger.warn(
+            '⚠️ Standalone MongoDB detected - transactions disabled (requires replica set)',
+          );
         }
       }
     } catch (error: any) {
@@ -65,7 +71,7 @@ export class TransactionService {
   /**
    * Execute a function within a MongoDB transaction
    * Falls back to non-transactional execution if transactions not supported
-   * 
+   *
    * @param fn - Function to execute (receives session if transactions supported)
    * @param options - Transaction options
    * @returns Result of the function
@@ -83,30 +89,35 @@ export class TransactionService {
     }
 
     const session = await this.connection.startSession();
-    
+
     try {
       let result: T;
-      
-      await session.withTransaction(async () => {
-        result = await fn(session);
-      }, {
-        readPreference: options?.readPreference || 'primary',
-        readConcern: { level: options?.readConcern || 'snapshot' },
-        writeConcern: { w: options?.writeConcern || 'majority' },
-        maxCommitTimeMS: options?.maxCommitTimeMS || 30000,
-      });
+
+      await session.withTransaction(
+        async () => {
+          result = await fn(session);
+        },
+        {
+          readPreference: options?.readPreference || 'primary',
+          readConcern: { level: options?.readConcern || 'snapshot' },
+          writeConcern: { w: options?.writeConcern || 'majority' },
+          maxCommitTimeMS: options?.maxCommitTimeMS || 30000,
+        },
+      );
 
       return result!;
     } catch (error: any) {
       // Check for retryable errors
       if (this.isRetryableError(error) && (options?.retries ?? 1) > 0) {
-        this.logger.warn(`Retryable transaction error: ${error.message}. Retrying...`);
+        this.logger.warn(
+          `Retryable transaction error: ${error.message}. Retrying...`,
+        );
         return this.withTransaction(fn, {
           ...options,
           retries: (options?.retries ?? 1) - 1,
         });
       }
-      
+
       throw error;
     } finally {
       await session.endSession();
@@ -118,7 +129,7 @@ export class TransactionService {
    */
   async startSession(): Promise<ClientSession | null> {
     const supportsTransactions = await this.checkTransactionSupport();
-    
+
     if (!supportsTransactions) {
       return null;
     }
@@ -137,12 +148,12 @@ export class TransactionService {
 
     // Network errors
     const retryableCodes = [
-      6,     // HostUnreachable
-      7,     // HostNotFound
-      89,    // NetworkTimeout
-      91,    // ShutdownInProgress
-      189,   // PrimarySteppedDown
-      262,   // ExceededTimeLimit
+      6, // HostUnreachable
+      7, // HostNotFound
+      89, // NetworkTimeout
+      91, // ShutdownInProgress
+      189, // PrimarySteppedDown
+      262, // ExceededTimeLimit
       10107, // NotWritablePrimary
       11600, // InterruptedAtShutdown
       11602, // InterruptedDueToReplStateChange
@@ -163,12 +174,12 @@ export class TransactionService {
   ): Promise<T[]> {
     return this.withTransaction(async (session) => {
       const results: T[] = [];
-      
+
       for (const operation of operations) {
         const result = await operation(session);
         results.push(result);
       }
-      
+
       return results;
     }, options);
   }
@@ -178,8 +189,18 @@ export class TransactionService {
  * Transaction options
  */
 export interface TransactionOptions {
-  readPreference?: 'primary' | 'primaryPreferred' | 'secondary' | 'secondaryPreferred' | 'nearest';
-  readConcern?: 'local' | 'available' | 'majority' | 'linearizable' | 'snapshot';
+  readPreference?:
+    | 'primary'
+    | 'primaryPreferred'
+    | 'secondary'
+    | 'secondaryPreferred'
+    | 'nearest';
+  readConcern?:
+    | 'local'
+    | 'available'
+    | 'majority'
+    | 'linearizable'
+    | 'snapshot';
   writeConcern?: 'majority' | number;
   maxCommitTimeMS?: number;
   retries?: number;

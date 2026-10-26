@@ -7,11 +7,11 @@ export type VerificationLogDocument = HydratedDocument<VerificationLog>;
  * Types of verification operations
  */
 export enum VerificationType {
-  CREDENTIAL_TEST = 'credential_test',     // Test OAuth token generation
-  OAUTH_TOKEN = 'oauth_token',             // OAuth token request
-  STK_PUSH_TEST = 'stk_push_test',         // Test STK push (sandbox)
-  CALLBACK_TEST = 'callback_test',         // Test callback URL
-  BALANCE_CHECK = 'balance_check',         // Check account balance
+  CREDENTIAL_TEST = 'credential_test', // Test OAuth token generation
+  OAUTH_TOKEN = 'oauth_token', // OAuth token request
+  STK_PUSH_TEST = 'stk_push_test', // Test STK push (sandbox)
+  CALLBACK_TEST = 'callback_test', // Test callback URL
+  BALANCE_CHECK = 'balance_check', // Check account balance
   ACCOUNT_VALIDATION = 'account_validation', // Validate account exists
 }
 
@@ -28,7 +28,7 @@ export enum VerificationResult {
 
 /**
  * Verification Log Schema
- * 
+ *
  * Tracks all verification attempts for payment configurations.
  * Used for:
  * - Audit trail of credential testing
@@ -37,7 +37,12 @@ export enum VerificationResult {
  */
 @Schema({ timestamps: true, collection: 'verification_logs' })
 export class VerificationLog {
-  @Prop({ required: true, type: Types.ObjectId, ref: 'PaymentConfig', index: true })
+  @Prop({
+    required: true,
+    type: Types.ObjectId,
+    ref: 'PaymentConfig',
+    index: true,
+  })
   configId: Types.ObjectId;
 
   @Prop({ required: true, type: Types.ObjectId, ref: 'Shop', index: true })
@@ -49,7 +54,11 @@ export class VerificationLog {
   @Prop({ required: true, enum: VerificationType })
   type: VerificationType;
 
-  @Prop({ required: true, enum: VerificationResult, default: VerificationResult.PENDING })
+  @Prop({
+    required: true,
+    enum: VerificationResult,
+    default: VerificationResult.PENDING,
+  })
   result: VerificationResult;
 
   /**
@@ -135,7 +144,8 @@ export class VerificationLog {
   createdAt?: Date;
 }
 
-export const VerificationLogSchema = SchemaFactory.createForClass(VerificationLog);
+export const VerificationLogSchema =
+  SchemaFactory.createForClass(VerificationLog);
 
 // ============================================
 // INDEXES

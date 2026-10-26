@@ -1,16 +1,39 @@
-import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Shop, ShopDocument } from '../../shops/schemas/shop.schema';
 import { User, UserDocument } from '../../users/schemas/user.schema';
-import { Subscription, SubscriptionDocument } from '../../subscriptions/schemas/subscription.schema';
-import { SubscriptionInvoice, SubscriptionInvoiceDocument, InvoiceStatus, InvoiceType } from '../../subscriptions/schemas/subscription-invoice.schema';
-import { SystemConfig, SystemConfigDocument, SystemConfigType } from '../schemas/system-config.schema';
+import {
+  Subscription,
+  SubscriptionDocument,
+} from '../../subscriptions/schemas/subscription.schema';
+import {
+  SubscriptionInvoice,
+  SubscriptionInvoiceDocument,
+  InvoiceStatus,
+  InvoiceType,
+} from '../../subscriptions/schemas/subscription-invoice.schema';
+import {
+  SystemConfig,
+  SystemConfigDocument,
+  SystemConfigType,
+} from '../schemas/system-config.schema';
 import { EmailService } from '../../notifications/email.service';
 import { EmailLogService } from './email-log.service';
 import { SystemAuditService } from './system-audit.service';
-import { AuditActionCategory, AuditActionType } from '../schemas/system-audit-log.schema';
-import { SendManualEmailDto, CreateManualInvoiceDto } from '../dto/communications.dto';
+import {
+  AuditActionCategory,
+  AuditActionType,
+} from '../schemas/system-audit-log.schema';
+import {
+  SendManualEmailDto,
+  CreateManualInvoiceDto,
+} from '../dto/communications.dto';
 
 export interface ManualEmailResult {
   success: boolean;
@@ -27,9 +50,12 @@ export class SuperAdminCommunicationsService {
   constructor(
     @InjectModel(Shop.name) private readonly shopModel: Model<ShopDocument>,
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
-    @InjectModel(Subscription.name) private readonly subscriptionModel: Model<SubscriptionDocument>,
-    @InjectModel(SubscriptionInvoice.name) private readonly invoiceModel: Model<SubscriptionInvoiceDocument>,
-    @InjectModel(SystemConfig.name) private readonly systemConfigModel: Model<SystemConfigDocument>,
+    @InjectModel(Subscription.name)
+    private readonly subscriptionModel: Model<SubscriptionDocument>,
+    @InjectModel(SubscriptionInvoice.name)
+    private readonly invoiceModel: Model<SubscriptionInvoiceDocument>,
+    @InjectModel(SystemConfig.name)
+    private readonly systemConfigModel: Model<SystemConfigDocument>,
     private readonly emailService: EmailService,
     private readonly emailLogService: EmailLogService,
     private readonly auditService: SystemAuditService,
@@ -40,7 +66,9 @@ export class SuperAdminCommunicationsService {
    */
   private async getVatConfig(): Promise<{ enabled: boolean; rate: number }> {
     try {
-      const config = await this.systemConfigModel.findOne({ type: SystemConfigType.VAT });
+      const config = await this.systemConfigModel.findOne({
+        type: SystemConfigType.VAT,
+      });
       if (!config) {
         return { enabled: false, rate: 0.16 };
       }
@@ -61,14 +89,20 @@ export class SuperAdminCommunicationsService {
     superAdminId: string,
     superAdminEmail: string,
   ): Promise<ManualEmailResult> {
-    this.logger.log(`Super admin ${superAdminEmail} sending manual email: ${dto.subject}`);
+    this.logger.log(
+      `Super admin ${superAdminEmail} sending manual email: ${dto.subject}`,
+    );
 
-    const recipients: Array<{ email: string; shopId?: string; shopName?: string }> = [];
+    const recipients: Array<{
+      email: string;
+      shopId?: string;
+      shopName?: string;
+    }> = [];
 
     // Gather recipients based on type
     if (dto.recipientType === 'shop' && dto.shopIds?.length) {
       const shops = await this.shopModel
-        .find({ _id: { $in: dto.shopIds.map(id => new Types.ObjectId(id)) } })
+        .find({ _id: { $in: dto.shopIds.map((id) => new Types.ObjectId(id)) } })
         .select('email name')
         .exec();
 
@@ -116,8 +150,8 @@ export class SuperAdminCommunicationsService {
 
     // Send emails in parallel batches for better performance
     const BATCH_SIZE = 5; // Process 5 emails concurrently
-    const batches: typeof recipients[] = [];
-    
+    const batches: (typeof recipients)[] = [];
+
     for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
       batches.push(recipients.slice(i, i + BATCH_SIZE));
     }
@@ -167,12 +201,18 @@ export class SuperAdminCommunicationsService {
               sendResult.error || 'Unknown error',
             );
             result.failed++;
-            result.errors.push({ email: recipient.email, error: sendResult.error || 'Unknown error' });
+            result.errors.push({
+              email: recipient.email,
+              error: sendResult.error || 'Unknown error',
+            });
           }
         } else {
           result.failed++;
           const error = batchResult.reason;
-          result.errors.push({ email: 'unknown', error: error?.message || 'Batch processing error' });
+          result.errors.push({
+            email: 'unknown',
+            error: error?.message || 'Batch processing error',
+          });
           this.logger.error(`Batch email failed: ${error?.message}`);
         }
       }
@@ -194,7 +234,12 @@ export class SuperAdminCommunicationsService {
         sent: result.sent,
         failed: result.failed,
       },
-      status: result.failed === 0 ? 'success' : (result.sent > 0 ? 'warning' : 'failure'),
+      status:
+        result.failed === 0
+          ? 'success'
+          : result.sent > 0
+            ? 'warning'
+            : 'failure',
     });
 
     result.success = result.sent > 0;
@@ -204,7 +249,9 @@ export class SuperAdminCommunicationsService {
   /**
    * Get all shops for email recipient selection
    */
-  async getShopsForEmail(): Promise<Array<{ id: string; name: string; email: string; status: string }>> {
+  async getShopsForEmail(): Promise<
+    Array<{ id: string; name: string; email: string; status: string }>
+  > {
     const shops = await this.shopModel
       .find({ email: { $exists: true, $ne: '' } })
       .select('name email status')
@@ -212,7 +259,7 @@ export class SuperAdminCommunicationsService {
       .lean()
       .exec();
 
-    return shops.map(shop => ({
+    return shops.map((shop) => ({
       id: (shop._id as any).toString(),
       name: shop.name,
       email: shop.email,
@@ -223,14 +270,24 @@ export class SuperAdminCommunicationsService {
   /**
    * Get shops missing email addresses
    */
-  async getShopsMissingEmail(): Promise<Array<{ id: string; name: string; phone: string; status: string; createdAt: Date }>> {
+  async getShopsMissingEmail(): Promise<
+    Array<{
+      id: string;
+      name: string;
+      phone: string;
+      status: string;
+      createdAt: Date;
+    }>
+  > {
     const shops = await this.shopModel
-      .find({ $or: [{ email: { $exists: false } }, { email: '' }, { email: null }] })
+      .find({
+        $or: [{ email: { $exists: false } }, { email: '' }, { email: null }],
+      })
       .select('name phone status createdAt')
       .sort({ createdAt: -1 })
       .exec();
 
-    return shops.map(shop => ({
+    return shops.map((shop) => ({
       id: shop._id.toString(),
       name: shop.name,
       phone: shop.phone,
@@ -247,10 +304,14 @@ export class SuperAdminCommunicationsService {
     superAdminId: string,
     superAdminEmail: string,
   ): Promise<SubscriptionInvoiceDocument> {
-    this.logger.log(`Super admin ${superAdminEmail} creating manual invoice for shop ${dto.shopId}`);
+    this.logger.log(
+      `Super admin ${superAdminEmail} creating manual invoice for shop ${dto.shopId}`,
+    );
 
     // Validate shop exists
-    const shop = await this.shopModel.findById(new Types.ObjectId(dto.shopId)).exec();
+    const shop = await this.shopModel
+      .findById(new Types.ObjectId(dto.shopId))
+      .exec();
     if (!shop) {
       throw new NotFoundException('Shop not found');
     }
@@ -264,20 +325,22 @@ export class SuperAdminCommunicationsService {
     const invoiceNumber = await this.generateInvoiceNumber();
 
     // Calculate line items
-    const lineItems = dto.lineItems?.map(item => ({
+    const lineItems = dto.lineItems?.map((item) => ({
       description: item.description,
       quantity: item.quantity,
       unitPrice: item.unitPrice,
       amount: item.quantity * item.unitPrice,
-    })) || [{
-      description: dto.description,
-      quantity: 1,
-      unitPrice: dto.amount,
-      amount: dto.amount,
-    }];
+    })) || [
+      {
+        description: dto.description,
+        quantity: 1,
+        unitPrice: dto.amount,
+        amount: dto.amount,
+      },
+    ];
 
     const subtotal = lineItems.reduce((sum, item) => sum + item.amount, 0);
-    
+
     // Get VAT config - only apply tax if VAT is enabled
     const vatConfig = await this.getVatConfig();
     const tax = vatConfig.enabled ? Math.round(subtotal * vatConfig.rate) : 0;
@@ -297,7 +360,9 @@ export class SuperAdminCommunicationsService {
       currency: 'KES',
       dueDate: new Date(dto.dueDate),
       lineItems,
-      notes: dto.notes ? `${dto.notes}\n\nCreated manually by super admin.` : 'Created manually by super admin.',
+      notes: dto.notes
+        ? `${dto.notes}\n\nCreated manually by super admin.`
+        : 'Created manually by super admin.',
     });
 
     const savedInvoice = await invoice.save();
@@ -329,7 +394,9 @@ export class SuperAdminCommunicationsService {
       await this.sendInvoiceEmail(savedInvoice, shop);
     }
 
-    this.logger.log(`Manual invoice ${invoiceNumber} created for shop ${shop.name}`);
+    this.logger.log(
+      `Manual invoice ${invoiceNumber} created for shop ${shop.name}`,
+    );
     return savedInvoice;
   }
 
@@ -341,7 +408,9 @@ export class SuperAdminCommunicationsService {
     shop?: ShopDocument,
   ): Promise<{ success: boolean; error?: string }> {
     if (!shop) {
-      shop = await this.shopModel.findById(invoice.shopId).exec() as ShopDocument;
+      shop = (await this.shopModel
+        .findById(invoice.shopId)
+        .exec()) as ShopDocument;
       if (!shop) {
         return { success: false, error: 'Shop not found' };
       }
@@ -355,7 +424,11 @@ export class SuperAdminCommunicationsService {
     // Direct to subscription page with invoice parameter for payment
     const paymentUrl = `${frontendUrl}/admin/subscription?invoice=${invoice._id}&pay=true`;
 
-    const htmlContent = this.generateInvoiceEmailHtml(invoice, shop, paymentUrl);
+    const htmlContent = this.generateInvoiceEmailHtml(
+      invoice,
+      shop,
+      paymentUrl,
+    );
 
     try {
       // Create email log
@@ -376,8 +449,12 @@ export class SuperAdminCommunicationsService {
       });
 
       if (result.success) {
-        await this.emailLogService.markSent(emailLog._id.toString(), result.messageId, 'nodemailer');
-        
+        await this.emailLogService.markSent(
+          emailLog._id.toString(),
+          result.messageId,
+          'nodemailer',
+        );
+
         // Update invoice email tracking
         await this.invoiceModel.findByIdAndUpdate(invoice._id, {
           $set: {
@@ -387,16 +464,19 @@ export class SuperAdminCommunicationsService {
           },
           $inc: { emailSentCount: 1 },
         });
-        
+
         return { success: true };
       } else {
-        await this.emailLogService.markFailed(emailLog._id.toString(), result.error || 'Unknown error');
-        
+        await this.emailLogService.markFailed(
+          emailLog._id.toString(),
+          result.error || 'Unknown error',
+        );
+
         // Update invoice with error
         await this.invoiceModel.findByIdAndUpdate(invoice._id, {
           $set: { lastEmailError: result.error || 'Unknown error' },
         });
-        
+
         return { success: false, error: result.error };
       }
     } catch (error: any) {
@@ -416,7 +496,9 @@ export class SuperAdminCommunicationsService {
     superAdminId: string,
     superAdminEmail: string,
   ): Promise<{ success: boolean; error?: string }> {
-    const invoice = await this.invoiceModel.findById(new Types.ObjectId(invoiceId)).exec();
+    const invoice = await this.invoiceModel
+      .findById(new Types.ObjectId(invoiceId))
+      .exec();
     if (!invoice) {
       throw new NotFoundException('Invoice not found');
     }
@@ -495,7 +577,10 @@ export class SuperAdminCommunicationsService {
 
     let nextNumber = 1;
     if (latestInvoice) {
-      const lastNumber = parseInt(latestInvoice.invoiceNumber.replace(prefix, ''), 10);
+      const lastNumber = parseInt(
+        latestInvoice.invoiceNumber.replace(prefix, ''),
+        10,
+      );
       nextNumber = lastNumber + 1;
     }
 
@@ -529,7 +614,7 @@ export class SuperAdminCommunicationsService {
     // Mobile-friendly line items (stacked on small screens)
     const lineItemsHtml = invoice.lineItems
       .map(
-        item => `
+        (item) => `
         <tr style="border-bottom: 1px solid #e5e7eb;">
           <td style="padding: 16px 12px; font-size: 14px;">
             <div style="font-weight: 600; color: #1f2937;">${item.description}</div>
@@ -691,7 +776,9 @@ export class SuperAdminCommunicationsService {
                 </tr>
               </table>
               
-              ${invoice.notes ? `
+              ${
+                invoice.notes
+                  ? `
               <!-- Notes -->
               <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin-bottom: 24px;">
                 <tr>
@@ -702,7 +789,9 @@ export class SuperAdminCommunicationsService {
                   </td>
                 </tr>
               </table>
-              ` : ''}
+              `
+                  : ''
+              }
               
               <!-- Pay Now Button -->
               <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 32px 0;">

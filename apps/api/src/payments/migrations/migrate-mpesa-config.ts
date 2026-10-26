@@ -1,12 +1,12 @@
 /**
  * Migration Script: Move existing mpesaConfig from Shop schema to PaymentConfig schema
- * 
+ *
  * This script:
  * 1. Finds all shops with mpesaConfig
  * 2. Creates PaymentConfig documents for each
  * 3. Preserves all encrypted credentials
  * 4. Marks old configs as migrated
- * 
+ *
  * Run with: npx ts-node -r tsconfig-paths/register src/payments/migrations/migrate-mpesa-config.ts
  */
 
@@ -48,8 +48,12 @@ async function migrate() {
   });
 
   const shopModel = app.get<Model<ShopDocument>>(getModelToken(Shop.name));
-  const paymentConfigModel = app.get<Model<PaymentConfigDocument>>(getModelToken(PaymentConfig.name));
-  const auditLogModel = app.get<Model<ConfigAuditLogDocument>>(getModelToken(ConfigAuditLog.name));
+  const paymentConfigModel = app.get<Model<PaymentConfigDocument>>(
+    getModelToken(PaymentConfig.name),
+  );
+  const auditLogModel = app.get<Model<ConfigAuditLogDocument>>(
+    getModelToken(ConfigAuditLog.name),
+  );
 
   const results: MigrationResult[] = [];
   let migratedCount = 0;
@@ -58,11 +62,15 @@ async function migrate() {
 
   try {
     // Find all shops with mpesaConfig
-    const shopsWithConfig = await shopModel.find({
-      'mpesaConfig.shortCode': { $exists: true, $nin: [null, ''] },
-    }).exec();
+    const shopsWithConfig = await shopModel
+      .find({
+        'mpesaConfig.shortCode': { $exists: true, $nin: [null, ''] },
+      })
+      .exec();
 
-    console.log(`Found ${shopsWithConfig.length} shops with M-Pesa configuration`);
+    console.log(
+      `Found ${shopsWithConfig.length} shops with M-Pesa configuration`,
+    );
     console.log('');
 
     for (const shop of shopsWithConfig) {
@@ -73,10 +81,12 @@ async function migrate() {
 
       try {
         // Check if already migrated
-        const existingConfig = await paymentConfigModel.findOne({
-          shopId: shop._id,
-          shortCode: mpesaConfig?.shortCode,
-        }).exec();
+        const existingConfig = await paymentConfigModel
+          .findOne({
+            shopId: shop._id,
+            shortCode: mpesaConfig?.shortCode,
+          })
+          .exec();
 
         if (existingConfig) {
           console.log(`  ⏭️  Already migrated, skipping`);
@@ -92,14 +102,16 @@ async function migrate() {
         }
 
         // Determine provider type
-        const provider = mpesaConfig?.type === 'till'
-          ? PaymentProvider.MPESA_TILL
-          : PaymentProvider.MPESA_PAYBILL;
+        const provider =
+          mpesaConfig?.type === 'till'
+            ? PaymentProvider.MPESA_TILL
+            : PaymentProvider.MPESA_PAYBILL;
 
         // Determine environment from global setting
-        const environment = process.env.MPESA_ENV === 'production'
-          ? ConfigEnvironment.PRODUCTION
-          : ConfigEnvironment.SANDBOX;
+        const environment =
+          process.env.MPESA_ENV === 'production'
+            ? ConfigEnvironment.PRODUCTION
+            : ConfigEnvironment.SANDBOX;
 
         // Determine status based on verification
         let status = ConfigStatus.DRAFT;
@@ -134,7 +146,8 @@ async function migrate() {
           callbackUrl: mpesaConfig?.callbackUrl,
           status,
           priority: 0,
-          isActive: mpesaConfig?.enabled === true && status === ConfigStatus.VERIFIED,
+          isActive:
+            mpesaConfig?.enabled === true && status === ConfigStatus.VERIFIED,
           isDefault: true,
           verifiedAt: mpesaConfig?.verifiedAt,
           lastTestedAt: mpesaConfig?.lastTestedAt,
@@ -146,7 +159,9 @@ async function migrate() {
             originalEnabled: mpesaConfig?.enabled,
             originalVerificationStatus: mpesaConfig?.verificationStatus,
           },
-          createdBy: shop.verificationBy || new Types.ObjectId('000000000000000000000000'),
+          createdBy:
+            shop.verificationBy ||
+            new Types.ObjectId('000000000000000000000000'),
         });
 
         await newConfig.save();
@@ -171,16 +186,18 @@ async function migrate() {
         await auditLog.save();
 
         // Mark shop's mpesaConfig as migrated (add flag)
-        await shopModel.updateOne(
-          { _id: shop._id },
-          {
-            $set: {
-              'mpesaConfig.migratedToPaymentConfig': true,
-              'mpesaConfig.migratedAt': new Date(),
-              'mpesaConfig.paymentConfigId': newConfig._id,
+        await shopModel
+          .updateOne(
+            { _id: shop._id },
+            {
+              $set: {
+                'mpesaConfig.migratedToPaymentConfig': true,
+                'mpesaConfig.migratedAt': new Date(),
+                'mpesaConfig.paymentConfigId': newConfig._id,
+              },
             },
-          }
-        ).exec();
+          )
+          .exec();
 
         console.log(`  ✅ Migrated successfully (configId: ${newConfig._id})`);
         migratedCount++;
@@ -190,7 +207,6 @@ async function migrate() {
           success: true,
           configId: newConfig._id.toString(),
         });
-
       } catch (error: any) {
         console.log(`  ❌ Error: ${error.message}`);
         errorCount++;
@@ -217,12 +233,11 @@ async function migrate() {
     if (errorCount > 0) {
       console.log('Failed migrations:');
       results
-        .filter(r => !r.success && r.error !== 'Already migrated')
-        .forEach(r => {
+        .filter((r) => !r.success && r.error !== 'Already migrated')
+        .forEach((r) => {
           console.log(`  - ${r.shopName} (${r.shopId}): ${r.error}`);
         });
     }
-
   } catch (error: any) {
     console.error('Migration failed:', error.message);
     process.exit(1);

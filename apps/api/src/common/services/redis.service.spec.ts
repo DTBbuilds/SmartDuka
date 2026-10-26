@@ -21,7 +21,7 @@ describe('RedisService', () => {
 
     service = module.get<RedisService>(RedisService);
     configService = module.get<ConfigService>(ConfigService);
-    
+
     // Initialize the service
     await service.onModuleInit();
   });
@@ -56,7 +56,7 @@ describe('RedisService', () => {
     it('should delete values', async () => {
       await service.set('delete-key', 'value');
       expect(await service.get('delete-key')).toBe('value');
-      
+
       const deleted = await service.del('delete-key');
       expect(deleted).toBe(true);
       expect(await service.get('delete-key')).toBeNull();
@@ -66,9 +66,9 @@ describe('RedisService', () => {
       // Set with 1 second TTL
       await service.set('ttl-key', 'value', 1);
       expect(await service.get('ttl-key')).toBe('value');
-      
+
       // Wait for expiry
-      await new Promise(resolve => setTimeout(resolve, 1100));
+      await new Promise((resolve) => setTimeout(resolve, 1100));
       expect(await service.get('ttl-key')).toBeNull();
     });
 
@@ -76,10 +76,10 @@ describe('RedisService', () => {
       await service.set('shop:123:products', 'p1');
       await service.set('shop:123:orders', 'o1');
       await service.set('shop:456:products', 'p2');
-      
+
       const deleted = await service.deletePattern('shop:123:*');
       expect(deleted).toBe(2);
-      
+
       expect(await service.get('shop:123:products')).toBeNull();
       expect(await service.get('shop:123:orders')).toBeNull();
       expect(await service.get('shop:456:products')).toBe('p2');
@@ -94,7 +94,7 @@ describe('RedisService', () => {
     it('should increment counter', async () => {
       const count1 = await service.incr('counter');
       expect(count1).toBe(1);
-      
+
       const count2 = await service.incr('counter');
       expect(count2).toBe(2);
     });
@@ -120,7 +120,7 @@ describe('RedisService', () => {
     it('should get cache stats', async () => {
       await service.set('stat-key', 'value');
       const stats = await service.getStats();
-      
+
       expect(stats.mode).toBe('memory');
       expect(stats.connected).toBe(false);
       expect(stats.keys).toBeGreaterThanOrEqual(1);
@@ -129,9 +129,9 @@ describe('RedisService', () => {
     it('should flush all cache', async () => {
       await service.set('key1', 'value1');
       await service.set('key2', 'value2');
-      
+
       await service.flushAll();
-      
+
       expect(await service.get('key1')).toBeNull();
       expect(await service.get('key2')).toBeNull();
     });

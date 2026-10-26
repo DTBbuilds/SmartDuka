@@ -58,9 +58,16 @@ export class ReportPreferencesController {
   @Roles('admin')
   @Post('preferences/unsubscribe')
   @HttpCode(HttpStatus.OK)
-  async unsubscribe(@CurrentUser() user: any, @Body() body: { reason?: string }) {
+  async unsubscribe(
+    @CurrentUser() user: any,
+    @Body() body: { reason?: string },
+  ) {
     await this.preferencesService.unsubscribeAll(user.shopId, body?.reason);
-    return { success: true, message: 'Optional business reports unsubscribed. Transactional emails (security, payment notices) are unaffected.' };
+    return {
+      success: true,
+      message:
+        'Optional business reports unsubscribed. Transactional emails (security, payment notices) are unaffected.',
+    };
   }
 
   /**
@@ -71,7 +78,11 @@ export class ReportPreferencesController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
   @Get('preview')
-  async preview(@CurrentUser() user: any, @Query('frequency') frequency: 'daily' | 'weekly' | 'monthly' = 'daily', @Query('format') format: 'html' | 'pdf' = 'html') {
+  async preview(
+    @CurrentUser() user: any,
+    @Query('frequency') frequency: 'daily' | 'weekly' | 'monthly' = 'daily',
+    @Query('format') format: 'html' | 'pdf' = 'html',
+  ) {
     const prefs = await this.preferencesService.getOrCreate(user.shopId);
     const now = new Date();
     const tz = prefs.timezone || 'Africa/Nairobi';
@@ -79,18 +90,32 @@ export class ReportPreferencesController {
     let metrics: any;
     if (frequency === 'weekly') {
       const start = new Date(now.getTime() - 6 * 86_400_000);
-      metrics = await this.reportsService.getWeeklySalesReport(user.shopId, start, tz);
+      metrics = await this.reportsService.getWeeklySalesReport(
+        user.shopId,
+        start,
+        tz,
+      );
     } else if (frequency === 'monthly') {
       const d = new Date();
-      metrics = await this.reportsService.getMonthlySalesReport(user.shopId, d.getFullYear(), d.getMonth() + 1, tz);
+      metrics = await this.reportsService.getMonthlySalesReport(
+        user.shopId,
+        d.getFullYear(),
+        d.getMonth() + 1,
+        tz,
+      );
     } else {
-      metrics = await this.reportsService.getDailySalesReport(user.shopId, now, tz);
+      metrics = await this.reportsService.getDailySalesReport(
+        user.shopId,
+        now,
+        tz,
+      );
     }
 
     const reportMetrics = {
       shopName: metrics.shopName ?? 'Your shop',
       frequency,
-      periodLabel: metrics.date ?? metrics.week ?? `${metrics.month} ${metrics.year}`,
+      periodLabel:
+        metrics.date ?? metrics.week ?? `${metrics.month} ${metrics.year}`,
       periodStart: metrics.startDate ?? new Date(),
       periodEnd: metrics.endDate ?? new Date(),
       timezone: tz,
@@ -114,13 +139,13 @@ export class ReportPreferencesController {
     };
 
     if (format === 'pdf') {
-      const pdf = await this.renderer.pdf(reportMetrics as any);
+      const pdf = await this.renderer.pdf(reportMetrics);
       return pdf;
     }
     return {
-      subject: this.renderer.subject(reportMetrics as any),
-      html: this.renderer.html(reportMetrics as any),
-      text: this.renderer.text(reportMetrics as any),
+      subject: this.renderer.subject(reportMetrics),
+      html: this.renderer.html(reportMetrics),
+      text: this.renderer.text(reportMetrics),
     };
   }
 

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument */
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -9,7 +8,8 @@ export class ActivityService {
   private readonly logger = new Logger(ActivityService.name);
 
   constructor(
-    @InjectModel(Activity.name) private readonly activityModel: Model<ActivityDocument>,
+    @InjectModel(Activity.name)
+    private readonly activityModel: Model<ActivityDocument>,
   ) {}
 
   /**
@@ -19,7 +19,12 @@ export class ActivityService {
     shopId: string,
     userId: string,
     userName: string,
-    userRole: 'admin' | 'cashier' | 'super_admin' | 'branch_admin' | 'branch_manager',
+    userRole:
+      | 'admin'
+      | 'cashier'
+      | 'super_admin'
+      | 'branch_admin'
+      | 'branch_manager',
     action: string,
     details?: any,
     ipAddress?: string,
@@ -37,7 +42,7 @@ export class ActivityService {
         branchId: branchId ? new Types.ObjectId(branchId) : undefined,
         userId: new Types.ObjectId(userId),
         userName,
-        userRole: userRole as 'admin' | 'cashier' | 'branch_admin' | 'branch_manager',
+        userRole: userRole,
         action,
         details: details || {},
         ipAddress,
@@ -46,7 +51,10 @@ export class ActivityService {
       });
       return await activity.save();
     } catch (error) {
-      this.logger.error(`Failed to log activity: ${error.message}`, error.stack);
+      this.logger.error(
+        `Failed to log activity: ${error.message}`,
+        error.stack,
+      );
       // Don't throw - activity logging should not break the application
       return null;
     }
@@ -62,7 +70,7 @@ export class ActivityService {
     skip: number = 0,
   ): Promise<ActivityDocument[]> {
     const query: any = { shopId: new Types.ObjectId(shopId) };
-    
+
     if (branchId) {
       query.branchId = new Types.ObjectId(branchId);
     }

@@ -4,8 +4,14 @@ import { BullModule } from '@nestjs/bullmq';
 import { ConfigModule } from '@nestjs/config';
 
 // Schemas
-import { WhatsAppMessage, WhatsAppMessageSchema } from './schemas/whatsapp-message.schema';
-import { WhatsAppConfig, WhatsAppConfigSchema } from './schemas/whatsapp-config.schema';
+import {
+  WhatsAppMessage,
+  WhatsAppMessageSchema,
+} from './schemas/whatsapp-message.schema';
+import {
+  WhatsAppConfig,
+  WhatsAppConfigSchema,
+} from './schemas/whatsapp-config.schema';
 
 // Providers
 import { MetaCloudProvider } from './providers/meta-cloud.provider';
@@ -29,12 +35,12 @@ const REDIS_URL = process.env.REDIS_URL;
 
 /**
  * WhatsApp Module
- * 
+ *
  * Provides WhatsApp Business API integration for:
  * - AI-generated report delivery
  * - Event-based alerts
  * - Phone verification
- * 
+ *
  * Supports multiple providers: Meta Cloud API, Twilio
  */
 @Module({
@@ -44,11 +50,13 @@ const REDIS_URL = process.env.REDIS_URL;
       { name: WhatsAppMessage.name, schema: WhatsAppMessageSchema },
       { name: WhatsAppConfig.name, schema: WhatsAppConfigSchema },
     ]),
-    ...(REDIS_URL ? [
-      BullModule.registerQueue({
-        name: 'whatsapp',
-      }),
-    ] : []),
+    ...(REDIS_URL
+      ? [
+          BullModule.registerQueue({
+            name: 'whatsapp',
+          }),
+        ]
+      : []),
     forwardRef(() => QueueModule),
   ],
   controllers: [WhatsAppController],
@@ -63,9 +71,6 @@ const REDIS_URL = process.env.REDIS_URL;
     // Processors (only register if Redis is available)
     ...(REDIS_URL ? [WhatsAppMessageProcessor] : []),
   ],
-  exports: [
-    WhatsAppService,
-    WhatsAppTemplateService,
-  ],
+  exports: [WhatsAppService, WhatsAppTemplateService],
 })
 export class WhatsAppModule {}

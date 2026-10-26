@@ -49,14 +49,18 @@ export class PaymentReversalService {
       }
 
       // Find payment record
-      const payment = order.payments?.find((p) => (p as any)._id?.toString() === paymentId);
+      const payment = order.payments?.find(
+        (p) => (p as any)._id?.toString() === paymentId,
+      );
       if (!payment) {
         throw new BadRequestException('Payment not found');
       }
 
       // Validate payment can be reversed
       if (payment.status !== 'completed') {
-        throw new BadRequestException('Only completed payments can be reversed');
+        throw new BadRequestException(
+          'Only completed payments can be reversed',
+        );
       }
 
       // If M-Pesa payment, call reversal API
@@ -104,7 +108,9 @@ export class PaymentReversalService {
 
         await order.save();
 
-        this.logger.log(`Cash payment reversed for order ${orderId}: Amount: ${payment.amount}`);
+        this.logger.log(
+          `Cash payment reversed for order ${orderId}: Amount: ${payment.amount}`,
+        );
 
         return {
           shopId,
@@ -119,7 +125,9 @@ export class PaymentReversalService {
           notes,
         };
       } else {
-        throw new BadRequestException('Payment method does not support reversal');
+        throw new BadRequestException(
+          'Payment method does not support reversal',
+        );
       }
     } catch (error: any) {
       this.logger.error('Payment reversal failed', error?.message);
@@ -146,7 +154,8 @@ export class PaymentReversalService {
 
       const reversals: PaymentReversal[] = [];
       for (const order of orders) {
-        const reversedPayments = order.payments?.filter((p) => p.status === 'reversed') || [];
+        const reversedPayments =
+          order.payments?.filter((p) => p.status === 'reversed') || [];
         for (const payment of reversedPayments) {
           reversals.push({
             shopId,
@@ -187,7 +196,8 @@ export class PaymentReversalService {
       const reversalsByPaymentMethod: Record<string, number> = {};
 
       for (const order of orders) {
-        const reversedPayments = order.payments?.filter((p) => p.status === 'reversed') || [];
+        const reversedPayments =
+          order.payments?.filter((p) => p.status === 'reversed') || [];
         for (const payment of reversedPayments) {
           totalReversals++;
           totalReversalAmount += payment.amount;
@@ -196,14 +206,16 @@ export class PaymentReversalService {
           reversalsByReason[reason] = (reversalsByReason[reason] || 0) + 1;
 
           const method = payment.method || 'Unknown';
-          reversalsByPaymentMethod[method] = (reversalsByPaymentMethod[method] || 0) + 1;
+          reversalsByPaymentMethod[method] =
+            (reversalsByPaymentMethod[method] || 0) + 1;
         }
       }
 
       return {
         totalReversals,
         totalReversalAmount,
-        averageReversalAmount: totalReversals > 0 ? totalReversalAmount / totalReversals : 0,
+        averageReversalAmount:
+          totalReversals > 0 ? totalReversalAmount / totalReversals : 0,
         reversalsByReason,
         reversalsByPaymentMethod,
       };

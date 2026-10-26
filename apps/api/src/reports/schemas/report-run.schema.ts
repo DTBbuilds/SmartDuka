@@ -55,7 +55,14 @@ export class ReportRun {
 
   @Prop({
     required: true,
-    enum: ['queued', 'processing', 'accepted', 'delivered', 'failed', 'suppressed'],
+    enum: [
+      'queued',
+      'processing',
+      'accepted',
+      'delivered',
+      'failed',
+      'suppressed',
+    ],
     default: 'queued',
     index: true,
   })

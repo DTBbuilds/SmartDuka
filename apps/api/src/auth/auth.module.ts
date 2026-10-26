@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import { Module, forwardRef } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
@@ -8,7 +7,12 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { TokenService } from './token.service';
 import { OAuthExchangeService } from './services/oauth-exchange.service';
-import { OAuthExchangeTicket, OAuthExchangeTicketSchema, OAuthState, OAuthStateSchema } from './schemas/oauth-exchange-ticket.schema';
+import {
+  OAuthExchangeTicket,
+  OAuthExchangeTicketSchema,
+  OAuthState,
+  OAuthStateSchema,
+} from './schemas/oauth-exchange-ticket.schema';
 import { OtpService } from './services/otp.service';
 import { DeviceFingerprintService } from './services/device-fingerprint.service';
 import { UsersModule } from '../users/users.module';
@@ -21,13 +25,28 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { SubscriptionStatusGuard } from './guards/subscription-status.guard';
 import { SuperAdmin, SuperAdminSchema } from './schemas/super-admin.schema';
-import { Subscription, SubscriptionSchema } from '../subscriptions/schemas/subscription.schema';
-import { RefreshToken, RefreshTokenSchema } from './schemas/refresh-token.schema';
-import { PasswordResetToken, PasswordResetTokenSchema } from './schemas/password-reset-token.schema';
+import {
+  Subscription,
+  SubscriptionSchema,
+} from '../subscriptions/schemas/subscription.schema';
+import {
+  RefreshToken,
+  RefreshTokenSchema,
+} from './schemas/refresh-token.schema';
+import {
+  PasswordResetToken,
+  PasswordResetTokenSchema,
+} from './schemas/password-reset-token.schema';
 import { Session, SessionSchema } from './schemas/session.schema';
 import { Otp, OtpSchema } from './schemas/otp.schema';
-import { LoginHistory, LoginHistorySchema } from './schemas/login-history.schema';
-import { DeviceFingerprint, DeviceFingerprintSchema } from './schemas/device-fingerprint.schema';
+import {
+  LoginHistory,
+  LoginHistorySchema,
+} from './schemas/login-history.schema';
+import {
+  DeviceFingerprint,
+  DeviceFingerprintSchema,
+} from './schemas/device-fingerprint.schema';
 import { CookieService } from './services/cookie.service';
 import { CsrfService } from './services/csrf.service';
 import { LoginAttemptService } from './services/login-attempt.service';
@@ -78,9 +97,9 @@ import { JwtCookieAuthGuard } from './guards/jwt-cookie-auth.guard';
         name: DeviceFingerprint.name,
         schema: DeviceFingerprintSchema,
       },
-    { name: OAuthExchangeTicket.name, schema: OAuthExchangeTicketSchema },
-    { name: OAuthState.name, schema: OAuthStateSchema },
-  ]),
+      { name: OAuthExchangeTicket.name, schema: OAuthExchangeTicketSchema },
+      { name: OAuthState.name, schema: OAuthStateSchema },
+    ]),
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({

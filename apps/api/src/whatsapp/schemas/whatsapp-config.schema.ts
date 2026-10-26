@@ -109,4 +109,5 @@ export class WhatsAppConfig {
   totalMessagesFailed: number;
 }
 
-export const WhatsAppConfigSchema = SchemaFactory.createForClass(WhatsAppConfig);
+export const WhatsAppConfigSchema =
+  SchemaFactory.createForClass(WhatsAppConfig);

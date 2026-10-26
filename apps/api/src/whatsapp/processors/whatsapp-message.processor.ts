@@ -12,7 +12,7 @@ export interface WhatsAppMessageJobData {
 
 /**
  * WhatsApp Message Queue Processor
- * 
+ *
  * Processes queued WhatsApp messages asynchronously.
  * Handles retries and error logging.
  */
@@ -26,7 +26,7 @@ export class WhatsAppMessageProcessor extends WorkerHost {
 
   async process(job: Job<WhatsAppMessageJobData>): Promise<void> {
     const { messageId, to } = job.data;
-    
+
     this.logger.debug(`Processing WhatsApp message ${messageId} to ${to}`);
 
     try {
@@ -34,7 +34,9 @@ export class WhatsAppMessageProcessor extends WorkerHost {
       this.logger.log(`WhatsApp message sent: ${messageId}`);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Failed to send WhatsApp message ${messageId}: ${message}`);
+      this.logger.error(
+        `Failed to send WhatsApp message ${messageId}: ${message}`,
+      );
       throw error; // Let BullMQ handle retry
     }
   }

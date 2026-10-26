@@ -2,7 +2,10 @@ import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Discount, DiscountDocument } from './schemas/discount.schema';
-import { DiscountAudit, DiscountAuditDocument } from './schemas/discount-audit.schema';
+import {
+  DiscountAudit,
+  DiscountAuditDocument,
+} from './schemas/discount-audit.schema';
 import { CreateDiscountDto } from './dto/create-discount.dto';
 import { UpdateDiscountDto } from './dto/update-discount.dto';
 import { ApplyDiscountDto } from './dto/apply-discount.dto';
@@ -13,7 +16,8 @@ export class DiscountsService {
 
   constructor(
     @InjectModel(Discount.name) private discountModel: Model<DiscountDocument>,
-    @InjectModel(DiscountAudit.name) private auditModel: Model<DiscountAuditDocument>,
+    @InjectModel(DiscountAudit.name)
+    private auditModel: Model<DiscountAuditDocument>,
   ) {}
 
   async create(shopId: string, dto: CreateDiscountDto): Promise<Discount> {
@@ -37,9 +41,7 @@ export class DiscountsService {
   }
 
   async update(id: string, dto: UpdateDiscountDto): Promise<Discount | null> {
-    return this.discountModel
-      .findByIdAndUpdate(id, dto, { new: true })
-      .exec();
+    return this.discountModel.findByIdAndUpdate(id, dto, { new: true }).exec();
   }
 
   async delete(id: string): Promise<Discount | null> {
@@ -79,7 +81,10 @@ export class DiscountsService {
     }
 
     // Check minimum purchase amount
-    if (discount.rules.minPurchaseAmount && subtotal < discount.rules.minPurchaseAmount) {
+    if (
+      discount.rules.minPurchaseAmount &&
+      subtotal < discount.rules.minPurchaseAmount
+    ) {
       return {
         valid: false,
         reason: `Minimum purchase amount is Ksh ${discount.rules.minPurchaseAmount}`,
@@ -93,11 +98,17 @@ export class DiscountsService {
       customerSegment &&
       !discount.rules.customerSegments.includes(customerSegment)
     ) {
-      return { valid: false, reason: 'Discount not available for your customer segment' };
+      return {
+        valid: false,
+        reason: 'Discount not available for your customer segment',
+      };
     }
 
     // Check applicable day
-    if (discount.rules.applicableDays && discount.rules.applicableDays.length > 0) {
+    if (
+      discount.rules.applicableDays &&
+      discount.rules.applicableDays.length > 0
+    ) {
       const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
       const currentDay = dayNames[now.getDay()];
       if (!discount.rules.applicableDays.includes(currentDay)) {
@@ -189,7 +200,9 @@ export class DiscountsService {
     );
 
     if (!validation.valid) {
-      throw new BadRequestException(validation.reason || 'Discount validation failed');
+      throw new BadRequestException(
+        validation.reason || 'Discount validation failed',
+      );
     }
 
     // Calculate discount amount
@@ -279,7 +292,10 @@ export class DiscountsService {
     return this.auditModel.find(query).sort({ createdAt: -1 }).exec();
   }
 
-  async approveDiscount(auditId: string, approvedBy: string): Promise<DiscountAudit | null> {
+  async approveDiscount(
+    auditId: string,
+    approvedBy: string,
+  ): Promise<DiscountAudit | null> {
     return this.auditModel
       .findByIdAndUpdate(
         auditId,
@@ -292,7 +308,10 @@ export class DiscountsService {
       .exec();
   }
 
-  async rejectDiscount(auditId: string, approvedBy: string): Promise<DiscountAudit | null> {
+  async rejectDiscount(
+    auditId: string,
+    approvedBy: string,
+  ): Promise<DiscountAudit | null> {
     return this.auditModel
       .findByIdAndUpdate(
         auditId,

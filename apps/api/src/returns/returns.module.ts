@@ -6,9 +6,7 @@ import { Return, ReturnSchema } from './schemas/return.schema';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([
-      { name: Return.name, schema: ReturnSchema },
-    ]),
+    MongooseModule.forFeature([{ name: Return.name, schema: ReturnSchema }]),
   ],
   providers: [ReturnsService],
   controllers: [ReturnsController],

@@ -17,12 +17,17 @@ import type { ReportMetrics } from './report-renderer.service';
 export class ReportNarrativeService {
   private readonly logger = new Logger(ReportNarrativeService.name);
 
-  buildInsights(metrics: ReportMetrics): Array<{ kind: 'fact' | 'suggestion'; text: string }> {
+  buildInsights(
+    metrics: ReportMetrics,
+  ): Array<{ kind: 'fact' | 'suggestion'; text: string }> {
     const insights: Array<{ kind: 'fact' | 'suggestion'; text: string }> = [];
 
     // ---- FACTS (verbatim from the metrics) ----
     if (metrics.orders === 0) {
-      insights.push({ kind: 'fact', text: 'No completed sales in this period.' });
+      insights.push({
+        kind: 'fact',
+        text: 'No completed sales in this period.',
+      });
     } else {
       insights.push({
         kind: 'fact',
@@ -42,7 +47,10 @@ export class ReportNarrativeService {
         });
       }
       if (metrics.previousPeriod && metrics.previousPeriod.billedRevenue > 0) {
-        const change = ((metrics.billedRevenue - metrics.previousPeriod.billedRevenue) / metrics.previousPeriod.billedRevenue) * 100;
+        const change =
+          ((metrics.billedRevenue - metrics.previousPeriod.billedRevenue) /
+            metrics.previousPeriod.billedRevenue) *
+          100;
         insights.push({
           kind: 'fact',
           text: `Billed sales changed ${change > 0 ? 'up' : 'down'} ${Math.abs(change).toFixed(1)}% versus the previous comparable period.`,
@@ -92,61 +100,77 @@ export class ReportNarrativeService {
    * receives the validated metrics and the deterministic insights; it may
    * only rephrase/explain. Any failure returns the deterministic insights.
    */
-  async buildAiNarrativeIfEnabled(metrics: ReportMetrics): Promise<Array<{ kind: 'fact' | 'suggestion'; text: string }>> {
+  async buildAiNarrativeIfEnabled(
+    metrics: ReportMetrics,
+  ): Promise<Array<{ kind: 'fact' | 'suggestion'; text: string }>> {
     const enabled = process.env.AI_NARRATIVE_ENABLED === 'true';
     if (!enabled) return metrics.insights;
 
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
-      this.logger.warn('AI_NARRATIVE_ENABLED=true but OPENAI_API_KEY missing — deterministic insights used');
+      this.logger.warn(
+        'AI_NARRATIVE_ENABLED=true but OPENAI_API_KEY missing — deterministic insights used',
+      );
       return metrics.insights;
     }
 
     try {
       // Cost control: small model, short output, one request per report run.
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify({
-          model: process.env.AI_NARRATIVE_MODEL || 'gpt-4o-mini',
-          temperature: 0.3,
-          max_tokens: 300,
-          messages: [
-            {
-              role: 'system',
-              content:
-                'You write two-sentence business explanations for a shop owner. You receive ONLY validated metrics. Rules: never introduce a number that is not in the metrics; never name a product or customer that is not listed; no predictions; no profit claims unless profit data is present; if data is missing, say so plainly. Output plain text only.',
-            },
-            {
-              role: 'user',
-              content: JSON.stringify({
-                period: metrics.periodLabel,
-                currency: metrics.currency,
-                metrics: {
-                  billedRevenue: metrics.billedRevenue,
-                  collectedPayments: metrics.collectedPayments,
-                  outstanding: metrics.outstanding,
-                  refunds: metrics.refunds,
-                  tax: metrics.tax,
-                  orders: metrics.orders,
-                  itemsSold: metrics.itemsSold,
-                  topProducts: metrics.topProducts.slice(0, 5),
-                  lowStockCount: metrics.lowStock.length,
-                },
-                deterministicInsights: metrics.insights,
-              }),
-            },
-          ],
-        }),
-        signal: AbortSignal.timeout(15_000),
-      });
+      const response = await fetch(
+        'https://api.openai.com/v1/chat/completions',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model: process.env.AI_NARRATIVE_MODEL || 'gpt-4o-mini',
+            temperature: 0.3,
+            max_tokens: 300,
+            messages: [
+              {
+                role: 'system',
+                content:
+                  'You write two-sentence business explanations for a shop owner. You receive ONLY validated metrics. Rules: never introduce a number that is not in the metrics; never name a product or customer that is not listed; no predictions; no profit claims unless profit data is present; if data is missing, say so plainly. Output plain text only.',
+              },
+              {
+                role: 'user',
+                content: JSON.stringify({
+                  period: metrics.periodLabel,
+                  currency: metrics.currency,
+                  metrics: {
+                    billedRevenue: metrics.billedRevenue,
+                    collectedPayments: metrics.collectedPayments,
+                    outstanding: metrics.outstanding,
+                    refunds: metrics.refunds,
+                    tax: metrics.tax,
+                    orders: metrics.orders,
+                    itemsSold: metrics.itemsSold,
+                    topProducts: metrics.topProducts.slice(0, 5),
+                    lowStockCount: metrics.lowStock.length,
+                  },
+                  deterministicInsights: metrics.insights,
+                }),
+              },
+            ],
+          }),
+          signal: AbortSignal.timeout(15_000),
+        },
+      );
       if (!response.ok) throw new Error(`AI narrative HTTP ${response.status}`);
-      const data = (await response.json()) as any;
+      const data = await response.json();
       const text = data?.choices?.[0]?.message?.content;
-      if (!text || typeof text !== 'string') throw new Error('Empty AI narrative');
-      return [{ kind: 'fact' as const, text: text.trim().slice(0, 600) }, ...metrics.insights];
+      if (!text || typeof text !== 'string')
+        throw new Error('Empty AI narrative');
+      return [
+        { kind: 'fact' as const, text: text.trim().slice(0, 600) },
+        ...metrics.insights,
+      ];
     } catch (error: any) {
-      this.logger.warn(`AI narrative failed (${error.message}) — deterministic insights used`);
+      this.logger.warn(
+        `AI narrative failed (${error.message}) — deterministic insights used`,
+      );
       return metrics.insights;
     }
   }

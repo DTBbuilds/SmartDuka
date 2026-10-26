@@ -30,7 +30,8 @@ export class StockReconciliation {
   notes?: string;
 }
 
-export const StockReconciliationSchema = SchemaFactory.createForClass(StockReconciliation);
+export const StockReconciliationSchema =
+  SchemaFactory.createForClass(StockReconciliation);
 
 // Create indexes for multi-tenant queries
 StockReconciliationSchema.index({ shopId: 1, productId: 1 });

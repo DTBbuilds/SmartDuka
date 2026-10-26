@@ -76,11 +76,7 @@ describe('ShopSettingsController tenant isolation (P0-4A)', () => {
 
   describe('writes', () => {
     it('same-tenant settings update is allowed for admin', async () => {
-      await controller.updateSettings(
-        SHOP_A,
-        { tax: { rate: 0.16 } } as any,
-        adminA,
-      );
+      await controller.updateSettings(SHOP_A, { tax: { rate: 0.16 } }, adminA);
       expect(service.update).toHaveBeenCalledWith(
         SHOP_A,
         expect.objectContaining({ tax: { rate: 0.16 } }),

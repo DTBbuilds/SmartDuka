@@ -74,12 +74,17 @@ export class Shift {
   @Prop()
   lastActivityAt?: Date; // Last recorded activity timestamp
 
-  @Prop({ type: [{ 
-    startTime: Date, 
-    endTime: Date, 
-    type: { type: String, enum: ['active', 'inactive', 'break'] },
-    reason: String 
-  }], default: [] })
+  @Prop({
+    type: [
+      {
+        startTime: Date,
+        endTime: Date,
+        type: { type: String, enum: ['active', 'inactive', 'break'] },
+        reason: String,
+      },
+    ],
+    default: [],
+  })
   activityPeriods: ActivityPeriod[]; // Detailed activity log
 
   @Prop({ default: 0 })

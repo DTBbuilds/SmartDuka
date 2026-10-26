@@ -33,7 +33,7 @@ export enum StripePaymentType {
 
 /**
  * Stripe Payment Schema
- * 
+ *
  * Tracks all Stripe payments with full sync to local database.
  * Supports POS sales, subscriptions, and other payment scenarios.
  */

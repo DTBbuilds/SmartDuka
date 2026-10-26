@@ -11,7 +11,7 @@ import {
 
 /**
  * Payment Attempt Service
- * 
+ *
  * Tracks all payment attempts for subscriptions.
  * Provides data for super admin dashboard.
  */
@@ -63,7 +63,9 @@ export class PaymentAttemptService {
     });
 
     await attempt.save();
-    this.logger.log(`Payment attempt created: ${attempt._id} - ${data.method} - KES ${data.amount}`);
+    this.logger.log(
+      `Payment attempt created: ${attempt._id} - ${data.method} - KES ${data.amount}`,
+    );
     return attempt;
   }
 
@@ -119,10 +121,7 @@ export class PaymentAttemptService {
   /**
    * Mark attempt as successful
    */
-  async markSuccess(
-    attemptId: string,
-    receiptNumber?: string,
-  ): Promise<void> {
+  async markSuccess(attemptId: string, receiptNumber?: string): Promise<void> {
     await this.attemptModel.findByIdAndUpdate(attemptId, {
       $set: {
         status: PaymentAttemptStatus.SUCCESS,
@@ -153,14 +152,18 @@ export class PaymentAttemptService {
   /**
    * Find attempt by checkout request ID (M-Pesa)
    */
-  async findByCheckoutRequestId(checkoutRequestId: string): Promise<PaymentAttemptDocument | null> {
+  async findByCheckoutRequestId(
+    checkoutRequestId: string,
+  ): Promise<PaymentAttemptDocument | null> {
     return this.attemptModel.findOne({ checkoutRequestId });
   }
 
   /**
    * Find attempt by payment intent ID (Stripe)
    */
-  async findByPaymentIntentId(paymentIntentId: string): Promise<PaymentAttemptDocument | null> {
+  async findByPaymentIntentId(
+    paymentIntentId: string,
+  ): Promise<PaymentAttemptDocument | null> {
     return this.attemptModel.findOne({ paymentIntentId });
   }
 
@@ -168,15 +171,17 @@ export class PaymentAttemptService {
    * Get all payment attempts (for super admin)
    * Populates shop data for display
    */
-  async getAllAttempts(options: {
-    status?: PaymentAttemptStatus;
-    method?: PaymentMethod;
-    shopId?: string;
-    startDate?: Date;
-    endDate?: Date;
-    limit?: number;
-    skip?: number;
-  } = {}): Promise<{ attempts: any[]; total: number }> {
+  async getAllAttempts(
+    options: {
+      status?: PaymentAttemptStatus;
+      method?: PaymentMethod;
+      shopId?: string;
+      startDate?: Date;
+      endDate?: Date;
+      limit?: number;
+      skip?: number;
+    } = {},
+  ): Promise<{ attempts: any[]; total: number }> {
     const query: any = {};
 
     if (options.status) query.status = options.status;
@@ -214,7 +219,10 @@ export class PaymentAttemptService {
   /**
    * Get payment attempt statistics (for super admin dashboard)
    */
-  async getStatistics(startDate?: Date, endDate?: Date): Promise<{
+  async getStatistics(
+    startDate?: Date,
+    endDate?: Date,
+  ): Promise<{
     total: number;
     byStatus: Record<string, number>;
     byMethod: Record<string, number>;
@@ -266,7 +274,12 @@ export class PaymentAttemptService {
       byMethod[m._id] = m.count;
     });
 
-    const amounts = amountAgg[0] || { total: 0, totalAmount: 0, successAmount: 0, successCount: 0 };
+    const amounts = amountAgg[0] || {
+      total: 0,
+      totalAmount: 0,
+      successAmount: 0,
+      successCount: 0,
+    };
 
     return {
       total: amounts.total,
@@ -274,14 +287,18 @@ export class PaymentAttemptService {
       byMethod,
       totalAmount: amounts.totalAmount,
       successAmount: amounts.successAmount,
-      successRate: amounts.total > 0 ? (amounts.successCount / amounts.total) * 100 : 0,
+      successRate:
+        amounts.total > 0 ? (amounts.successCount / amounts.total) * 100 : 0,
     };
   }
 
   /**
    * Get recent attempts for a shop
    */
-  async getShopAttempts(shopId: string, limit = 10): Promise<PaymentAttemptDocument[]> {
+  async getShopAttempts(
+    shopId: string,
+    limit = 10,
+  ): Promise<PaymentAttemptDocument[]> {
     return this.attemptModel
       .find({ shopId: new Types.ObjectId(shopId) })
       .sort({ createdAt: -1 })

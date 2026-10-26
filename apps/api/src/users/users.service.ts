@@ -1,5 +1,12 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unused-vars, @typescript-eslint/require-await */
-import { Injectable, BadRequestException, ConflictException, NotFoundException, UnauthorizedException, Inject, forwardRef } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+  UnauthorizedException,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import * as bcrypt from 'bcryptjs';
@@ -25,15 +32,15 @@ export class UsersService {
     const { password, ...rest } = dto as any;
     // bcrypt cost 12 (OWASP 2024 minimum). Existing 10-round hashes still verify (forward-compatible).
     const passwordHash = await bcrypt.hash(password, 12);
-    
+
     // Convert empty phone to null to avoid duplicate key errors
     const userData = {
-      ...rest, 
+      ...rest,
       shopId: new Types.ObjectId(dto.shopId),
       passwordHash,
-      phone: rest.phone && rest.phone.trim() ? rest.phone : null
+      phone: rest.phone && rest.phone.trim() ? rest.phone : null,
     };
-    
+
     const created = new this.userModel(userData);
     const user = await created.save();
 
@@ -49,11 +56,16 @@ export class UsersService {
     return this.userModel.findOne({ email }).exec();
   }
 
-  async findByEmailAndShop(email: string, shopId: string): Promise<User | null> {
-    return this.userModel.findOne({ 
-      email, 
-      shopId: new Types.ObjectId(shopId) 
-    }).exec();
+  async findByEmailAndShop(
+    email: string,
+    shopId: string,
+  ): Promise<User | null> {
+    return this.userModel
+      .findOne({
+        email,
+        shopId: new Types.ObjectId(shopId),
+      })
+      .exec();
   }
 
   async findById(id: string): Promise<User | null> {
@@ -65,15 +77,15 @@ export class UsersService {
   }
 
   async findCashiersByShop(shopId: string, branchId?: string): Promise<User[]> {
-    const query: any = { 
+    const query: any = {
       shopId: new Types.ObjectId(shopId),
-      role: 'cashier'
+      role: 'cashier',
     };
-    
+
     if (branchId) {
       query.branchId = new Types.ObjectId(branchId);
     }
-    
+
     return this.userModel.find(query).populate('branchId', 'name code').exec();
   }
 
@@ -81,24 +93,30 @@ export class UsersService {
    * Find cashiers by branch (for branch managers)
    */
   async findCashiersByBranch(branchId: string): Promise<User[]> {
-    return this.userModel.find({ 
-      branchId: new Types.ObjectId(branchId),
-      role: 'cashier'
-    }).exec();
+    return this.userModel
+      .find({
+        branchId: new Types.ObjectId(branchId),
+        role: 'cashier',
+      })
+      .exec();
   }
 
   async countCashiersByShop(shopId: string): Promise<number> {
-    return this.userModel.countDocuments({ 
-      shopId: new Types.ObjectId(shopId),
-      role: 'cashier'
-    }).exec();
+    return this.userModel
+      .countDocuments({
+        shopId: new Types.ObjectId(shopId),
+        role: 'cashier',
+      })
+      .exec();
   }
 
   async countCashiersByBranch(branchId: string): Promise<number> {
-    return this.userModel.countDocuments({ 
-      branchId: new Types.ObjectId(branchId),
-      role: 'cashier'
-    }).exec();
+    return this.userModel
+      .countDocuments({
+        branchId: new Types.ObjectId(branchId),
+        role: 'cashier',
+      })
+      .exec();
   }
 
   /**
@@ -120,7 +138,11 @@ export class UsersService {
       query.status = filters.status;
     }
 
-    return this.userModel.find(query).populate('branchId', 'name code').sort({ createdAt: -1 }).exec();
+    return this.userModel
+      .find(query)
+      .populate('branchId', 'name code')
+      .sort({ createdAt: -1 })
+      .exec();
   }
 
   /**
@@ -141,11 +163,14 @@ export class UsersService {
       throw new NotFoundException('Cashier not found');
     }
 
-    return this.userModel.findByIdAndUpdate(
-      userId,
-      { branchId: new Types.ObjectId(branchId) },
-      { new: true },
-    ).populate('branchId', 'name code').exec();
+    return this.userModel
+      .findByIdAndUpdate(
+        userId,
+        { branchId: new Types.ObjectId(branchId) },
+        { new: true },
+      )
+      .populate('branchId', 'name code')
+      .exec();
   }
 
   /**
@@ -165,11 +190,9 @@ export class UsersService {
       throw new NotFoundException('Cashier not found');
     }
 
-    return this.userModel.findByIdAndUpdate(
-      userId,
-      { $unset: { branchId: 1 } },
-      { new: true },
-    ).exec();
+    return this.userModel
+      .findByIdAndUpdate(userId, { $unset: { branchId: 1 } }, { new: true })
+      .exec();
   }
 
   /**
@@ -215,31 +238,38 @@ export class UsersService {
     }
 
     const updateFields: any = {};
-    
+
     if (updateData.name) updateFields.name = updateData.name;
-    if (updateData.phone !== undefined) updateFields.phone = updateData.phone || null;
+    if (updateData.phone !== undefined)
+      updateFields.phone = updateData.phone || null;
     if (updateData.branchId !== undefined) {
-      updateFields.branchId = updateData.branchId ? new Types.ObjectId(updateData.branchId) : null;
+      updateFields.branchId = updateData.branchId
+        ? new Types.ObjectId(updateData.branchId)
+        : null;
     }
     if (updateData.permissions) {
-      updateFields.permissions = { ...user.permissions, ...updateData.permissions };
+      updateFields.permissions = {
+        ...user.permissions,
+        ...updateData.permissions,
+      };
     }
 
-    return this.userModel.findByIdAndUpdate(
-      userId,
-      { $set: updateFields },
-      { new: true },
-    ).exec();
+    return this.userModel
+      .findByIdAndUpdate(userId, { $set: updateFields }, { new: true })
+      .exec();
   }
 
   /**
    * Get cashier with full details including branch info
    */
   async getCashierDetails(shopId: string, userId: string): Promise<any> {
-    const user = await this.userModel.findOne({
-      _id: new Types.ObjectId(userId),
-      shopId: new Types.ObjectId(shopId),
-    }).populate('branchId', 'name code').exec();
+    const user = await this.userModel
+      .findOne({
+        _id: new Types.ObjectId(userId),
+        shopId: new Types.ObjectId(shopId),
+      })
+      .populate('branchId', 'name code')
+      .exec();
 
     if (!user) {
       throw new NotFoundException('User not found');
@@ -248,12 +278,13 @@ export class UsersService {
     return user;
   }
 
-  async updateStatus(userId: string, status: 'active' | 'disabled'): Promise<User | null> {
-    return this.userModel.findByIdAndUpdate(
-      userId,
-      { status },
-      { new: true }
-    ).exec();
+  async updateStatus(
+    userId: string,
+    status: 'active' | 'disabled',
+  ): Promise<User | null> {
+    return this.userModel
+      .findByIdAndUpdate(userId, { status }, { new: true })
+      .exec();
   }
 
   /**
@@ -265,13 +296,12 @@ export class UsersService {
   ): Promise<User | null> {
     const updateFields: any = {};
     if (data.name !== undefined) updateFields.name = data.name.trim();
-    if (data.phone !== undefined) updateFields.phone = data.phone?.trim() || null;
+    if (data.phone !== undefined)
+      updateFields.phone = data.phone?.trim() || null;
 
-    return this.userModel.findByIdAndUpdate(
-      userId,
-      { $set: updateFields },
-      { new: true },
-    ).exec();
+    return this.userModel
+      .findByIdAndUpdate(userId, { $set: updateFields }, { new: true })
+      .exec();
   }
 
   /**
@@ -287,7 +317,10 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
-    const isValid = await bcrypt.compare(currentPassword, (user as any).passwordHash);
+    const isValid = await bcrypt.compare(
+      currentPassword,
+      (user as any).passwordHash,
+    );
     if (!isValid) {
       throw new BadRequestException('Current password is incorrect');
     }
@@ -312,7 +345,7 @@ export class UsersService {
       { _id: new Types.ObjectId(userId) },
       { $set: { passwordHash: hashedPassword } },
     );
-    
+
     if (result.matchedCount === 0) {
       throw new NotFoundException('User not found');
     }
@@ -322,7 +355,10 @@ export class UsersService {
    * Delete a user (employee/cashier)
    * Only non-admin users can be deleted
    */
-  async deleteUser(shopId: string, userId: string): Promise<{ deleted: boolean; message: string }> {
+  async deleteUser(
+    shopId: string,
+    userId: string,
+  ): Promise<{ deleted: boolean; message: string }> {
     const user = await this.userModel.findOne({
       _id: new Types.ObjectId(userId),
       shopId: new Types.ObjectId(shopId),
@@ -334,7 +370,9 @@ export class UsersService {
 
     // Prevent deleting admin users
     if (user.role === 'admin') {
-      throw new BadRequestException('Cannot delete admin users. Disable them instead.');
+      throw new BadRequestException(
+        'Cannot delete admin users. Disable them instead.',
+      );
     }
 
     await this.userModel.deleteOne({ _id: new Types.ObjectId(userId) });
@@ -346,10 +384,12 @@ export class UsersService {
   }
 
   async findByPin(pin: string, shopId: string): Promise<User | null> {
-    const users = await this.userModel.find({
-      shopId: new Types.ObjectId(shopId),
-      status: 'active',
-    }).exec();
+    const users = await this.userModel
+      .find({
+        shopId: new Types.ObjectId(shopId),
+        status: 'active',
+      })
+      .exec();
 
     for (const user of users) {
       if ((user as any).pinHash) {
@@ -371,33 +411,32 @@ export class UsersService {
   }
 
   async updatePin(userId: string, hashedPin: string): Promise<User | null> {
-    return this.userModel.findByIdAndUpdate(
-      userId,
-      { pinHash: hashedPin },
-      { new: true },
-    ).exec();
+    return this.userModel
+      .findByIdAndUpdate(userId, { pinHash: hashedPin }, { new: true })
+      .exec();
   }
 
   async updateLastLogin(userId: string): Promise<User | null> {
-    return this.userModel.findByIdAndUpdate(
-      userId,
-      { lastLoginAt: new Date() },
-      { new: true },
-    ).exec();
+    return this.userModel
+      .findByIdAndUpdate(userId, { lastLoginAt: new Date() }, { new: true })
+      .exec();
   }
 
-  async updateEmailVerified(userId: string, verified: boolean): Promise<User | null> {
-    return this.userModel.findByIdAndUpdate(
-      userId,
-      { emailVerified: verified },
-      { new: true },
-    ).exec();
+  async updateEmailVerified(
+    userId: string,
+    verified: boolean,
+  ): Promise<User | null> {
+    return this.userModel
+      .findByIdAndUpdate(userId, { emailVerified: verified }, { new: true })
+      .exec();
   }
 
   async generatePin(): Promise<string> {
     let pin = '';
     do {
-      pin = Math.floor(Math.random() * 1000000).toString().padStart(4, '0');
+      pin = Math.floor(Math.random() * 1000000)
+        .toString()
+        .padStart(4, '0');
     } while (this.isInvalidPin(pin));
     return pin;
   }
@@ -451,7 +490,7 @@ export class UsersService {
           }
         }
       }
-      
+
       // Add attempt offset to avoid collisions on retry
       const nextNum = maxNum + 1 + attempt;
       const cashierId = `C${String(nextNum).padStart(3, '0')}`;
@@ -462,13 +501,15 @@ export class UsersService {
       // Check if email already exists
       const existingUser = await this.userModel.findOne({ email: uniqueEmail });
       if (existingUser) {
-        throw new ConflictException(`A user with this email already exists. Please use a different email.`);
+        throw new ConflictException(
+          `A user with this email already exists. Please use a different email.`,
+        );
       }
 
       // Check if cashierId already exists for this shop
-      const existingCashier = await this.userModel.findOne({ 
+      const existingCashier = await this.userModel.findOne({
         shopId: new Types.ObjectId(shopId),
-        cashierId 
+        cashierId,
       });
       if (existingCashier) {
         // Try next number
@@ -513,7 +554,7 @@ export class UsersService {
         if (err.code === 11000) {
           const keyPattern = err.keyPattern || {};
           const keyValue = err.keyValue || {};
-          
+
           // Check for compound index (shopId + cashierId)
           if (keyPattern.shopId && keyPattern.cashierId) {
             // Cashier ID collision within shop, retry
@@ -524,10 +565,14 @@ export class UsersService {
             continue;
           }
           if (keyPattern.email) {
-            throw new ConflictException('A user with this email already exists. Please use a different email.');
+            throw new ConflictException(
+              'A user with this email already exists. Please use a different email.',
+            );
           }
           if (keyPattern.phone) {
-            throw new ConflictException('A user with this phone number already exists.');
+            throw new ConflictException(
+              'A user with this phone number already exists.',
+            );
           }
           // Generic duplicate key - retry
           continue;
@@ -608,15 +653,17 @@ export class UsersService {
     googleId: string,
     avatarUrl?: string,
   ): Promise<User | null> {
-    return this.userModel.findByIdAndUpdate(
-      userId,
-      { 
-        googleId, 
-        avatarUrl,
-        authProvider: 'google',
-      },
-      { new: true },
-    ).exec();
+    return this.userModel
+      .findByIdAndUpdate(
+        userId,
+        {
+          googleId,
+          avatarUrl,
+          authProvider: 'google',
+        },
+        { new: true },
+      )
+      .exec();
   }
 
   async createGoogleUser(data: {
@@ -654,10 +701,12 @@ export class UsersService {
    * Count employees (non-admin users) for a shop
    */
   async countEmployeesByShop(shopId: string): Promise<number> {
-    return this.userModel.countDocuments({
-      shopId: new Types.ObjectId(shopId),
-      role: { $ne: 'admin' },
-    }).exec();
+    return this.userModel
+      .countDocuments({
+        shopId: new Types.ObjectId(shopId),
+        role: { $ne: 'admin' },
+      })
+      .exec();
   }
 
   /**
@@ -674,10 +723,8 @@ export class UsersService {
       receiptPrinterEnabled?: boolean;
     },
   ): Promise<User | null> {
-    return this.userModel.findByIdAndUpdate(
-      userId,
-      { $set: { preferences } },
-      { new: true },
-    ).exec();
+    return this.userModel
+      .findByIdAndUpdate(userId, { $set: { preferences } }, { new: true })
+      .exec();
   }
 }

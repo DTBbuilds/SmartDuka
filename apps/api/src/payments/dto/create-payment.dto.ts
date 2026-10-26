@@ -1,4 +1,12 @@
-import { IsString, IsNumber, IsOptional, IsEnum, IsMongoId, Min, IsBoolean } from 'class-validator';
+import {
+  IsString,
+  IsNumber,
+  IsOptional,
+  IsEnum,
+  IsMongoId,
+  Min,
+  IsBoolean,
+} from 'class-validator';
 
 export class CreatePaymentDto {
   @IsMongoId()
@@ -15,7 +23,15 @@ export class CreatePaymentDto {
   @IsString()
   currency?: string; // Defaults to 'KES'
 
-  @IsEnum(['cash', 'mpesa', 'card', 'bank_transfer', 'credit', 'cheque', 'other'])
+  @IsEnum([
+    'cash',
+    'mpesa',
+    'card',
+    'bank_transfer',
+    'credit',
+    'cheque',
+    'other',
+  ])
   method: string;
 
   @IsOptional()
@@ -127,11 +143,26 @@ export class ReconcilePaymentDto {
 
 export class PaymentQueryDto {
   @IsOptional()
-  @IsEnum(['pending', 'processing', 'completed', 'failed', 'reversed', 'refunded'])
+  @IsEnum([
+    'pending',
+    'processing',
+    'completed',
+    'failed',
+    'reversed',
+    'refunded',
+  ])
   status?: string;
 
   @IsOptional()
-  @IsEnum(['cash', 'mpesa', 'card', 'bank_transfer', 'credit', 'cheque', 'other'])
+  @IsEnum([
+    'cash',
+    'mpesa',
+    'card',
+    'bank_transfer',
+    'credit',
+    'cheque',
+    'other',
+  ])
   method?: string;
 
   @IsOptional()

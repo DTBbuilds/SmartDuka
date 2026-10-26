@@ -1,7 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
-import { WhatsAppProvider, MessageResult, MessageStatus, TemplateParams } from './whatsapp-provider.interface';
+import {
+  WhatsAppProvider,
+  MessageResult,
+  MessageStatus,
+  TemplateParams,
+} from './whatsapp-provider.interface';
 
 // Response types for Meta API
 type MetaError = { message?: string; code?: number };
@@ -19,10 +24,22 @@ export class MetaCloudProvider implements WhatsAppProvider {
   private webhookVerifyToken: string;
 
   constructor(private readonly configService: ConfigService) {
-    this.accessToken = this.configService.get<string>('META_WHATSAPP_TOKEN', '');
-    this.phoneNumberId = this.configService.get<string>('META_WHATSAPP_PHONE_ID', '');
-    this.appSecret = this.configService.get<string>('META_WHATSAPP_APP_SECRET', '');
-    this.webhookVerifyToken = this.configService.get<string>('META_WHATSAPP_WEBHOOK_VERIFY_TOKEN', '');
+    this.accessToken = this.configService.get<string>(
+      'META_WHATSAPP_TOKEN',
+      '',
+    );
+    this.phoneNumberId = this.configService.get<string>(
+      'META_WHATSAPP_PHONE_ID',
+      '',
+    );
+    this.appSecret = this.configService.get<string>(
+      'META_WHATSAPP_APP_SECRET',
+      '',
+    );
+    this.webhookVerifyToken = this.configService.get<string>(
+      'META_WHATSAPP_WEBHOOK_VERIFY_TOKEN',
+      '',
+    );
 
     if (this.isAvailable()) {
       this.logger.log('✅ Meta Cloud WhatsApp provider initialized');
@@ -39,26 +56,33 @@ export class MetaCloudProvider implements WhatsAppProvider {
     }
 
     try {
-      const response = await fetch(`${this.baseUrl}/${this.phoneNumberId}/messages`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.accessToken}`,
-          'Content-Type': 'application/json',
+      const response = await fetch(
+        `${this.baseUrl}/${this.phoneNumberId}/messages`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${this.accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            messaging_product: 'whatsapp',
+            recipient_type: 'individual',
+            to: to.replace('+', ''),
+            type: 'text',
+            text: { preview_url: false, body: message },
+          }),
         },
-        body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          recipient_type: 'individual',
-          to: to.replace('+', ''),
-          type: 'text',
-          text: { preview_url: false, body: message },
-        }),
-      });
+      );
 
       const data = (await response.json()) as MetaSendResponse;
 
       if (!response.ok) {
         this.logger.error(`Meta API error: ${JSON.stringify(data)}`);
-        return { success: false, error: data.error?.message ?? 'Unknown error', errorCode: data.error?.code?.toString() };
+        return {
+          success: false,
+          error: data.error?.message ?? 'Unknown error',
+          errorCode: data.error?.code?.toString(),
+        };
       }
 
       return { success: true, messageId: data.messages?.[0]?.id };
@@ -69,35 +93,45 @@ export class MetaCloudProvider implements WhatsAppProvider {
     }
   }
 
-  async sendTemplateMessage(to: string, template: TemplateParams): Promise<MessageResult> {
+  async sendTemplateMessage(
+    to: string,
+    template: TemplateParams,
+  ): Promise<MessageResult> {
     if (!this.isAvailable()) {
       return { success: false, error: 'Provider not configured' };
     }
 
     try {
-      const response = await fetch(`${this.baseUrl}/${this.phoneNumberId}/messages`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          recipient_type: 'individual',
-          to: to.replace('+', ''),
-          type: 'template',
-          template: {
-            name: template.name,
-            language: { code: template.language || 'en' },
-            components: template.components,
+      const response = await fetch(
+        `${this.baseUrl}/${this.phoneNumberId}/messages`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${this.accessToken}`,
+            'Content-Type': 'application/json',
           },
-        }),
-      });
+          body: JSON.stringify({
+            messaging_product: 'whatsapp',
+            recipient_type: 'individual',
+            to: to.replace('+', ''),
+            type: 'template',
+            template: {
+              name: template.name,
+              language: { code: template.language || 'en' },
+              components: template.components,
+            },
+          }),
+        },
+      );
 
       const data = (await response.json()) as MetaSendResponse;
 
       if (!response.ok) {
-        return { success: false, error: data.error?.message ?? 'Unknown error', errorCode: data.error?.code?.toString() };
+        return {
+          success: false,
+          error: data.error?.message ?? 'Unknown error',
+          errorCode: data.error?.code?.toString(),
+        };
       }
 
       return { success: true, messageId: data.messages?.[0]?.id };
@@ -113,11 +147,18 @@ export class MetaCloudProvider implements WhatsAppProvider {
 
   verifyWebhookSignature(payload: string, signature: string): boolean {
     if (!this.appSecret) return true;
-    const expectedSignature = crypto.createHmac('sha256', this.appSecret).update(payload).digest('hex');
+    const expectedSignature = crypto
+      .createHmac('sha256', this.appSecret)
+      .update(payload)
+      .digest('hex');
     return `sha256=${expectedSignature}` === signature;
   }
 
-  verifyWebhookChallenge(mode: string, token: string, challenge: string): string | null {
+  verifyWebhookChallenge(
+    mode: string,
+    token: string,
+    challenge: string,
+  ): string | null {
     if (mode === 'subscribe' && token === this.webhookVerifyToken) {
       return challenge;
     }

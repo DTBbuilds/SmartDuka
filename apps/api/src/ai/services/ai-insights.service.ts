@@ -1,8 +1,12 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-assignment */
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { AiInsight, AiInsightDocument, InsightType, InsightStatus } from '../schemas/ai-insight.schema';
+import {
+  AiInsight,
+  AiInsightDocument,
+  InsightType,
+  InsightStatus,
+} from '../schemas/ai-insight.schema';
 import { AiFeedback } from '../schemas/ai-feedback.schema';
 
 export interface InsightFilters {
@@ -29,9 +33,12 @@ export class AiInsightsService {
     @InjectModel(AiFeedback.name) private feedbackModel: Model<AiFeedback>,
   ) {}
 
-  async getInsights(shopId: string, filters: InsightFilters = {}): Promise<AiInsight[]> {
+  async getInsights(
+    shopId: string,
+    filters: InsightFilters = {},
+  ): Promise<AiInsight[]> {
     const query: any = { shopId: new Types.ObjectId(shopId) };
-    
+
     if (filters.type) query.type = filters.type;
     if (filters.status) query.status = filters.status;
     if (filters.priority) query.priority = filters.priority;
@@ -45,10 +52,12 @@ export class AiInsightsService {
   }
 
   async getInsightById(shopId: string, insightId: string): Promise<AiInsight> {
-    const insight = await this.insightModel.findOne({
-      _id: new Types.ObjectId(insightId),
-      shopId: new Types.ObjectId(shopId),
-    }).lean();
+    const insight = await this.insightModel
+      .findOne({
+        _id: new Types.ObjectId(insightId),
+        shopId: new Types.ObjectId(shopId),
+      })
+      .lean();
 
     if (!insight) {
       throw new NotFoundException('Insight not found');
@@ -58,11 +67,16 @@ export class AiInsightsService {
   }
 
   async markAsRead(shopId: string, insightId: string): Promise<AiInsight> {
-    const insight = await this.insightModel.findOneAndUpdate(
-      { _id: new Types.ObjectId(insightId), shopId: new Types.ObjectId(shopId) },
-      { status: 'read', readAt: new Date() },
-      { new: true },
-    ).lean();
+    const insight = await this.insightModel
+      .findOneAndUpdate(
+        {
+          _id: new Types.ObjectId(insightId),
+          shopId: new Types.ObjectId(shopId),
+        },
+        { status: 'read', readAt: new Date() },
+        { new: true },
+      )
+      .lean();
 
     if (!insight) {
       throw new NotFoundException('Insight not found');
@@ -71,12 +85,25 @@ export class AiInsightsService {
     return insight;
   }
 
-  async dismiss(shopId: string, insightId: string, userId: string): Promise<AiInsight> {
-    const insight = await this.insightModel.findOneAndUpdate(
-      { _id: new Types.ObjectId(insightId), shopId: new Types.ObjectId(shopId) },
-      { status: 'dismissed', dismissedAt: new Date(), dismissedBy: new Types.ObjectId(userId) },
-      { new: true },
-    ).lean();
+  async dismiss(
+    shopId: string,
+    insightId: string,
+    userId: string,
+  ): Promise<AiInsight> {
+    const insight = await this.insightModel
+      .findOneAndUpdate(
+        {
+          _id: new Types.ObjectId(insightId),
+          shopId: new Types.ObjectId(shopId),
+        },
+        {
+          status: 'dismissed',
+          dismissedAt: new Date(),
+          dismissedBy: new Types.ObjectId(userId),
+        },
+        { new: true },
+      )
+      .lean();
 
     if (!insight) {
       throw new NotFoundException('Insight not found');
@@ -85,7 +112,13 @@ export class AiInsightsService {
     return insight;
   }
 
-  async submitFeedback(shopId: string, insightId: string, userId: string, rating: string, comment?: string): Promise<void> {
+  async submitFeedback(
+    shopId: string,
+    insightId: string,
+    userId: string,
+    rating: string,
+    comment?: string,
+  ): Promise<void> {
     const insight = await this.getInsightById(shopId, insightId);
 
     await this.feedbackModel.create({
@@ -132,9 +165,9 @@ export class AiInsightsService {
 
     return {
       total,
-      byType: Object.fromEntries(byType.map(r => [r._id, r.count])),
-      byStatus: Object.fromEntries(byStatus.map(r => [r._id, r.count])),
-      byPriority: Object.fromEntries(byPriority.map(r => [r._id, r.count])),
+      byType: Object.fromEntries(byType.map((r) => [r._id, r.count])),
+      byStatus: Object.fromEntries(byStatus.map((r) => [r._id, r.count])),
+      byPriority: Object.fromEntries(byPriority.map((r) => [r._id, r.count])),
     };
   }
 }

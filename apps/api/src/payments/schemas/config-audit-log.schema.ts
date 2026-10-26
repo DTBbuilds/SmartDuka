@@ -33,7 +33,7 @@ export interface FieldChange {
 
 /**
  * Configuration Audit Log Schema
- * 
+ *
  * Provides complete audit trail for all payment configuration changes.
  * Used for:
  * - Security auditing
@@ -43,7 +43,12 @@ export interface FieldChange {
  */
 @Schema({ timestamps: true, collection: 'config_audit_logs' })
 export class ConfigAuditLog {
-  @Prop({ required: true, type: Types.ObjectId, ref: 'PaymentConfig', index: true })
+  @Prop({
+    required: true,
+    type: Types.ObjectId,
+    ref: 'PaymentConfig',
+    index: true,
+  })
   configId: Types.ObjectId;
 
   @Prop({ required: true, type: Types.ObjectId, ref: 'Shop', index: true })
@@ -164,7 +169,8 @@ export class ConfigAuditLog {
   createdAt?: Date;
 }
 
-export const ConfigAuditLogSchema = SchemaFactory.createForClass(ConfigAuditLog);
+export const ConfigAuditLogSchema =
+  SchemaFactory.createForClass(ConfigAuditLog);
 
 // ============================================
 // INDEXES
@@ -203,23 +209,27 @@ export function maskSensitiveValue(value: any, field: string): any {
   ];
 
   if (!value) return value;
-  
-  if (sensitiveFields.some(f => field.toLowerCase().includes(f.toLowerCase()))) {
+
+  if (
+    sensitiveFields.some((f) => field.toLowerCase().includes(f.toLowerCase()))
+  ) {
     if (typeof value === 'string' && value.length > 4) {
       return '****' + value.slice(-4);
     }
     return '********';
   }
-  
+
   return value;
 }
 
 /**
  * Helper to create masked state snapshot
  */
-export function createMaskedSnapshot(config: Record<string, any>): Record<string, any> {
+export function createMaskedSnapshot(
+  config: Record<string, any>,
+): Record<string, any> {
   const masked: Record<string, any> = {};
-  
+
   for (const [key, value] of Object.entries(config)) {
     if (key === 'credentials' && typeof value === 'object') {
       masked[key] = {};
@@ -230,6 +240,6 @@ export function createMaskedSnapshot(config: Record<string, any>): Record<string
       masked[key] = maskSensitiveValue(value, key);
     }
   }
-  
+
   return masked;
 }

@@ -4,7 +4,10 @@ import { CustomersController } from './customers.controller';
 import { CustomersService } from './customers.service';
 import { Customer, CustomerSchema } from './schemas/customer.schema';
 import { Order, OrderSchema } from '../sales/schemas/order.schema';
-import { LoyaltyAccount, LoyaltyAccountSchema } from '../loyalty/schemas/loyalty-account.schema';
+import {
+  LoyaltyAccount,
+  LoyaltyAccountSchema,
+} from '../loyalty/schemas/loyalty-account.schema';
 
 @Module({
   imports: [

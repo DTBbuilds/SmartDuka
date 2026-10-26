@@ -136,9 +136,7 @@ export class ReturnsService {
     }
 
     if (returnRequest.status !== 'approved') {
-      throw new BadRequestException(
-        'Only approved returns can be completed',
-      );
+      throw new BadRequestException('Only approved returns can be completed');
     }
 
     return this.returnModel
@@ -177,7 +175,10 @@ export class ReturnsService {
       pendingReturns: returns.filter((r) => r.status === 'pending').length,
       approvedReturns: returns.filter((r) => r.status === 'approved').length,
       rejectedReturns: returns.filter((r) => r.status === 'rejected').length,
-      totalRefundAmount: returns.reduce((sum, r) => sum + r.totalRefundAmount, 0),
+      totalRefundAmount: returns.reduce(
+        (sum, r) => sum + r.totalRefundAmount,
+        0,
+      ),
     };
 
     return stats;

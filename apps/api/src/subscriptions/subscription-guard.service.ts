@@ -1,8 +1,15 @@
 import { Injectable, ForbiddenException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Subscription, SubscriptionDocument, SubscriptionStatus } from './schemas/subscription.schema';
-import { SubscriptionPlan, SubscriptionPlanDocument } from './schemas/subscription-plan.schema';
+import {
+  Subscription,
+  SubscriptionDocument,
+  SubscriptionStatus,
+} from './schemas/subscription.schema';
+import {
+  SubscriptionPlan,
+  SubscriptionPlanDocument,
+} from './schemas/subscription-plan.schema';
 
 export type ResourceType = 'shops' | 'employees' | 'products';
 
@@ -19,8 +26,10 @@ export class SubscriptionGuardService {
   private readonly logger = new Logger(SubscriptionGuardService.name);
 
   constructor(
-    @InjectModel(Subscription.name) private readonly subscriptionModel: Model<SubscriptionDocument>,
-    @InjectModel(SubscriptionPlan.name) private readonly planModel: Model<SubscriptionPlanDocument>,
+    @InjectModel(Subscription.name)
+    private readonly subscriptionModel: Model<SubscriptionDocument>,
+    @InjectModel(SubscriptionPlan.name)
+    private readonly planModel: Model<SubscriptionPlanDocument>,
   ) {}
 
   /**
@@ -48,23 +57,31 @@ export class SubscriptionGuardService {
     }
 
     // Check if subscription is active
-    if (subscription.status !== SubscriptionStatus.ACTIVE && 
-        subscription.status !== SubscriptionStatus.TRIAL) {
+    if (
+      subscription.status !== SubscriptionStatus.ACTIVE &&
+      subscription.status !== SubscriptionStatus.TRIAL
+    ) {
       // Get plan to show meaningful limits in error
       const plan = await this.planModel.findById(subscription.planId);
       const statusMessages: Record<string, string> = {
-        [SubscriptionStatus.PENDING_PAYMENT]: 'Payment required to activate your subscription.',
-        [SubscriptionStatus.PAST_DUE]: 'Your subscription payment is overdue. Please pay to restore access.',
-        [SubscriptionStatus.SUSPENDED]: 'Your subscription has been suspended. Contact support.',
+        [SubscriptionStatus.PENDING_PAYMENT]:
+          'Payment required to activate your subscription.',
+        [SubscriptionStatus.PAST_DUE]:
+          'Your subscription payment is overdue. Please pay to restore access.',
+        [SubscriptionStatus.SUSPENDED]:
+          'Your subscription has been suspended. Contact support.',
         [SubscriptionStatus.CANCELLED]: 'Your subscription has been cancelled.',
-        [SubscriptionStatus.EXPIRED]: 'Your subscription has expired. Please renew to continue.',
+        [SubscriptionStatus.EXPIRED]:
+          'Your subscription has expired. Please renew to continue.',
       };
       return {
         allowed: false,
         current: subscription.currentProductCount || 0,
         limit: plan?.maxProducts || 0,
         remaining: 0,
-        message: statusMessages[subscription.status] || `Subscription status: ${subscription.status}. Please contact support.`,
+        message:
+          statusMessages[subscription.status] ||
+          `Subscription status: ${subscription.status}. Please contact support.`,
       };
     }
 
@@ -109,8 +126,8 @@ export class SubscriptionGuardService {
       current,
       limit,
       remaining,
-      message: allowed 
-        ? undefined 
+      message: allowed
+        ? undefined
         : `You have reached your ${resourceName} limit (${current}/${limit}). Upgrade your plan to add more.`,
     };
   }
@@ -124,9 +141,11 @@ export class SubscriptionGuardService {
     increment = 1,
   ): Promise<void> {
     const result = await this.checkLimit(shopId, resource, increment);
-    
+
     if (!result.allowed) {
-      this.logger.warn(`Limit exceeded for shop ${shopId}: ${resource} (${result.current}/${result.limit})`);
+      this.logger.warn(
+        `Limit exceeded for shop ${shopId}: ${resource} (${result.current}/${result.limit})`,
+      );
       throw new ForbiddenException(result.message);
     }
   }
@@ -134,9 +153,13 @@ export class SubscriptionGuardService {
   /**
    * Update usage count after successful creation
    */
-  async incrementUsage(shopId: string, resource: ResourceType, count = 1): Promise<void> {
+  async incrementUsage(
+    shopId: string,
+    resource: ResourceType,
+    count = 1,
+  ): Promise<void> {
     const update: Record<string, number> = {};
-    
+
     switch (resource) {
       case 'shops':
         update.currentShopCount = count;
@@ -160,9 +183,13 @@ export class SubscriptionGuardService {
   /**
    * Decrement usage count after deletion
    */
-  async decrementUsage(shopId: string, resource: ResourceType, count = 1): Promise<void> {
+  async decrementUsage(
+    shopId: string,
+    resource: ResourceType,
+    count = 1,
+  ): Promise<void> {
     const update: Record<string, number> = {};
-    
+
     switch (resource) {
       case 'shops':
         update.currentShopCount = -count;
@@ -191,10 +218,12 @@ export class SubscriptionGuardService {
     counts: { shops?: number; employees?: number; products?: number },
   ): Promise<void> {
     const update: Record<string, number> = {};
-    
+
     if (counts.shops !== undefined) update.currentShopCount = counts.shops;
-    if (counts.employees !== undefined) update.currentEmployeeCount = counts.employees;
-    if (counts.products !== undefined) update.currentProductCount = counts.products;
+    if (counts.employees !== undefined)
+      update.currentEmployeeCount = counts.employees;
+    if (counts.products !== undefined)
+      update.currentProductCount = counts.products;
 
     if (Object.keys(update).length > 0) {
       await this.subscriptionModel.updateOne(
@@ -223,17 +252,17 @@ export class SubscriptionGuardService {
     if (!plan) return null;
 
     return {
-      shops: { 
-        current: subscription.currentShopCount || 0, 
-        limit: plan.maxShops 
+      shops: {
+        current: subscription.currentShopCount || 0,
+        limit: plan.maxShops,
       },
-      employees: { 
-        current: subscription.currentEmployeeCount || 0, 
-        limit: plan.maxEmployees 
+      employees: {
+        current: subscription.currentEmployeeCount || 0,
+        limit: plan.maxEmployees,
       },
-      products: { 
-        current: subscription.currentProductCount || 0, 
-        limit: plan.maxProducts 
+      products: {
+        current: subscription.currentProductCount || 0,
+        limit: plan.maxProducts,
       },
     };
   }

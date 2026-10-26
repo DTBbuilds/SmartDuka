@@ -14,7 +14,11 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { MessagingService } from './messaging.service';
 import { MessagingGateway } from './messaging.gateway';
-import { CreateConversationDto, SendMessageDto, UpdateConversationDto } from './dto/messaging.dto';
+import {
+  CreateConversationDto,
+  SendMessageDto,
+  UpdateConversationDto,
+} from './dto/messaging.dto';
 
 @Controller('messaging')
 @UseGuards(JwtAuthGuard)
@@ -30,7 +34,10 @@ export class MessagingController {
   @Post('conversations')
   @UseGuards(RolesGuard)
   @Roles('admin')
-  async createConversation(@Request() req: any, @Body() dto: CreateConversationDto) {
+  async createConversation(
+    @Request() req: any,
+    @Body() dto: CreateConversationDto,
+  ) {
     const conversation = await this.messagingService.createConversation(
       req.user.shopId,
       req.user.userId,
@@ -73,7 +80,11 @@ export class MessagingController {
     );
 
     // Broadcast message via WebSocket
-    this.messagingGateway.broadcastMessage(dto.conversationId, message, req.user);
+    this.messagingGateway.broadcastMessage(
+      dto.conversationId,
+      message,
+      req.user,
+    );
 
     return message;
   }
@@ -101,12 +112,23 @@ export class MessagingController {
   @Post('conversations/:id/read')
   @UseGuards(RolesGuard)
   @Roles('admin')
-  async markAdminMessagesRead(@Request() req: any, @Param('id') conversationId: string) {
-    const result = await this.messagingService.markAsRead(conversationId, req.user.userId, 'admin');
-    
+  async markAdminMessagesRead(
+    @Request() req: any,
+    @Param('id') conversationId: string,
+  ) {
+    const result = await this.messagingService.markAsRead(
+      conversationId,
+      req.user.userId,
+      'admin',
+    );
+
     // Notify via WebSocket
-    this.messagingGateway.notifyMessagesRead(conversationId, req.user.userId, 'admin');
-    
+    this.messagingGateway.notifyMessagesRead(
+      conversationId,
+      req.user.userId,
+      'admin',
+    );
+
     return result;
   }
 
@@ -115,7 +137,11 @@ export class MessagingController {
   @UseGuards(RolesGuard)
   @Roles('admin')
   async getAdminUnreadCount(@Request() req: any) {
-    return this.messagingService.getUnreadCount(req.user.userId, 'admin', req.user.shopId);
+    return this.messagingService.getUnreadCount(
+      req.user.userId,
+      'admin',
+      req.user.shopId,
+    );
   }
 
   // ============ SUPER ADMIN ENDPOINTS ============
@@ -142,7 +168,10 @@ export class MessagingController {
   @Post('super-admin/messages')
   @UseGuards(RolesGuard)
   @Roles('super_admin')
-  async sendSuperAdminMessage(@Request() req: any, @Body() dto: SendMessageDto) {
+  async sendSuperAdminMessage(
+    @Request() req: any,
+    @Body() dto: SendMessageDto,
+  ) {
     const message = await this.messagingService.sendMessage(
       '', // Super admin doesn't have shopId
       req.user.userId,
@@ -151,7 +180,11 @@ export class MessagingController {
     );
 
     // Broadcast message via WebSocket
-    this.messagingGateway.broadcastMessage(dto.conversationId, message, req.user);
+    this.messagingGateway.broadcastMessage(
+      dto.conversationId,
+      message,
+      req.user,
+    );
 
     return message;
   }
@@ -179,12 +212,23 @@ export class MessagingController {
   @Post('super-admin/conversations/:id/read')
   @UseGuards(RolesGuard)
   @Roles('super_admin')
-  async markSuperAdminMessagesRead(@Request() req: any, @Param('id') conversationId: string) {
-    const result = await this.messagingService.markAsRead(conversationId, req.user.userId, 'super_admin');
-    
+  async markSuperAdminMessagesRead(
+    @Request() req: any,
+    @Param('id') conversationId: string,
+  ) {
+    const result = await this.messagingService.markAsRead(
+      conversationId,
+      req.user.userId,
+      'super_admin',
+    );
+
     // Notify via WebSocket
-    this.messagingGateway.notifyMessagesRead(conversationId, req.user.userId, 'super_admin');
-    
+    this.messagingGateway.notifyMessagesRead(
+      conversationId,
+      req.user.userId,
+      'super_admin',
+    );
+
     return result;
   }
 

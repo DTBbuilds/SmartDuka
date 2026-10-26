@@ -21,13 +21,23 @@ describe('QUALITY-CORE1 receipt reconciliation', () => {
     shopId: { toString: () => SHOP_A },
     orderNumber: 'STK-2026-JD2PTR',
     items: [
-      { name: 'Incident Basket Item', quantity: 1, unitPrice: 805, lineTotal: 805 },
+      {
+        name: 'Incident Basket Item',
+        quantity: 1,
+        unitPrice: 805,
+        lineTotal: 805,
+      },
     ],
     subtotal: 805,
     tax: 128.8,
     total: 933.8,
     payments: [
-      { method: 'mpesa', amount: 933.8, status: 'pending', mpesaReceiptNumber: 'QGH7XYZ12K' },
+      {
+        method: 'mpesa',
+        amount: 933.8,
+        status: 'pending',
+        mpesaReceiptNumber: 'QGH7XYZ12K',
+      },
     ],
     customerName: 'Walk-in',
     cashierId: '507f1f77bcf86cd799439012',
@@ -64,18 +74,13 @@ describe('QUALITY-CORE1 receipt reconciliation', () => {
         exec: jest.fn().mockResolvedValue(canonicalOrder),
       })),
     };
-    service = new ReceiptService(
-      receiptModel as any,
-      orderModel as any,
-      undefined,
-      {
-        findById: jest.fn(() => ({
-          select: jest.fn(() => ({
-            exec: jest.fn().mockResolvedValue({ currency: 'KES' }),
-          })),
+    service = new ReceiptService(receiptModel, orderModel, undefined, {
+      findById: jest.fn(() => ({
+        select: jest.fn(() => ({
+          exec: jest.fn().mockResolvedValue({ currency: 'KES' }),
         })),
-      } as any,
-    );
+      })),
+    } as any);
   });
 
   it('receipt mirrors the canonical order snapshot including the server-derived allocation', async () => {

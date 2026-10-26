@@ -13,10 +13,22 @@ import { SubscriptionPaymentController } from './subscription-payment.controller
 import { SubscriptionEnforcementController } from './subscription-enforcement.controller';
 import { SubscriptionAuditController } from './subscription-audit.controller';
 import { SubscriptionAuditService } from './subscription-audit.service';
-import { Subscription, SubscriptionSchema } from './schemas/subscription.schema';
-import { SubscriptionPlan, SubscriptionPlanSchema } from './schemas/subscription-plan.schema';
-import { SubscriptionInvoice, SubscriptionInvoiceSchema } from './schemas/subscription-invoice.schema';
-import { PaymentAttempt, PaymentAttemptSchema } from './schemas/payment-attempt.schema';
+import {
+  Subscription,
+  SubscriptionSchema,
+} from './schemas/subscription.schema';
+import {
+  SubscriptionPlan,
+  SubscriptionPlanSchema,
+} from './schemas/subscription-plan.schema';
+import {
+  SubscriptionInvoice,
+  SubscriptionInvoiceSchema,
+} from './schemas/subscription-invoice.schema';
+import {
+  PaymentAttempt,
+  PaymentAttemptSchema,
+} from './schemas/payment-attempt.schema';
 import { ActivityLog, ActivityLogSchema } from './schemas/activity-log.schema';
 import { PaymentAttemptService } from './services/payment-attempt.service';
 import { ActivityLogService } from './services/activity-log.service';
@@ -25,7 +37,10 @@ import { BillingEffectsReconciliationService } from './services/billing-effects-
 import { Shop, ShopSchema } from '../shops/schemas/shop.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { Product, ProductSchema } from '../inventory/schemas/product.schema';
-import { SystemConfig, SystemConfigSchema } from '../super-admin/schemas/system-config.schema';
+import {
+  SystemConfig,
+  SystemConfigSchema,
+} from '../super-admin/schemas/system-config.schema';
 import { PaymentsModule } from '../payments/payments.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 
@@ -46,10 +61,15 @@ import { NotificationsModule } from '../notifications/notifications.module';
     PaymentsModule,
     NotificationsModule,
   ],
-  controllers: [SubscriptionsController, SubscriptionPaymentController, SubscriptionEnforcementController, SubscriptionAuditController],
+  controllers: [
+    SubscriptionsController,
+    SubscriptionPaymentController,
+    SubscriptionEnforcementController,
+    SubscriptionAuditController,
+  ],
   providers: [
-    SubscriptionsService, 
-    SubscriptionGuardService, 
+    SubscriptionsService,
+    SubscriptionGuardService,
     SubscriptionMpesaService,
     SubscriptionSchedulerService,
     SubscriptionMigrationService,
@@ -62,14 +82,14 @@ import { NotificationsModule } from '../notifications/notifications.module';
     BillingEffectsReconciliationService,
   ],
   exports: [
-    SubscriptionsService, 
-    SubscriptionGuardService, 
-    SubscriptionMpesaService, 
-    SubscriptionMigrationService, 
+    SubscriptionsService,
+    SubscriptionGuardService,
+    SubscriptionMpesaService,
+    SubscriptionMigrationService,
     SubscriptionEnforcementService,
     SubscriptionDunningService,
     SubscriptionAuditService,
-    PaymentAttemptService, 
+    PaymentAttemptService,
     ActivityLogService,
     InvoicePaymentAuthorityService,
   ],
@@ -88,7 +108,10 @@ export class SubscriptionsModule implements OnModuleInit {
         await this.subscriptionsService.updatePlanProductLimits();
         await this.subscriptionsService.updatePlansSetupPricing();
       } catch (err: any) {
-        console.error('Subscription plan initialization failed:', err?.message || err);
+        console.error(
+          'Subscription plan initialization failed:',
+          err?.message || err,
+        );
       }
     });
     // Note: Migration runs automatically via SubscriptionMigrationService.onModuleInit()

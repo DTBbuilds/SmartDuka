@@ -8,10 +8,10 @@ import { Notification, NotificationDocument } from './notification.schema';
 
 /**
  * System Event Manager - Automated Email & Notification Controller
- * 
+ *
  * This service acts as the central hub for all automated system events
  * that require user notification via email, SMS, or in-app notifications.
- * 
+ *
  * Best Practices Implemented:
  * 1. Use reply-to addresses for support emails
  * 2. Clear subject lines with shop context
@@ -65,7 +65,9 @@ export class SystemEventManagerService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    this.logger.log('System Event Manager initialized - monitoring system events');
+    this.logger.log(
+      'System Event Manager initialized - monitoring system events',
+    );
     // Process any pending scheduled notifications
     await this.processScheduledNotifications();
   }
@@ -85,22 +87,25 @@ export class SystemEventManagerService implements OnModuleInit {
    */
   private async processQueue(): Promise<void> {
     if (this.isProcessing || this.emailQueue.length === 0) return;
-    
+
     this.isProcessing = true;
-    
+
     while (this.emailQueue.length > 0) {
       const event = this.emailQueue.shift();
       if (event) {
         try {
           await this.processEvent(event);
         } catch (error: any) {
-          this.logger.error(`Failed to process event ${event.type}:`, error.message);
+          this.logger.error(
+            `Failed to process event ${event.type}:`,
+            error.message,
+          );
         }
       }
       // Rate limiting: wait 100ms between emails
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
     }
-    
+
     this.isProcessing = false;
   }
 
@@ -151,7 +156,11 @@ export class SystemEventManagerService implements OnModuleInit {
   /**
    * Send welcome email to new shop registration
    */
-  async sendWelcomeEmail(shop: ShopContext, user: UserContext, data: any): Promise<void> {
+  async sendWelcomeEmail(
+    shop: ShopContext,
+    user: UserContext,
+    data: any,
+  ): Promise<void> {
     const emailResult = await this.emailService.sendTemplateEmail({
       to: user.userEmail,
       templateName: 'welcome',
@@ -165,7 +174,8 @@ export class SystemEventManagerService implements OnModuleInit {
         planPrice: data.planPrice ? data.planPrice.toLocaleString() : '0',
         maxShops: data.maxShops || 1,
         maxEmployees: data.maxEmployees || 3,
-        maxProducts: data.maxProducts >= 10000 ? 'Unlimited' : (data.maxProducts || 100),
+        maxProducts:
+          data.maxProducts >= 10000 ? 'Unlimited' : data.maxProducts || 100,
       },
     });
 
@@ -180,16 +190,24 @@ export class SystemEventManagerService implements OnModuleInit {
     });
 
     if (emailResult.success) {
-      this.logger.log(`Welcome email sent to ${user.userEmail} for shop ${shop.shopName}`);
+      this.logger.log(
+        `Welcome email sent to ${user.userEmail} for shop ${shop.shopName}`,
+      );
     } else {
-      this.logger.warn(`Welcome email failed for ${user.userEmail} (shop: ${shop.shopName}): ${emailResult.error}`);
+      this.logger.warn(
+        `Welcome email failed for ${user.userEmail} (shop: ${shop.shopName}): ${emailResult.error}`,
+      );
     }
   }
 
   /**
    * Send subscription activated email
    */
-  async sendSubscriptionActivatedEmail(shop: ShopContext, user: UserContext, data: any): Promise<void> {
+  async sendSubscriptionActivatedEmail(
+    shop: ShopContext,
+    user: UserContext,
+    data: any,
+  ): Promise<void> {
     await this.emailService.sendTemplateEmail({
       to: user.userEmail,
       templateName: 'subscription_activated',
@@ -220,7 +238,11 @@ export class SystemEventManagerService implements OnModuleInit {
   /**
    * Send subscription expiring warning
    */
-  async sendSubscriptionExpiringEmail(shop: ShopContext, user: UserContext, data: any): Promise<void> {
+  async sendSubscriptionExpiringEmail(
+    shop: ShopContext,
+    user: UserContext,
+    data: any,
+  ): Promise<void> {
     await this.notificationsService.sendSubscriptionExpiringAlert(
       shop.shopId,
       shop.shopName,
@@ -234,7 +256,11 @@ export class SystemEventManagerService implements OnModuleInit {
   /**
    * Send subscription expired notification
    */
-  async sendSubscriptionExpiredEmail(shop: ShopContext, user: UserContext, data: any): Promise<void> {
+  async sendSubscriptionExpiredEmail(
+    shop: ShopContext,
+    user: UserContext,
+    data: any,
+  ): Promise<void> {
     await this.emailService.sendTemplateEmail({
       to: user.userEmail,
       templateName: 'subscription_expired',
@@ -262,7 +288,11 @@ export class SystemEventManagerService implements OnModuleInit {
   /**
    * Send payment success confirmation
    */
-  async sendPaymentSuccessEmail(shop: ShopContext, user: UserContext, data: any): Promise<void> {
+  async sendPaymentSuccessEmail(
+    shop: ShopContext,
+    user: UserContext,
+    data: any,
+  ): Promise<void> {
     await this.emailService.sendTemplateEmail({
       to: user.userEmail,
       templateName: 'payment_successful',
@@ -307,13 +337,19 @@ export class SystemEventManagerService implements OnModuleInit {
       category: 'receipt',
     });
 
-    this.logger.log(`Receipt sent to ${data.customerEmail} for order ${data.orderNumber}`);
+    this.logger.log(
+      `Receipt sent to ${data.customerEmail} for order ${data.orderNumber}`,
+    );
   }
 
   /**
    * Send low stock alert to shop admin
    */
-  async sendLowStockAlert(shop: ShopContext, user: UserContext, data: any): Promise<void> {
+  async sendLowStockAlert(
+    shop: ShopContext,
+    user: UserContext,
+    data: any,
+  ): Promise<void> {
     await this.notificationsService.sendLowStockAlert(
       shop.shopId,
       shop.shopName,
@@ -339,7 +375,9 @@ export class SystemEventManagerService implements OnModuleInit {
       },
     });
 
-    this.logger.log(`Employee invite sent to ${data.employeeEmail} for shop ${shop.shopName}`);
+    this.logger.log(
+      `Employee invite sent to ${data.employeeEmail} for shop ${shop.shopName}`,
+    );
   }
 
   /**
@@ -360,7 +398,11 @@ export class SystemEventManagerService implements OnModuleInit {
   /**
    * Send daily sales report
    */
-  async sendDailyReportEmail(shop: ShopContext, user: UserContext, data: any): Promise<void> {
+  async sendDailyReportEmail(
+    shop: ShopContext,
+    user: UserContext,
+    data: any,
+  ): Promise<void> {
     await this.notificationsService.sendDailySalesReport(
       shop.shopId,
       shop.shopName,
@@ -376,14 +418,18 @@ export class SystemEventManagerService implements OnModuleInit {
    */
   generateReceiptHtml(shop: ShopContext, data: any): string {
     const items = data.items || [];
-    const itemsHtml = items.map((item: any) => `
+    const itemsHtml = items
+      .map(
+        (item: any) => `
       <tr>
         <td style="padding: 8px; border-bottom: 1px solid #eee;">${item.name}</td>
         <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: center;">${item.quantity}</td>
         <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">${shop.currency || 'KES'} ${item.price.toLocaleString()}</td>
         <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">${shop.currency || 'KES'} ${(item.quantity * item.price).toLocaleString()}</td>
       </tr>
-    `).join('');
+    `,
+      )
+      .join('');
 
     return `
 <!DOCTYPE html>
@@ -437,33 +483,48 @@ export class SystemEventManagerService implements OnModuleInit {
       <div class="order-info">
         <div class="order-info-row">
           <span>Date:</span>
-          <strong>${new Date(data.date || Date.now()).toLocaleDateString('en-KE', { 
-            weekday: 'short', 
-            year: 'numeric', 
-            month: 'short', 
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-          })}</strong>
+          <strong>${new Date(data.date || Date.now()).toLocaleDateString(
+            'en-KE',
+            {
+              weekday: 'short',
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+            },
+          )}</strong>
         </div>
-        ${data.customerName ? `
+        ${
+          data.customerName
+            ? `
         <div class="order-info-row">
           <span>Customer:</span>
           <strong>${data.customerName}</strong>
         </div>
-        ` : ''}
-        ${data.paymentMethod ? `
+        `
+            : ''
+        }
+        ${
+          data.paymentMethod
+            ? `
         <div class="order-info-row">
           <span>Payment:</span>
           <strong>${data.paymentMethod}</strong>
         </div>
-        ` : ''}
-        ${data.cashier ? `
+        `
+            : ''
+        }
+        ${
+          data.cashier
+            ? `
         <div class="order-info-row">
           <span>Served by:</span>
           <strong>${data.cashier}</strong>
         </div>
-        ` : ''}
+        `
+            : ''
+        }
       </div>
       
       <table class="items-table">
@@ -485,34 +546,50 @@ export class SystemEventManagerService implements OnModuleInit {
           <span>Subtotal:</span>
           <span>${shop.currency || 'KES'} ${(data.subtotal || data.total).toLocaleString()}</span>
         </div>
-        ${data.discount ? `
+        ${
+          data.discount
+            ? `
         <div class="total-row" style="color: #10b981;">
           <span>Discount:</span>
           <span>- ${shop.currency || 'KES'} ${data.discount.toLocaleString()}</span>
         </div>
-        ` : ''}
-        ${data.tax ? `
+        `
+            : ''
+        }
+        ${
+          data.tax
+            ? `
         <div class="total-row">
           <span>Tax (${data.taxRate || 16}%):</span>
           <span>${shop.currency || 'KES'} ${data.tax.toLocaleString()}</span>
         </div>
-        ` : ''}
+        `
+            : ''
+        }
         <div class="total-row grand-total">
           <span>TOTAL:</span>
           <span>${shop.currency || 'KES'} ${data.total.toLocaleString()}</span>
         </div>
-        ${data.amountPaid ? `
+        ${
+          data.amountPaid
+            ? `
         <div class="total-row">
           <span>Amount Paid:</span>
           <span>${shop.currency || 'KES'} ${data.amountPaid.toLocaleString()}</span>
         </div>
-        ` : ''}
-        ${data.change ? `
+        `
+            : ''
+        }
+        ${
+          data.change
+            ? `
         <div class="total-row">
           <span>Change:</span>
           <span>${shop.currency || 'KES'} ${data.change.toLocaleString()}</span>
         </div>
-        ` : ''}
+        `
+            : ''
+        }
       </div>
     </div>
     
@@ -536,10 +613,12 @@ export class SystemEventManagerService implements OnModuleInit {
    */
   @Cron(CronExpression.EVERY_MINUTE)
   async processScheduledNotifications(): Promise<void> {
-    const pendingNotifications = await this.notificationModel.find({
-      status: 'pending',
-      scheduledFor: { $lte: new Date() },
-    }).limit(50);
+    const pendingNotifications = await this.notificationModel
+      .find({
+        status: 'pending',
+        scheduledFor: { $lte: new Date() },
+      })
+      .limit(50);
 
     for (const notification of pendingNotifications) {
       try {
@@ -564,7 +643,9 @@ export class SystemEventManagerService implements OnModuleInit {
    */
   @Cron('0 9 * * *')
   async checkExpiringSubscriptions(): Promise<void> {
-    this.logger.log('Subscription expiration check triggered (handled by SubscriptionSchedulerService)');
+    this.logger.log(
+      'Subscription expiration check triggered (handled by SubscriptionSchedulerService)',
+    );
   }
 
   /**

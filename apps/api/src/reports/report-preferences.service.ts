@@ -1,7 +1,16 @@
-import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { ReportPreferences, ReportPreferencesDocument, ReportFrequencyPreference } from './schemas/report-preferences.schema';
+import {
+  ReportPreferences,
+  ReportPreferencesDocument,
+  ReportFrequencyPreference,
+} from './schemas/report-preferences.schema';
 import { Shop } from '../shops/schemas/shop.schema';
 import { User } from '../users/schemas/user.schema';
 
@@ -35,7 +44,9 @@ export class ReportPreferencesService {
     });
     if (existing) return existing;
     try {
-      return await this.prefsModel.create({ shopId: new Types.ObjectId(shopId) });
+      return await this.prefsModel.create({
+        shopId: new Types.ObjectId(shopId),
+      });
     } catch (error: any) {
       if (error?.code === 11000) {
         const raced = await this.prefsModel.findOne({
@@ -86,7 +97,9 @@ export class ReportPreferencesService {
     }
     if (patch.recipientUserIds) {
       await this.assertRecipientsBelongToShop(shopId, patch.recipientUserIds);
-      prefs.recipientUserIds = patch.recipientUserIds.map((id) => new Types.ObjectId(id));
+      prefs.recipientUserIds = patch.recipientUserIds.map(
+        (id) => new Types.ObjectId(id),
+      );
     }
 
     prefs.updatedAt = new Date();
@@ -106,7 +119,9 @@ export class ReportPreferencesService {
    * at send time (never cached identities). Deduplicated; skips users
    * without an email.
    */
-  async resolveRecipients(shopId: string): Promise<Array<{ userId: string; email: string; name?: string }>> {
+  async resolveRecipients(
+    shopId: string,
+  ): Promise<Array<{ userId: string; email: string; name?: string }>> {
     const prefs = await this.getOrCreate(shopId);
     const shopObjectId = new Types.ObjectId(shopId);
 
@@ -134,9 +149,12 @@ export class ReportPreferencesService {
       .exec();
 
     const seen = new Set<string>();
-    const recipients: Array<{ userId: string; email: string; name?: string }> = [];
+    const recipients: Array<{ userId: string; email: string; name?: string }> =
+      [];
     for (const u of users) {
-      const email = String(u.email || '').toLowerCase().trim();
+      const email = String(u.email || '')
+        .toLowerCase()
+        .trim();
       if (!email || seen.has(email)) continue;
       // Optional reports go to verified identities only.
       if (u.emailVerified === false) continue;
@@ -155,7 +173,9 @@ export class ReportPreferencesService {
    * shop flag handled by the scheduler; here — not paused, not
    * unsubscribed, at least one eligible recipient.
    */
-  async isEligible(shopId: string): Promise<{ eligible: boolean; reason?: string }> {
+  async isEligible(
+    shopId: string,
+  ): Promise<{ eligible: boolean; reason?: string }> {
     const prefs = await this.getOrCreate(shopId);
     if (prefs.unsubscribedAt) {
       return { eligible: false, reason: 'unsubscribed' };
@@ -170,7 +190,10 @@ export class ReportPreferencesService {
     return { eligible: true };
   }
 
-  private async assertRecipientsBelongToShop(shopId: string, userIds: string[]): Promise<void> {
+  private async assertRecipientsBelongToShop(
+    shopId: string,
+    userIds: string[],
+  ): Promise<void> {
     const shopObjectId = new Types.ObjectId(shopId);
     const users = await this.userModel
       .find({
@@ -185,7 +208,9 @@ export class ReportPreferencesService {
     }
     for (const u of users) {
       if (u.role !== 'admin') {
-        throw new ForbiddenException('Report recipients must be shop admins or the owner');
+        throw new ForbiddenException(
+          'Report recipients must be shop admins or the owner',
+        );
       }
     }
   }

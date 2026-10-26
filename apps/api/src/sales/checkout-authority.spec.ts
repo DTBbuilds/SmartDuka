@@ -102,7 +102,15 @@ describe('P0-3A checkout server authority', () => {
       providers: [
         SalesService,
         { provide: getModelToken(Order.name), useValue: mockOrderModel },
-        { provide: getModelToken(Shop.name), useValue: { findById: jest.fn().mockReturnThis(), select: jest.fn().mockReturnThis(), lean: jest.fn().mockReturnThis(), exec: jest.fn().mockResolvedValue({ currency: 'KES' }) } },
+        {
+          provide: getModelToken(Shop.name),
+          useValue: {
+            findById: jest.fn().mockReturnThis(),
+            select: jest.fn().mockReturnThis(),
+            lean: jest.fn().mockReturnThis(),
+            exec: jest.fn().mockResolvedValue({ currency: 'KES' }),
+          },
+        },
         {
           provide: getConnectionToken(),
           useValue: { startSession: jest.fn() },
@@ -402,7 +410,9 @@ describe('P0-3A checkout server authority', () => {
       // never exceed what is owed.
       await expect(
         service.checkout(SHOP, USER_A, undefined, {
-          items: [{ productId: PRODUCT, name: 'X', quantity: 1, unitPrice: 100 }],
+          items: [
+            { productId: PRODUCT, name: 'X', quantity: 1, unitPrice: 100 },
+          ],
           payments: [{ method: 'cash', amount: 999999 }],
         }),
       ).rejects.toThrow(/exceeds the order total/);

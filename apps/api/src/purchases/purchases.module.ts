@@ -7,7 +7,9 @@ import { InventoryModule } from '../inventory/inventory.module';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([{ name: Purchase.name, schema: PurchaseSchema }]),
+    MongooseModule.forFeature([
+      { name: Purchase.name, schema: PurchaseSchema },
+    ]),
     InventoryModule,
   ],
   providers: [PurchasesService],

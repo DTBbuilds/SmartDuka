@@ -1,4 +1,15 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query, Res, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Put,
+  Query,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import type { Response } from 'express';
 import type { CreatePurchaseDto, UpdatePurchaseDto } from './purchases.service';
 import { PurchasesService } from './purchases.service';
@@ -55,7 +66,11 @@ export class PurchasesController {
     @Body() body: { rows: Array<Record<string, any>> },
     @CurrentUser() user: Record<string, any>,
   ) {
-    return this.purchasesService.importPurchasesCSV(user.shopId, user.sub, body?.rows || []);
+    return this.purchasesService.importPurchasesCSV(
+      user.shopId,
+      user.sub,
+      body?.rows || [],
+    );
   }
 
   @UseGuards(JwtAuthGuard)
@@ -69,7 +84,10 @@ export class PurchasesController {
 
   @UseGuards(JwtAuthGuard)
   @Get(':id')
-  async findById(@Param('id') id: string, @CurrentUser() user: Record<string, any>) {
+  async findById(
+    @Param('id') id: string,
+    @CurrentUser() user: Record<string, any>,
+  ) {
     return this.purchasesService.findById(id, user.shopId);
   }
 
@@ -87,7 +105,10 @@ export class PurchasesController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
   @Delete(':id')
-  async delete(@Param('id') id: string, @CurrentUser() user: Record<string, any>) {
+  async delete(
+    @Param('id') id: string,
+    @CurrentUser() user: Record<string, any>,
+  ) {
     const deleted = await this.purchasesService.delete(id, user.shopId);
     return { deleted };
   }

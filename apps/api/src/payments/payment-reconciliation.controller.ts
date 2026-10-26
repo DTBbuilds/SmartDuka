@@ -1,6 +1,17 @@
-import { Body, Controller, Get, Post, Query, UseGuards, BadRequestException } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Query,
+  UseGuards,
+  BadRequestException,
+} from '@nestjs/common';
 import { PaymentReconciliationService } from './payment-reconciliation.service';
-import { CreatePaymentReconciliationDto, GetReconciliationHistoryDto } from './dto/payment-reconciliation.dto';
+import {
+  CreatePaymentReconciliationDto,
+  GetReconciliationHistoryDto,
+} from './dto/payment-reconciliation.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -9,7 +20,9 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 @Controller('payments/reconciliation')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class PaymentReconciliationController {
-  constructor(private readonly reconciliationService: PaymentReconciliationService) {}
+  constructor(
+    private readonly reconciliationService: PaymentReconciliationService,
+  ) {}
 
   @Post()
   @Roles('admin')
@@ -32,9 +45,15 @@ export class PaymentReconciliationController {
     @Query() query: GetReconciliationHistoryDto,
     @CurrentUser() user: Record<string, any>,
   ) {
-    const startDate = query.startDate ? new Date(query.startDate) : new Date(new Date().setDate(new Date().getDate() - 30));
+    const startDate = query.startDate
+      ? new Date(query.startDate)
+      : new Date(new Date().setDate(new Date().getDate() - 30));
     const endDate = query.endDate ? new Date(query.endDate) : new Date();
-    return this.reconciliationService.getReconciliationHistory(user.shopId, startDate, endDate);
+    return this.reconciliationService.getReconciliationHistory(
+      user.shopId,
+      startDate,
+      endDate,
+    );
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

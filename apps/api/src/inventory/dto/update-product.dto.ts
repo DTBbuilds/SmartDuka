@@ -1,4 +1,15 @@
-import { IsEnum, IsMongoId, IsNumber, IsOptional, IsString, IsBoolean, IsArray, IsDate, Min, MinLength } from 'class-validator';
+import {
+  IsEnum,
+  IsMongoId,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsBoolean,
+  IsArray,
+  IsDate,
+  Min,
+  MinLength,
+} from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 
 export class UpdateProductDto {
@@ -43,8 +54,28 @@ export class UpdateProductDto {
   @Transform(({ value }) => {
     if (!value || typeof value !== 'string') return 'active';
     const normalized = value.toString().toLowerCase().trim();
-    if (['active', '1', 'true', 'yes', 'enabled', 'on', 'y', 'a'].includes(normalized)) return 'active';
-    if (['inactive', '0', 'false', 'no', 'disabled', 'off', 'n', 'i', 'disabled', 'draft', 'pending'].includes(normalized)) return 'inactive';
+    if (
+      ['active', '1', 'true', 'yes', 'enabled', 'on', 'y', 'a'].includes(
+        normalized,
+      )
+    )
+      return 'active';
+    if (
+      [
+        'inactive',
+        '0',
+        'false',
+        'no',
+        'disabled',
+        'off',
+        'n',
+        'i',
+        'disabled',
+        'draft',
+        'pending',
+      ].includes(normalized)
+    )
+      return 'inactive';
     return 'active';
   })
   @IsEnum(['active', 'inactive'])

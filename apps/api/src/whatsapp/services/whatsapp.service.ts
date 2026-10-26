@@ -1,17 +1,33 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call */
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { ConfigService } from '@nestjs/config';
-import { WhatsAppMessage, WhatsAppMessageDocument, MessageCategory, ReportType, AlertType } from '../schemas/whatsapp-message.schema';
-import { WhatsAppConfig, WhatsAppConfigDocument } from '../schemas/whatsapp-config.schema';
+import {
+  WhatsAppMessage,
+  WhatsAppMessageDocument,
+  MessageCategory,
+  ReportType,
+  AlertType,
+} from '../schemas/whatsapp-message.schema';
+import {
+  WhatsAppConfig,
+  WhatsAppConfigDocument,
+} from '../schemas/whatsapp-config.schema';
 import { WhatsAppProviderService } from './whatsapp-provider.service';
-import { WhatsAppTemplateService, DailyReportData, WeeklyReportData, MonthlyReportData, LowStockAlertData, CashVarianceAlertData, SalesAnomalyAlertData } from './whatsapp-template.service';
+import {
+  WhatsAppTemplateService,
+  DailyReportData,
+  WeeklyReportData,
+  MonthlyReportData,
+  LowStockAlertData,
+  CashVarianceAlertData,
+  SalesAnomalyAlertData,
+} from './whatsapp-template.service';
 import { QueueService } from '../../queue/queue.service';
 
 /**
  * WhatsApp Service
- * 
+ *
  * Main service for WhatsApp messaging. Handles:
  * - Message sending and queuing
  * - Configuration management
@@ -25,14 +41,19 @@ export class WhatsAppService {
   private readonly senderNumber: string;
 
   constructor(
-    @InjectModel(WhatsAppMessage.name) private readonly messageModel: Model<WhatsAppMessageDocument>,
-    @InjectModel(WhatsAppConfig.name) private readonly configModel: Model<WhatsAppConfigDocument>,
+    @InjectModel(WhatsAppMessage.name)
+    private readonly messageModel: Model<WhatsAppMessageDocument>,
+    @InjectModel(WhatsAppConfig.name)
+    private readonly configModel: Model<WhatsAppConfigDocument>,
     private readonly providerService: WhatsAppProviderService,
     private readonly templateService: WhatsAppTemplateService,
     private readonly queueService: QueueService,
     private readonly configService: ConfigService,
   ) {
-    this.senderNumber = this.configService.get<string>('WHATSAPP_SENDER_NUMBER', '+254700000000');
+    this.senderNumber = this.configService.get<string>(
+      'WHATSAPP_SENDER_NUMBER',
+      '+254700000000',
+    );
   }
 
   // ==================== CONFIGURATION MANAGEMENT ====================
@@ -47,7 +68,10 @@ export class WhatsAppService {
   /**
    * Create or update WhatsApp config
    */
-  async upsertConfig(shopId: string, data: Partial<WhatsAppConfig>): Promise<WhatsAppConfigDocument> {
+  async upsertConfig(
+    shopId: string,
+    data: Partial<WhatsAppConfig>,
+  ): Promise<WhatsAppConfigDocument> {
     return this.configModel.findOneAndUpdate(
       { shopId: new Types.ObjectId(shopId) },
       { $set: { ...data, shopId: new Types.ObjectId(shopId) } },
@@ -68,7 +92,11 @@ export class WhatsAppService {
   /**
    * Send verification OTP to phone number
    */
-  async sendVerificationOtp(shopId: string, phoneNumber: string, shopName: string): Promise<{ success: boolean; error?: string }> {
+  async sendVerificationOtp(
+    shopId: string,
+    phoneNumber: string,
+    shopName: string,
+  ): Promise<{ success: boolean; error?: string }> {
     if (!this.providerService.isAvailable()) {
       return { success: false, error: 'WhatsApp service not available' };
     }
@@ -94,7 +122,10 @@ export class WhatsAppService {
 
     // Send OTP message
     const message = this.templateService.formatVerificationOtp(shopName, otp);
-    const result = await this.providerService.sendTextMessage(phoneNumber, message);
+    const result = await this.providerService.sendTextMessage(
+      phoneNumber,
+      message,
+    );
 
     if (!result.success) {
       return { success: false, error: result.error };
@@ -114,7 +145,10 @@ export class WhatsAppService {
   /**
    * Confirm verification OTP
    */
-  async confirmVerification(shopId: string, otp: string): Promise<{ success: boolean; error?: string }> {
+  async confirmVerification(
+    shopId: string,
+    otp: string,
+  ): Promise<{ success: boolean; error?: string }> {
     const config = await this.getConfig(shopId);
 
     if (!config) {
@@ -178,29 +212,53 @@ export class WhatsAppService {
     if (!this.shouldSendReport(config, 'daily')) return;
 
     const messages = this.templateService.formatDailyReport(data);
-    await this.sendMultiPartMessage(shopId, config!.adminPhone, messages, 'report', 'daily');
+    await this.sendMultiPartMessage(
+      shopId,
+      config!.adminPhone,
+      messages,
+      'report',
+      'daily',
+    );
   }
 
   /**
    * Send weekly report
    */
-  async sendWeeklyReport(shopId: string, data: WeeklyReportData): Promise<void> {
+  async sendWeeklyReport(
+    shopId: string,
+    data: WeeklyReportData,
+  ): Promise<void> {
     const config = await this.getConfig(shopId);
     if (!this.shouldSendReport(config, 'weekly')) return;
 
     const messages = this.templateService.formatWeeklyReport(data);
-    await this.sendMultiPartMessage(shopId, config!.adminPhone, messages, 'report', 'weekly');
+    await this.sendMultiPartMessage(
+      shopId,
+      config!.adminPhone,
+      messages,
+      'report',
+      'weekly',
+    );
   }
 
   /**
    * Send monthly report
    */
-  async sendMonthlyReport(shopId: string, data: MonthlyReportData): Promise<void> {
+  async sendMonthlyReport(
+    shopId: string,
+    data: MonthlyReportData,
+  ): Promise<void> {
     const config = await this.getConfig(shopId);
     if (!this.shouldSendReport(config, 'monthly')) return;
 
     const messages = this.templateService.formatMonthlyReport(data);
-    await this.sendMultiPartMessage(shopId, config!.adminPhone, messages, 'report', 'monthly');
+    await this.sendMultiPartMessage(
+      shopId,
+      config!.adminPhone,
+      messages,
+      'report',
+      'monthly',
+    );
   }
 
   // ==================== ALERT SENDING ====================
@@ -208,7 +266,10 @@ export class WhatsAppService {
   /**
    * Send low stock alert
    */
-  async sendLowStockAlert(shopId: string, data: LowStockAlertData): Promise<void> {
+  async sendLowStockAlert(
+    shopId: string,
+    data: LowStockAlertData,
+  ): Promise<void> {
     const config = await this.getConfig(shopId);
     if (!this.shouldSendAlert(config, 'lowStock')) return;
 
@@ -218,25 +279,45 @@ export class WhatsAppService {
     }
 
     const message = this.templateService.formatLowStockAlert(data);
-    await this.queueMessage(shopId, config!.adminPhone, message, 'alert', undefined, 'low_stock');
+    await this.queueMessage(
+      shopId,
+      config!.adminPhone,
+      message,
+      'alert',
+      undefined,
+      'low_stock',
+    );
   }
 
   /**
    * Send cash variance alert
    */
-  async sendCashVarianceAlert(shopId: string, data: CashVarianceAlertData): Promise<void> {
+  async sendCashVarianceAlert(
+    shopId: string,
+    data: CashVarianceAlertData,
+  ): Promise<void> {
     const config = await this.getConfig(shopId);
     if (!this.shouldSendAlert(config, 'cashVariance')) return;
 
     // Cash variance is important - send even during quiet hours
     const message = this.templateService.formatCashVarianceAlert(data);
-    await this.queueMessage(shopId, config!.adminPhone, message, 'alert', undefined, 'cash_variance');
+    await this.queueMessage(
+      shopId,
+      config!.adminPhone,
+      message,
+      'alert',
+      undefined,
+      'cash_variance',
+    );
   }
 
   /**
    * Send sales anomaly alert
    */
-  async sendSalesAnomalyAlert(shopId: string, data: SalesAnomalyAlertData): Promise<void> {
+  async sendSalesAnomalyAlert(
+    shopId: string,
+    data: SalesAnomalyAlertData,
+  ): Promise<void> {
     const config = await this.getConfig(shopId);
     if (!this.shouldSendAlert(config, 'salesAnomaly')) return;
 
@@ -245,7 +326,14 @@ export class WhatsAppService {
     }
 
     const message = this.templateService.formatSalesAnomalyAlert(data);
-    await this.queueMessage(shopId, config!.adminPhone, message, 'alert', undefined, 'sales_anomaly');
+    await this.queueMessage(
+      shopId,
+      config!.adminPhone,
+      message,
+      'alert',
+      undefined,
+      'sales_anomaly',
+    );
   }
 
   // ==================== MESSAGE QUEUING ====================
@@ -303,7 +391,10 @@ export class WhatsAppService {
       return;
     }
 
-    const result = await this.providerService.sendTextMessage(message.to, message.content);
+    const result = await this.providerService.sendTextMessage(
+      message.to,
+      message.content,
+    );
 
     if (result.success) {
       await this.messageModel.updateOne(
@@ -321,7 +412,7 @@ export class WhatsAppService {
       await this.incrementMessageCount(message.shopId.toString());
     } else {
       const shouldRetry = message.retryCount < message.maxRetries;
-      
+
       await this.messageModel.updateOne(
         { _id: message._id },
         {
@@ -329,7 +420,9 @@ export class WhatsAppService {
             status: shouldRetry ? 'queued' : 'failed',
             errorMessage: result.error,
             errorCode: result.errorCode,
-            nextRetryAt: shouldRetry ? new Date(Date.now() + 60000 * (message.retryCount + 1)) : undefined,
+            nextRetryAt: shouldRetry
+              ? new Date(Date.now() + 60000 * (message.retryCount + 1))
+              : undefined,
           },
           $inc: { retryCount: 1 },
         },
@@ -351,23 +444,33 @@ export class WhatsAppService {
     error?: string,
   ): Promise<void> {
     const updateData: Record<string, unknown> = { status };
-    
+
     if (status === 'delivered') {
       updateData.deliveredAt = timestamp || new Date();
-      await this.messageModel.updateOne({ providerMessageId }, { $set: updateData });
-      
+      await this.messageModel.updateOne(
+        { providerMessageId },
+        { $set: updateData },
+      );
+
       // Update delivered count
       const message = await this.messageModel.findOne({ providerMessageId });
       if (message) {
-        const shopIdStr = message.shopId?.toString?.() ?? String(message.shopId);
+        const shopIdStr =
+          message.shopId?.toString?.() ?? String(message.shopId);
         await this.incrementDeliveredCount(shopIdStr);
       }
     } else if (status === 'read') {
       updateData.readAt = timestamp || new Date();
-      await this.messageModel.updateOne({ providerMessageId }, { $set: updateData });
+      await this.messageModel.updateOne(
+        { providerMessageId },
+        { $set: updateData },
+      );
     } else if (status === 'failed') {
       updateData.errorMessage = error;
-      await this.messageModel.updateOne({ providerMessageId }, { $set: updateData });
+      await this.messageModel.updateOne(
+        { providerMessageId },
+        { $set: updateData },
+      );
     }
   }
 
@@ -380,7 +483,9 @@ export class WhatsAppService {
     shopId: string,
     options: { category?: string; limit?: number; skip?: number } = {},
   ): Promise<WhatsAppMessageDocument[]> {
-    const query: Record<string, unknown> = { shopId: new Types.ObjectId(shopId) };
+    const query: Record<string, unknown> = {
+      shopId: new Types.ObjectId(shopId),
+    };
     if (options.category) query.category = options.category;
 
     return this.messageModel
@@ -394,7 +499,10 @@ export class WhatsAppService {
   /**
    * Get message statistics for a shop
    */
-  async getMessageStats(shopId: string, days: number = 30): Promise<{
+  async getMessageStats(
+    shopId: string,
+    days: number = 30,
+  ): Promise<{
     total: number;
     sent: number;
     delivered: number;
@@ -411,14 +519,22 @@ export class WhatsAppService {
 
     const stats = {
       total: messages.length,
-      sent: messages.filter(m => m.status === 'sent' || m.status === 'delivered' || m.status === 'read').length,
-      delivered: messages.filter(m => m.status === 'delivered' || m.status === 'read').length,
-      failed: messages.filter(m => m.status === 'failed').length,
+      sent: messages.filter(
+        (m) =>
+          m.status === 'sent' ||
+          m.status === 'delivered' ||
+          m.status === 'read',
+      ).length,
+      delivered: messages.filter(
+        (m) => m.status === 'delivered' || m.status === 'read',
+      ).length,
+      failed: messages.filter((m) => m.status === 'failed').length,
       byCategory: {} as Record<string, number>,
     };
 
     for (const message of messages) {
-      stats.byCategory[message.category] = (stats.byCategory[message.category] || 0) + 1;
+      stats.byCategory[message.category] =
+        (stats.byCategory[message.category] || 0) + 1;
     }
 
     return stats;
@@ -426,13 +542,19 @@ export class WhatsAppService {
 
   // ==================== PRIVATE HELPERS ====================
 
-  private shouldSendReport(config: WhatsAppConfigDocument | null, reportType: ReportType): boolean {
+  private shouldSendReport(
+    config: WhatsAppConfigDocument | null,
+    reportType: ReportType,
+  ): boolean {
     if (!config?.isOptedIn || !config?.isVerified) return false;
     if (config.deliveryChannel === 'email') return false;
     return config.reportSchedule?.[reportType] ?? true;
   }
 
-  private shouldSendAlert(config: WhatsAppConfigDocument | null, alertType: keyof WhatsAppConfig['alertPreferences']): boolean {
+  private shouldSendAlert(
+    config: WhatsAppConfigDocument | null,
+    alertType: keyof WhatsAppConfig['alertPreferences'],
+  ): boolean {
     if (!config?.isOptedIn || !config?.isVerified) return false;
     if (config.deliveryChannel === 'email') return false;
     return config.alertPreferences?.[alertType] ?? true;
@@ -463,7 +585,7 @@ export class WhatsAppService {
     for (const content of messages) {
       await this.queueMessage(shopId, to, content, category, reportType);
       // Small delay between parts
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
     }
   }
 

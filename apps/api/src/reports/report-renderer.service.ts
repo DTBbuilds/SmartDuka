@@ -33,7 +33,11 @@ export interface ReportMetrics {
   itemsSold: number;
   averageOrderValue: number;
   paymentMethods: Array<{ method: string; amount: number }>;
-  topProducts: Array<{ productName: string; quantity: number; revenue: number }>;
+  topProducts: Array<{
+    productName: string;
+    quantity: number;
+    revenue: number;
+  }>;
   lowStock: Array<{ name: string; stock: number; reorderPoint: number }>;
   previousPeriod?: { billedRevenue: number; orders: number } | null;
   insights: Array<{ kind: 'fact' | 'suggestion'; text: string }>;
@@ -42,7 +46,13 @@ export interface ReportMetrics {
   generatedAt: Date;
 }
 
-const BRAND = { dark: '#111827', muted: '#6b7280', accent: '#f97316', line: '#e5e7eb', bg: '#f9fafb' };
+const BRAND = {
+  dark: '#111827',
+  muted: '#6b7280',
+  accent: '#f97316',
+  line: '#e5e7eb',
+  bg: '#f9fafb',
+};
 const PAGE_W = 595.28; // A4 width in pt (pdfkit default)
 
 const fmt = (v: number, currency?: string) => formatMoney(v, currency || 'KES');
@@ -53,13 +63,22 @@ export class ReportRendererService {
   private readonly logger = new Logger(ReportRendererService.name);
 
   subject(metrics: ReportMetrics): string {
-    const label = metrics.frequency === 'daily' ? 'Daily' : metrics.frequency === 'weekly' ? 'Weekly' : 'Monthly';
+    const label =
+      metrics.frequency === 'daily'
+        ? 'Daily'
+        : metrics.frequency === 'weekly'
+          ? 'Weekly'
+          : 'Monthly';
     return `SmartDuka ${label} Business Digest — ${metrics.shopName} — ${metrics.periodLabel}`;
   }
 
   private changeText(metrics: ReportMetrics): string | null {
-    if (!metrics.previousPeriod || metrics.previousPeriod.billedRevenue <= 0) return null;
-    const change = ((metrics.billedRevenue - metrics.previousPeriod.billedRevenue) / metrics.previousPeriod.billedRevenue) * 100;
+    if (!metrics.previousPeriod || metrics.previousPeriod.billedRevenue <= 0)
+      return null;
+    const change =
+      ((metrics.billedRevenue - metrics.previousPeriod.billedRevenue) /
+        metrics.previousPeriod.billedRevenue) *
+      100;
     return `${pct(change)} vs previous ${metrics.frequency === 'daily' ? 'day' : metrics.frequency === 'weekly' ? 'week' : 'month'}`;
   }
 
@@ -86,10 +105,12 @@ export class ReportRendererService {
   private paymentMethodsTable(metrics: ReportMetrics): string {
     if (metrics.paymentMethods.length === 0) return '';
     const rows = metrics.paymentMethods
-      .map((m) => `<tr>
+      .map(
+        (m) => `<tr>
         <td style="padding:6px 12px;font-size:13px;color:#374151;border-bottom:1px solid ${BRAND.line};text-transform:capitalize;">${m.method.replace(/_/g, ' ')}</td>
         <td style="padding:6px 12px;font-size:13px;font-weight:600;color:${BRAND.dark};border-bottom:1px solid ${BRAND.line};text-align:right;">${fmt(m.amount, metrics.currency)}</td>
-      </tr>`)
+      </tr>`,
+      )
       .join('');
     return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${BRAND.line};border-radius:6px;overflow:hidden;margin-top:12px;">
       <tr><td colspan="2" style="padding:8px 12px;font-size:12px;font-weight:700;color:${BRAND.dark};background:${BRAND.bg};border-bottom:1px solid ${BRAND.line};">Payments by method</td></tr>
@@ -101,11 +122,13 @@ export class ReportRendererService {
     if (metrics.topProducts.length === 0) return '';
     const rows = metrics.topProducts
       .slice(0, 10)
-      .map((p, i) => `<tr>
+      .map(
+        (p, i) => `<tr>
         <td style="padding:6px 12px;font-size:13px;color:#374151;border-bottom:1px solid ${BRAND.line};">${i + 1}. ${escapeHtml(p.productName)}</td>
         <td style="padding:6px 12px;font-size:13px;color:${BRAND.muted};border-bottom:1px solid ${BRAND.line};text-align:center;">${p.quantity}</td>
         <td style="padding:6px 12px;font-size:13px;font-weight:600;color:${BRAND.dark};border-bottom:1px solid ${BRAND.line};text-align:right;">${fmt(p.revenue, metrics.currency)}</td>
-      </tr>`)
+      </tr>`,
+      )
       .join('');
     return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${BRAND.line};border-radius:6px;overflow:hidden;margin-top:12px;">
       <tr><td style="padding:8px 12px;font-size:12px;font-weight:700;color:${BRAND.dark};background:${BRAND.bg};border-bottom:1px solid ${BRAND.line};">Best sellers</td><td style="padding:8px 12px;font-size:12px;font-weight:700;color:${BRAND.dark};background:${BRAND.bg};border-bottom:1px solid ${BRAND.line};text-align:center;">Qty</td><td style="padding:8px 12px;font-size:12px;font-weight:700;color:${BRAND.dark};background:${BRAND.bg};border-bottom:1px solid ${BRAND.line};text-align:right;">Revenue</td></tr>
@@ -117,10 +140,12 @@ export class ReportRendererService {
     if (metrics.lowStock.length === 0) return '';
     const rows = metrics.lowStock
       .slice(0, 8)
-      .map((p) => `<tr>
+      .map(
+        (p) => `<tr>
         <td style="padding:6px 12px;font-size:13px;color:#374151;border-bottom:1px solid ${BRAND.line};">${escapeHtml(p.name)}</td>
         <td style="padding:6px 12px;font-size:13px;font-weight:600;color:#b91c1c;border-bottom:1px solid ${BRAND.line};text-align:right;">${p.stock} left</td>
-      </tr>`)
+      </tr>`,
+      )
       .join('');
     return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #fecaca;border-radius:6px;overflow:hidden;margin-top:12px;">
       <tr><td colspan="2" style="padding:8px 12px;font-size:12px;font-weight:700;color:#b91c1c;background:#fef2f2;border-bottom:1px solid #fecaca;">&#9888; Low stock — reorder soon</td></tr>
@@ -185,44 +210,76 @@ export class ReportRendererService {
 
   text(metrics: ReportMetrics): string {
     const lines: string[] = [];
-    lines.push(`SMARTDUKA ${metrics.frequency.toUpperCase()} DIGEST — ${metrics.shopName}`);
+    lines.push(
+      `SMARTDUKA ${metrics.frequency.toUpperCase()} DIGEST — ${metrics.shopName}`,
+    );
     lines.push(`${metrics.periodLabel} (${metrics.timezone})`);
     lines.push('');
-    lines.push(`Billed sales: ${fmt(metrics.billedRevenue, metrics.currency)}${this.changeText(metrics) ? ` (${this.changeText(metrics)})` : ''}`);
-    lines.push(`Payments collected: ${fmt(metrics.collectedPayments, metrics.currency)}`);
-    if (metrics.outstanding > 0.005) lines.push(`Outstanding balance: ${fmt(metrics.outstanding, metrics.currency)}`);
-    if (metrics.refunds > 0) lines.push(`Refunds: ${fmt(metrics.refunds, metrics.currency)}`);
+    lines.push(
+      `Billed sales: ${fmt(metrics.billedRevenue, metrics.currency)}${this.changeText(metrics) ? ` (${this.changeText(metrics)})` : ''}`,
+    );
+    lines.push(
+      `Payments collected: ${fmt(metrics.collectedPayments, metrics.currency)}`,
+    );
+    if (metrics.outstanding > 0.005)
+      lines.push(
+        `Outstanding balance: ${fmt(metrics.outstanding, metrics.currency)}`,
+      );
+    if (metrics.refunds > 0)
+      lines.push(`Refunds: ${fmt(metrics.refunds, metrics.currency)}`);
     lines.push(`Tax collected: ${fmt(metrics.tax, metrics.currency)}`);
-    if (metrics.discounts > 0) lines.push(`Discounts given: ${fmt(metrics.discounts, metrics.currency)}`);
+    if (metrics.discounts > 0)
+      lines.push(
+        `Discounts given: ${fmt(metrics.discounts, metrics.currency)}`,
+      );
     lines.push(`Orders: ${metrics.orders} | Items sold: ${metrics.itemsSold}`);
-    if (metrics.orders > 0) lines.push(`Average order: ${fmt(metrics.averageOrderValue, metrics.currency)}`);
+    if (metrics.orders > 0)
+      lines.push(
+        `Average order: ${fmt(metrics.averageOrderValue, metrics.currency)}`,
+      );
     if (metrics.paymentMethods.length > 0) {
       lines.push('');
       lines.push('Payments by method:');
-      for (const m of metrics.paymentMethods) lines.push(`  ${m.method.replace(/_/g, ' ')}: ${fmt(m.amount, metrics.currency)}`);
+      for (const m of metrics.paymentMethods)
+        lines.push(
+          `  ${m.method.replace(/_/g, ' ')}: ${fmt(m.amount, metrics.currency)}`,
+        );
     }
     if (metrics.topProducts.length > 0) {
       lines.push('');
       lines.push('Best sellers:');
-      metrics.topProducts.slice(0, 10).forEach((p, i) =>
-        lines.push(`  ${i + 1}. ${p.productName} — ${p.quantity} sold — ${fmt(p.revenue, metrics.currency)}`),
-      );
+      metrics.topProducts
+        .slice(0, 10)
+        .forEach((p, i) =>
+          lines.push(
+            `  ${i + 1}. ${p.productName} — ${p.quantity} sold — ${fmt(p.revenue, metrics.currency)}`,
+          ),
+        );
     }
     if (metrics.lowStock.length > 0) {
       lines.push('');
       lines.push('LOW STOCK (reorder soon):');
-      metrics.lowStock.slice(0, 8).forEach((p) => lines.push(`  ${p.name} — ${p.stock} left`));
+      metrics.lowStock
+        .slice(0, 8)
+        .forEach((p) => lines.push(`  ${p.name} — ${p.stock} left`));
     }
     if (metrics.insights.length > 0) {
       lines.push('');
       lines.push('Insights:');
-      for (const i of metrics.insights) lines.push(`  [${i.kind === 'fact' ? 'Fact' : 'Suggestion'}] ${i.text}`);
+      for (const i of metrics.insights)
+        lines.push(
+          `  [${i.kind === 'fact' ? 'Fact' : 'Suggestion'}] ${i.text}`,
+        );
     }
     lines.push('');
     lines.push(`Dashboard: ${metrics.dashboardUrl}`);
     lines.push(`Manage reports: ${metrics.preferencesUrl}`);
-    lines.push(`Generated ${localTime(metrics.generatedAt, metrics.timezone)} (UTC ${metrics.generatedAt.toISOString().slice(11, 16)})`);
-    lines.push('Billed sales and collected payments are reported separately; outstanding balances are shown, not hidden.');
+    lines.push(
+      `Generated ${localTime(metrics.generatedAt, metrics.timezone)} (UTC ${metrics.generatedAt.toISOString().slice(11, 16)})`,
+    );
+    lines.push(
+      'Billed sales and collected payments are reported separately; outstanding balances are shown, not hidden.',
+    );
     return lines.join('\n');
   }
 
@@ -256,7 +313,9 @@ export class ReportRendererService {
     });
     const chunks: Buffer[] = [];
     doc.on('data', (c: Buffer) => chunks.push(c));
-    const done = new Promise<Buffer>((resolve) => doc.on('end', () => resolve(Buffer.concat(chunks))));
+    const done = new Promise<Buffer>((resolve) =>
+      doc.on('end', () => resolve(Buffer.concat(chunks))),
+    );
 
     const W = doc.page.width - 96;
     let y = 0;
@@ -279,9 +338,14 @@ export class ReportRendererService {
         .fillColor('#9ca3af')
         .fontSize(8)
         .font('Helvetica')
-        .text(label, Math.max(48, (PAGE_W - estimatedWidth) / 2), doc.page.maxY() - 12, {
-          lineBreak: false,
-        });
+        .text(
+          label,
+          Math.max(48, (PAGE_W - estimatedWidth) / 2),
+          doc.page.maxY() - 12,
+          {
+            lineBreak: false,
+          },
+        );
     };
 
     const ensureSpace = (needed: number) => {
@@ -295,31 +359,78 @@ export class ReportRendererService {
 
     // Header band
     doc.rect(0, 0, doc.page.width, 88).fill('#111827');
-    doc.fillColor('#f97316').fontSize(9).font('Helvetica-Bold').text(`SMARTDUKA ${metrics.frequency.toUpperCase()} BUSINESS DIGEST`, 48, 22);
-    doc.fillColor('#ffffff').fontSize(18).text(escapePdf(metrics.shopName), 48, 38);
-    doc.fillColor('#9ca3af').fontSize(9).font('Helvetica').text(`${metrics.periodLabel} · ${metrics.timezone}`, 48, 62);
+    doc
+      .fillColor('#f97316')
+      .fontSize(9)
+      .font('Helvetica-Bold')
+      .text(
+        `SMARTDUKA ${metrics.frequency.toUpperCase()} BUSINESS DIGEST`,
+        48,
+        22,
+      );
+    doc
+      .fillColor('#ffffff')
+      .fontSize(18)
+      .text(escapePdf(metrics.shopName), 48, 38);
+    doc
+      .fillColor('#9ca3af')
+      .fontSize(9)
+      .font('Helvetica')
+      .text(`${metrics.periodLabel} · ${metrics.timezone}`, 48, 62);
     y = 112;
 
     // KPI table
     const kpiRows: Array<[string, string]> = [
       ['Billed sales', fmt(metrics.billedRevenue, metrics.currency)],
       ['Payments collected', fmt(metrics.collectedPayments, metrics.currency)],
-      ...(metrics.outstanding > 0.005 ? ([['Outstanding balance', fmt(metrics.outstanding, metrics.currency)]] as Array<[string, string]>) : []),
-      ...(metrics.refunds > 0 ? ([['Refunds', fmt(metrics.refunds, metrics.currency)]] as Array<[string, string]>) : []),
+      ...(metrics.outstanding > 0.005
+        ? ([
+            ['Outstanding balance', fmt(metrics.outstanding, metrics.currency)],
+          ] as Array<[string, string]>)
+        : []),
+      ...(metrics.refunds > 0
+        ? ([['Refunds', fmt(metrics.refunds, metrics.currency)]] as Array<
+            [string, string]
+          >)
+        : []),
       ['Tax collected', fmt(metrics.tax, metrics.currency)],
-      ...(metrics.discounts > 0 ? ([['Discounts given', fmt(metrics.discounts, metrics.currency)]] as Array<[string, string]>) : []),
+      ...(metrics.discounts > 0
+        ? ([
+            ['Discounts given', fmt(metrics.discounts, metrics.currency)],
+          ] as Array<[string, string]>)
+        : []),
       ['Orders', String(metrics.orders)],
       ['Items sold', String(metrics.itemsSold)],
-      ...(metrics.orders > 0 ? ([['Average order', fmt(metrics.averageOrderValue, metrics.currency)]] as Array<[string, string]>) : []),
+      ...(metrics.orders > 0
+        ? ([
+            ['Average order', fmt(metrics.averageOrderValue, metrics.currency)],
+          ] as Array<[string, string]>)
+        : []),
     ];
     const change = this.changeText(metrics);
-    doc.fillColor('#111827').fontSize(12).font('Helvetica-Bold').text('Summary', 48, y);
+    doc
+      .fillColor('#111827')
+      .fontSize(12)
+      .font('Helvetica-Bold')
+      .text('Summary', 48, y);
     y += 18;
     for (const [label, value] of kpiRows) {
       ensureSpace(22);
       doc.rect(48, y, W, 22).fill('#f9fafb');
-      doc.fillColor('#6b7280').fontSize(10).font('Helvetica').text(label, 58, y + 6);
-      doc.fillColor('#111827').font('Helvetica-Bold').text(value + (label === 'Billed sales' && change ? `  (${change})` : ''), 48, y + 6, { width: W - 20, align: 'right' });
+      doc
+        .fillColor('#6b7280')
+        .fontSize(10)
+        .font('Helvetica')
+        .text(label, 58, y + 6);
+      doc
+        .fillColor('#111827')
+        .font('Helvetica-Bold')
+        .text(
+          value + (label === 'Billed sales' && change ? `  (${change})` : ''),
+          48,
+          y + 6,
+          { width: W - 20, align: 'right' },
+        );
       y += 22;
     }
 
@@ -327,12 +438,26 @@ export class ReportRendererService {
     if (metrics.paymentMethods.length > 0) {
       ensureSpace(30);
       y += 14;
-      doc.fillColor('#111827').fontSize(12).font('Helvetica-Bold').text('Payments by method', 48, y);
+      doc
+        .fillColor('#111827')
+        .fontSize(12)
+        .font('Helvetica-Bold')
+        .text('Payments by method', 48, y);
       y += 18;
       for (const m of metrics.paymentMethods) {
         ensureSpace(18);
-        doc.fillColor('#374151').fontSize(10).font('Helvetica').text(m.method.replace(/_/g, ' '), 58, y);
-        doc.fillColor('#111827').font('Helvetica-Bold').text(fmt(m.amount, metrics.currency), 48, y, { width: W - 20, align: 'right' });
+        doc
+          .fillColor('#374151')
+          .fontSize(10)
+          .font('Helvetica')
+          .text(m.method.replace(/_/g, ' '), 58, y);
+        doc
+          .fillColor('#111827')
+          .font('Helvetica-Bold')
+          .text(fmt(m.amount, metrics.currency), 48, y, {
+            width: W - 20,
+            align: 'right',
+          });
         y += 18;
       }
     }
@@ -341,12 +466,29 @@ export class ReportRendererService {
     if (metrics.topProducts.length > 0) {
       ensureSpace(30);
       y += 14;
-      doc.fillColor('#111827').fontSize(12).font('Helvetica-Bold').text('Best sellers', 48, y);
+      doc
+        .fillColor('#111827')
+        .fontSize(12)
+        .font('Helvetica-Bold')
+        .text('Best sellers', 48, y);
       y += 18;
       metrics.topProducts.slice(0, 10).forEach((p, i) => {
         ensureSpace(18);
-        doc.fillColor('#374151').fontSize(10).font('Helvetica').text(`${i + 1}. ${p.productName} (${p.quantity})`, 58, y, { width: W - 120, ellipsis: true });
-        doc.fillColor('#111827').font('Helvetica-Bold').text(fmt(p.revenue, metrics.currency), 48, y, { width: W - 20, align: 'right' });
+        doc
+          .fillColor('#374151')
+          .fontSize(10)
+          .font('Helvetica')
+          .text(`${i + 1}. ${p.productName} (${p.quantity})`, 58, y, {
+            width: W - 120,
+            ellipsis: true,
+          });
+        doc
+          .fillColor('#111827')
+          .font('Helvetica-Bold')
+          .text(fmt(p.revenue, metrics.currency), 48, y, {
+            width: W - 20,
+            align: 'right',
+          });
         y += 18;
       });
     }
@@ -355,12 +497,23 @@ export class ReportRendererService {
     if (metrics.lowStock.length > 0) {
       ensureSpace(30);
       y += 14;
-      doc.fillColor('#b91c1c').fontSize(12).font('Helvetica-Bold').text('Low stock — reorder soon', 48, y);
+      doc
+        .fillColor('#b91c1c')
+        .fontSize(12)
+        .font('Helvetica-Bold')
+        .text('Low stock — reorder soon', 48, y);
       y += 18;
       metrics.lowStock.slice(0, 8).forEach((p) => {
         ensureSpace(18);
-        doc.fillColor('#374151').fontSize(10).font('Helvetica').text(p.name, 58, y, { width: W - 120, ellipsis: true });
-        doc.fillColor('#b91c1c').font('Helvetica-Bold').text(`${p.stock} left`, 48, y, { width: W - 20, align: 'right' });
+        doc
+          .fillColor('#374151')
+          .fontSize(10)
+          .font('Helvetica')
+          .text(p.name, 58, y, { width: W - 120, ellipsis: true });
+        doc
+          .fillColor('#b91c1c')
+          .font('Helvetica-Bold')
+          .text(`${p.stock} left`, 48, y, { width: W - 20, align: 'right' });
         y += 18;
       });
     }
@@ -369,12 +522,23 @@ export class ReportRendererService {
     if (metrics.insights.length > 0) {
       ensureSpace(30);
       y += 14;
-      doc.fillColor('#111827').fontSize(12).font('Helvetica-Bold').text('Insights', 48, y);
+      doc
+        .fillColor('#111827')
+        .fontSize(12)
+        .font('Helvetica-Bold')
+        .text('Insights', 48, y);
       y += 18;
       for (const i of metrics.insights) {
         ensureSpace(28);
-        doc.fillColor(i.kind === 'fact' ? '#111827' : '#c2410c').fontSize(10).font('Helvetica-Bold').text(i.kind === 'fact' ? 'Fact' : 'Suggestion', 58, y);
-        doc.fillColor('#374151').font('Helvetica').text(i.text, 100, y, { width: W - 60 });
+        doc
+          .fillColor(i.kind === 'fact' ? '#111827' : '#c2410c')
+          .fontSize(10)
+          .font('Helvetica-Bold')
+          .text(i.kind === 'fact' ? 'Fact' : 'Suggestion', 58, y);
+        doc
+          .fillColor('#374151')
+          .font('Helvetica')
+          .text(i.text, 100, y, { width: W - 60 });
         y += 28;
       }
     }
@@ -399,7 +563,9 @@ function escapePdf(s: string): string {
 function localTime(instant: Date, timeZone: string): string {
   try {
     return new Intl.DateTimeFormat('en-GB', {
-      timeZone, dateStyle: 'medium', timeStyle: 'short',
+      timeZone,
+      dateStyle: 'medium',
+      timeStyle: 'short',
     }).format(instant);
   } catch {
     return instant.toISOString();

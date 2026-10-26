@@ -1,8 +1,17 @@
-import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  Logger,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { nanoid } from 'nanoid';
-import { Invoice, InvoiceDocument, PaymentApprovalStatus } from '../schemas/invoice.schema';
+import {
+  Invoice,
+  InvoiceDocument,
+  PaymentApprovalStatus,
+} from '../schemas/invoice.schema';
 import { Order, OrderDocument } from '../schemas/order.schema';
 import { CreateInvoiceDto, RecordPaymentDto } from '../dto/invoice.dto';
 import { EmailService } from '../../notifications/email.service';
@@ -25,7 +34,8 @@ export class InvoiceService {
   private readonly logger = new Logger(InvoiceService.name);
 
   constructor(
-    @InjectModel(Invoice.name) private readonly invoiceModel: Model<InvoiceDocument>,
+    @InjectModel(Invoice.name)
+    private readonly invoiceModel: Model<InvoiceDocument>,
     @InjectModel(Order.name) private readonly orderModel: Model<OrderDocument>,
     private readonly emailService: EmailService,
   ) {}
@@ -42,7 +52,11 @@ export class InvoiceService {
   /**
    * Create invoice from order
    */
-  async createFromOrder(shopId: string, branchId: string | undefined, dto: CreateInvoiceDto): Promise<InvoiceDocument> {
+  async createFromOrder(
+    shopId: string,
+    branchId: string | undefined,
+    dto: CreateInvoiceDto,
+  ): Promise<InvoiceDocument> {
     if (!dto.orderId) {
       throw new BadRequestException('Order ID is required');
     }
@@ -59,16 +73,23 @@ export class InvoiceService {
     }
 
     const issueDate = dto.issueDate || new Date();
-    const dueDate = dto.dueDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+    const dueDate =
+      dto.dueDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
 
     // Calculate amounts paid from order payments
-    const amountPaid = order.payments?.reduce((sum, p) => {
-      if (p.status === 'completed') return sum + p.amount;
-      return sum;
-    }, 0) || 0;
+    const amountPaid =
+      order.payments?.reduce((sum, p) => {
+        if (p.status === 'completed') return sum + p.amount;
+        return sum;
+      }, 0) || 0;
 
     const amountDue = order.total - amountPaid;
-    const paymentStatus = amountPaid >= order.total ? 'paid' : amountPaid > 0 ? 'partial' : 'unpaid';
+    const paymentStatus =
+      amountPaid >= order.total
+        ? 'paid'
+        : amountPaid > 0
+          ? 'partial'
+          : 'unpaid';
 
     const invoice = new this.invoiceModel({
       shopId: new Types.ObjectId(shopId),
@@ -91,7 +112,7 @@ export class InvoiceService {
       customerTaxPin: dto.customerTaxPin,
       issueDate,
       dueDate,
-      items: order.items.map(item => ({
+      items: order.items.map((item) => ({
         name: item.name,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
@@ -100,12 +121,15 @@ export class InvoiceService {
       subtotal: order.subtotal,
       taxAmount: order.tax,
       total: order.total,
-      payments: order.payments?.filter(p => p.status === 'completed').map(p => ({
-        date: new Date(),
-        method: p.method as any,
-        amount: p.amount,
-        reference: p.mpesaReceiptNumber || p.reference,
-      })) || [],
+      payments:
+        order.payments
+          ?.filter((p) => p.status === 'completed')
+          .map((p) => ({
+            date: new Date(),
+            method: p.method as any,
+            amount: p.amount,
+            reference: p.mpesaReceiptNumber || p.reference,
+          })) || [],
       amountPaid,
       amountDue,
       paymentStatus,
@@ -127,18 +151,24 @@ export class InvoiceService {
   /**
    * Create standalone invoice (not from order)
    */
-  async create(shopId: string, branchId: string | undefined, userId: string, dto: CreateInvoiceDto): Promise<InvoiceDocument> {
+  async create(
+    shopId: string,
+    branchId: string | undefined,
+    userId: string,
+    dto: CreateInvoiceDto,
+  ): Promise<InvoiceDocument> {
     if (!dto.items || dto.items.length === 0) {
       throw new BadRequestException('Invoice must have at least one item');
     }
 
     const issueDate = dto.issueDate || new Date();
-    const dueDate = dto.dueDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    const dueDate =
+      dto.dueDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
     // Calculate totals
     let subtotal = 0;
     let totalTax = 0;
-    const items = dto.items.map(item => {
+    const items = dto.items.map((item) => {
       const lineTotal = item.quantity * item.unitPrice;
       const itemTax = item.taxRate ? lineTotal * item.taxRate : 0;
       subtotal += lineTotal;
@@ -223,10 +253,12 @@ export class InvoiceService {
    * Get invoice by ID
    */
   async getById(shopId: string, invoiceId: string): Promise<InvoiceDocument> {
-    const invoice = await this.invoiceModel.findOne({
-      _id: new Types.ObjectId(invoiceId),
-      shopId: new Types.ObjectId(shopId),
-    }).exec();
+    const invoice = await this.invoiceModel
+      .findOne({
+        _id: new Types.ObjectId(invoiceId),
+        shopId: new Types.ObjectId(shopId),
+      })
+      .exec();
 
     if (!invoice) {
       throw new NotFoundException('Invoice not found');
@@ -238,7 +270,10 @@ export class InvoiceService {
   /**
    * Get invoices with filters
    */
-  async getInvoices(shopId: string, filters?: InvoiceFilters): Promise<InvoiceDocument[]> {
+  async getInvoices(
+    shopId: string,
+    filters?: InvoiceFilters,
+  ): Promise<InvoiceDocument[]> {
     const query: any = { shopId: new Types.ObjectId(shopId) };
 
     if (filters?.status && filters.status !== 'all') {
@@ -283,11 +318,17 @@ export class InvoiceService {
    * For manual payments (bank_transfer, mpesa send money), set requiresApproval=true
    * to require super admin approval before the payment is considered complete.
    */
-  async recordPayment(shopId: string, invoiceId: string, dto: RecordPaymentDto): Promise<InvoiceDocument> {
+  async recordPayment(
+    shopId: string,
+    invoiceId: string,
+    dto: RecordPaymentDto,
+  ): Promise<InvoiceDocument> {
     const invoice = await this.getById(shopId, invoiceId);
 
     if (invoice.status === 'cancelled' || invoice.status === 'void') {
-      throw new BadRequestException('Cannot record payment on cancelled/void invoice');
+      throw new BadRequestException(
+        'Cannot record payment on cancelled/void invoice',
+      );
     }
 
     if (dto.amount <= 0) {
@@ -300,10 +341,15 @@ export class InvoiceService {
 
     // Determine approval status based on payment method and requiresApproval flag
     // Manual payments (bank_transfer, mpesa send money) should require approval
-    const requiresApproval = dto.requiresApproval ?? 
-      (dto.method === 'bank_transfer' || (dto.method === 'mpesa' && dto.notes?.toLowerCase().includes('send money')));
-    
-    const approvalStatus: PaymentApprovalStatus = requiresApproval ? 'pending' : 'auto_approved';
+    const requiresApproval =
+      dto.requiresApproval ??
+      (dto.method === 'bank_transfer' ||
+        (dto.method === 'mpesa' &&
+          dto.notes?.toLowerCase().includes('send money')));
+
+    const approvalStatus: PaymentApprovalStatus = requiresApproval
+      ? 'pending'
+      : 'auto_approved';
     const paymentId = nanoid(12);
 
     // Add payment with approval status
@@ -340,16 +386,18 @@ export class InvoiceService {
    * Approve a pending payment (super admin only)
    */
   async approvePayment(
-    invoiceId: string, 
-    paymentId: string, 
-    approvedBy: string
+    invoiceId: string,
+    paymentId: string,
+    approvedBy: string,
   ): Promise<InvoiceDocument> {
     const invoice = await this.invoiceModel.findById(invoiceId).exec();
     if (!invoice) {
       throw new NotFoundException('Invoice not found');
     }
 
-    const paymentIndex = invoice.payments.findIndex(p => p.paymentId === paymentId);
+    const paymentIndex = invoice.payments.findIndex(
+      (p) => p.paymentId === paymentId,
+    );
     if (paymentIndex === -1) {
       throw new NotFoundException('Payment not found');
     }
@@ -384,17 +432,19 @@ export class InvoiceService {
    * Reject a pending payment (super admin only)
    */
   async rejectPayment(
-    invoiceId: string, 
-    paymentId: string, 
+    invoiceId: string,
+    paymentId: string,
     rejectedBy: string,
-    reason: string
+    reason: string,
   ): Promise<InvoiceDocument> {
     const invoice = await this.invoiceModel.findById(invoiceId).exec();
     if (!invoice) {
       throw new NotFoundException('Invoice not found');
     }
 
-    const paymentIndex = invoice.payments.findIndex(p => p.paymentId === paymentId);
+    const paymentIndex = invoice.payments.findIndex(
+      (p) => p.paymentId === paymentId,
+    );
     if (paymentIndex === -1) {
       throw new NotFoundException('Payment not found');
     }
@@ -418,7 +468,10 @@ export class InvoiceService {
   /**
    * Send invoice (mark as sent)
    */
-  async sendInvoice(shopId: string, invoiceId: string): Promise<InvoiceDocument> {
+  async sendInvoice(
+    shopId: string,
+    invoiceId: string,
+  ): Promise<InvoiceDocument> {
     const invoice = await this.getById(shopId, invoiceId);
 
     if (invoice.status === 'cancelled' || invoice.status === 'void') {
@@ -434,7 +487,11 @@ export class InvoiceService {
   /**
    * Cancel invoice
    */
-  async cancelInvoice(shopId: string, invoiceId: string, reason: string): Promise<InvoiceDocument> {
+  async cancelInvoice(
+    shopId: string,
+    invoiceId: string,
+    reason: string,
+  ): Promise<InvoiceDocument> {
     const invoice = await this.getById(shopId, invoiceId);
 
     if (invoice.paymentStatus === 'paid') {
@@ -455,12 +512,15 @@ export class InvoiceService {
   async getOverdueInvoices(shopId: string): Promise<InvoiceDocument[]> {
     const now = new Date();
 
-    return await this.invoiceModel.find({
-      shopId: new Types.ObjectId(shopId),
-      dueDate: { $lt: now },
-      paymentStatus: { $in: ['unpaid', 'partial'] },
-      status: { $nin: ['cancelled', 'void', 'paid'] },
-    }).sort({ dueDate: 1 }).exec();
+    return await this.invoiceModel
+      .find({
+        shopId: new Types.ObjectId(shopId),
+        dueDate: { $lt: now },
+        paymentStatus: { $in: ['unpaid', 'partial'] },
+        status: { $nin: ['cancelled', 'void', 'paid'] },
+      })
+      .sort({ dueDate: 1 })
+      .exec();
   }
 
   /**
@@ -475,22 +535,32 @@ export class InvoiceService {
       if (to) matchStage.issueDate.$lte = new Date(to);
     }
 
-    const stats = await this.invoiceModel.aggregate([
-      { $match: matchStage },
-      {
-        $group: {
-          _id: null,
-          totalInvoices: { $sum: 1 },
-          totalAmount: { $sum: '$total' },
-          totalPaid: { $sum: '$amountPaid' },
-          totalDue: { $sum: '$amountDue' },
-          paidCount: { $sum: { $cond: [{ $eq: ['$paymentStatus', 'paid'] }, 1, 0] } },
-          unpaidCount: { $sum: { $cond: [{ $eq: ['$paymentStatus', 'unpaid'] }, 1, 0] } },
-          partialCount: { $sum: { $cond: [{ $eq: ['$paymentStatus', 'partial'] }, 1, 0] } },
-          overdueCount: { $sum: { $cond: [{ $eq: ['$paymentStatus', 'overdue'] }, 1, 0] } },
+    const stats = await this.invoiceModel
+      .aggregate([
+        { $match: matchStage },
+        {
+          $group: {
+            _id: null,
+            totalInvoices: { $sum: 1 },
+            totalAmount: { $sum: '$total' },
+            totalPaid: { $sum: '$amountPaid' },
+            totalDue: { $sum: '$amountDue' },
+            paidCount: {
+              $sum: { $cond: [{ $eq: ['$paymentStatus', 'paid'] }, 1, 0] },
+            },
+            unpaidCount: {
+              $sum: { $cond: [{ $eq: ['$paymentStatus', 'unpaid'] }, 1, 0] },
+            },
+            partialCount: {
+              $sum: { $cond: [{ $eq: ['$paymentStatus', 'partial'] }, 1, 0] },
+            },
+            overdueCount: {
+              $sum: { $cond: [{ $eq: ['$paymentStatus', 'overdue'] }, 1, 0] },
+            },
+          },
         },
-      },
-    ]).exec();
+      ])
+      .exec();
 
     if (stats.length === 0) {
       return {
@@ -514,7 +584,8 @@ export class InvoiceService {
   generateInvoiceHTML(invoice: InvoiceDocument): string {
     const currencyConfig = getCurrencyConfig(invoice.currency);
     const fmt = (amt: number) => formatMoney(amt, invoice.currency);
-    const localeDate = (date: Date) => new Date(date).toLocaleDateString(currencyConfig.locale);
+    const localeDate = (date: Date) =>
+      new Date(date).toLocaleDateString(currencyConfig.locale);
 
     return `
 <!DOCTYPE html>
@@ -607,14 +678,18 @@ export class InvoiceService {
         </tr>
       </thead>
       <tbody>
-        ${invoice.items.map(item => `
+        ${invoice.items
+          .map(
+            (item) => `
           <tr>
             <td>${item.name}${item.description ? `<br><small style="color:#6b7280">${item.description}</small>` : ''}</td>
             <td class="text-right">${item.quantity}</td>
             <td class="text-right">${fmt(item.unitPrice)}</td>
             <td class="text-right">${fmt(item.lineTotal)}</td>
           </tr>
-        `).join('')}
+        `,
+          )
+          .join('')}
       </tbody>
     </table>
 
@@ -623,12 +698,16 @@ export class InvoiceService {
         <span>Subtotal</span>
         <span>${fmt(invoice.subtotal)}</span>
       </div>
-      ${invoice.discount ? `
+      ${
+        invoice.discount
+          ? `
         <div class="totals-row">
           <span>Discount</span>
           <span>-${fmt(invoice.discount)}</span>
         </div>
-      ` : ''}
+      `
+          : ''
+      }
       <div class="totals-row">
         <span>Tax</span>
         <span>${fmt(invoice.taxAmount)}</span>
@@ -637,7 +716,9 @@ export class InvoiceService {
         <span>Total</span>
         <span>${fmt(invoice.total)}</span>
       </div>
-      ${invoice.amountPaid > 0 ? `
+      ${
+        invoice.amountPaid > 0
+          ? `
         <div class="totals-row">
           <span>Amount Paid</span>
           <span>${fmt(invoice.amountPaid)}</span>
@@ -646,22 +727,32 @@ export class InvoiceService {
           <span>Amount Due</span>
           <span>${fmt(invoice.amountDue)}</span>
         </div>
-      ` : ''}
+      `
+          : ''
+      }
     </div>
 
     <div class="footer">
-      ${invoice.notes ? `
+      ${
+        invoice.notes
+          ? `
         <div class="notes">
           <h4>Notes</h4>
           <p>${invoice.notes}</p>
         </div>
-      ` : ''}
-      ${invoice.terms ? `
+      `
+          : ''
+      }
+      ${
+        invoice.terms
+          ? `
         <div class="notes">
           <h4>Terms & Conditions</h4>
           <p>${invoice.terms}</p>
         </div>
-      ` : ''}
+      `
+          : ''
+      }
       <p class="thank-you">${invoice.footerMessage || 'Thank you for your business!'}</p>
     </div>
   </div>
@@ -682,7 +773,10 @@ export class InvoiceService {
       const html = this.generateInvoiceHTML(invoice);
 
       const fromName = invoice.businessName || 'SmartDuka';
-      const fromEmail = invoice.businessEmail || process.env.SMTP_FROM || 'SmartDuka <noreply@smartduka.org>';
+      const fromEmail =
+        invoice.businessEmail ||
+        process.env.SMTP_FROM ||
+        'SmartDuka <noreply@smartduka.org>';
 
       await this.emailService.sendEmail({
         to: invoice.customerEmail,
@@ -693,7 +787,9 @@ export class InvoiceService {
         category: 'billing',
       });
     } catch (error: any) {
-      this.logger.error(`Failed to send invoice email for ${invoice._id}: ${error.message}`);
+      this.logger.error(
+        `Failed to send invoice email for ${invoice._id}: ${error.message}`,
+      );
     }
   }
 }

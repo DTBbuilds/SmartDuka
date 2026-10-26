@@ -5,10 +5,10 @@ export type SubscriptionPlanDocument = HydratedDocument<SubscriptionPlan>;
 
 /**
  * Subscription Plan Schema
- * 
+ *
  * Defines the available subscription tiers for SmartDuka POS
  * Pricing is in KES (Kenyan Shillings) - friendly for Kenyan market
- * 
+ *
  * Plans:
  * - Starter: KES 1,000/month - 1 shop, 2 employees, 500 products
  * - Basic: KES 1,500/month - 2 shops, 5 employees, 1000 products
@@ -86,7 +86,8 @@ export class SubscriptionPlan {
   updatedAt?: Date;
 }
 
-export const SubscriptionPlanSchema = SchemaFactory.createForClass(SubscriptionPlan);
+export const SubscriptionPlanSchema =
+  SchemaFactory.createForClass(SubscriptionPlan);
 
 // Indexes
 // Note: code already has unique index from @Prop({ unique: true })

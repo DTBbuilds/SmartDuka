@@ -2,7 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { EmailTemplate, EmailTemplateDocument } from './email-template.schema';
-import { EmailLog, EmailLogDocument } from '../super-admin/schemas/email-log.schema';
+import {
+  EmailLog,
+  EmailLogDocument,
+} from '../super-admin/schemas/email-log.schema';
 import * as nodemailer from 'nodemailer';
 import { Resend } from 'resend';
 import { getAllTemplatesForSeeding } from './email-templates';
@@ -109,7 +112,9 @@ export class EmailService {
       this.activeProvider = 'resend';
       this.logger.log('✅ Email: Resend only');
     } else {
-      this.logger.warn('⚠️ No email provider configured. Set SMTP credentials and/or RESEND_API_KEY.');
+      this.logger.warn(
+        '⚠️ No email provider configured. Set SMTP credentials and/or RESEND_API_KEY.',
+      );
     }
   }
 
@@ -123,10 +128,14 @@ export class EmailService {
     const from = process.env.SMTP_FROM || 'SmartDuka <noreply@smartduka.org>';
 
     // Log configuration status (only once, concisely)
-    this.logger.log(`SMTP Config: host=${host ? '✓' : '✗'}, user=${user ? '✓' : '✗'}, pass=${pass ? '✓' : '✗'}, port=${port}`);
+    this.logger.log(
+      `SMTP Config: host=${host ? '✓' : '✗'}, user=${user ? '✓' : '✗'}, pass=${pass ? '✓' : '✗'}, port=${port}`,
+    );
 
     if (!host || !user || !pass) {
-      this.logger.warn('⚠️  SMTP not configured - email sending DISABLED. Set SMTP_HOST, SMTP_USER, SMTP_PASS to enable.');
+      this.logger.warn(
+        '⚠️  SMTP not configured - email sending DISABLED. Set SMTP_HOST, SMTP_USER, SMTP_PASS to enable.',
+      );
       return;
     }
 
@@ -148,16 +157,21 @@ export class EmailService {
       });
 
       // Skip verification in development if using placeholder credentials
-      const isPlaceholder = user?.includes('your-email') || pass?.includes('your-app');
+      const isPlaceholder =
+        user?.includes('your-email') || pass?.includes('your-app');
       if (isPlaceholder) {
-        this.logger.warn('⚠️  SMTP using placeholder credentials - email sending will fail. Update SMTP_USER and SMTP_PASS in .env');
+        this.logger.warn(
+          '⚠️  SMTP using placeholder credentials - email sending will fail. Update SMTP_USER and SMTP_PASS in .env',
+        );
         return;
       }
 
       // Verify connection asynchronously - don't block startup
       // Use a shorter timeout for verification to fail fast
       const verifyTimeout = setTimeout(() => {
-        this.logger.warn('⚠️  SMTP verification skipped (timeout) - emails will be sent on-demand');
+        this.logger.warn(
+          '⚠️  SMTP verification skipped (timeout) - emails will be sent on-demand',
+        );
       }, 5000);
 
       this.transporter.verify((error) => {
@@ -165,12 +179,27 @@ export class EmailService {
         if (error) {
           this.logger.warn(`⚠️  SMTP verification failed: ${error.message}`);
           // Provide helpful hints based on error type
-          if (error.message.includes('timeout') || error.message.includes('ETIMEDOUT')) {
-            this.logger.warn('   → Check: Firewall blocking port 465? VPN interfering? SMTP server down?');
-          } else if (error.message.includes('auth') || error.message.includes('535')) {
-            this.logger.warn('   → Check: For Gmail, use App Password (not regular password)');
-          } else if (error.message.includes('certificate') || error.message.includes('TLS')) {
-            this.logger.warn('   → Check: TLS/SSL certificate issue with SMTP server');
+          if (
+            error.message.includes('timeout') ||
+            error.message.includes('ETIMEDOUT')
+          ) {
+            this.logger.warn(
+              '   → Check: Firewall blocking port 465? VPN interfering? SMTP server down?',
+            );
+          } else if (
+            error.message.includes('auth') ||
+            error.message.includes('535')
+          ) {
+            this.logger.warn(
+              '   → Check: For Gmail, use App Password (not regular password)',
+            );
+          } else if (
+            error.message.includes('certificate') ||
+            error.message.includes('TLS')
+          ) {
+            this.logger.warn(
+              '   → Check: TLS/SSL certificate issue with SMTP server',
+            );
           }
           // Keep transporter - emails may still work when actually sending
           this.logger.log('   → Email sending will be attempted on-demand');
@@ -180,7 +209,10 @@ export class EmailService {
         }
       });
     } catch (error: any) {
-      this.logger.error('Failed to initialize SMTP transporter:', error.message);
+      this.logger.error(
+        'Failed to initialize SMTP transporter:',
+        error.message,
+      );
       this.transporter = null;
     }
   }
@@ -199,15 +231,25 @@ export class EmailService {
    * Get the correct 'from' address based on the provider being used.
    * SMTP can send from Gmail; Resend requires a verified domain.
    */
-  private getFromAddress(requestedFrom?: string, provider?: 'smtp' | 'resend'): string {
+  private getFromAddress(
+    requestedFrom?: string,
+    provider?: 'smtp' | 'resend',
+  ): string {
     const verifiedDomainFrom = 'SmartDuka <noreply@smartduka.org>';
-    const smtpFrom = process.env.SMTP_FROM || process.env.EMAIL_FROM || verifiedDomainFrom;
+    const smtpFrom =
+      process.env.SMTP_FROM || process.env.EMAIL_FROM || verifiedDomainFrom;
 
     // For Resend, we MUST send from a verified domain - never gmail.com etc.
     if (provider === 'resend') {
       const resendFrom = process.env.RESEND_FROM_EMAIL || verifiedDomainFrom;
       const envFrom = requestedFrom || smtpFrom;
-      const freeEmailDomains = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'live.com'];
+      const freeEmailDomains = [
+        'gmail.com',
+        'yahoo.com',
+        'hotmail.com',
+        'outlook.com',
+        'live.com',
+      ];
       const fromEmail = envFrom.match(/<([^>]+)>/)?.[1] || envFrom;
       const domain = fromEmail.split('@')[1]?.toLowerCase();
       if (domain && freeEmailDomains.includes(domain)) {
@@ -220,10 +262,21 @@ export class EmailService {
     return requestedFrom || smtpFrom;
   }
 
-  async sendEmail(options: EmailOptions): Promise<{ success: boolean; messageId?: string; error?: string; emailLogId?: string }> {
+  async sendEmail(options: EmailOptions): Promise<{
+    success: boolean;
+    messageId?: string;
+    error?: string;
+    emailLogId?: string;
+  }> {
     // Guard: prevent sending emails with empty/null html body
-    if (!options.html || typeof options.html !== 'string' || !options.html.trim()) {
-      this.logger.error(`sendEmail called with empty html body for "${options.subject}" to ${options.to}`);
+    if (
+      !options.html ||
+      typeof options.html !== 'string' ||
+      !options.html.trim()
+    ) {
+      this.logger.error(
+        `sendEmail called with empty html body for "${options.subject}" to ${options.to}`,
+      );
       return { success: false, error: 'Email html body is empty or missing' };
     }
 
@@ -233,7 +286,10 @@ export class EmailService {
     if (options.idempotencyKey) {
       try {
         const prior = await this.emailLogModel
-          .findOne({ idempotencyKey: options.idempotencyKey, status: { $in: ['sent', 'delivered'] } })
+          .findOne({
+            idempotencyKey: options.idempotencyKey,
+            status: { $in: ['sent', 'delivered'] },
+          })
           .lean();
         if (prior) {
           this.logger.log(
@@ -246,14 +302,19 @@ export class EmailService {
           };
         }
       } catch (error: any) {
-        this.logger.warn(`Idempotency check failed (sending anyway): ${error.message}`);
+        this.logger.warn(
+          `Idempotency check failed (sending anyway): ${error.message}`,
+        );
       }
     }
 
     const toArray = Array.isArray(options.to) ? options.to : [options.to];
     const toAddress = toArray.join(', ');
-    const replyTo = options.replyTo || process.env.REPLY_TO_EMAIL || 'smartdukainfo@gmail.com';
-    
+    const replyTo =
+      options.replyTo ||
+      process.env.REPLY_TO_EMAIL ||
+      'smartdukainfo@gmail.com';
+
     const smtpFrom = this.getFromAddress(options.from, 'smtp');
     const resendFrom = this.getFromAddress(options.from, 'resend');
 
@@ -264,13 +325,29 @@ export class EmailService {
       const redact = (v?: string) =>
         v
           ? options.redactPatterns?.length
-            ? v.substring(0, 1000).replace(new RegExp(options.redactPatterns.map((p) => p.source).join('|'), 'g'), '[REDACTED]')
+            ? v
+                .substring(0, 1000)
+                .replace(
+                  new RegExp(
+                    options.redactPatterns.map((p) => p.source).join('|'),
+                    'g',
+                  ),
+                  '[REDACTED]',
+                )
             : v.substring(0, 1000)
           : v;
       const redactShort = (v?: string) =>
         v
           ? options.redactPatterns?.length
-            ? v.substring(0, 500).replace(new RegExp(options.redactPatterns.map((p) => p.source).join('|'), 'g'), '[REDACTED]')
+            ? v
+                .substring(0, 500)
+                .replace(
+                  new RegExp(
+                    options.redactPatterns.map((p) => p.source).join('|'),
+                    'g',
+                  ),
+                  '[REDACTED]',
+                )
             : v.substring(0, 500)
           : v;
       emailLog = new this.emailLogModel({
@@ -288,10 +365,15 @@ export class EmailService {
         templateName: options.templateName,
         templateVariables: options.templateVariables
           ? options.redactPatterns?.length
-            ? JSON.parse(JSON.stringify(options.templateVariables).replace(
-                new RegExp(options.redactPatterns.map((p) => p.source).join('|'), 'g'),
-                '[REDACTED]',
-              ))
+            ? JSON.parse(
+                JSON.stringify(options.templateVariables).replace(
+                  new RegExp(
+                    options.redactPatterns.map((p) => p.source).join('|'),
+                    'g',
+                  ),
+                  '[REDACTED]',
+                ),
+              )
             : options.templateVariables
           : undefined,
         triggeredBy: options.triggeredBy || 'system',
@@ -308,7 +390,10 @@ export class EmailService {
         this.logger.warn(
           `Concurrent send detected for idempotency key ${options.idempotencyKey} — not sending again`,
         );
-        return { success: false, error: 'Duplicate send prevented (idempotency key in flight)' };
+        return {
+          success: false,
+          error: 'Duplicate send prevented (idempotency key in flight)',
+        };
       }
       this.logger.warn(`Failed to create email log: ${logError.message}`);
     }
@@ -343,7 +428,14 @@ export class EmailService {
       attempts.push(fallback); // preferred provider unavailable — start on the fallback
     }
 
-    const outcomes: Array<{ provider: 'smtp' | 'resend'; success: boolean; messageId?: string; error?: string; from?: string; ambiguous?: boolean }> = [];
+    const outcomes: Array<{
+      provider: 'smtp' | 'resend';
+      success: boolean;
+      messageId?: string;
+      error?: string;
+      from?: string;
+      ambiguous?: boolean;
+    }> = [];
     for (const provider of attempts) {
       const result =
         provider === 'resend'
@@ -358,14 +450,19 @@ export class EmailService {
     }
 
     const firstSuccess = outcomes.find((r) => r.success);
-    const ambiguousFailure = !firstSuccess && outcomes.some((r) => (r as any).ambiguous);
+    const ambiguousFailure =
+      !firstSuccess && outcomes.some((r) => (r as any).ambiguous);
 
     // Log results
     for (const r of outcomes) {
       if (r.success) {
-        this.logger.log(`✅ ${r.provider} accepted email to ${toAddress}: ${r.messageId}`);
+        this.logger.log(
+          `✅ ${r.provider} accepted email to ${toAddress}: ${r.messageId}`,
+        );
       } else {
-        this.logger.warn(`⚠️ ${r.provider} failed for ${toAddress}: ${r.error}`);
+        this.logger.warn(
+          `⚠️ ${r.provider} failed for ${toAddress}: ${r.error}`,
+        );
       }
     }
 
@@ -383,27 +480,39 @@ export class EmailService {
           from: firstSuccess.from,
         });
       } else {
-        const errors = outcomes.map((r) => `${r.provider}: ${r.error}`).join('; ');
+        const errors = outcomes
+          .map((r) => `${r.provider}: ${r.error}`)
+          .join('; ');
         await this.emailLogModel.findByIdAndUpdate(emailLog._id, {
-          ...(ambiguousFailure ? { status: 'pending' } : { status: 'failed', failedAt: new Date() }),
-          errorMessage: ambiguousFailure ? `AMBIGUOUS: provider may hold the message — ${errors}` : errors,
+          ...(ambiguousFailure
+            ? { status: 'pending' }
+            : { status: 'failed', failedAt: new Date() }),
+          errorMessage: ambiguousFailure
+            ? `AMBIGUOUS: provider may hold the message — ${errors}`
+            : errors,
           provider: outcomes.map((r) => r.provider).join('+'),
         });
       }
     }
 
     if (firstSuccess) {
-      return { success: true, messageId: firstSuccess.messageId, emailLogId: emailLog?._id?.toString() };
+      return {
+        success: true,
+        messageId: firstSuccess.messageId,
+        emailLogId: emailLog?._id?.toString(),
+      };
     }
 
-    const allErrors = outcomes.map((r) => `${r.provider}: ${r.error}`).join('; ');
+    const allErrors = outcomes
+      .map((r) => `${r.provider}: ${r.error}`)
+      .join('; ');
     this.logger.error(`All providers failed for ${toAddress}: ${allErrors}`);
     return {
       success: false,
       error: allErrors,
       emailLogId: emailLog?._id?.toString(),
       ...(ambiguousFailure ? { ambiguous: true } : {}),
-    } as any;
+    };
   }
 
   /**
@@ -414,7 +523,14 @@ export class EmailService {
     options: EmailOptions,
     from: string,
     replyTo: string,
-  ): Promise<{ provider: 'smtp'; success: boolean; messageId?: string; error?: string; from: string; ambiguous?: boolean }> {
+  ): Promise<{
+    provider: 'smtp';
+    success: boolean;
+    messageId?: string;
+    error?: string;
+    from: string;
+    ambiguous?: boolean;
+  }> {
     let lastError: Error | null = null;
     let ambiguous = false;
 
@@ -429,14 +545,20 @@ export class EmailService {
           replyTo,
           attachments: options.attachments,
         });
-        return { provider: 'smtp', success: true, messageId: result.messageId, from };
+        return {
+          provider: 'smtp',
+          success: true,
+          messageId: result.messageId,
+          from,
+        };
       } catch (error: any) {
         lastError = error;
-        const isRetryable = error.code === 'ETIMEDOUT' ||
-                           error.code === 'ECONNRESET' ||
-                           error.code === 'ECONNREFUSED' ||
-                           error.message?.includes('timeout') ||
-                           error.message?.includes('Connection');
+        const isRetryable =
+          error.code === 'ETIMEDOUT' ||
+          error.code === 'ECONNRESET' ||
+          error.code === 'ECONNREFUSED' ||
+          error.message?.includes('timeout') ||
+          error.message?.includes('Connection');
         // AMBIGUOUS ACCEPTANCE: a timeout/reset AFTER the DATA phase means
         // the message may have been accepted — retrying or falling back
         // could deliver a second copy. Only pre-connection failures
@@ -448,7 +570,9 @@ export class EmailService {
         }
 
         if (isRetryable && attempt < this.maxRetries && !ambiguous) {
-          await new Promise(resolve => setTimeout(resolve, this.retryDelayMs * (attempt + 1)));
+          await new Promise((resolve) =>
+            setTimeout(resolve, this.retryDelayMs * (attempt + 1)),
+          );
           continue;
         }
         break;
@@ -472,7 +596,14 @@ export class EmailService {
     options: EmailOptions,
     from: string,
     replyTo: string,
-  ): Promise<{ provider: 'resend'; success: boolean; messageId?: string; error?: string; from: string; ambiguous?: boolean }> {
+  ): Promise<{
+    provider: 'resend';
+    success: boolean;
+    messageId?: string;
+    error?: string;
+    from: string;
+    ambiguous?: boolean;
+  }> {
     try {
       // EMAIL-REPORTS-CORE1: attachments must survive the Resend path — the
       // previous implementation silently dropped them (masked by the old
@@ -486,28 +617,41 @@ export class EmailService {
         contentType: a.contentType,
       }));
 
-      const result = await this.resend!.emails.send({
-        from,
-        to: toArray,
-        subject: options.subject,
-        html: options.html,
-        text: options.text,
-        replyTo,
-        ...(attachments && attachments.length > 0 ? { attachments } : {}),
-      } as any, {
-        // RELEASE-GATE1: provider-side idempotency — when the caller supplies
-        // a key, Resend itself deduplicates retries of the same logical
-        // email (a timeout after acceptance cannot produce a second copy).
-        ...(options.idempotencyKey
-          ? { headers: { 'Idempotency-Key': options.idempotencyKey } }
-          : {}),
-      } as any);
+      const result = await this.resend!.emails.send(
+        {
+          from,
+          to: toArray,
+          subject: options.subject,
+          html: options.html,
+          text: options.text,
+          replyTo,
+          ...(attachments && attachments.length > 0 ? { attachments } : {}),
+        },
+        {
+          // RELEASE-GATE1: provider-side idempotency — when the caller supplies
+          // a key, Resend itself deduplicates retries of the same logical
+          // email (a timeout after acceptance cannot produce a second copy).
+          ...(options.idempotencyKey
+            ? { headers: { 'Idempotency-Key': options.idempotencyKey } }
+            : {}),
+        } as any,
+      );
 
       if (result.error) {
-        return { provider: 'resend', success: false, error: result.error.message, from };
+        return {
+          provider: 'resend',
+          success: false,
+          error: result.error.message,
+          from,
+        };
       }
 
-      return { provider: 'resend', success: true, messageId: result.data?.id, from };
+      return {
+        provider: 'resend',
+        success: true,
+        messageId: result.data?.id,
+        from,
+      };
     } catch (error: any) {
       // AMBIGUOUS ACCEPTANCE: a network timeout/reset after the request may
       // have reached Resend leaves delivery UNKNOWN. The caller must NOT
@@ -527,14 +671,19 @@ export class EmailService {
     }
   }
 
-  async sendTemplateEmail(options: TemplateEmailOptions): Promise<{ success: boolean; messageId?: string; error?: string }> {
-    const template = await this.templateModel.findOne({ 
+  async sendTemplateEmail(
+    options: TemplateEmailOptions,
+  ): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    const template = await this.templateModel.findOne({
       name: options.templateName,
       active: true,
     });
 
     if (!template) {
-      return { success: false, error: `Template '${options.templateName}' not found` };
+      return {
+        success: false,
+        error: `Template '${options.templateName}' not found`,
+      };
     }
 
     // Replace variables in template
@@ -624,17 +773,31 @@ export class EmailService {
 
     // Convert plain text line breaks to HTML if content appears to be plain text
     let htmlContent = content;
-    if (!content.includes('<p>') && !content.includes('<div>') && !content.includes('<br') && !content.includes('<table')) {
+    if (
+      !content.includes('<p>') &&
+      !content.includes('<div>') &&
+      !content.includes('<br') &&
+      !content.includes('<table')
+    ) {
       // Convert markdown-style links to HTML
-      htmlContent = content.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" style="color:#f97316;text-decoration:none;">$1</a>');
+      htmlContent = content.replace(
+        /\[([^\]]+)\]\(([^)]+)\)/g,
+        '<a href="$2" style="color:#f97316;text-decoration:none;">$1</a>',
+      );
       // Convert line breaks to paragraphs
       htmlContent = content
         .split(/\n\n+/)
-        .map(para => `<p style="margin:0 0 14px;font-size:14px;color:#374151;line-height:1.6;">${para.replace(/\n/g, '<br>')}</p>`)
+        .map(
+          (para) =>
+            `<p style="margin:0 0 14px;font-size:14px;color:#374151;line-height:1.6;">${para.replace(/\n/g, '<br>')}</p>`,
+        )
         .join('');
     }
 
-    return this.getBaseLayout(htmlContent, footerText || 'This message was sent by the SmartDuka team.');
+    return this.getBaseLayout(
+      htmlContent,
+      footerText || 'This message was sent by the SmartDuka team.',
+    );
   }
 
   // Seed default email templates with professional SmartDuka branding
@@ -650,7 +813,8 @@ export class EmailService {
       );
     }
 
-    this.logger.log(`Seeded ${templates.length} professional email templates with SmartDuka branding`);
+    this.logger.log(
+      `Seeded ${templates.length} professional email templates with SmartDuka branding`,
+    );
   }
-
 }

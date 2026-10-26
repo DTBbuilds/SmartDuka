@@ -32,7 +32,13 @@ export class ReportFrequencyPreference {
 
 @Schema({ timestamps: true })
 export class ReportPreferences {
-  @Prop({ required: true, unique: true, index: true, type: Types.ObjectId, ref: 'Shop' })
+  @Prop({
+    required: true,
+    unique: true,
+    index: true,
+    type: Types.ObjectId,
+    ref: 'Shop',
+  })
   shopId: Types.ObjectId;
 
   /** IANA timezone for shop-local boundaries and send instants. */

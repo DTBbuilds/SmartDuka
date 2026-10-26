@@ -14,4 +14,8 @@ export * from './services/whatsapp-provider.service';
 export * from './dto';
 
 // Provider Interface (exclude MessageStatus to avoid conflict)
-export type { WhatsAppProvider, MessageResult, TemplateParams } from './providers/whatsapp-provider.interface';
+export type {
+  WhatsAppProvider,
+  MessageResult,
+  TemplateParams,
+} from './providers/whatsapp-provider.interface';

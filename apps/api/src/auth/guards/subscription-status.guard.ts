@@ -9,7 +9,11 @@ import {
 import { Reflector } from '@nestjs/core';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Subscription, SubscriptionDocument, SubscriptionStatus } from '../../subscriptions/schemas/subscription.schema';
+import {
+  Subscription,
+  SubscriptionDocument,
+  SubscriptionStatus,
+} from '../../subscriptions/schemas/subscription.schema';
 
 /**
  * Decorator to skip subscription check for specific routes
@@ -19,7 +23,8 @@ import { Subscription, SubscriptionDocument, SubscriptionStatus } from '../../su
  * - Health check routes
  */
 export const SKIP_SUBSCRIPTION_CHECK = 'skipSubscriptionCheck';
-export const SkipSubscriptionCheck = () => SetMetadata(SKIP_SUBSCRIPTION_CHECK, true);
+export const SkipSubscriptionCheck = () =>
+  SetMetadata(SKIP_SUBSCRIPTION_CHECK, true);
 
 /**
  * Decorator to mark routes as read-only accessible during grace period
@@ -34,7 +39,7 @@ export const AllowReadOnly = () => SetMetadata(ALLOW_READ_ONLY, true);
  * - SUSPENDED: Payment overdue past grace period
  * - EXPIRED: Subscription ended and not renewed
  * - CANCELLED: User cancelled the subscription
- * 
+ *
  * Allows access when subscription is:
  * - ACTIVE: Normal active subscription
  * - TRIAL: In trial period
@@ -88,7 +93,8 @@ export class SubscriptionStatusGuard implements CanActivate {
       if (!subscription) {
         this.logger.warn(`No subscription found for shop ${user.shopId}`);
         throw new ForbiddenException({
-          message: 'No active subscription found. Please subscribe to a plan to continue.',
+          message:
+            'No active subscription found. Please subscribe to a plan to continue.',
           code: 'NO_SUBSCRIPTION',
           shopId: user.shopId,
         });
@@ -100,10 +106,17 @@ export class SubscriptionStatusGuard implements CanActivate {
       const periodEnd = subscription.currentPeriodEnd;
       const isExpiredByDate = periodEnd && now > periodEnd;
 
-      if (isExpiredByDate && (subscription.status === SubscriptionStatus.ACTIVE || subscription.status === SubscriptionStatus.TRIAL)) {
-        this.logger.warn(`Shop ${user.shopId} subscription expired on ${periodEnd.toISOString()} but status is still ${subscription.status}. Blocking access.`);
+      if (
+        isExpiredByDate &&
+        (subscription.status === SubscriptionStatus.ACTIVE ||
+          subscription.status === SubscriptionStatus.TRIAL)
+      ) {
+        this.logger.warn(
+          `Shop ${user.shopId} subscription expired on ${periodEnd.toISOString()} but status is still ${subscription.status}. Blocking access.`,
+        );
         throw new ForbiddenException({
-          message: 'Your subscription has expired. Please renew your subscription to continue using SmartDuka.',
+          message:
+            'Your subscription has expired. Please renew your subscription to continue using SmartDuka.',
           code: 'SUBSCRIPTION_EXPIRED',
           shopId: user.shopId,
           requiresPayment: true,
@@ -125,26 +138,34 @@ export class SubscriptionStatusGuard implements CanActivate {
           request.subscriptionStatus = 'past_due';
           request.gracePeriodEndDate = subscription.gracePeriodEndDate;
           request.subscriptionAccessLevel = 'read_only';
-          
+
           // Check if this route allows read-only access
           const allowReadOnly = this.reflector.getAllAndOverride<boolean>(
             ALLOW_READ_ONLY,
             [context.getHandler(), context.getClass()],
           );
-          
+
           // Check HTTP method - allow GET requests, block mutations
           const httpMethod = request.method?.toUpperCase();
-          const isReadOperation = httpMethod === 'GET' || httpMethod === 'HEAD' || httpMethod === 'OPTIONS';
-          
+          const isReadOperation =
+            httpMethod === 'GET' ||
+            httpMethod === 'HEAD' ||
+            httpMethod === 'OPTIONS';
+
           if (allowReadOnly || isReadOperation) {
-            this.logger.warn(`Shop ${user.shopId} has past due subscription (read-only access), grace period ends ${subscription.gracePeriodEndDate}`);
+            this.logger.warn(
+              `Shop ${user.shopId} has past due subscription (read-only access), grace period ends ${subscription.gracePeriodEndDate}`,
+            );
             return true;
           }
-          
+
           // Block write operations during grace period
-          this.logger.warn(`Blocked write operation for past due shop ${user.shopId}`);
+          this.logger.warn(
+            `Blocked write operation for past due shop ${user.shopId}`,
+          );
           throw new ForbiddenException({
-            message: 'Your subscription payment is overdue. Write operations are disabled during the grace period. Please pay your outstanding invoice to restore full access.',
+            message:
+              'Your subscription payment is overdue. Write operations are disabled during the grace period. Please pay your outstanding invoice to restore full access.',
             code: 'SUBSCRIPTION_PAST_DUE_WRITE_BLOCKED',
             shopId: user.shopId,
             gracePeriodEndDate: subscription.gracePeriodEndDate,
@@ -153,43 +174,56 @@ export class SubscriptionStatusGuard implements CanActivate {
         case SubscriptionStatus.SUSPENDED:
           this.logger.warn(`Blocked access for suspended shop ${user.shopId}`);
           throw new ForbiddenException({
-            message: 'Your subscription has been suspended due to non-payment. Please pay your outstanding invoice to restore access.',
+            message:
+              'Your subscription has been suspended due to non-payment. Please pay your outstanding invoice to restore access.',
             code: 'SUBSCRIPTION_SUSPENDED',
             shopId: user.shopId,
             requiresPayment: true,
           });
 
         case SubscriptionStatus.EXPIRED:
-          this.logger.warn(`Blocked access for expired subscription shop ${user.shopId}`);
+          this.logger.warn(
+            `Blocked access for expired subscription shop ${user.shopId}`,
+          );
           throw new ForbiddenException({
-            message: 'Your subscription has expired. Please renew your subscription to continue using SmartDuka.',
+            message:
+              'Your subscription has expired. Please renew your subscription to continue using SmartDuka.',
             code: 'SUBSCRIPTION_EXPIRED',
             shopId: user.shopId,
             requiresPayment: true,
           });
 
         case SubscriptionStatus.CANCELLED:
-          this.logger.warn(`Blocked access for cancelled subscription shop ${user.shopId}`);
+          this.logger.warn(
+            `Blocked access for cancelled subscription shop ${user.shopId}`,
+          );
           throw new ForbiddenException({
-            message: 'Your subscription has been cancelled. Please reactivate your subscription to continue.',
+            message:
+              'Your subscription has been cancelled. Please reactivate your subscription to continue.',
             code: 'SUBSCRIPTION_CANCELLED',
             shopId: user.shopId,
             requiresPayment: true,
           });
 
         case SubscriptionStatus.PENDING_PAYMENT:
-          this.logger.warn(`Blocked access for pending payment shop ${user.shopId}`);
+          this.logger.warn(
+            `Blocked access for pending payment shop ${user.shopId}`,
+          );
           throw new ForbiddenException({
-            message: 'Your subscription is pending payment. Please complete payment to activate your account.',
+            message:
+              'Your subscription is pending payment. Please complete payment to activate your account.',
             code: 'SUBSCRIPTION_PENDING_PAYMENT',
             shopId: user.shopId,
             requiresPayment: true,
           });
 
         default:
-          this.logger.error(`Unknown subscription status: ${subscription.status} for shop ${user.shopId}`);
+          this.logger.error(
+            `Unknown subscription status: ${subscription.status} for shop ${user.shopId}`,
+          );
           throw new ForbiddenException({
-            message: 'Unable to verify subscription status. Please contact support.',
+            message:
+              'Unable to verify subscription status. Please contact support.',
             code: 'SUBSCRIPTION_ERROR',
             shopId: user.shopId,
           });
@@ -198,8 +232,11 @@ export class SubscriptionStatusGuard implements CanActivate {
       if (error instanceof ForbiddenException) {
         throw error;
       }
-      
-      this.logger.error(`Error checking subscription status for shop ${user.shopId}:`, error);
+
+      this.logger.error(
+        `Error checking subscription status for shop ${user.shopId}:`,
+        error,
+      );
       // On error, allow access but log - don't block users due to system errors
       return true;
     }

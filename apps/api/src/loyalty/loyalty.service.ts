@@ -2,8 +2,14 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { nanoid } from 'nanoid';
-import { LoyaltyProgram, LoyaltyProgramDocument } from './schemas/loyalty-program.schema';
-import { LoyaltyAccount, LoyaltyAccountDocument } from './schemas/loyalty-account.schema';
+import {
+  LoyaltyProgram,
+  LoyaltyProgramDocument,
+} from './schemas/loyalty-program.schema';
+import {
+  LoyaltyAccount,
+  LoyaltyAccountDocument,
+} from './schemas/loyalty-account.schema';
 import { CreateLoyaltyProgramDto } from './dto/create-loyalty-program.dto';
 
 @Injectable()
@@ -106,7 +112,9 @@ export class LoyaltyService {
       }
     }
 
-    const program = await this.loyaltyProgramModel.findById(account.programId).exec();
+    const program = await this.loyaltyProgramModel
+      .findById(account.programId)
+      .exec();
     if (!program) {
       throw new BadRequestException('Loyalty program not found');
     }
@@ -184,7 +192,9 @@ export class LoyaltyService {
       throw new BadRequestException('Loyalty account not found');
     }
 
-    const program = await this.loyaltyProgramModel.findById(account.programId).exec();
+    const program = await this.loyaltyProgramModel
+      .findById(account.programId)
+      .exec();
     if (!program || !program.enableBirthdayBonus) {
       throw new BadRequestException('Birthday bonus not available');
     }
@@ -194,7 +204,9 @@ export class LoyaltyService {
       const lastClaim = new Date(account.birthdayBonusClaimedAt);
       const today = new Date();
       if (lastClaim.getFullYear() === today.getFullYear()) {
-        throw new BadRequestException('Birthday bonus already claimed this year');
+        throw new BadRequestException(
+          'Birthday bonus already claimed this year',
+        );
       }
     }
 
@@ -227,7 +239,9 @@ export class LoyaltyService {
       throw new BadRequestException('Invalid referral code');
     }
 
-    const program = await this.loyaltyProgramModel.findById(referrerAccount.programId).exec();
+    const program = await this.loyaltyProgramModel
+      .findById(referrerAccount.programId)
+      .exec();
     if (!program || !program.enableReferralBonus) {
       throw new BadRequestException('Referral bonus not available');
     }
@@ -258,7 +272,10 @@ export class LoyaltyService {
       .exec();
   }
 
-  async getTopCustomers(shopId: string, limit = 10): Promise<LoyaltyAccountDocument[]> {
+  async getTopCustomers(
+    shopId: string,
+    limit = 10,
+  ): Promise<LoyaltyAccountDocument[]> {
     return this.loyaltyAccountModel
       .find({ shopId: new Types.ObjectId(shopId) })
       .sort({ totalPoints: -1 })
@@ -266,12 +283,18 @@ export class LoyaltyService {
       .exec();
   }
 
-  private getTierMultiplier(program: LoyaltyProgramDocument, tier: string): number {
+  private getTierMultiplier(
+    program: LoyaltyProgramDocument,
+    tier: string,
+  ): number {
     const tierData = program.tiers.find((t) => t.name === tier);
     return tierData?.bonusPointsMultiplier || 1;
   }
 
-  private calculateTier(program: LoyaltyProgramDocument, totalPoints: number): string {
+  private calculateTier(
+    program: LoyaltyProgramDocument,
+    totalPoints: number,
+  ): string {
     let tier = program.tiers[0]?.name || 'Bronze';
 
     for (const t of program.tiers) {
@@ -335,7 +358,9 @@ export class LoyaltyService {
       };
     }
 
-    const program = await this.loyaltyProgramModel.findById(account.programId).exec();
+    const program = await this.loyaltyProgramModel
+      .findById(account.programId)
+      .exec();
     if (!program) {
       return {
         pointsToEarn: 0,
@@ -349,16 +374,23 @@ export class LoyaltyService {
     }
 
     // Calculate points to earn
-    const basePoints = Math.floor(purchaseAmount / (100 / program.pointsPerKsh));
+    const basePoints = Math.floor(
+      purchaseAmount / (100 / program.pointsPerKsh),
+    );
     const tierMultiplier = this.getTierMultiplier(program, account.tier);
     const pointsToEarn = Math.floor(basePoints * tierMultiplier);
 
     // Calculate tier progress
-    const sortedTiers = [...program.tiers].sort((a, b) => a.minPoints - b.minPoints);
-    const currentTierIndex = sortedTiers.findIndex((t) => t.name === account.tier);
-    const nextTierData = currentTierIndex < sortedTiers.length - 1
-      ? sortedTiers[currentTierIndex + 1]
-      : null;
+    const sortedTiers = [...program.tiers].sort(
+      (a, b) => a.minPoints - b.minPoints,
+    );
+    const currentTierIndex = sortedTiers.findIndex(
+      (t) => t.name === account.tier,
+    );
+    const nextTierData =
+      currentTierIndex < sortedTiers.length - 1
+        ? sortedTiers[currentTierIndex + 1]
+        : null;
 
     const projectedTotal = account.totalPoints + pointsToEarn;
     const pointsToNextTier = nextTierData
@@ -368,9 +400,13 @@ export class LoyaltyService {
     const currentTierMin = sortedTiers[currentTierIndex]?.minPoints || 0;
     const nextTierMin = nextTierData?.minPoints || currentTierMin;
     const tierRange = nextTierMin - currentTierMin;
-    const tierProgress = tierRange > 0
-      ? Math.min(100, Math.round(((projectedTotal - currentTierMin) / tierRange) * 100))
-      : 100;
+    const tierProgress =
+      tierRange > 0
+        ? Math.min(
+            100,
+            Math.round(((projectedTotal - currentTierMin) / tierRange) * 100),
+          )
+        : 100;
 
     return {
       pointsToEarn,
@@ -408,14 +444,21 @@ export class LoyaltyService {
       .find({ shopId: new Types.ObjectId(shopId) })
       .exec();
 
-    const totalPointsIssued = accounts.reduce((sum, a) => sum + a.totalPoints, 0);
-    const totalPointsRedeemed = accounts.reduce((sum, a) => sum + a.redeemedPoints, 0);
+    const totalPointsIssued = accounts.reduce(
+      (sum, a) => sum + a.totalPoints,
+      0,
+    );
+    const totalPointsRedeemed = accounts.reduce(
+      (sum, a) => sum + a.redeemedPoints,
+      0,
+    );
 
     return {
       totalMembers: accounts.length,
       totalPointsIssued,
       totalPointsRedeemed,
-      averagePointsPerMember: accounts.length > 0 ? totalPointsIssued / accounts.length : 0,
+      averagePointsPerMember:
+        accounts.length > 0 ? totalPointsIssued / accounts.length : 0,
       topTier: accounts.length > 0 ? accounts[0].tier : 'N/A',
     };
   }

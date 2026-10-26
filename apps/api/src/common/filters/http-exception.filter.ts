@@ -25,8 +25,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       path: request.url,
       method: request.method,
       message:
-        typeof exceptionResponse === 'object' &&
-        'message' in exceptionResponse
+        typeof exceptionResponse === 'object' && 'message' in exceptionResponse
           ? (exceptionResponse as any).message
           : exception.message,
       ...(status === HttpStatus.INTERNAL_SERVER_ERROR && {

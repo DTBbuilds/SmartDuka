@@ -26,7 +26,10 @@ export class OAuthExchangeTicket {
   @Prop({ required: true })
   payload: string;
 
-  @Prop({ required: true, enum: ['admin_login', 'cashier_signup', 'shop_registration'] })
+  @Prop({
+    required: true,
+    enum: ['admin_login', 'cashier_signup', 'shop_registration'],
+  })
   purpose: string;
 
   @Prop({ required: true, index: true })

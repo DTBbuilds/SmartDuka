@@ -24,13 +24,18 @@ export class GoogleAuthGuard extends AuthGuard('google') {
     const request = context.switchToHttp().getRequest();
     const response = context.switchToHttp().getResponse();
     const frontendUrl = process.env.FRONTEND_URL || 'https://www.smartduka.org';
-    
+
     // CRITICAL: Check if Google OAuth is configured BEFORE redirecting to Google
     // This prevents the "OAuth client was not found" / "invalid_client" error
     if (!GoogleStrategy.isConfigured()) {
-      this.logger.warn('Google login attempted but GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET are not configured.');
-      const errorMessage = 'Google login is not configured yet. Please set up Google OAuth credentials in your .env file, or contact your administrator.';
-      response.redirect(`${frontendUrl}/login?error=${encodeURIComponent(errorMessage)}`);
+      this.logger.warn(
+        'Google login attempted but GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET are not configured.',
+      );
+      const errorMessage =
+        'Google login is not configured yet. Please set up Google OAuth credentials in your .env file, or contact your administrator.';
+      response.redirect(
+        `${frontendUrl}/login?error=${encodeURIComponent(errorMessage)}`,
+      );
       return false;
     }
 
@@ -38,21 +43,26 @@ export class GoogleAuthGuard extends AuthGuard('google') {
     const error = request.query?.error;
     if (error) {
       let errorMessage = 'Google sign-in was cancelled or failed.';
-      
+
       if (error === 'access_denied') {
-        errorMessage = 'You cancelled the Google sign-in. Please try again when ready.';
+        errorMessage =
+          'You cancelled the Google sign-in. Please try again when ready.';
       } else if (error === 'invalid_request') {
         errorMessage = 'Invalid Google sign-in request. Please try again.';
       } else if (error === 'unauthorized_client') {
-        errorMessage = 'Google sign-in is not properly configured. Please contact support.';
+        errorMessage =
+          'Google sign-in is not properly configured. Please contact support.';
       } else if (error === 'server_error') {
-        errorMessage = 'Google servers are temporarily unavailable. Please try again later.';
+        errorMessage =
+          'Google servers are temporarily unavailable. Please try again later.';
       }
-      
-      response.redirect(`${frontendUrl}/login?error=${encodeURIComponent(errorMessage)}`);
+
+      response.redirect(
+        `${frontendUrl}/login?error=${encodeURIComponent(errorMessage)}`,
+      );
       return false;
     }
-    
+
     // RELEASE-INTEGRATION1: MANDATORY transaction-bound state validation
     // (before the code exchange). Missing, forged, replayed, expired or
     // mismatched states are rejected — the flow classification is read
@@ -75,8 +85,11 @@ export class GoogleAuthGuard extends AuthGuard('google') {
     } catch (err: any) {
       // Catch any Passport errors (e.g., invalid credentials at Google's end)
       this.logger.error(`Google OAuth error: ${err?.message}`);
-      const errorMessage = 'Google sign-in failed. The OAuth credentials may be invalid. Please check your Google Cloud Console configuration.';
-      response.redirect(`${frontendUrl}/login?error=${encodeURIComponent(errorMessage)}`);
+      const errorMessage =
+        'Google sign-in failed. The OAuth credentials may be invalid. Please check your Google Cloud Console configuration.';
+      response.redirect(
+        `${frontendUrl}/login?error=${encodeURIComponent(errorMessage)}`,
+      );
       return false;
     }
   }

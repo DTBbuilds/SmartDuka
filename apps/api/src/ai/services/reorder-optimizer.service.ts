@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/require-await, @typescript-eslint/no-unused-vars */
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -23,7 +22,9 @@ export class ReorderOptimizerService {
     @InjectModel(AiInsight.name) private insightModel: Model<AiInsight>,
   ) {}
 
-  async generateReorderSuggestions(shopId: string): Promise<ReorderSuggestion[]> {
+  async generateReorderSuggestions(
+    shopId: string,
+  ): Promise<ReorderSuggestion[]> {
     this.logger.log(`Generating reorder suggestions for shop ${shopId}`);
     return [];
   }
@@ -38,11 +39,16 @@ export class ReorderOptimizerService {
     return Math.ceil(leadTimeDemand + safetyStock);
   }
 
-  determineUrgency(currentStock: number, reorderLevel: number, avgDailySales: number): ReorderSuggestion['urgency'] {
+  determineUrgency(
+    currentStock: number,
+    reorderLevel: number,
+    avgDailySales: number,
+  ): ReorderSuggestion['urgency'] {
     if (currentStock <= 0) return 'critical';
-    
-    const daysOfStock = avgDailySales > 0 ? currentStock / avgDailySales : Infinity;
-    
+
+    const daysOfStock =
+      avgDailySales > 0 ? currentStock / avgDailySales : Infinity;
+
     if (daysOfStock <= 1) return 'critical';
     if (daysOfStock <= 3) return 'high';
     if (currentStock <= reorderLevel) return 'medium';

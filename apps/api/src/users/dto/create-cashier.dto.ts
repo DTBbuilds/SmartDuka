@@ -1,4 +1,12 @@
-import { IsString, IsOptional, IsPhoneNumber, MinLength, IsMongoId, IsObject, IsEmail } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsPhoneNumber,
+  MinLength,
+  IsMongoId,
+  IsObject,
+  IsEmail,
+} from 'class-validator';
 
 export class CreateCashierDto {
   @IsString()

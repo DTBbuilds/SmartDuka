@@ -307,7 +307,9 @@ export class AuthController {
       this.configService.get<string>('GOOGLE_CALLBACK_URL') ||
       defaultCallbackUrl;
     const state = await this.oauthExchangeService.issueState('admin_login');
-    const googleAuthUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+    const googleAuthUrl = new URL(
+      'https://accounts.google.com/o/oauth2/v2/auth',
+    );
     googleAuthUrl.searchParams.set('client_id', clientId);
     googleAuthUrl.searchParams.set('redirect_uri', callbackUrl);
     googleAuthUrl.searchParams.set('response_type', 'code');
@@ -383,10 +385,7 @@ export class AuthController {
 
   @Get('google/callback')
   @UseGuards(GoogleAuthGuard)
-  async googleAuthCallback(
-    @Req() req: any,
-    @Res() res: Response,
-  ) {
+  async googleAuthCallback(@Req() req: any, @Res() res: Response) {
     const ipAddress = req.ip || req.connection.remoteAddress;
     const userAgent = req.get('user-agent');
     const frontendUrl =
@@ -434,7 +433,9 @@ export class AuthController {
               'shop_registration',
             );
           this.cookieService.setOAuthBindingCookie(res, regNonce);
-          res.redirect(`${frontendUrl}/register-shop?google_ticket=${regTicket}`);
+          res.redirect(
+            `${frontendUrl}/register-shop?google_ticket=${regTicket}`,
+          );
         }
       } else {
         // Existing user - verify they have the correct role if this is a cashier flow
@@ -483,7 +484,9 @@ export class AuthController {
           // OAUTH-SEC2: browser transaction binding cookie (the exchange
           // must come from the same browser that received this redirect).
           this.cookieService.setOAuthBindingCookie(res, bindNonce);
-          res.redirect(`${frontendUrl}/auth/callback?success=true&ticket=${ticket}`);
+          res.redirect(
+            `${frontendUrl}/auth/callback?success=true&ticket=${ticket}`,
+          );
         } else {
           res.redirect(
             `${frontendUrl}/login?error=${encodeURIComponent('Failed to generate authentication tokens')}`,

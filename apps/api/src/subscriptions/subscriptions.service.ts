@@ -9,9 +9,22 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { ConfigService } from '@nestjs/config';
-import { Subscription, SubscriptionDocument, SubscriptionStatus, BillingCycle } from './schemas/subscription.schema';
-import { SubscriptionPlan, SubscriptionPlanDocument } from './schemas/subscription-plan.schema';
-import { SubscriptionInvoice, SubscriptionInvoiceDocument, InvoiceStatus, InvoiceType } from './schemas/subscription-invoice.schema';
+import {
+  Subscription,
+  SubscriptionDocument,
+  SubscriptionStatus,
+  BillingCycle,
+} from './schemas/subscription.schema';
+import {
+  SubscriptionPlan,
+  SubscriptionPlanDocument,
+} from './schemas/subscription-plan.schema';
+import {
+  SubscriptionInvoice,
+  SubscriptionInvoiceDocument,
+  InvoiceStatus,
+  InvoiceType,
+} from './schemas/subscription-invoice.schema';
 import { Shop, ShopDocument } from '../shops/schemas/shop.schema';
 import { Product, ProductDocument } from '../inventory/schemas/product.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
@@ -24,7 +37,11 @@ import {
   InvoiceResponseDto,
 } from './dto/subscription.dto';
 
-import { SystemConfig, SystemConfigDocument, SystemConfigType } from '../super-admin/schemas/system-config.schema';
+import {
+  SystemConfig,
+  SystemConfigDocument,
+  SystemConfigType,
+} from '../super-admin/schemas/system-config.schema';
 import { EmailService } from '../notifications/email.service';
 import { EMAIL_TEMPLATES } from '../notifications/email-templates';
 import {
@@ -73,7 +90,9 @@ export class SubscriptionsService {
    */
   private async getVatConfig(): Promise<{ enabled: boolean; rate: number }> {
     try {
-      const config = await this.systemConfigModel.findOne({ type: SystemConfigType.VAT });
+      const config = await this.systemConfigModel.findOne({
+        type: SystemConfigType.VAT,
+      });
       if (!config) {
         // Default: VAT disabled
         return { enabled: false, rate: DEFAULT_VAT_RATE };
@@ -113,7 +132,7 @@ export class SubscriptionsService {
       .sort({ displayOrder: 1 })
       .exec();
 
-    return plans.map(plan => this.mapPlanToResponse(plan));
+    return plans.map((plan) => this.mapPlanToResponse(plan));
   }
 
   /**
@@ -298,7 +317,8 @@ export class SubscriptionsService {
       {
         code: 'daily',
         name: 'Daily',
-        description: 'Pay per day - flexible subscription with Silver-level features',
+        description:
+          'Pay per day - flexible subscription with Silver-level features',
         dailyPrice: 99, // KES 99 per day
         monthlyPrice: 2970, // 99 * 30 (reference only)
         annualPrice: 36135, // 99 * 365 (reference only)
@@ -389,7 +409,8 @@ export class SubscriptionsService {
       await this.planModel.create({
         code: 'daily',
         name: 'Daily',
-        description: 'Pay per day - flexible subscription with Silver-level features',
+        description:
+          'Pay per day - flexible subscription with Silver-level features',
         dailyPrice: 99, // KES 99 per day
         monthlyPrice: 2970, // 99 * 30 (reference only)
         annualPrice: 36135, // 99 * 365 (reference only)
@@ -462,7 +483,10 @@ export class SubscriptionsService {
    * Update plan product limits
    * Trial: 25, Starter: 250, Basic: 750
    */
-  async updatePlanProductLimits(): Promise<{ updated: number; message: string }> {
+  async updatePlanProductLimits(): Promise<{
+    updated: number;
+    message: string;
+  }> {
     const updates = [
       { code: 'trial', maxProducts: 25 },
       { code: 'starter', maxProducts: 250 },
@@ -477,7 +501,9 @@ export class SubscriptionsService {
       );
       if (result.modifiedCount > 0) {
         updatedCount++;
-        this.logger.log(`Updated ${update.code} plan: maxProducts = ${update.maxProducts}`);
+        this.logger.log(
+          `Updated ${update.code} plan: maxProducts = ${update.maxProducts}`,
+        );
       }
     }
 
@@ -491,7 +517,10 @@ export class SubscriptionsService {
    * Update all subscription plans with new setup pricing
    * Setup fee: KES 3,000 (optional) - includes 1 month training & support
    */
-  async updatePlansSetupPricing(): Promise<{ updated: number; message: string }> {
+  async updatePlansSetupPricing(): Promise<{
+    updated: number;
+    message: string;
+  }> {
     const SETUP_FEE = 3000;
     const SETUP_FREE_MONTHS = 1;
 
@@ -511,8 +540,10 @@ export class SubscriptionsService {
       },
     );
 
-    this.logger.log(`Updated ${result.modifiedCount} subscription plans with new setup pricing`);
-    
+    this.logger.log(
+      `Updated ${result.modifiedCount} subscription plans with new setup pricing`,
+    );
+
     return {
       updated: result.modifiedCount,
       message: `Updated ${result.modifiedCount} plans: Setup fee KES ${SETUP_FEE}, includes ${SETUP_FREE_MONTHS} month training & support (optional)`,
@@ -533,15 +564,17 @@ export class SubscriptionsService {
       this.logger.warn('getSubscription called with invalid shopId:', shopId);
       throw new NotFoundException('Shop ID is required to fetch subscription');
     }
-    
-    let subscription = await this.subscriptionModel.findOne({
+
+    const subscription = await this.subscriptionModel.findOne({
       shopId: new Types.ObjectId(shopId),
     });
 
     // If no subscription exists, auto-create a trial subscription
     if (!subscription) {
-      this.logger.log(`No subscription found for shop ${shopId}, creating trial subscription...`);
-      
+      this.logger.log(
+        `No subscription found for shop ${shopId}, creating trial subscription...`,
+      );
+
       const trialPlan = await this.getTrialPlan();
       if (!trialPlan) {
         // Ensure trial plan exists
@@ -552,7 +585,7 @@ export class SubscriptionsService {
         }
         return this.createTrialSubscription(shopId, newTrialPlan);
       }
-      
+
       return this.createTrialSubscription(shopId, trialPlan);
     }
 
@@ -565,22 +598,28 @@ export class SubscriptionsService {
     // This prevents data integrity issues where planId and planCode are out of sync
     if (plan.code !== subscription.planCode) {
       this.logger.warn(
-        `Plan mismatch detected for shop ${shopId}: subscription.planCode='${subscription.planCode}' but planId references plan.code='${plan.code}'. Fixing...`
+        `Plan mismatch detected for shop ${shopId}: subscription.planCode='${subscription.planCode}' but planId references plan.code='${plan.code}'. Fixing...`,
       );
-      
+
       // Try to find the correct plan by planCode
-      const correctPlan = await this.planModel.findOne({ code: subscription.planCode });
+      const correctPlan = await this.planModel.findOne({
+        code: subscription.planCode,
+      });
       if (correctPlan) {
         // Update the subscription to reference the correct plan
         subscription.planId = correctPlan._id;
         await subscription.save();
         plan = correctPlan;
-        this.logger.log(`Fixed plan reference for shop ${shopId}: now using planId for '${correctPlan.code}'`);
+        this.logger.log(
+          `Fixed plan reference for shop ${shopId}: now using planId for '${correctPlan.code}'`,
+        );
       } else {
         // If planCode doesn't exist, update planCode to match planId
         subscription.planCode = plan.code;
         await subscription.save();
-        this.logger.log(`Fixed planCode for shop ${shopId}: now using '${plan.code}'`);
+        this.logger.log(
+          `Fixed planCode for shop ${shopId}: now using '${plan.code}'`,
+        );
       }
     }
 
@@ -588,8 +627,8 @@ export class SubscriptionsService {
     const realTimeUsage = await this.getUsageCounts(shopId);
 
     // Also update stored counts in background (don't await)
-    this.syncUsageCountsForShop(shopId).catch(err => 
-      this.logger.error(`Background sync failed for shop ${shopId}:`, err)
+    this.syncUsageCountsForShop(shopId).catch((err) =>
+      this.logger.error(`Background sync failed for shop ${shopId}:`, err),
     );
 
     return this.mapSubscriptionToResponse(subscription, plan, realTimeUsage);
@@ -599,13 +638,16 @@ export class SubscriptionsService {
    * Create a trial subscription for a shop (internal helper)
    * Trial expires after TRIAL_PERIOD_DAYS (14 days)
    */
-  private async createTrialSubscription(shopId: string, trialPlan: SubscriptionPlanDocument): Promise<SubscriptionResponseDto> {
+  private async createTrialSubscription(
+    shopId: string,
+    trialPlan: SubscriptionPlanDocument,
+  ): Promise<SubscriptionResponseDto> {
     const now = new Date();
-    
+
     // Trial expires after 14 days - user must upgrade to continue
     const trialEndDate = new Date(now);
     trialEndDate.setDate(trialEndDate.getDate() + TRIAL_PERIOD_DAYS);
-    
+
     const subscription = new this.subscriptionModel({
       shopId: new Types.ObjectId(shopId),
       planId: trialPlan._id,
@@ -631,7 +673,11 @@ export class SubscriptionsService {
     this.logger.log(`Created trial subscription for shop ${shopId}`);
 
     const realTimeUsage = await this.getUsageCounts(shopId);
-    return this.mapSubscriptionToResponse(subscription, trialPlan, realTimeUsage);
+    return this.mapSubscriptionToResponse(
+      subscription,
+      trialPlan,
+      realTimeUsage,
+    );
   }
 
   /**
@@ -652,14 +698,17 @@ export class SubscriptionsService {
     }
 
     // Get the plan
-    const plan = await this.planModel.findOne({ code: dto.planCode, status: 'active' });
+    const plan = await this.planModel.findOne({
+      code: dto.planCode,
+      status: 'active',
+    });
     if (!plan) {
       throw new NotFoundException(`Plan '${dto.planCode}' not found`);
     }
 
     const now = new Date();
     const billingCycle = dto.billingCycle || BillingCycle.MONTHLY;
-    
+
     // Calculate price and period end based on billing cycle
     const { price, periodEnd, numberOfDays } = this.calculateBillingDetails(
       plan,
@@ -701,7 +750,8 @@ export class SubscriptionsService {
       currentPeriodEnd: freeMonths > 0 ? trialEndDate : periodEnd,
       nextBillingDate: freeMonths > 0 ? trialEndDate : periodEnd,
       currentPrice: price,
-      numberOfDays: billingCycle === BillingCycle.DAILY ? numberOfDays : undefined,
+      numberOfDays:
+        billingCycle === BillingCycle.DAILY ? numberOfDays : undefined,
       isTrialUsed: freeMonths > 0,
       trialEndDate: freeMonths > 0 ? trialEndDate : undefined,
       autoRenew: dto.autoRenew ?? true,
@@ -712,7 +762,9 @@ export class SubscriptionsService {
 
     await subscription.save();
 
-    this.logger.log(`Created subscription for shop ${shopId} with plan ${plan.code}, billing: ${billingCycle}${numberOfDays ? ` (${numberOfDays} days)` : ''}, status: ${initialStatus}`);
+    this.logger.log(
+      `Created subscription for shop ${shopId} with plan ${plan.code}, billing: ${billingCycle}${numberOfDays ? ` (${numberOfDays} days)` : ''}, status: ${initialStatus}`,
+    );
 
     // Create setup invoice if applicable
     if (hasSetupFee) {
@@ -723,7 +775,9 @@ export class SubscriptionsService {
         'SmartDuka POS Setup Package',
         plan.setupPrice,
       );
-      this.logger.log(`Setup invoice created for shop ${shopId}, payment required to activate`);
+      this.logger.log(
+        `Setup invoice created for shop ${shopId}, payment required to activate`,
+      );
     }
 
     return this.mapSubscriptionToResponse(subscription, plan);
@@ -765,11 +819,11 @@ export class SubscriptionsService {
 
   /**
    * Change subscription plan (upgrade/downgrade)
-   * 
+   *
    * IMPORTANT: For upgrades to paid plans, this creates a PENDING upgrade
    * that requires payment before activation. The plan is NOT changed until
    * payment is confirmed via M-Pesa callback or manual confirmation.
-   * 
+   *
    * Free transitions (no payment required):
    * - Any plan to trial/free plan (downgrade)
    * - Trial to any plan when first subscribing (handled by createSubscription)
@@ -778,7 +832,13 @@ export class SubscriptionsService {
   async changePlan(
     shopId: string,
     dto: ChangePlanDto,
-  ): Promise<SubscriptionResponseDto & { requiresPayment?: boolean; invoiceId?: string; pendingUpgrade?: any }> {
+  ): Promise<
+    SubscriptionResponseDto & {
+      requiresPayment?: boolean;
+      invoiceId?: string;
+      pendingUpgrade?: any;
+    }
+  > {
     const subscription = await this.subscriptionModel.findOne({
       shopId: new Types.ObjectId(shopId),
     });
@@ -788,28 +848,44 @@ export class SubscriptionsService {
     }
 
     const currentPlan = await this.planModel.findById(subscription.planId);
-    const newPlan = await this.planModel.findOne({ code: dto.newPlanCode, status: 'active' });
-    
+    const newPlan = await this.planModel.findOne({
+      code: dto.newPlanCode,
+      status: 'active',
+    });
+
     if (!newPlan) {
       throw new NotFoundException(`Plan '${dto.newPlanCode}' not found`);
     }
 
     // Same plan - allow renewal if subscription is expired, suspended, or past_due
-    const allowRenewalStatuses = ['expired', 'suspended', 'past_due', 'cancelled', 'pending_payment'];
-    if (subscription.planCode === dto.newPlanCode && !allowRenewalStatuses.includes(subscription.status)) {
+    const allowRenewalStatuses = [
+      'expired',
+      'suspended',
+      'past_due',
+      'cancelled',
+      'pending_payment',
+    ];
+    if (
+      subscription.planCode === dto.newPlanCode &&
+      !allowRenewalStatuses.includes(subscription.status)
+    ) {
       throw new BadRequestException('Already on this plan');
     }
 
     const billingCycle = dto.billingCycle || subscription.billingCycle;
-    const newPrice = billingCycle === BillingCycle.ANNUAL ? newPlan.annualPrice : 
-                     billingCycle === BillingCycle.DAILY ? newPlan.dailyPrice :
-                     newPlan.monthlyPrice;
+    const newPrice =
+      billingCycle === BillingCycle.ANNUAL
+        ? newPlan.annualPrice
+        : billingCycle === BillingCycle.DAILY
+          ? newPlan.dailyPrice
+          : newPlan.monthlyPrice;
     const currentPrice = currentPlan ? currentPlan.monthlyPrice : 0;
 
     // Determine if this is an upgrade (requires payment) or downgrade (free)
     const isUpgrade = newPlan.monthlyPrice > currentPrice;
     const isToFreePlan = newPlan.code === 'trial' || newPlan.monthlyPrice === 0;
-    const isFromFreePlan = subscription.planCode === 'trial' || currentPrice === 0;
+    const isFromFreePlan =
+      subscription.planCode === 'trial' || currentPrice === 0;
 
     // Get current usage counts for limit validation
     const currentUsage = await this.getUsageCounts(shopId);
@@ -817,13 +893,19 @@ export class SubscriptionsService {
     // Check if change would exceed new plan limits
     const limitWarnings: string[] = [];
     if (currentUsage.products > newPlan.maxProducts) {
-      limitWarnings.push(`You have ${currentUsage.products} products but ${newPlan.name} plan only supports ${newPlan.maxProducts}.`);
+      limitWarnings.push(
+        `You have ${currentUsage.products} products but ${newPlan.name} plan only supports ${newPlan.maxProducts}.`,
+      );
     }
     if (currentUsage.employees > newPlan.maxEmployees) {
-      limitWarnings.push(`You have ${currentUsage.employees} employees but ${newPlan.name} plan only supports ${newPlan.maxEmployees}.`);
+      limitWarnings.push(
+        `You have ${currentUsage.employees} employees but ${newPlan.name} plan only supports ${newPlan.maxEmployees}.`,
+      );
     }
     if (currentUsage.shops > newPlan.maxShops) {
-      limitWarnings.push(`You have ${currentUsage.shops} shops but ${newPlan.name} plan only supports ${newPlan.maxShops}.`);
+      limitWarnings.push(
+        `You have ${currentUsage.shops} shops but ${newPlan.name} plan only supports ${newPlan.maxShops}.`,
+      );
     }
 
     // === DOWNGRADE BLOCKING ===
@@ -832,22 +914,27 @@ export class SubscriptionsService {
     if (!isUpgrade && !isFromFreePlan) {
       const now = new Date();
       const periodEnd = subscription.currentPeriodEnd;
-      
+
       // Check if subscription is still active (not expired)
-      if (subscription.status === SubscriptionStatus.ACTIVE && periodEnd > now) {
-        const daysRemaining = Math.ceil((periodEnd.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
-        const formattedDate = periodEnd.toLocaleDateString('en-KE', { 
-          weekday: 'long', 
-          year: 'numeric', 
-          month: 'long', 
-          day: 'numeric' 
+      if (
+        subscription.status === SubscriptionStatus.ACTIVE &&
+        periodEnd > now
+      ) {
+        const daysRemaining = Math.ceil(
+          (periodEnd.getTime() - now.getTime()) / (24 * 60 * 60 * 1000),
+        );
+        const formattedDate = periodEnd.toLocaleDateString('en-KE', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
         });
-        
+
         throw new BadRequestException(
           `You cannot downgrade while your current subscription is active. ` +
-          `Your ${currentPlan?.name || subscription.planCode} plan is valid until ${formattedDate} ` +
-          `(${daysRemaining} day${daysRemaining !== 1 ? 's' : ''} remaining). ` +
-          `Please come back after your subscription expires to downgrade, or you can upgrade to a higher plan now.`
+            `Your ${currentPlan?.name || subscription.planCode} plan is valid until ${formattedDate} ` +
+            `(${daysRemaining} day${daysRemaining !== 1 ? 's' : ''} remaining). ` +
+            `Please come back after your subscription expires to downgrade, or you can upgrade to a higher plan now.`,
         );
       }
     }
@@ -859,7 +946,9 @@ export class SubscriptionsService {
     // 3. Downgrade after subscription period ends
     if (isToFreePlan || !isUpgrade) {
       if (limitWarnings.length > 0) {
-        this.logger.warn(`Plan downgrade for shop ${shopId} exceeds limits: ${limitWarnings.join(' | ')}`);
+        this.logger.warn(
+          `Plan downgrade for shop ${shopId} exceeds limits: ${limitWarnings.join(' | ')}`,
+        );
       }
 
       const oldPlanCode = subscription.planCode;
@@ -875,18 +964,24 @@ export class SubscriptionsService {
       };
 
       await subscription.save();
-      this.logger.log(`Downgraded subscription for shop ${shopId} from ${oldPlanCode} to ${newPlan.code}`);
+      this.logger.log(
+        `Downgraded subscription for shop ${shopId} from ${oldPlanCode} to ${newPlan.code}`,
+      );
 
       // Send plan change notification email
       try {
         const shop = await this.shopModel.findById(shopId).lean();
-        const admin = await this.userModel.findOne({ shopId: new Types.ObjectId(shopId), role: 'admin' }).lean();
+        const admin = await this.userModel
+          .findOne({ shopId: new Types.ObjectId(shopId), role: 'admin' })
+          .lean();
         const previousPlan = currentPlan?.name || oldPlanCode;
-        
+
         if (admin?.email && shop) {
-          const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'https://www.smartduka.org';
+          const frontendUrl =
+            this.configService.get<string>('FRONTEND_URL') ||
+            'https://www.smartduka.org';
           const template = EMAIL_TEMPLATES.plan_changed;
-          
+
           await this.emailService.sendEmail({
             to: admin.email,
             subject: template.subject,
@@ -895,16 +990,22 @@ export class SubscriptionsService {
               userName: admin.name || admin.email,
               previousPlan: previousPlan,
               newPlan: newPlan.name,
-              changeDate: new Date().toLocaleDateString('en-KE', { dateStyle: 'long' }),
+              changeDate: new Date().toLocaleDateString('en-KE', {
+                dateStyle: 'long',
+              }),
               dashboardUrl: `${frontendUrl}/admin/dashboard`,
             }),
             templateName: 'plan_changed',
             category: 'subscription',
           });
-          this.logger.log(`📧 Plan change email sent to ${admin.email} (${previousPlan} → ${newPlan.name})`);
+          this.logger.log(
+            `📧 Plan change email sent to ${admin.email} (${previousPlan} → ${newPlan.name})`,
+          );
         }
       } catch (emailError: any) {
-        this.logger.error(`Failed to send plan change email: ${emailError.message}`);
+        this.logger.error(
+          `Failed to send plan change email: ${emailError.message}`,
+        );
         // Don't fail the plan change if email fails
       }
 
@@ -912,14 +1013,16 @@ export class SubscriptionsService {
     }
 
     // === PAID UPGRADE: Requires payment first ===
-    this.logger.log(`Creating pending upgrade for shop ${shopId} from ${subscription.planCode} to ${newPlan.code}`);
+    this.logger.log(
+      `Creating pending upgrade for shop ${shopId} from ${subscription.planCode} to ${newPlan.code}`,
+    );
 
     // Calculate upgrade amount
     // For daily plans, ALWAYS use the exact daily price (no proration)
     // For other plans, use full price (proration was confusing users)
     let finalAmount: number;
-    let isProrated = false;
-    
+    const isProrated = false;
+
     if (billingCycle === BillingCycle.DAILY) {
       // Daily plan: exact daily price, no proration
       finalAmount = newPlan.dailyPrice || 99;
@@ -954,10 +1057,15 @@ export class SubscriptionsService {
 
     await subscription.save();
 
-    this.logger.log(`Created pending upgrade for shop ${shopId}: ${newPlan.code} - Invoice ${invoice.invoiceNumber}`);
+    this.logger.log(
+      `Created pending upgrade for shop ${shopId}: ${newPlan.code} - Invoice ${invoice.invoiceNumber}`,
+    );
 
     // Return current subscription with pending upgrade info
-    const response = this.mapSubscriptionToResponse(subscription, currentPlan || newPlan);
+    const response = this.mapSubscriptionToResponse(
+      subscription,
+      currentPlan || newPlan,
+    );
     return {
       ...response,
       requiresPayment: true,
@@ -977,7 +1085,10 @@ export class SubscriptionsService {
    * Activate a pending upgrade after payment is confirmed
    * Called by payment callback handlers (M-Pesa, Stripe, manual confirmation)
    */
-  async activatePendingUpgrade(shopId: string, invoiceId?: string): Promise<SubscriptionResponseDto | null> {
+  async activatePendingUpgrade(
+    shopId: string,
+    invoiceId?: string,
+  ): Promise<SubscriptionResponseDto | null> {
     const subscription = await this.subscriptionModel.findOne({
       shopId: new Types.ObjectId(shopId),
     });
@@ -989,29 +1100,39 @@ export class SubscriptionsService {
 
     // Verify invoice matches if provided
     if (invoiceId && subscription.pendingUpgrade.invoiceId !== invoiceId) {
-      this.logger.warn(`Invoice mismatch for upgrade: expected ${subscription.pendingUpgrade.invoiceId}, got ${invoiceId}`);
+      this.logger.warn(
+        `Invoice mismatch for upgrade: expected ${subscription.pendingUpgrade.invoiceId}, got ${invoiceId}`,
+      );
       return null;
     }
 
     // Check if pending upgrade has expired
-    if (subscription.pendingUpgrade.expiresAt && new Date() > subscription.pendingUpgrade.expiresAt) {
+    if (
+      subscription.pendingUpgrade.expiresAt &&
+      new Date() > subscription.pendingUpgrade.expiresAt
+    ) {
       this.logger.warn(`Pending upgrade expired for shop ${shopId}`);
       subscription.pendingUpgrade = undefined;
       await subscription.save();
       return null;
     }
 
-    const newPlan = await this.planModel.findById(subscription.pendingUpgrade.planId);
+    const newPlan = await this.planModel.findById(
+      subscription.pendingUpgrade.planId,
+    );
     if (!newPlan) {
-      this.logger.error(`Plan not found for pending upgrade: ${subscription.pendingUpgrade.planId}`);
+      this.logger.error(
+        `Plan not found for pending upgrade: ${subscription.pendingUpgrade.planId}`,
+      );
       return null;
     }
 
     // Activate the upgrade
     const oldPlanCode = subscription.planCode;
     const now = new Date();
-    const billingCycle = subscription.pendingUpgrade.billingCycle as BillingCycle;
-    
+    const billingCycle = subscription.pendingUpgrade
+      .billingCycle as BillingCycle;
+
     // Calculate new period based on billing cycle
     const { periodEnd, numberOfDays } = this.calculateBillingDetails(
       newPlan,
@@ -1019,7 +1140,7 @@ export class SubscriptionsService {
       billingCycle === BillingCycle.DAILY ? 1 : undefined, // Default 1 day for daily
       now,
     );
-    
+
     subscription.planId = newPlan._id;
     subscription.planCode = newPlan.code;
     subscription.billingCycle = billingCycle;
@@ -1035,7 +1156,7 @@ export class SubscriptionsService {
       upgradedFrom: oldPlanCode,
       upgradedAt: now,
     };
-    
+
     // Clear pending upgrade
     subscription.pendingUpgrade = undefined;
 
@@ -1043,16 +1164,23 @@ export class SubscriptionsService {
 
     // Reactivate the shop if it was suspended
     const shop = await this.shopModel.findById(shopId);
-    if (shop && (shop.status === 'suspended' || shop.subscriptionStatus === 'suspended')) {
+    if (
+      shop &&
+      (shop.status === 'suspended' || shop.subscriptionStatus === 'suspended')
+    ) {
       shop.status = 'active';
       shop.subscriptionStatus = 'active';
       shop.subscriptionPlan = newPlan.code;
       shop.subscriptionExpiresAt = periodEnd;
       await shop.save();
-      this.logger.log(`Shop ${shop.shopId} reactivated after upgrade payment verification`);
+      this.logger.log(
+        `Shop ${shop.shopId} reactivated after upgrade payment verification`,
+      );
     }
 
-    this.logger.log(`✅ Activated upgrade for shop ${shopId}: ${oldPlanCode} -> ${newPlan.code}`);
+    this.logger.log(
+      `✅ Activated upgrade for shop ${shopId}: ${oldPlanCode} -> ${newPlan.code}`,
+    );
 
     return this.mapSubscriptionToResponse(subscription, newPlan);
   }
@@ -1070,14 +1198,19 @@ export class SubscriptionsService {
     }
 
     // Check if expired
-    if (subscription.pendingUpgrade.expiresAt && new Date() > subscription.pendingUpgrade.expiresAt) {
+    if (
+      subscription.pendingUpgrade.expiresAt &&
+      new Date() > subscription.pendingUpgrade.expiresAt
+    ) {
       subscription.pendingUpgrade = undefined;
       await subscription.save();
       return null;
     }
 
-    const plan = await this.planModel.findById(subscription.pendingUpgrade.planId);
-    
+    const plan = await this.planModel.findById(
+      subscription.pendingUpgrade.planId,
+    );
+
     return {
       ...subscription.pendingUpgrade,
       planName: plan?.name,
@@ -1098,9 +1231,12 @@ export class SubscriptionsService {
 
     // Cancel the associated invoice
     if (subscription.pendingUpgrade.invoiceId) {
-      await this.invoiceModel.findByIdAndUpdate(subscription.pendingUpgrade.invoiceId, {
-        status: InvoiceStatus.CANCELLED,
-      });
+      await this.invoiceModel.findByIdAndUpdate(
+        subscription.pendingUpgrade.invoiceId,
+        {
+          status: InvoiceStatus.CANCELLED,
+        },
+      );
     }
 
     subscription.pendingUpgrade = undefined;
@@ -1130,9 +1266,13 @@ export class SubscriptionsService {
 
     const plan = await this.planModel.findById(subscription.planId);
     const now = new Date();
-    const daysRemaining = Math.max(0, Math.ceil(
-      (subscription.currentPeriodEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
-    ));
+    const daysRemaining = Math.max(
+      0,
+      Math.ceil(
+        (subscription.currentPeriodEnd.getTime() - now.getTime()) /
+          (1000 * 60 * 60 * 24),
+      ),
+    );
 
     // Data archive happens 60 days after cancellation
     const dataArchiveDate = new Date(subscription.currentPeriodEnd);
@@ -1163,7 +1303,7 @@ export class SubscriptionsService {
 
   /**
    * Cancel subscription with proper data retention schedule
-   * 
+   *
    * Cancellation Timeline:
    * 1. Immediate: Subscription marked for cancellation, access continues until period end
    * 2. Period End: Access reverted to trial/free plan
@@ -1192,7 +1332,7 @@ export class SubscriptionsService {
     }
 
     const now = new Date();
-    
+
     // Calculate data retention dates
     const periodEnd = dto.immediate ? now : subscription.currentPeriodEnd;
     const dataArchiveDate = new Date(periodEnd);
@@ -1219,7 +1359,7 @@ export class SubscriptionsService {
     if (dto.immediate) {
       subscription.status = SubscriptionStatus.CANCELLED;
       subscription.currentPeriodEnd = now;
-      
+
       // Downgrade to trial plan immediately
       const trialPlan = await this.planModel.findOne({ code: 'trial' });
       if (trialPlan) {
@@ -1231,10 +1371,12 @@ export class SubscriptionsService {
 
     await subscription.save();
 
-    this.logger.log(`Cancelled subscription for shop ${shopId}. Period ends: ${periodEnd}, Archive: ${dataArchiveDate}, Delete: ${dataDeletionDate}`);
+    this.logger.log(
+      `Cancelled subscription for shop ${shopId}. Period ends: ${periodEnd}, Archive: ${dataArchiveDate}, Delete: ${dataDeletionDate}`,
+    );
 
     return {
-      message: dto.immediate 
+      message: dto.immediate
         ? 'Your subscription has been cancelled immediately. You have been moved to the free trial plan.'
         : `Your subscription will end on ${periodEnd.toLocaleDateString()}. You can continue using all features until then.`,
       currentPeriodEnd: periodEnd,
@@ -1258,7 +1400,9 @@ export class SubscriptionsService {
   }> {
     // Require explicit confirmation
     if (confirmation !== 'DELETE MY ACCOUNT') {
-      throw new BadRequestException('Please type "DELETE MY ACCOUNT" to confirm');
+      throw new BadRequestException(
+        'Please type "DELETE MY ACCOUNT" to confirm',
+      );
     }
 
     const subscription = await this.subscriptionModel.findOne({
@@ -1271,9 +1415,10 @@ export class SubscriptionsService {
 
     // Calculate deletion date (90 days from now or from period end)
     const now = new Date();
-    const baseDate = subscription.status === SubscriptionStatus.CANCELLED 
-      ? subscription.currentPeriodEnd 
-      : now;
+    const baseDate =
+      subscription.status === SubscriptionStatus.CANCELLED
+        ? subscription.currentPeriodEnd
+        : now;
     const scheduledDeletionDate = new Date(baseDate);
     scheduledDeletionDate.setDate(scheduledDeletionDate.getDate() + 90);
 
@@ -1294,7 +1439,7 @@ export class SubscriptionsService {
       subscription.autoRenew = false;
       subscription.status = SubscriptionStatus.CANCELLED;
       subscription.currentPeriodEnd = now;
-      
+
       // Downgrade to trial
       const trialPlan = await this.planModel.findOne({ code: 'trial' });
       if (trialPlan) {
@@ -1306,7 +1451,9 @@ export class SubscriptionsService {
 
     await subscription.save();
 
-    this.logger.warn(`⚠️ Account deletion requested for shop ${shopId}. Scheduled: ${scheduledDeletionDate}`);
+    this.logger.warn(
+      `⚠️ Account deletion requested for shop ${shopId}. Scheduled: ${scheduledDeletionDate}`,
+    );
 
     return {
       success: true,
@@ -1346,14 +1493,17 @@ export class SubscriptionsService {
 
     return {
       success: true,
-      message: 'Account deletion request has been cancelled. Your data is safe.',
+      message:
+        'Account deletion request has been cancelled. Your data is safe.',
     };
   }
 
   /**
    * Reactivate cancelled subscription
    */
-  async reactivateSubscription(shopId: string): Promise<SubscriptionResponseDto> {
+  async reactivateSubscription(
+    shopId: string,
+  ): Promise<SubscriptionResponseDto> {
     const subscription = await this.subscriptionModel.findOne({
       shopId: new Types.ObjectId(shopId),
     });
@@ -1362,8 +1512,10 @@ export class SubscriptionsService {
       throw new NotFoundException('Subscription not found');
     }
 
-    if (subscription.status !== SubscriptionStatus.CANCELLED && 
-        subscription.status !== SubscriptionStatus.EXPIRED) {
+    if (
+      subscription.status !== SubscriptionStatus.CANCELLED &&
+      subscription.status !== SubscriptionStatus.EXPIRED
+    ) {
       throw new BadRequestException('Subscription is not cancelled or expired');
     }
 
@@ -1374,7 +1526,7 @@ export class SubscriptionsService {
 
     const now = new Date();
     const periodEnd = new Date(now);
-    
+
     // Calculate period end based on billing cycle
     if (subscription.billingCycle === BillingCycle.DAILY) {
       // Daily billing - use numberOfDays (default 1 day)
@@ -1399,8 +1551,12 @@ export class SubscriptionsService {
     await subscription.save();
 
     // Create new billing invoice
-    const billingCycleLabel = subscription.billingCycle === BillingCycle.ANNUAL ? 'Annual' : 
-                              subscription.billingCycle === BillingCycle.DAILY ? 'Daily' : 'Monthly';
+    const billingCycleLabel =
+      subscription.billingCycle === BillingCycle.ANNUAL
+        ? 'Annual'
+        : subscription.billingCycle === BillingCycle.DAILY
+          ? 'Daily'
+          : 'Monthly';
     await this.createInvoice(
       shopId,
       subscription._id.toString(),
@@ -1411,7 +1567,9 @@ export class SubscriptionsService {
       periodEnd,
     );
 
-    this.logger.log(`Reactivated subscription for shop ${shopId}, period ends: ${periodEnd.toISOString()}`);
+    this.logger.log(
+      `Reactivated subscription for shop ${shopId}, period ends: ${periodEnd.toISOString()}`,
+    );
 
     return this.mapSubscriptionToResponse(subscription, plan);
   }
@@ -1441,7 +1599,9 @@ export class SubscriptionsService {
     subscription.autoRenew = autoRenew;
     await subscription.save();
 
-    this.logger.log(`Auto-renew ${autoRenew ? 'enabled' : 'disabled'} for shop ${shopId}`);
+    this.logger.log(
+      `Auto-renew ${autoRenew ? 'enabled' : 'disabled'} for shop ${shopId}`,
+    );
 
     return {
       success: true,
@@ -1477,7 +1637,7 @@ export class SubscriptionsService {
       .skip(skip)
       .exec();
 
-    return invoices.map(inv => this.mapInvoiceToResponse(inv));
+    return invoices.map((inv) => this.mapInvoiceToResponse(inv));
   }
 
   /**
@@ -1488,18 +1648,27 @@ export class SubscriptionsService {
     const invoices = await this.invoiceModel
       .find({
         shopId: new Types.ObjectId(shopId),
-        status: { $in: [InvoiceStatus.PENDING, InvoiceStatus.FAILED, InvoiceStatus.PENDING_VERIFICATION] },
+        status: {
+          $in: [
+            InvoiceStatus.PENDING,
+            InvoiceStatus.FAILED,
+            InvoiceStatus.PENDING_VERIFICATION,
+          ],
+        },
       })
       .sort({ dueDate: 1 })
       .exec();
 
-    return invoices.map(inv => this.mapInvoiceToResponse(inv));
+    return invoices.map((inv) => this.mapInvoiceToResponse(inv));
   }
 
   /**
    * Get invoice by ID
    */
-  async getInvoice(shopId: string, invoiceId: string): Promise<InvoiceResponseDto> {
+  async getInvoice(
+    shopId: string,
+    invoiceId: string,
+  ): Promise<InvoiceResponseDto> {
     const invoice = await this.invoiceModel.findOne({
       _id: new Types.ObjectId(invoiceId),
       shopId: new Types.ObjectId(shopId),
@@ -1588,14 +1757,18 @@ export class SubscriptionsService {
     await invoice.save();
 
     // Update subscription
-    const subscription = await this.subscriptionModel.findById(invoice.subscriptionId);
+    const subscription = await this.subscriptionModel.findById(
+      invoice.subscriptionId,
+    );
     if (subscription) {
       subscription.failedPaymentAttempts += 1;
 
       // After 3 failed attempts, mark as past due
       if (subscription.failedPaymentAttempts >= 3) {
         subscription.status = SubscriptionStatus.PAST_DUE;
-        subscription.gracePeriodEndDate = new Date(Date.now() + GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000);
+        subscription.gracePeriodEndDate = new Date(
+          Date.now() + GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000,
+        );
       }
 
       await subscription.save();
@@ -1633,7 +1806,10 @@ export class SubscriptionsService {
   /**
    * Verify a manual payment and activate subscription
    */
-  async verifyAndActivatePayment(invoiceId: string, verifiedBy: string): Promise<void> {
+  async verifyAndActivatePayment(
+    invoiceId: string,
+    verifiedBy: string,
+  ): Promise<void> {
     const invoice = await this.invoiceModel.findById(invoiceId);
     if (!invoice) {
       throw new NotFoundException('Invoice not found');
@@ -1672,17 +1848,21 @@ export class SubscriptionsService {
     }
 
     // Activate subscription
-    const subscription = await this.subscriptionModel.findById(invoice.subscriptionId);
+    const subscription = await this.subscriptionModel.findById(
+      invoice.subscriptionId,
+    );
     if (subscription) {
       const now = new Date();
       const periodEnd = new Date(now);
-      
+
       // Calculate period end based on billing cycle
       if (subscription.billingCycle === BillingCycle.DAILY) {
         // Daily billing - use numberOfDays (default 1 day)
         const days = subscription.numberOfDays || 1;
         periodEnd.setDate(periodEnd.getDate() + days);
-        this.logger.log(`Daily subscription: setting period end to ${days} day(s) from now`);
+        this.logger.log(
+          `Daily subscription: setting period end to ${days} day(s) from now`,
+        );
       } else if (subscription.billingCycle === BillingCycle.ANNUAL) {
         periodEnd.setFullYear(periodEnd.getFullYear() + 1);
       } else {
@@ -1739,7 +1919,10 @@ export class SubscriptionsService {
 
       // Reactivate the shop if it was suspended
       const shop = await this.shopModel.findById(subscription.shopId);
-      if (shop && (shop.status === 'suspended' || shop.subscriptionStatus === 'suspended')) {
+      if (
+        shop &&
+        (shop.status === 'suspended' || shop.subscriptionStatus === 'suspended')
+      ) {
         shop.status = 'active';
         shop.subscriptionStatus = 'active';
         shop.subscriptionExpiresAt = periodEnd;
@@ -1861,7 +2044,9 @@ export class SubscriptionsService {
     };
     await invoice.save();
 
-    this.logger.log(`Payment rejected for invoice ${invoice.invoiceNumber}: ${reason}`);
+    this.logger.log(
+      `Payment rejected for invoice ${invoice.invoiceNumber}: ${reason}`,
+    );
   }
 
   // ============================================
@@ -1875,36 +2060,58 @@ export class SubscriptionsService {
     shopId: string,
     resource: 'shops' | 'employees' | 'products',
     increment = 1,
-  ): Promise<{ allowed: boolean; current: number; limit: number; message?: string }> {
+  ): Promise<{
+    allowed: boolean;
+    current: number;
+    limit: number;
+    message?: string;
+  }> {
     const subscription = await this.subscriptionModel.findOne({
       shopId: new Types.ObjectId(shopId),
     });
 
     if (!subscription) {
-      return { allowed: false, current: 0, limit: 0, message: 'No active subscription' };
+      return {
+        allowed: false,
+        current: 0,
+        limit: 0,
+        message: 'No active subscription',
+      };
     }
 
-    if (subscription.status !== SubscriptionStatus.ACTIVE && 
-        subscription.status !== SubscriptionStatus.TRIAL) {
+    if (
+      subscription.status !== SubscriptionStatus.ACTIVE &&
+      subscription.status !== SubscriptionStatus.TRIAL
+    ) {
       const plan = await this.planModel.findById(subscription.planId);
       const statusMessages: Record<string, string> = {
-        [SubscriptionStatus.PENDING_PAYMENT]: 'Payment required to activate your subscription.',
-        [SubscriptionStatus.PAST_DUE]: 'Your subscription payment is overdue. Please pay to restore access.',
-        [SubscriptionStatus.SUSPENDED]: 'Your subscription has been suspended. Contact support.',
+        [SubscriptionStatus.PENDING_PAYMENT]:
+          'Payment required to activate your subscription.',
+        [SubscriptionStatus.PAST_DUE]:
+          'Your subscription payment is overdue. Please pay to restore access.',
+        [SubscriptionStatus.SUSPENDED]:
+          'Your subscription has been suspended. Contact support.',
         [SubscriptionStatus.CANCELLED]: 'Your subscription has been cancelled.',
-        [SubscriptionStatus.EXPIRED]: 'Your subscription has expired. Please renew to continue.',
+        [SubscriptionStatus.EXPIRED]:
+          'Your subscription has expired. Please renew to continue.',
       };
-      return { 
-        allowed: false, 
-        current: subscription.currentProductCount || 0, 
-        limit: plan?.maxProducts || 0, 
-        message: statusMessages[subscription.status] || 'Subscription is not active' 
+      return {
+        allowed: false,
+        current: subscription.currentProductCount || 0,
+        limit: plan?.maxProducts || 0,
+        message:
+          statusMessages[subscription.status] || 'Subscription is not active',
       };
     }
 
     const plan = await this.planModel.findById(subscription.planId);
     if (!plan) {
-      return { allowed: false, current: 0, limit: 0, message: 'Plan not found' };
+      return {
+        allowed: false,
+        current: 0,
+        limit: 0,
+        message: 'Plan not found',
+      };
     }
 
     let current: number;
@@ -1931,7 +2138,9 @@ export class SubscriptionsService {
       allowed,
       current,
       limit,
-      message: allowed ? undefined : `${resource} limit reached. Upgrade your plan to add more.`,
+      message: allowed
+        ? undefined
+        : `${resource} limit reached. Upgrade your plan to add more.`,
     };
   }
 
@@ -1989,7 +2198,9 @@ export class SubscriptionsService {
     for (const subscription of expiredTrials) {
       subscription.status = SubscriptionStatus.EXPIRED;
       await subscription.save();
-      this.logger.log(`Trial expired for shop ${subscription.shopId} - user must upgrade to continue`);
+      this.logger.log(
+        `Trial expired for shop ${subscription.shopId} - user must upgrade to continue`,
+      );
       // TODO: Send trial expiry notification
     }
 
@@ -2021,17 +2232,19 @@ export class SubscriptionsService {
       if (subscription.planCode === 'trial') {
         subscription.status = SubscriptionStatus.EXPIRED;
         await subscription.save();
-        this.logger.log(`Trial subscription ${subscription._id} expired - user must upgrade to continue`);
+        this.logger.log(
+          `Trial subscription ${subscription._id} expired - user must upgrade to continue`,
+        );
         continue;
       }
-      
+
       if (subscription.autoRenew) {
         // Create renewal invoice for non-trial plans only
         const plan = await this.planModel.findById(subscription.planId);
         if (plan) {
           const periodStart = new Date();
           const periodEnd = new Date();
-          
+
           // Calculate period end based on billing cycle
           if (subscription.billingCycle === BillingCycle.DAILY) {
             // For daily, renew for same number of days as before
@@ -2054,7 +2267,9 @@ export class SubscriptionsService {
           );
 
           subscription.status = SubscriptionStatus.PAST_DUE;
-          subscription.gracePeriodEndDate = new Date(now.getTime() + GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000);
+          subscription.gracePeriodEndDate = new Date(
+            now.getTime() + GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000,
+          );
         }
       } else {
         subscription.status = SubscriptionStatus.EXPIRED;
@@ -2097,15 +2312,20 @@ export class SubscriptionsService {
 
     for (const subscription of expiredDaily) {
       const plan = await this.planModel.findById(subscription.planId);
-      
+
       // Trial plans cannot be renewed - they must upgrade to a paid plan
-      if (subscription.status === SubscriptionStatus.TRIAL || subscription.planCode === 'trial') {
+      if (
+        subscription.status === SubscriptionStatus.TRIAL ||
+        subscription.planCode === 'trial'
+      ) {
         subscription.status = SubscriptionStatus.EXPIRED;
         await subscription.save();
-        this.logger.log(`Trial subscription ${subscription._id} expired - user must upgrade to continue`);
+        this.logger.log(
+          `Trial subscription ${subscription._id} expired - user must upgrade to continue`,
+        );
         continue;
       }
-      
+
       if (subscription.autoRenew && plan) {
         // Create renewal invoice for auto-renew subscriptions (non-trial only)
         const days = subscription.numberOfDays || 1;
@@ -2125,28 +2345,38 @@ export class SubscriptionsService {
 
         // Set to PAST_DUE with grace period
         subscription.status = SubscriptionStatus.PAST_DUE;
-        subscription.gracePeriodEndDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days grace
-        
-        this.logger.log(`Daily subscription ${subscription._id} expired, created renewal invoice, set to PAST_DUE`);
+        subscription.gracePeriodEndDate = new Date(
+          now.getTime() + 7 * 24 * 60 * 60 * 1000,
+        ); // 7 days grace
+
+        this.logger.log(
+          `Daily subscription ${subscription._id} expired, created renewal invoice, set to PAST_DUE`,
+        );
       } else {
         // No auto-renew - expire the subscription
         subscription.status = SubscriptionStatus.EXPIRED;
-        this.logger.log(`Daily subscription ${subscription._id} expired (auto-renew off)`);
+        this.logger.log(
+          `Daily subscription ${subscription._id} expired (auto-renew off)`,
+        );
       }
 
       await subscription.save();
     }
 
-    this.logger.log(`Processed ${expiredDaily.length} daily billing subscriptions`);
+    this.logger.log(
+      `Processed ${expiredDaily.length} daily billing subscriptions`,
+    );
   }
 
   // ============================================
   // HELPER METHODS
   // ============================================
 
-  private mapPlanToResponse(plan: SubscriptionPlanDocument): SubscriptionPlanResponseDto {
+  private mapPlanToResponse(
+    plan: SubscriptionPlanDocument,
+  ): SubscriptionPlanResponseDto {
     const monthlyEquivalent = Math.round(plan.annualPrice / 12);
-    const annualSavings = (plan.monthlyPrice * 12) - plan.annualPrice;
+    const annualSavings = plan.monthlyPrice * 12 - plan.annualPrice;
 
     return {
       code: plan.code,
@@ -2176,7 +2406,10 @@ export class SubscriptionsService {
     const now = new Date();
     const daysRemaining = Math.max(
       0,
-      Math.ceil((subscription.currentPeriodEnd.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)),
+      Math.ceil(
+        (subscription.currentPeriodEnd.getTime() - now.getTime()) /
+          (24 * 60 * 60 * 1000),
+      ),
     );
 
     // Use real-time usage if provided, otherwise fall back to stored counts
@@ -2187,8 +2420,9 @@ export class SubscriptionsService {
     };
 
     // Check if trial has expired
-    const isTrialExpired = subscription.status === SubscriptionStatus.TRIAL && 
-      subscription.currentPeriodEnd && 
+    const isTrialExpired =
+      subscription.status === SubscriptionStatus.TRIAL &&
+      subscription.currentPeriodEnd &&
       now > subscription.currentPeriodEnd;
 
     return {
@@ -2218,7 +2452,9 @@ export class SubscriptionsService {
     };
   }
 
-  private mapInvoiceToResponse(invoice: SubscriptionInvoiceDocument): InvoiceResponseDto {
+  private mapInvoiceToResponse(
+    invoice: SubscriptionInvoiceDocument,
+  ): InvoiceResponseDto {
     return {
       id: invoice._id.toString(),
       invoiceNumber: invoice.invoiceNumber,
@@ -2240,12 +2476,14 @@ export class SubscriptionsService {
       mpesaReceiptNumber: invoice.mpesaReceiptNumber,
       createdAt: invoice.createdAt!,
       // Include manual payment details (Send Money)
-      manualPayment: invoice.manualPayment ? {
-        senderPhoneNumber: invoice.manualPayment.senderPhoneNumber,
-        paidAmount: invoice.manualPayment.paidAmount,
-        submittedAt: invoice.manualPayment.submittedAt,
-        verifiedAt: invoice.manualPayment.verifiedAt,
-      } : undefined,
+      manualPayment: invoice.manualPayment
+        ? {
+            senderPhoneNumber: invoice.manualPayment.senderPhoneNumber,
+            paidAmount: invoice.manualPayment.paidAmount,
+            submittedAt: invoice.manualPayment.submittedAt,
+            verifiedAt: invoice.manualPayment.verifiedAt,
+          }
+        : undefined,
     };
   }
 
@@ -2265,8 +2503,12 @@ export class SubscriptionsService {
     const periodStart = subscription.currentPeriodStart;
     const periodEnd = subscription.currentPeriodEnd;
 
-    const totalDays = Math.ceil((periodEnd.getTime() - periodStart.getTime()) / (24 * 60 * 60 * 1000));
-    const remainingDays = Math.ceil((periodEnd.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+    const totalDays = Math.ceil(
+      (periodEnd.getTime() - periodStart.getTime()) / (24 * 60 * 60 * 1000),
+    );
+    const remainingDays = Math.ceil(
+      (periodEnd.getTime() - now.getTime()) / (24 * 60 * 60 * 1000),
+    );
 
     if (remainingDays <= 0) return 0;
 
@@ -2293,9 +2535,13 @@ export class SubscriptionsService {
       .lean();
 
     return subscriptions.map((sub: any) => {
-      const isTrial = sub.planCode === 'trial' || sub.status === SubscriptionStatus.TRIAL;
-      const daysRemaining = Math.ceil((new Date(sub.currentPeriodEnd).getTime() - Date.now()) / (24 * 60 * 60 * 1000));
-      
+      const isTrial =
+        sub.planCode === 'trial' || sub.status === SubscriptionStatus.TRIAL;
+      const daysRemaining = Math.ceil(
+        (new Date(sub.currentPeriodEnd).getTime() - Date.now()) /
+          (24 * 60 * 60 * 1000),
+      );
+
       // Determine correct display status
       // Trial plans should NEVER show "pending_payment" - they're free
       let displayStatus = sub.status;
@@ -2306,13 +2552,13 @@ export class SubscriptionsService {
       if (daysRemaining < 0 && displayStatus === SubscriptionStatus.ACTIVE) {
         displayStatus = SubscriptionStatus.PAST_DUE;
       }
-      
+
       // For trial plans, billing display should show "X-day trial" not "Monthly"
       let billingDisplay = sub.billingCycle;
       if (isTrial) {
         billingDisplay = `${Math.max(0, daysRemaining)}-Day Trial`;
       }
-      
+
       return {
         shopId: sub.shopId?._id?.toString() || sub.shopId?.toString(),
         shopName: sub.shopId?.name || 'Unknown Shop',
@@ -2329,9 +2575,18 @@ export class SubscriptionsService {
         isTrial,
         createdAt: sub.createdAt,
         usage: {
-          shops: { current: sub.currentShopCount || 0, limit: sub.planId?.maxShops || 1 },
-          employees: { current: sub.currentEmployeeCount || 0, limit: sub.planId?.maxEmployees || 2 },
-          products: { current: sub.currentProductCount || 0, limit: sub.planId?.maxProducts || 500 },
+          shops: {
+            current: sub.currentShopCount || 0,
+            limit: sub.planId?.maxShops || 1,
+          },
+          employees: {
+            current: sub.currentEmployeeCount || 0,
+            limit: sub.planId?.maxEmployees || 2,
+          },
+          products: {
+            current: sub.currentProductCount || 0,
+            limit: sub.planId?.maxProducts || 500,
+          },
         },
       };
     });
@@ -2350,17 +2605,34 @@ export class SubscriptionsService {
       revenueData,
     ] = await Promise.all([
       this.subscriptionModel.countDocuments(),
-      this.subscriptionModel.countDocuments({ status: SubscriptionStatus.ACTIVE }),
-      this.subscriptionModel.countDocuments({ status: SubscriptionStatus.TRIAL }),
-      this.subscriptionModel.countDocuments({ 
-        status: { $in: [SubscriptionStatus.EXPIRED, SubscriptionStatus.CANCELLED] } 
+      this.subscriptionModel.countDocuments({
+        status: SubscriptionStatus.ACTIVE,
+      }),
+      this.subscriptionModel.countDocuments({
+        status: SubscriptionStatus.TRIAL,
+      }),
+      this.subscriptionModel.countDocuments({
+        status: {
+          $in: [SubscriptionStatus.EXPIRED, SubscriptionStatus.CANCELLED],
+        },
       }),
       this.subscriptionModel.aggregate([
-        { $match: { status: { $in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIAL] } } },
+        {
+          $match: {
+            status: {
+              $in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIAL],
+            },
+          },
+        },
         { $group: { _id: '$planCode', count: { $sum: 1 } } },
       ]),
       this.subscriptionModel.aggregate([
-        { $match: { status: SubscriptionStatus.ACTIVE, billingCycle: 'monthly' } },
+        {
+          $match: {
+            status: SubscriptionStatus.ACTIVE,
+            billingCycle: 'monthly',
+          },
+        },
         { $group: { _id: null, total: { $sum: '$currentPrice' } } },
       ]),
     ]);
@@ -2396,9 +2668,11 @@ export class SubscriptionsService {
    * Get all past due subscriptions
    */
   async getPastDueSubscriptions(): Promise<SubscriptionDocument[]> {
-    return this.subscriptionModel.find({
-      status: SubscriptionStatus.PAST_DUE,
-    }).exec();
+    return this.subscriptionModel
+      .find({
+        status: SubscriptionStatus.PAST_DUE,
+      })
+      .exec();
   }
 
   /**
@@ -2406,7 +2680,7 @@ export class SubscriptionsService {
    */
   async generateRecurringInvoices(): Promise<void> {
     const now = new Date();
-    
+
     // Find subscriptions that need renewal (next billing date is today or past)
     const dueSubscriptions = await this.subscriptionModel.find({
       status: SubscriptionStatus.ACTIVE,
@@ -2418,17 +2692,19 @@ export class SubscriptionsService {
       try {
         // Trial plans cannot be renewed - skip them
         if (subscription.planCode === 'trial') {
-          this.logger.log(`Skipping trial subscription ${subscription._id} - trials cannot be renewed`);
+          this.logger.log(
+            `Skipping trial subscription ${subscription._id} - trials cannot be renewed`,
+          );
           continue;
         }
-        
+
         const plan = await this.planModel.findById(subscription.planId);
         if (!plan) continue;
 
         // Calculate new billing period
         const periodStart = new Date(subscription.currentPeriodEnd);
         const periodEnd = new Date(periodStart);
-        
+
         if (subscription.billingCycle === BillingCycle.ANNUAL) {
           periodEnd.setFullYear(periodEnd.getFullYear() + 1);
         } else {
@@ -2450,9 +2726,14 @@ export class SubscriptionsService {
         subscription.nextBillingDate = periodEnd;
         await subscription.save();
 
-        this.logger.log(`Generated renewal invoice for shop ${subscription.shopId}`);
+        this.logger.log(
+          `Generated renewal invoice for shop ${subscription.shopId}`,
+        );
       } catch (error) {
-        this.logger.error(`Failed to generate invoice for subscription ${subscription._id}:`, error);
+        this.logger.error(
+          `Failed to generate invoice for subscription ${subscription._id}:`,
+          error,
+        );
       }
     }
   }
@@ -2463,14 +2744,23 @@ export class SubscriptionsService {
    */
   async syncAllUsageCounts(): Promise<void> {
     const subscriptions = await this.subscriptionModel.find({
-      status: { $in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIAL, SubscriptionStatus.PAST_DUE] },
+      status: {
+        $in: [
+          SubscriptionStatus.ACTIVE,
+          SubscriptionStatus.TRIAL,
+          SubscriptionStatus.PAST_DUE,
+        ],
+      },
     });
 
     for (const subscription of subscriptions) {
       try {
         await this.syncUsageCountsForShop(subscription.shopId.toString());
       } catch (error) {
-        this.logger.error(`Failed to sync counts for subscription ${subscription._id}:`, error);
+        this.logger.error(
+          `Failed to sync counts for subscription ${subscription._id}:`,
+          error,
+        );
       }
     }
   }
@@ -2491,9 +2781,11 @@ export class SubscriptionsService {
       // Count actual resources for this shop
       const [productCount, employeeCount, shopCount] = await Promise.all([
         // Count products for this shop
-        this.productModel.countDocuments({ shopId: new Types.ObjectId(shopId) }),
+        this.productModel.countDocuments({
+          shopId: new Types.ObjectId(shopId),
+        }),
         // Count employees (users with role 'employee' or 'cashier' for this shop)
-        this.userModel.countDocuments({ 
+        this.userModel.countDocuments({
           shopId: new Types.ObjectId(shopId),
           role: { $in: ['employee', 'cashier', 'manager'] },
         }),
@@ -2502,7 +2794,7 @@ export class SubscriptionsService {
       ]);
 
       // Only update and log if counts actually changed (prevents duplicate logs)
-      const hasChanges = 
+      const hasChanges =
         subscription.currentProductCount !== productCount ||
         subscription.currentEmployeeCount !== employeeCount ||
         subscription.currentShopCount !== shopCount;
@@ -2512,10 +2804,15 @@ export class SubscriptionsService {
         subscription.currentEmployeeCount = employeeCount;
         subscription.currentShopCount = shopCount;
         await subscription.save();
-        this.logger.log(`Synced usage counts for shop ${shopId}: products=${productCount}, employees=${employeeCount}, shops=${shopCount}`);
+        this.logger.log(
+          `Synced usage counts for shop ${shopId}: products=${productCount}, employees=${employeeCount}, shops=${shopCount}`,
+        );
       }
     } catch (error) {
-      this.logger.error(`Failed to sync usage counts for shop ${shopId}:`, error);
+      this.logger.error(
+        `Failed to sync usage counts for shop ${shopId}:`,
+        error,
+      );
       throw error;
     }
   }
@@ -2523,10 +2820,12 @@ export class SubscriptionsService {
   /**
    * Get current usage counts for a shop (real-time from database)
    */
-  async getUsageCounts(shopId: string): Promise<{ products: number; employees: number; shops: number }> {
+  async getUsageCounts(
+    shopId: string,
+  ): Promise<{ products: number; employees: number; shops: number }> {
     const [productCount, employeeCount] = await Promise.all([
       this.productModel.countDocuments({ shopId: new Types.ObjectId(shopId) }),
-      this.userModel.countDocuments({ 
+      this.userModel.countDocuments({
         shopId: new Types.ObjectId(shopId),
         role: { $in: ['employee', 'cashier', 'manager'] },
       }),
@@ -2542,7 +2841,9 @@ export class SubscriptionsService {
   /**
    * Check if a shop's subscription allows a specific action
    */
-  async canPerformAction(shopId: string): Promise<{ allowed: boolean; reason?: string }> {
+  async canPerformAction(
+    shopId: string,
+  ): Promise<{ allowed: boolean; reason?: string }> {
     const subscription = await this.subscriptionModel.findOne({
       shopId: new Types.ObjectId(shopId),
     });
@@ -2555,31 +2856,31 @@ export class SubscriptionsService {
       case SubscriptionStatus.ACTIVE:
       case SubscriptionStatus.TRIAL:
         return { allowed: true };
-      
+
       case SubscriptionStatus.PAST_DUE:
-        return { 
-          allowed: true, 
-          reason: 'Payment overdue - please pay to avoid service interruption' 
+        return {
+          allowed: true,
+          reason: 'Payment overdue - please pay to avoid service interruption',
         };
-      
+
       case SubscriptionStatus.SUSPENDED:
-        return { 
-          allowed: false, 
-          reason: 'Subscription suspended due to non-payment' 
+        return {
+          allowed: false,
+          reason: 'Subscription suspended due to non-payment',
         };
-      
+
       case SubscriptionStatus.EXPIRED:
-        return { 
-          allowed: false, 
-          reason: 'Subscription has expired' 
+        return {
+          allowed: false,
+          reason: 'Subscription has expired',
         };
-      
+
       case SubscriptionStatus.CANCELLED:
-        return { 
-          allowed: false, 
-          reason: 'Subscription has been cancelled' 
+        return {
+          allowed: false,
+          reason: 'Subscription has been cancelled',
         };
-      
+
       default:
         return { allowed: false, reason: 'Unknown subscription status' };
     }
@@ -2592,17 +2893,21 @@ export class SubscriptionsService {
   /**
    * Send invoice email to a shop (super admin)
    */
-  async sendInvoiceEmailToShop(shopId: string): Promise<{ success: boolean; message: string }> {
+  async sendInvoiceEmailToShop(
+    shopId: string,
+  ): Promise<{ success: boolean; message: string }> {
     const shop = await this.shopModel.findById(new Types.ObjectId(shopId));
     if (!shop) {
       throw new NotFoundException('Shop not found');
     }
 
     // Get the latest pending invoice for this shop
-    const invoice = await this.invoiceModel.findOne({
-      shopId: new Types.ObjectId(shopId),
-      status: { $in: [InvoiceStatus.PENDING, InvoiceStatus.FAILED] },
-    }).sort({ createdAt: -1 });
+    const invoice = await this.invoiceModel
+      .findOne({
+        shopId: new Types.ObjectId(shopId),
+        status: { $in: [InvoiceStatus.PENDING, InvoiceStatus.FAILED] },
+      })
+      .sort({ createdAt: -1 });
 
     if (!invoice) {
       throw new NotFoundException('No pending invoice found for this shop');
@@ -2611,7 +2916,9 @@ export class SubscriptionsService {
     // Get shop email
     const shopEmail = shop.email;
     if (!shopEmail) {
-      throw new BadRequestException('Shop does not have an email address configured');
+      throw new BadRequestException(
+        'Shop does not have an email address configured',
+      );
     }
 
     this.logger.log(`Sending invoice ${invoice.invoiceNumber} to ${shopEmail}`);
@@ -2622,9 +2929,9 @@ export class SubscriptionsService {
     invoice.emailSentCount = (invoice.emailSentCount || 0) + 1;
     await invoice.save();
 
-    return { 
-      success: true, 
-      message: `Invoice ${invoice.invoiceNumber} sent to ${shopEmail}` 
+    return {
+      success: true,
+      message: `Invoice ${invoice.invoiceNumber} sent to ${shopEmail}`,
     };
   }
 
@@ -2701,7 +3008,9 @@ export class SubscriptionsService {
       await shop.save();
     }
 
-    this.logger.log(`Subscription for shop ${shopId} updated by super admin: ${JSON.stringify(dto)}`);
+    this.logger.log(
+      `Subscription for shop ${shopId} updated by super admin: ${JSON.stringify(dto)}`,
+    );
 
     return { success: true, message: 'Subscription updated successfully' };
   }
@@ -2737,18 +3046,20 @@ export class SubscriptionsService {
       const currentEnd = new Date(subscription.currentPeriodEnd);
       newEnd = new Date(currentEnd.getTime() + dto.days * 24 * 60 * 60 * 1000);
     }
-    
+
     // Update subscription
     subscription.currentPeriodEnd = newEnd;
     subscription.nextBillingDate = newEnd;
-    
+
     // Reactivate if suspended/expired
-    if (subscription.status === SubscriptionStatus.SUSPENDED || 
-        subscription.status === SubscriptionStatus.EXPIRED ||
-        subscription.status === SubscriptionStatus.PAST_DUE) {
+    if (
+      subscription.status === SubscriptionStatus.SUSPENDED ||
+      subscription.status === SubscriptionStatus.EXPIRED ||
+      subscription.status === SubscriptionStatus.PAST_DUE
+    ) {
       subscription.status = SubscriptionStatus.ACTIVE;
     }
-    
+
     await subscription.save();
 
     // Update shop status
@@ -2763,11 +3074,11 @@ export class SubscriptionsService {
     // Send notification email if requested
     if (dto.sendEmail) {
       try {
-        const shopAdmin = await this.userModel.findOne({ 
-          shopId: new Types.ObjectId(shopId), 
-          role: 'admin' 
+        const shopAdmin = await this.userModel.findOne({
+          shopId: new Types.ObjectId(shopId),
+          role: 'admin',
         });
-        
+
         if (shopAdmin?.email && shop) {
           await this.emailService.sendEmail({
             to: shopAdmin.email,
@@ -2790,14 +3101,18 @@ export class SubscriptionsService {
           this.logger.log(`Grace period email sent to ${shopAdmin.email}`);
         }
       } catch (emailError: any) {
-        this.logger.error(`Failed to send grace period email: ${emailError.message}`);
+        this.logger.error(
+          `Failed to send grace period email: ${emailError.message}`,
+        );
       }
     }
 
-    this.logger.log(`Grace period of ${dto.days} days granted to shop ${shopId}. New expiry: ${newEnd.toISOString()}`);
+    this.logger.log(
+      `Grace period of ${dto.days} days granted to shop ${shopId}. New expiry: ${newEnd.toISOString()}`,
+    );
 
-    return { 
-      success: true, 
+    return {
+      success: true,
       message: `Grace period of ${dto.days} days granted successfully`,
       newExpiryDate: newEnd.toISOString(),
     };
@@ -2806,7 +3121,9 @@ export class SubscriptionsService {
   /**
    * Suspend a shop's subscription (super admin)
    */
-  async adminSuspendSubscription(shopId: string): Promise<{ success: boolean; message: string }> {
+  async adminSuspendSubscription(
+    shopId: string,
+  ): Promise<{ success: boolean; message: string }> {
     const subscription = await this.subscriptionModel.findOne({
       shopId: new Types.ObjectId(shopId),
     });
@@ -2830,7 +3147,9 @@ export class SubscriptionsService {
   /**
    * Reactivate a shop's subscription (super admin)
    */
-  async adminReactivateSubscription(shopId: string): Promise<{ success: boolean; message: string }> {
+  async adminReactivateSubscription(
+    shopId: string,
+  ): Promise<{ success: boolean; message: string }> {
     const subscription = await this.subscriptionModel.findOne({
       shopId: new Types.ObjectId(shopId),
     });
@@ -2846,7 +3165,9 @@ export class SubscriptionsService {
     subscription.status = SubscriptionStatus.ACTIVE;
     await subscription.save();
 
-    this.logger.log(`Subscription for shop ${shopId} reactivated by super admin`);
+    this.logger.log(
+      `Subscription for shop ${shopId} reactivated by super admin`,
+    );
 
     return { success: true, message: 'Subscription reactivated successfully' };
   }
@@ -2862,13 +3183,13 @@ export class SubscriptionsService {
     daysRemaining?: number,
   ): Promise<void> {
     if (!shopId) return;
-    
+
     try {
-      const shopAdmin = await this.userModel.findOne({ 
-        shopId: new Types.ObjectId(shopId), 
-        role: 'admin' 
+      const shopAdmin = await this.userModel.findOne({
+        shopId: new Types.ObjectId(shopId),
+        role: 'admin',
       });
-      
+
       if (!shopAdmin?.email) return;
 
       const subjects: Record<string, string> = {
@@ -2921,10 +3242,14 @@ export class SubscriptionsService {
         templateName: `payment_reminder_${type}`,
         category: 'subscription',
       });
-      
-      this.logger.log(`Payment reminder email (${type}) sent to ${shopAdmin.email}`);
+
+      this.logger.log(
+        `Payment reminder email (${type}) sent to ${shopAdmin.email}`,
+      );
     } catch (error: any) {
-      this.logger.error(`Failed to send payment reminder email: ${error.message}`);
+      this.logger.error(
+        `Failed to send payment reminder email: ${error.message}`,
+      );
     }
   }
 
@@ -2932,18 +3257,21 @@ export class SubscriptionsService {
    * Fix trial subscriptions with wrong period dates
    * Trial should be 14 days from subscription creation date
    */
-  async fixTrialSubscriptionPeriods(): Promise<{ fixed: number; skipped: number; details: string[] }> {
+  async fixTrialSubscriptionPeriods(): Promise<{
+    fixed: number;
+    skipped: number;
+    details: string[];
+  }> {
     const details: string[] = [];
     let fixed = 0;
     let skipped = 0;
 
     // Find all trial subscriptions
-    const trialSubscriptions = await this.subscriptionModel.find({
-      $or: [
-        { planCode: 'trial' },
-        { status: SubscriptionStatus.TRIAL },
-      ],
-    }).populate('shopId', 'name');
+    const trialSubscriptions = await this.subscriptionModel
+      .find({
+        $or: [{ planCode: 'trial' }, { status: SubscriptionStatus.TRIAL }],
+      })
+      .populate('shopId', 'name');
 
     for (const sub of trialSubscriptions) {
       try {
@@ -2953,7 +3281,12 @@ export class SubscriptionsService {
         correctEndDate.setDate(correctEndDate.getDate() + TRIAL_PERIOD_DAYS);
 
         const currentEnd = new Date(sub.currentPeriodEnd);
-        const diffDays = Math.abs(Math.ceil((currentEnd.getTime() - correctEndDate.getTime()) / (24 * 60 * 60 * 1000)));
+        const diffDays = Math.abs(
+          Math.ceil(
+            (currentEnd.getTime() - correctEndDate.getTime()) /
+              (24 * 60 * 60 * 1000),
+          ),
+        );
 
         // Only fix if the difference is significant (more than 1 day off)
         if (diffDays > 1) {
@@ -2969,7 +3302,9 @@ export class SubscriptionsService {
             await shop.save();
           }
 
-          details.push(`Fixed ${shopName}: ${oldEnd.toISOString().split('T')[0]} → ${correctEndDate.toISOString().split('T')[0]} (was ${diffDays} days off)`);
+          details.push(
+            `Fixed ${shopName}: ${oldEnd.toISOString().split('T')[0]} → ${correctEndDate.toISOString().split('T')[0]} (was ${diffDays} days off)`,
+          );
           fixed++;
         } else {
           skipped++;
@@ -2989,13 +3324,19 @@ export class SubscriptionsService {
    * - expired trials should be marked as expired
    * - status mismatches between subscription and shop
    */
-  async auditAndFixSubscriptions(): Promise<{ audited: number; fixed: number; issues: string[] }> {
+  async auditAndFixSubscriptions(): Promise<{
+    audited: number;
+    fixed: number;
+    issues: string[];
+  }> {
     const issues: string[] = [];
     let audited = 0;
     let fixed = 0;
     const now = new Date();
 
-    const subscriptions = await this.subscriptionModel.find().populate('shopId', 'name status subscriptionStatus');
+    const subscriptions = await this.subscriptionModel
+      .find()
+      .populate('shopId', 'name status subscriptionStatus');
 
     for (const sub of subscriptions) {
       audited++;
@@ -3004,67 +3345,83 @@ export class SubscriptionsService {
 
       try {
         // Check 1: Trial subscriptions that have expired
-        if ((sub.planCode === 'trial' || sub.status === SubscriptionStatus.TRIAL) && 
-            sub.currentPeriodEnd < now) {
+        if (
+          (sub.planCode === 'trial' ||
+            sub.status === SubscriptionStatus.TRIAL) &&
+          sub.currentPeriodEnd < now
+        ) {
           sub.status = SubscriptionStatus.EXPIRED;
           await sub.save();
-          
+
           if (shop && shop._id) {
             await this.shopModel.findByIdAndUpdate(shop._id, {
               subscriptionStatus: 'expired',
               status: 'suspended',
             });
           }
-          
+
           // FREE_MODE: Payment reminder emails disabled (system is free)
           // await this.sendPaymentReminderEmail(sub.shopId?.toString(), shopName, 'trial_expired');
-          
+
           issues.push(`${shopName}: Trial expired - marked as EXPIRED`);
           fixed++;
         }
-        
+
         // Check 2: Past due accounts that are more than GRACE_PERIOD_DAYS overdue should be suspended
         else if (sub.status === SubscriptionStatus.PAST_DUE) {
-          const daysOverdue = Math.ceil((now.getTime() - sub.currentPeriodEnd.getTime()) / (24 * 60 * 60 * 1000));
-          
+          const daysOverdue = Math.ceil(
+            (now.getTime() - sub.currentPeriodEnd.getTime()) /
+              (24 * 60 * 60 * 1000),
+          );
+
           if (daysOverdue > GRACE_PERIOD_DAYS) {
             sub.status = SubscriptionStatus.SUSPENDED;
             await sub.save();
-            
+
             if (shop && shop._id) {
               await this.shopModel.findByIdAndUpdate(shop._id, {
                 status: 'suspended',
                 subscriptionStatus: 'suspended',
               });
             }
-            
+
             // FREE_MODE: Payment reminder emails disabled (system is free)
             // await this.sendPaymentReminderEmail(sub.shopId?.toString(), shopName, 'suspended');
-            
-            issues.push(`${shopName}: Past due ${daysOverdue} days - suspended`);
+
+            issues.push(
+              `${shopName}: Past due ${daysOverdue} days - suspended`,
+            );
             fixed++;
           } else {
             // FREE_MODE: Payment reminder emails disabled (system is free)
             // await this.sendPaymentReminderEmail(sub.shopId?.toString(), shopName, 'past_due', GRACE_PERIOD_DAYS - daysOverdue);
-            issues.push(`${shopName}: Past due ${daysOverdue} days - grace period (no email sent, system is free)`);
+            issues.push(
+              `${shopName}: Past due ${daysOverdue} days - grace period (no email sent, system is free)`,
+            );
           }
         }
-        
+
         // Check 3: Status mismatch between subscription and shop
         else if (shop && shop._id) {
           const shopDoc = await this.shopModel.findById(shop._id);
           if (shopDoc) {
             let needsUpdate = false;
-            
-            if (sub.status === SubscriptionStatus.ACTIVE && shopDoc.subscriptionStatus !== 'active') {
+
+            if (
+              sub.status === SubscriptionStatus.ACTIVE &&
+              shopDoc.subscriptionStatus !== 'active'
+            ) {
               shopDoc.subscriptionStatus = 'active';
               needsUpdate = true;
-            } else if (sub.status === SubscriptionStatus.SUSPENDED && shopDoc.status !== 'suspended') {
+            } else if (
+              sub.status === SubscriptionStatus.SUSPENDED &&
+              shopDoc.status !== 'suspended'
+            ) {
               shopDoc.status = 'suspended';
               shopDoc.subscriptionStatus = 'suspended';
               needsUpdate = true;
             }
-            
+
             if (needsUpdate) {
               await shopDoc.save();
               issues.push(`${shopName}: Fixed shop status mismatch`);
@@ -3072,17 +3429,26 @@ export class SubscriptionsService {
             }
           }
         }
-        
+
         // Check 4: Billing cycle mismatch - KES 99 should be daily, not monthly
-        if (sub.currentPrice === 99 && sub.billingCycle !== BillingCycle.DAILY) {
+        if (
+          sub.currentPrice === 99 &&
+          sub.billingCycle !== BillingCycle.DAILY
+        ) {
           sub.billingCycle = BillingCycle.DAILY;
           await sub.save();
-          issues.push(`${shopName}: Fixed billing cycle - KES 99 is daily plan`);
+          issues.push(
+            `${shopName}: Fixed billing cycle - KES 99 is daily plan`,
+          );
           fixed++;
         }
-        
+
         // Check 5: Trial plans should show as trial status
-        if (sub.planCode === 'trial' && sub.status !== SubscriptionStatus.TRIAL && sub.status !== SubscriptionStatus.EXPIRED) {
+        if (
+          sub.planCode === 'trial' &&
+          sub.status !== SubscriptionStatus.TRIAL &&
+          sub.status !== SubscriptionStatus.EXPIRED
+        ) {
           if (sub.currentPeriodEnd > now) {
             sub.status = SubscriptionStatus.TRIAL;
             await sub.save();
@@ -3103,19 +3469,19 @@ export class SubscriptionsService {
    * Cancel/void any incorrectly created trial plan renewal invoices
    * Trial plans cannot be renewed - users must upgrade to a paid plan
    */
-  async cancelTrialRenewalInvoices(): Promise<{ cancelled: number; invoices: string[] }> {
+  async cancelTrialRenewalInvoices(): Promise<{
+    cancelled: number;
+    invoices: string[];
+  }> {
     this.logger.log('Cancelling incorrectly created trial renewal invoices...');
-    
+
     // Find all trial subscriptions
     const trialSubscriptions = await this.subscriptionModel.find({
-      $or: [
-        { status: SubscriptionStatus.TRIAL },
-        { planCode: 'trial' },
-      ],
+      $or: [{ status: SubscriptionStatus.TRIAL }, { planCode: 'trial' }],
     });
 
-    const trialSubscriptionIds = trialSubscriptions.map(s => s._id);
-    
+    const trialSubscriptionIds = trialSubscriptions.map((s) => s._id);
+
     // Find pending/unpaid invoices for trial subscriptions that look like renewal invoices
     const trialRenewalInvoices = await this.invoiceModel.find({
       subscriptionId: { $in: trialSubscriptionIds },
@@ -3125,16 +3491,21 @@ export class SubscriptionsService {
     });
 
     const cancelledInvoices: string[] = [];
-    
+
     for (const invoice of trialRenewalInvoices) {
       invoice.status = InvoiceStatus.CANCELLED;
-      invoice.notes = 'Cancelled: Trial plans cannot be renewed. User must upgrade to a paid plan.';
+      invoice.notes =
+        'Cancelled: Trial plans cannot be renewed. User must upgrade to a paid plan.';
       await invoice.save();
       cancelledInvoices.push(invoice.invoiceNumber);
-      this.logger.log(`Cancelled trial renewal invoice ${invoice.invoiceNumber}`);
+      this.logger.log(
+        `Cancelled trial renewal invoice ${invoice.invoiceNumber}`,
+      );
     }
 
-    this.logger.log(`Cancelled ${cancelledInvoices.length} trial renewal invoices`);
+    this.logger.log(
+      `Cancelled ${cancelledInvoices.length} trial renewal invoices`,
+    );
     return { cancelled: cancelledInvoices.length, invoices: cancelledInvoices };
   }
 }

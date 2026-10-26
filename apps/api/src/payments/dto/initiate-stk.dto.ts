@@ -1,4 +1,12 @@
-import { IsEmail, IsNumber, IsPhoneNumber, IsString, IsOptional, Min, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsNumber,
+  IsPhoneNumber,
+  IsString,
+  IsOptional,
+  Min,
+  MinLength,
+} from 'class-validator';
 
 export class InitiateStkDto {
   @IsPhoneNumber('KE')

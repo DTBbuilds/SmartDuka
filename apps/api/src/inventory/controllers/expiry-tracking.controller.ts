@@ -19,7 +19,9 @@ export class ExpiryTrackingController {
    * Get all expiring products for the current shop
    */
   @Get('expiring')
-  async getExpiringProducts(@Request() req: { user: { shopId: string } }): Promise<any> {
+  async getExpiringProducts(
+    @Request() req: { user: { shopId: string } },
+  ): Promise<any> {
     return this.expiryService.getExpiringProducts(req.user.shopId);
   }
 
@@ -27,8 +29,12 @@ export class ExpiryTrackingController {
    * Get only expired products
    */
   @Get('expired')
-  async getExpiredProducts(@Request() req: { user: { shopId: string } }): Promise<any> {
-    const products = await this.expiryService.getExpiredProducts(req.user.shopId);
+  async getExpiredProducts(
+    @Request() req: { user: { shopId: string } },
+  ): Promise<any> {
+    const products = await this.expiryService.getExpiredProducts(
+      req.user.shopId,
+    );
     return { products };
   }
 

@@ -63,7 +63,9 @@ export class SubscriptionsController {
    * Get a specific plan by code
    */
   @Get('plans/:code')
-  async getPlanByCode(@Param('code') code: string): Promise<SubscriptionPlanResponseDto> {
+  async getPlanByCode(
+    @Param('code') code: string,
+  ): Promise<SubscriptionPlanResponseDto> {
     return this.subscriptionsService.getPlanByCode(code);
   }
 
@@ -87,10 +89,15 @@ export class SubscriptionsController {
         return null;
       }
       // For other users without shopId, this is unexpected
-      this.logger.warn('getCurrentSubscription called without shopId for user:', user.email);
-      throw new NotFoundException('Shop context required to fetch subscription');
+      this.logger.warn(
+        'getCurrentSubscription called without shopId for user:',
+        user.email,
+      );
+      throw new NotFoundException(
+        'Shop context required to fetch subscription',
+      );
     }
-    
+
     return this.subscriptionsService.getSubscription(user.shopId);
   }
 
@@ -105,16 +112,18 @@ export class SubscriptionsController {
     @CurrentUser() user: JwtPayload,
     @Body() dto: CreateSubscriptionDto,
   ): Promise<SubscriptionResponseDto> {
-    this.logger.log(`Creating subscription for shop ${user.shopId} with plan ${dto.planCode}`);
+    this.logger.log(
+      `Creating subscription for shop ${user.shopId} with plan ${dto.planCode}`,
+    );
     return this.subscriptionsService.createSubscription(user.shopId, dto);
   }
 
   /**
    * Change subscription plan (upgrade/downgrade)
-   * 
+   *
    * For UPGRADES: Returns requiresPayment=true with invoice details.
    * Plan is NOT changed until payment is confirmed.
-   * 
+   *
    * For DOWNGRADES: Changes plan immediately.
    */
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -123,8 +132,16 @@ export class SubscriptionsController {
   async changePlan(
     @CurrentUser() user: JwtPayload,
     @Body() dto: ChangePlanDto,
-  ): Promise<SubscriptionResponseDto & { requiresPayment?: boolean; invoiceId?: string; pendingUpgrade?: any }> {
-    this.logger.log(`Changing plan for shop ${user.shopId} to ${dto.newPlanCode}`);
+  ): Promise<
+    SubscriptionResponseDto & {
+      requiresPayment?: boolean;
+      invoiceId?: string;
+      pendingUpgrade?: any;
+    }
+  > {
+    this.logger.log(
+      `Changing plan for shop ${user.shopId} to ${dto.newPlanCode}`,
+    );
     return this.subscriptionsService.changePlan(user.shopId, dto);
   }
 
@@ -147,9 +164,7 @@ export class SubscriptionsController {
   @Roles('admin')
   @Delete('pending-upgrade')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async cancelPendingUpgrade(
-    @CurrentUser() user: JwtPayload,
-  ): Promise<void> {
+  async cancelPendingUpgrade(@CurrentUser() user: JwtPayload): Promise<void> {
     this.logger.log(`Cancelling pending upgrade for shop ${user.shopId}`);
     return this.subscriptionsService.cancelPendingUpgrade(user.shopId);
   }
@@ -160,9 +175,7 @@ export class SubscriptionsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
   @Get('cancel/preview')
-  async getCancellationPreview(
-    @CurrentUser() user: JwtPayload,
-  ): Promise<{
+  async getCancellationPreview(@CurrentUser() user: JwtPayload): Promise<{
     currentPlan: string;
     currentPeriodEnd: Date;
     daysRemaining: number;
@@ -209,7 +222,11 @@ export class SubscriptionsController {
     scheduledDeletionDate?: Date;
   }> {
     this.logger.warn(`Account deletion requested for shop ${user.shopId}`);
-    return this.subscriptionsService.requestAccountDeletion(user.shopId, user.sub, dto.confirmation);
+    return this.subscriptionsService.requestAccountDeletion(
+      user.shopId,
+      user.sub,
+      dto.confirmation,
+    );
   }
 
   /**
@@ -219,9 +236,7 @@ export class SubscriptionsController {
   @Roles('admin')
   @Delete('delete-account')
   @HttpCode(HttpStatus.OK)
-  async cancelAccountDeletion(
-    @CurrentUser() user: JwtPayload,
-  ): Promise<{
+  async cancelAccountDeletion(@CurrentUser() user: JwtPayload): Promise<{
     success: boolean;
     message: string;
   }> {
@@ -252,8 +267,13 @@ export class SubscriptionsController {
     @CurrentUser() user: JwtPayload,
     @Body() dto: { autoRenew: boolean },
   ): Promise<{ success: boolean; autoRenew: boolean; message: string }> {
-    this.logger.log(`Toggling auto-renew for shop ${user.shopId} to ${dto.autoRenew}`);
-    return this.subscriptionsService.toggleAutoRenew(user.shopId, dto.autoRenew);
+    this.logger.log(
+      `Toggling auto-renew for shop ${user.shopId} to ${dto.autoRenew}`,
+    );
+    return this.subscriptionsService.toggleAutoRenew(
+      user.shopId,
+      dto.autoRenew,
+    );
   }
 
   // ============================================
@@ -312,8 +332,11 @@ export class SubscriptionsController {
     @Query('type') type: 'invoice' | 'receipt' = 'invoice',
     @Res() res: Response,
   ): Promise<void> {
-    const invoice = await this.subscriptionsService.getInvoice(user.shopId, invoiceId);
-    
+    const invoice = await this.subscriptionsService.getInvoice(
+      user.shopId,
+      invoiceId,
+    );
+
     if (!invoice) {
       throw new NotFoundException('Invoice not found');
     }
@@ -325,23 +348,36 @@ export class SubscriptionsController {
 
     // Generate HTML document
     const html = this.generateInvoiceHtml(invoice, type);
-    
+
     res.setHeader('Content-Type', 'text/html');
-    res.setHeader('Content-Disposition', `inline; filename="${type}-${invoice.invoiceNumber}.html"`);
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename="${type}-${invoice.invoiceNumber}.html"`,
+    );
     res.send(html);
   }
 
   /**
    * Generate invoice/receipt HTML - Clean, minimalistic, professional design
    */
-  private generateInvoiceHtml(invoice: InvoiceResponseDto, type: 'invoice' | 'receipt'): string {
+  private generateInvoiceHtml(
+    invoice: InvoiceResponseDto,
+    type: 'invoice' | 'receipt',
+  ): string {
     const isReceipt = type === 'receipt';
     const title = isReceipt ? 'Payment Receipt' : 'Invoice';
-    const statusColor = invoice.status === 'paid' ? '#10b981' : invoice.status === 'pending' ? '#f59e0b' : '#ef4444';
-    const paymentMethodLabel = invoice.paymentMethod 
-      ? invoice.paymentMethod.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+    const statusColor =
+      invoice.status === 'paid'
+        ? '#10b981'
+        : invoice.status === 'pending'
+          ? '#f59e0b'
+          : '#ef4444';
+    const paymentMethodLabel = invoice.paymentMethod
+      ? invoice.paymentMethod
+          .replace(/_/g, ' ')
+          .replace(/\b\w/g, (l) => l.toUpperCase())
       : 'Pending';
-    
+
     // Format phone number for display
     const formatPhone = (phone?: string) => {
       if (!phone) return null;
@@ -357,7 +393,7 @@ export class SubscriptionsController {
     };
 
     const senderPhone = formatPhone(invoice.manualPayment?.senderPhoneNumber);
-    
+
     return `
 <!DOCTYPE html>
 <html lang="en">
@@ -412,45 +448,75 @@ export class SubscriptionsController {
       </div>
       <div class="detail-row">
         <span class="detail-label">${isReceipt ? 'Payment Date' : 'Due Date'}</span>
-        <span class="detail-value">${isReceipt && invoice.paidAt 
-          ? new Date(invoice.paidAt).toLocaleDateString('en-KE', { year: 'numeric', month: 'short', day: 'numeric' }) 
-          : new Date(invoice.dueDate).toLocaleDateString('en-KE', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+        <span class="detail-value">${
+          isReceipt && invoice.paidAt
+            ? new Date(invoice.paidAt).toLocaleDateString('en-KE', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+              })
+            : new Date(invoice.dueDate).toLocaleDateString('en-KE', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+              })
+        }</span>
       </div>
-      ${invoice.periodStart && invoice.periodEnd ? `
+      ${
+        invoice.periodStart && invoice.periodEnd
+          ? `
       <div class="detail-row">
         <span class="detail-label">Billing Period</span>
         <span class="detail-value">${new Date(invoice.periodStart).toLocaleDateString('en-KE', { month: 'short', day: 'numeric' })} - ${new Date(invoice.periodEnd).toLocaleDateString('en-KE', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
       </div>
-      ` : ''}
+      `
+          : ''
+      }
     </div>
 
-    ${isReceipt ? `
+    ${
+      isReceipt
+        ? `
     <div class="section">
       <div class="section-title">Payment Information</div>
       <div class="detail-row">
         <span class="detail-label">Payment Method</span>
         <span class="detail-value">${paymentMethodLabel}</span>
       </div>
-      ${invoice.mpesaReceiptNumber ? `
+      ${
+        invoice.mpesaReceiptNumber
+          ? `
       <div class="detail-row">
         <span class="detail-label">M-Pesa Reference</span>
         <span class="detail-value mono highlight">${invoice.mpesaReceiptNumber}</span>
       </div>
-      ` : ''}
-      ${senderPhone ? `
+      `
+          : ''
+      }
+      ${
+        senderPhone
+          ? `
       <div class="detail-row">
         <span class="detail-label">Sender Phone</span>
         <span class="detail-value mono">${senderPhone}</span>
       </div>
-      ` : ''}
-      ${invoice.manualPayment?.verifiedAt ? `
+      `
+          : ''
+      }
+      ${
+        invoice.manualPayment?.verifiedAt
+          ? `
       <div class="detail-row">
         <span class="detail-label">Verified On</span>
         <span class="detail-value">${new Date(invoice.manualPayment.verifiedAt).toLocaleDateString('en-KE', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
       </div>
-      ` : ''}
+      `
+          : ''
+      }
     </div>
-    ` : ''}
+    `
+        : ''
+    }
 
     <div class="amount-section">
       <div class="section-title" style="color: #92400e;">Amount Summary</div>
@@ -458,18 +524,26 @@ export class SubscriptionsController {
         <span class="amount-label">${invoice.description}</span>
         <span class="amount-value">KES ${invoice.amount.toLocaleString()}</span>
       </div>
-      ${invoice.discount > 0 ? `
+      ${
+        invoice.discount > 0
+          ? `
       <div class="amount-row">
         <span class="amount-label">Discount</span>
         <span class="amount-value">- KES ${invoice.discount.toLocaleString()}</span>
       </div>
-      ` : ''}
-      ${invoice.tax > 0 ? `
+      `
+          : ''
+      }
+      ${
+        invoice.tax > 0
+          ? `
       <div class="amount-row">
         <span class="amount-label">Tax (VAT 16%)</span>
         <span class="amount-value">KES ${invoice.tax.toLocaleString()}</span>
       </div>
-      ` : ''}
+      `
+          : ''
+      }
       <div class="amount-row total">
         <span class="amount-label">Total ${isReceipt ? 'Paid' : 'Due'}</span>
         <span class="amount-value">KES ${invoice.totalAmount.toLocaleString()}</span>
@@ -503,7 +577,12 @@ export class SubscriptionsController {
     @CurrentUser() user: JwtPayload,
     @Param('resource') resource: 'shops' | 'employees' | 'products',
     @Query('increment') increment?: string,
-  ): Promise<{ allowed: boolean; current: number; limit: number; message?: string }> {
+  ): Promise<{
+    allowed: boolean;
+    current: number;
+    limit: number;
+    message?: string;
+  }> {
     return this.subscriptionsService.checkLimit(
       user.shopId,
       resource,
@@ -529,9 +608,7 @@ export class SubscriptionsController {
    */
   @UseGuards(JwtAuthGuard)
   @Get('activity-summary')
-  async getActivitySummary(
-    @CurrentUser() user: JwtPayload,
-  ): Promise<any> {
+  async getActivitySummary(@CurrentUser() user: JwtPayload): Promise<any> {
     return this.activityLogService.getActivitySummary(user.shopId);
   }
 
@@ -578,7 +655,12 @@ export class SubscriptionsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('super_admin')
   @Post('admin/migrate-shops')
-  async migrateShops(): Promise<{ created: number; updated: number; skipped: number; message: string }> {
+  async migrateShops(): Promise<{
+    created: number;
+    updated: number;
+    skipped: number;
+    message: string;
+  }> {
     this.logger.log('Running subscription migration for existing shops');
     return this.migrationService.runMigration();
   }
@@ -593,7 +675,9 @@ export class SubscriptionsController {
     @Param('shopId') shopId: string,
     @CurrentUser() user: JwtPayload,
   ): Promise<{ success: boolean; message: string }> {
-    this.logger.log(`Super admin ${user.email} sending invoice to shop ${shopId}`);
+    this.logger.log(
+      `Super admin ${user.email} sending invoice to shop ${shopId}`,
+    );
     return this.subscriptionsService.sendInvoiceEmailToShop(shopId);
   }
 
@@ -607,7 +691,8 @@ export class SubscriptionsController {
   async adminUpdateSubscription(
     @Param('shopId') shopId: string,
     @CurrentUser() user: JwtPayload,
-    @Body() dto: {
+    @Body()
+    dto: {
       planCode?: string;
       status?: string;
       billingCycle?: string;
@@ -615,7 +700,9 @@ export class SubscriptionsController {
       currentPrice?: number;
     },
   ): Promise<{ success: boolean; message: string }> {
-    this.logger.log(`Super admin ${user.email} updating subscription for shop ${shopId}`);
+    this.logger.log(
+      `Super admin ${user.email} updating subscription for shop ${shopId}`,
+    );
     return this.subscriptionsService.adminUpdateSubscription(shopId, dto);
   }
 
@@ -630,7 +717,8 @@ export class SubscriptionsController {
   async adminGrantGracePeriod(
     @Param('shopId') shopId: string,
     @CurrentUser() user: JwtPayload,
-    @Body() dto: {
+    @Body()
+    dto: {
       days: number;
       startDate?: string;
       endDate?: string;
@@ -638,7 +726,9 @@ export class SubscriptionsController {
       sendEmail?: boolean;
     },
   ): Promise<{ success: boolean; message: string; newExpiryDate: string }> {
-    this.logger.log(`Super admin ${user.email} granting ${dto.days} days grace period to shop ${shopId}${dto.startDate ? ` (${dto.startDate} to ${dto.endDate})` : ''}`);
+    this.logger.log(
+      `Super admin ${user.email} granting ${dto.days} days grace period to shop ${shopId}${dto.startDate ? ` (${dto.startDate} to ${dto.endDate})` : ''}`,
+    );
     return this.subscriptionsService.adminGrantGracePeriod(shopId, dto);
   }
 
@@ -652,7 +742,9 @@ export class SubscriptionsController {
     @Param('shopId') shopId: string,
     @CurrentUser() user: JwtPayload,
   ): Promise<{ success: boolean; message: string }> {
-    this.logger.log(`Super admin ${user.email} suspending subscription for shop ${shopId}`);
+    this.logger.log(
+      `Super admin ${user.email} suspending subscription for shop ${shopId}`,
+    );
     return this.subscriptionsService.adminSuspendSubscription(shopId);
   }
 
@@ -666,7 +758,9 @@ export class SubscriptionsController {
     @Param('shopId') shopId: string,
     @CurrentUser() user: JwtPayload,
   ): Promise<{ success: boolean; message: string }> {
-    this.logger.log(`Super admin ${user.email} reactivating subscription for shop ${shopId}`);
+    this.logger.log(
+      `Super admin ${user.email} reactivating subscription for shop ${shopId}`,
+    );
     return this.subscriptionsService.adminReactivateSubscription(shopId);
   }
 
@@ -677,10 +771,15 @@ export class SubscriptionsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('super_admin')
   @Post('admin/fix-daily-subscriptions')
-  async fixDailySubscriptions(
-    @CurrentUser() user: JwtPayload,
-  ): Promise<{ fixed: number; skipped: number; errors: number; details: string[] }> {
-    this.logger.log(`Super admin ${user.email} fixing daily subscription periods`);
+  async fixDailySubscriptions(@CurrentUser() user: JwtPayload): Promise<{
+    fixed: number;
+    skipped: number;
+    errors: number;
+    details: string[];
+  }> {
+    this.logger.log(
+      `Super admin ${user.email} fixing daily subscription periods`,
+    );
     return this.migrationService.fixDailySubscriptionPeriods();
   }
 
@@ -694,7 +793,9 @@ export class SubscriptionsController {
   async fixTrialSubscriptions(
     @CurrentUser() user: JwtPayload,
   ): Promise<{ fixed: number; skipped: number; details: string[] }> {
-    this.logger.log(`Super admin ${user.email} fixing trial subscription periods`);
+    this.logger.log(
+      `Super admin ${user.email} fixing trial subscription periods`,
+    );
     return this.subscriptionsService.fixTrialSubscriptionPeriods();
   }
 
@@ -722,7 +823,9 @@ export class SubscriptionsController {
   async cancelTrialRenewalInvoices(
     @CurrentUser() user: JwtPayload,
   ): Promise<{ cancelled: number; invoices: string[] }> {
-    this.logger.log(`Super admin ${user.email} cancelling trial renewal invoices`);
+    this.logger.log(
+      `Super admin ${user.email} cancelling trial renewal invoices`,
+    );
     return this.subscriptionsService.cancelTrialRenewalInvoices();
   }
 }

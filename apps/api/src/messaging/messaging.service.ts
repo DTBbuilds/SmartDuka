@@ -1,14 +1,26 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Conversation, ConversationDocument } from './schemas/conversation.schema';
+import {
+  Conversation,
+  ConversationDocument,
+} from './schemas/conversation.schema';
 import { Message, MessageDocument } from './schemas/message.schema';
-import { CreateConversationDto, SendMessageDto, UpdateConversationDto } from './dto/messaging.dto';
+import {
+  CreateConversationDto,
+  SendMessageDto,
+  UpdateConversationDto,
+} from './dto/messaging.dto';
 
 @Injectable()
 export class MessagingService {
   constructor(
-    @InjectModel(Conversation.name) private conversationModel: Model<ConversationDocument>,
+    @InjectModel(Conversation.name)
+    private conversationModel: Model<ConversationDocument>,
     @InjectModel(Message.name) private messageModel: Model<MessageDocument>,
   ) {}
 
@@ -48,7 +60,9 @@ export class MessagingService {
     senderType: 'admin' | 'super_admin',
     dto: SendMessageDto,
   ): Promise<MessageDocument> {
-    const conversation = await this.conversationModel.findById(dto.conversationId);
+    const conversation = await this.conversationModel.findById(
+      dto.conversationId,
+    );
     if (!conversation) {
       throw new NotFoundException('Conversation not found');
     }
@@ -84,7 +98,10 @@ export class MessagingService {
       updateData.$inc = { unreadCountAdmin: 1 };
     }
 
-    await this.conversationModel.findByIdAndUpdate(dto.conversationId, updateData);
+    await this.conversationModel.findByIdAndUpdate(
+      dto.conversationId,
+      updateData,
+    );
 
     return saved;
   }
@@ -108,12 +125,23 @@ export class MessagingService {
       this.conversationModel.countDocuments(query),
     ]);
 
-    return { conversations, total, page, limit, pages: Math.ceil(total / limit) };
+    return {
+      conversations,
+      total,
+      page,
+      limit,
+      pages: Math.ceil(total / limit),
+    };
   }
 
   // Get conversations for super admin
   async getSuperAdminConversations(
-    options: { status?: string; priority?: string; page?: number; limit?: number } = {},
+    options: {
+      status?: string;
+      priority?: string;
+      page?: number;
+      limit?: number;
+    } = {},
   ) {
     const { status, priority, page = 1, limit = 20 } = options;
     const query: any = {};
@@ -130,7 +158,13 @@ export class MessagingService {
       this.conversationModel.countDocuments(query),
     ]);
 
-    return { conversations, total, page, limit, pages: Math.ceil(total / limit) };
+    return {
+      conversations,
+      total,
+      page,
+      limit,
+      pages: Math.ceil(total / limit),
+    };
   }
 
   // Get messages for a conversation
@@ -149,28 +183,35 @@ export class MessagingService {
     }
 
     // Verify access
-    if (userType === 'admin' && shopId && conversation.shopId.toString() !== shopId) {
+    if (
+      userType === 'admin' &&
+      shopId &&
+      conversation.shopId.toString() !== shopId
+    ) {
       throw new ForbiddenException('Access denied');
     }
 
     const [messages, total] = await Promise.all([
       this.messageModel
-        .find({ conversationId: new Types.ObjectId(conversationId), deleted: { $ne: true } })
+        .find({
+          conversationId: new Types.ObjectId(conversationId),
+          deleted: { $ne: true },
+        })
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
         .limit(limit)
         .lean(),
-      this.messageModel.countDocuments({ 
-        conversationId: new Types.ObjectId(conversationId), 
-        deleted: { $ne: true } 
+      this.messageModel.countDocuments({
+        conversationId: new Types.ObjectId(conversationId),
+        deleted: { $ne: true },
       }),
     ]);
 
-    return { 
+    return {
       messages: messages.reverse(), // Return in chronological order
-      total, 
-      page, 
-      limit, 
+      total,
+      page,
+      limit,
       pages: Math.ceil(total / limit),
       conversation,
     };
@@ -203,8 +244,11 @@ export class MessagingService {
     );
 
     // Reset unread count
-    const updateField = userType === 'admin' ? 'unreadCountAdmin' : 'unreadCountSuperAdmin';
-    await this.conversationModel.findByIdAndUpdate(conversationId, { [updateField]: 0 });
+    const updateField =
+      userType === 'admin' ? 'unreadCountAdmin' : 'unreadCountSuperAdmin';
+    await this.conversationModel.findByIdAndUpdate(conversationId, {
+      [updateField]: 0,
+    });
 
     return { success: true };
   }
@@ -215,7 +259,7 @@ export class MessagingService {
     dto: UpdateConversationDto,
   ): Promise<ConversationDocument> {
     const update: any = { ...dto };
-    
+
     if (dto.status === 'resolved') {
       update.resolvedAt = new Date();
     }
@@ -238,7 +282,11 @@ export class MessagingService {
   }
 
   // Get unread counts
-  async getUnreadCount(userId: string, userType: 'admin' | 'super_admin', shopId?: string) {
+  async getUnreadCount(
+    userId: string,
+    userType: 'admin' | 'super_admin',
+    shopId?: string,
+  ) {
     if (userType === 'admin' && shopId) {
       const result = await this.conversationModel.aggregate([
         { $match: { shopId: new Types.ObjectId(shopId) } },
@@ -254,7 +302,9 @@ export class MessagingService {
   }
 
   // Get single conversation
-  async getConversation(conversationId: string): Promise<ConversationDocument | null> {
+  async getConversation(
+    conversationId: string,
+  ): Promise<ConversationDocument | null> {
     return this.conversationModel.findById(conversationId);
   }
 }

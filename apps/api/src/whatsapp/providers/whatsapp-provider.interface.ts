@@ -28,14 +28,17 @@ export interface ProviderConfig {
 
 export interface WhatsAppProvider {
   readonly name: string;
-  
+
   isAvailable(): boolean;
-  
+
   sendTextMessage(to: string, message: string): Promise<MessageResult>;
-  
-  sendTemplateMessage(to: string, template: TemplateParams): Promise<MessageResult>;
-  
+
+  sendTemplateMessage(
+    to: string,
+    template: TemplateParams,
+  ): Promise<MessageResult>;
+
   getMessageStatus(messageId: string): Promise<MessageStatus>;
-  
+
   verifyWebhookSignature(payload: string, signature: string): boolean;
 }

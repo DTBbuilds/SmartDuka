@@ -27,7 +27,9 @@ import { Server, Socket } from 'socket.io';
   namespace: '/messaging',
   transports: ['polling', 'websocket'],
 })
-export class MessagingGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
+export class MessagingGateway
+  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
+{
   @WebSocketServer() server: Server;
   private readonly logger = new Logger(MessagingGateway.name);
   private userSockets: Map<string, Set<string>> = new Map();
@@ -61,7 +63,9 @@ export class MessagingGateway implements OnGatewayInit, OnGatewayConnection, OnG
         client.join('super_admin');
       }
 
-      this.logger.log(`Messaging client ${client.id} connected (user: ${userId}, type: ${userType})`);
+      this.logger.log(
+        `Messaging client ${client.id} connected (user: ${userId}, type: ${userType})`,
+      );
     }
   }
 
@@ -86,7 +90,9 @@ export class MessagingGateway implements OnGatewayInit, OnGatewayConnection, OnG
     @MessageBody() data: { conversationId: string },
   ) {
     client.join(`conversation:${data.conversationId}`);
-    this.logger.log(`Client ${client.id} joined conversation ${data.conversationId}`);
+    this.logger.log(
+      `Client ${client.id} joined conversation ${data.conversationId}`,
+    );
     return { success: true };
   }
 
@@ -97,7 +103,9 @@ export class MessagingGateway implements OnGatewayInit, OnGatewayConnection, OnG
     @MessageBody() data: { conversationId: string },
   ) {
     client.leave(`conversation:${data.conversationId}`);
-    this.logger.log(`Client ${client.id} left conversation ${data.conversationId}`);
+    this.logger.log(
+      `Client ${client.id} left conversation ${data.conversationId}`,
+    );
     return { success: true };
   }
 
@@ -105,7 +113,8 @@ export class MessagingGateway implements OnGatewayInit, OnGatewayConnection, OnG
   @SubscribeMessage('typing:start')
   handleTypingStart(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { conversationId: string; userId: string; userName: string },
+    @MessageBody()
+    data: { conversationId: string; userId: string; userName: string },
   ) {
     client.to(`conversation:${data.conversationId}`).emit('typing:start', {
       conversationId: data.conversationId,
@@ -181,6 +190,9 @@ export class MessagingGateway implements OnGatewayInit, OnGatewayConnection, OnG
 
   // Check if user is online
   isUserOnline(userId: string): boolean {
-    return this.userSockets.has(userId) && (this.userSockets.get(userId)?.size || 0) > 0;
+    return (
+      this.userSockets.has(userId) &&
+      (this.userSockets.get(userId)?.size || 0) > 0
+    );
   }
 }

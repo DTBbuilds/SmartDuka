@@ -5,7 +5,7 @@ export type StripeCustomerDocument = HydratedDocument<StripeCustomer>;
 
 /**
  * Stripe Customer Schema
- * 
+ *
  * Links SmartDuka shops/users to Stripe customers for payment management.
  * Supports both shop-level and user-level customer records.
  */
@@ -67,7 +67,8 @@ export class StripeCustomer {
   updatedAt?: Date;
 }
 
-export const StripeCustomerSchema = SchemaFactory.createForClass(StripeCustomer);
+export const StripeCustomerSchema =
+  SchemaFactory.createForClass(StripeCustomer);
 
 // Indexes for efficient queries
 // Note: stripeCustomerId index is already created by unique: true in @Prop decorator

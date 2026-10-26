@@ -1,11 +1,11 @@
 /**
  * One-time script to process all expired subscriptions
- * 
+ *
  * This script will:
  * 1. Find all subscriptions that should be expired/suspended
  * 2. Update their status appropriately
  * 3. Send notification emails to shop admins
- * 
+ *
  * Run with: npx ts-node -r tsconfig-paths/register src/subscriptions/scripts/process-expired-subscriptions.ts
  * Or via NestJS CLI: npx nestjs-cli run src/subscriptions/scripts/process-expired-subscriptions.ts
  */
@@ -14,8 +14,15 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from '../../app.module';
 import { Model, Types } from 'mongoose';
 import { getModelToken } from '@nestjs/mongoose';
-import { Subscription, SubscriptionDocument, SubscriptionStatus } from '../schemas/subscription.schema';
-import { SubscriptionPlan, SubscriptionPlanDocument } from '../schemas/subscription-plan.schema';
+import {
+  Subscription,
+  SubscriptionDocument,
+  SubscriptionStatus,
+} from '../schemas/subscription.schema';
+import {
+  SubscriptionPlan,
+  SubscriptionPlanDocument,
+} from '../schemas/subscription-plan.schema';
 import { Shop, ShopDocument } from '../../shops/schemas/shop.schema';
 import { User, UserDocument } from '../../users/schemas/user.schema';
 import { EmailService } from '../../notifications/email.service';
@@ -43,8 +50,12 @@ async function processExpiredSubscriptions() {
   });
 
   // Get models and services
-  const subscriptionModel = app.get<Model<SubscriptionDocument>>(getModelToken(Subscription.name));
-  const planModel = app.get<Model<SubscriptionPlanDocument>>(getModelToken(SubscriptionPlan.name));
+  const subscriptionModel = app.get<Model<SubscriptionDocument>>(
+    getModelToken(Subscription.name),
+  );
+  const planModel = app.get<Model<SubscriptionPlanDocument>>(
+    getModelToken(SubscriptionPlan.name),
+  );
   const shopModel = app.get<Model<ShopDocument>>(getModelToken(Shop.name));
   const userModel = app.get<Model<UserDocument>>(getModelToken(User.name));
   const emailService = app.get(EmailService);
@@ -58,7 +69,7 @@ async function processExpiredSubscriptions() {
     // (currentPeriodEnd passed, autoRenew = false, status is ACTIVE/TRIAL)
     // ============================================
     console.log('📋 Finding subscriptions to expire...');
-    
+
     const toExpire = await subscriptionModel.find({
       status: { $in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIAL] },
       currentPeriodEnd: { $lt: now },
@@ -85,20 +96,24 @@ async function processExpiredSubscriptions() {
     // (currentPeriodEnd passed, autoRenew = true, status is ACTIVE/TRIAL)
     // ============================================
     console.log('📋 Finding subscriptions to set as PAST_DUE...');
-    
+
     const toPastDue = await subscriptionModel.find({
       status: { $in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIAL] },
       currentPeriodEnd: { $lt: now },
       autoRenew: true,
     });
 
-    console.log(`   Found ${toPastDue.length} subscriptions to set as past due\n`);
+    console.log(
+      `   Found ${toPastDue.length} subscriptions to set as past due\n`,
+    );
 
     for (const subscription of toPastDue) {
       // Set grace period end date
-      const gracePeriodEndDate = new Date(now.getTime() + GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000);
+      const gracePeriodEndDate = new Date(
+        now.getTime() + GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000,
+      );
       subscription.gracePeriodEndDate = gracePeriodEndDate;
-      
+
       const result = await processSubscription(
         subscription,
         SubscriptionStatus.PAST_DUE,
@@ -116,7 +131,7 @@ async function processExpiredSubscriptions() {
     // (PAST_DUE and grace period has ended)
     // ============================================
     console.log('📋 Finding subscriptions to suspend...');
-    
+
     const toSuspend = await subscriptionModel.find({
       status: SubscriptionStatus.PAST_DUE,
       gracePeriodEndDate: { $lt: now },
@@ -141,13 +156,15 @@ async function processExpiredSubscriptions() {
     // 4. Send reminders for existing PAST_DUE subscriptions
     // ============================================
     console.log('📋 Sending reminders for existing PAST_DUE subscriptions...');
-    
+
     const pastDueSubscriptions = await subscriptionModel.find({
       status: SubscriptionStatus.PAST_DUE,
       gracePeriodEndDate: { $gt: now },
     });
 
-    console.log(`   Found ${pastDueSubscriptions.length} past due subscriptions to remind\n`);
+    console.log(
+      `   Found ${pastDueSubscriptions.length} past due subscriptions to remind\n`,
+    );
 
     for (const subscription of pastDueSubscriptions) {
       const result = await sendReminderEmail(
@@ -164,12 +181,14 @@ async function processExpiredSubscriptions() {
     // 5. Send reminders for SUSPENDED subscriptions
     // ============================================
     console.log('📋 Sending reminders for SUSPENDED subscriptions...');
-    
+
     const suspendedSubscriptions = await subscriptionModel.find({
       status: SubscriptionStatus.SUSPENDED,
     });
 
-    console.log(`   Found ${suspendedSubscriptions.length} suspended subscriptions to remind\n`);
+    console.log(
+      `   Found ${suspendedSubscriptions.length} suspended subscriptions to remind\n`,
+    );
 
     for (const subscription of suspendedSubscriptions) {
       const result = await sendSuspensionReminder(
@@ -186,12 +205,14 @@ async function processExpiredSubscriptions() {
     // 6. Send reminders for EXPIRED subscriptions
     // ============================================
     console.log('📋 Sending reminders for EXPIRED subscriptions...');
-    
+
     const expiredSubscriptions = await subscriptionModel.find({
       status: SubscriptionStatus.EXPIRED,
     });
 
-    console.log(`   Found ${expiredSubscriptions.length} expired subscriptions to remind\n`);
+    console.log(
+      `   Found ${expiredSubscriptions.length} expired subscriptions to remind\n`,
+    );
 
     for (const subscription of expiredSubscriptions) {
       const result = await sendExpirationReminder(
@@ -203,7 +224,6 @@ async function processExpiredSubscriptions() {
       );
       results.push(result);
     }
-
   } catch (error) {
     console.error('❌ Error processing subscriptions:', error);
   }
@@ -212,10 +232,10 @@ async function processExpiredSubscriptions() {
   console.log('\n' + '='.repeat(60));
   console.log('📊 PROCESSING SUMMARY');
   console.log('='.repeat(60));
-  
-  const statusChanged = results.filter(r => r.previousStatus !== r.newStatus);
-  const emailsSent = results.filter(r => r.emailSent);
-  const errors = results.filter(r => r.error);
+
+  const statusChanged = results.filter((r) => r.previousStatus !== r.newStatus);
+  const emailsSent = results.filter((r) => r.emailSent);
+  const errors = results.filter((r) => r.error);
 
   console.log(`\n✅ Total processed: ${results.length}`);
   console.log(`📝 Status changes: ${statusChanged.length}`);
@@ -224,14 +244,14 @@ async function processExpiredSubscriptions() {
 
   if (statusChanged.length > 0) {
     console.log('\n📝 Status Changes:');
-    statusChanged.forEach(r => {
+    statusChanged.forEach((r) => {
       console.log(`   - ${r.shopName}: ${r.previousStatus} → ${r.newStatus}`);
     });
   }
 
   if (errors.length > 0) {
     console.log('\n❌ Errors:');
-    errors.forEach(r => {
+    errors.forEach((r) => {
       console.log(`   - ${r.shopName}: ${r.error}`);
     });
   }
@@ -254,7 +274,10 @@ async function processSubscription(
   emailService: EmailService,
 ): Promise<ProcessResult> {
   const shop = await shopModel.findById(subscription.shopId);
-  const admin = await userModel.findOne({ shopId: subscription.shopId, role: 'admin' });
+  const admin = await userModel.findOne({
+    shopId: subscription.shopId,
+    role: 'admin',
+  });
   const plan = await planModel.findById(subscription.planId);
 
   const result: ProcessResult = {
@@ -272,18 +295,38 @@ async function processSubscription(
     subscription.status = newStatus;
     await subscription.save();
 
-    console.log(`   ✓ ${shop?.name || subscription.shopId}: ${previousStatus} → ${newStatus}`);
+    console.log(
+      `   ✓ ${shop?.name || subscription.shopId}: ${previousStatus} → ${newStatus}`,
+    );
 
     // Send appropriate email
     if (admin?.email) {
       let emailSent = false;
 
       if (newStatus === SubscriptionStatus.EXPIRED) {
-        emailSent = await sendExpirationEmail(shop, admin, plan, subscription, emailService);
+        emailSent = await sendExpirationEmail(
+          shop,
+          admin,
+          plan,
+          subscription,
+          emailService,
+        );
       } else if (newStatus === SubscriptionStatus.PAST_DUE) {
-        emailSent = await sendPastDueEmail(shop, admin, plan, subscription, emailService);
+        emailSent = await sendPastDueEmail(
+          shop,
+          admin,
+          plan,
+          subscription,
+          emailService,
+        );
       } else if (newStatus === SubscriptionStatus.SUSPENDED) {
-        emailSent = await sendSuspensionEmail(shop, admin, plan, subscription, emailService);
+        emailSent = await sendSuspensionEmail(
+          shop,
+          admin,
+          plan,
+          subscription,
+          emailService,
+        );
       }
 
       result.emailSent = emailSent;
@@ -340,7 +383,10 @@ async function sendPastDueEmail(
 
   const now = new Date();
   const daysUntilSuspension = subscription.gracePeriodEndDate
-    ? Math.ceil((subscription.gracePeriodEndDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000))
+    ? Math.ceil(
+        (subscription.gracePeriodEndDate.getTime() - now.getTime()) /
+          (24 * 60 * 60 * 1000),
+      )
     : GRACE_PERIOD_DAYS;
 
   const vars = {
@@ -407,7 +453,10 @@ async function sendReminderEmail(
   emailService: EmailService,
 ): Promise<ProcessResult> {
   const shop = await shopModel.findById(subscription.shopId);
-  const admin = await userModel.findOne({ shopId: subscription.shopId, role: 'admin' });
+  const admin = await userModel.findOne({
+    shopId: subscription.shopId,
+    role: 'admin',
+  });
   const plan = await planModel.findById(subscription.planId);
 
   const result: ProcessResult = {
@@ -421,9 +470,15 @@ async function sendReminderEmail(
 
   if (!admin?.email || !shop) return result;
 
-  const emailSent = await sendPastDueEmail(shop, admin, plan, subscription, emailService);
+  const emailSent = await sendPastDueEmail(
+    shop,
+    admin,
+    plan,
+    subscription,
+    emailService,
+  );
   result.emailSent = emailSent;
-  
+
   if (emailSent) {
     console.log(`   📧 Reminder sent to ${shop.name} (${admin.email})`);
   }
@@ -439,7 +494,10 @@ async function sendSuspensionReminder(
   emailService: EmailService,
 ): Promise<ProcessResult> {
   const shop = await shopModel.findById(subscription.shopId);
-  const admin = await userModel.findOne({ shopId: subscription.shopId, role: 'admin' });
+  const admin = await userModel.findOne({
+    shopId: subscription.shopId,
+    role: 'admin',
+  });
   const plan = await planModel.findById(subscription.planId);
 
   const result: ProcessResult = {
@@ -453,11 +511,19 @@ async function sendSuspensionReminder(
 
   if (!admin?.email || !shop) return result;
 
-  const emailSent = await sendSuspensionEmail(shop, admin, plan, subscription, emailService);
+  const emailSent = await sendSuspensionEmail(
+    shop,
+    admin,
+    plan,
+    subscription,
+    emailService,
+  );
   result.emailSent = emailSent;
-  
+
   if (emailSent) {
-    console.log(`   📧 Suspension reminder sent to ${shop.name} (${admin.email})`);
+    console.log(
+      `   📧 Suspension reminder sent to ${shop.name} (${admin.email})`,
+    );
   }
 
   return result;
@@ -471,7 +537,10 @@ async function sendExpirationReminder(
   emailService: EmailService,
 ): Promise<ProcessResult> {
   const shop = await shopModel.findById(subscription.shopId);
-  const admin = await userModel.findOne({ shopId: subscription.shopId, role: 'admin' });
+  const admin = await userModel.findOne({
+    shopId: subscription.shopId,
+    role: 'admin',
+  });
   const plan = await planModel.findById(subscription.planId);
 
   const result: ProcessResult = {
@@ -485,11 +554,19 @@ async function sendExpirationReminder(
 
   if (!admin?.email || !shop) return result;
 
-  const emailSent = await sendExpirationEmail(shop, admin, plan, subscription, emailService);
+  const emailSent = await sendExpirationEmail(
+    shop,
+    admin,
+    plan,
+    subscription,
+    emailService,
+  );
   result.emailSent = emailSent;
-  
+
   if (emailSent) {
-    console.log(`   📧 Expiration reminder sent to ${shop.name} (${admin.email})`);
+    console.log(
+      `   📧 Expiration reminder sent to ${shop.name} (${admin.email})`,
+    );
   }
 
   return result;

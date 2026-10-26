@@ -58,7 +58,10 @@ describe('OAUTH-COOKIE-FIX1 — oauth_bind cookie attribute policy', () => {
   });
 
   it('production WITH COOKIE_DOMAIN (same-site subdomain cutover): SameSite=Lax + Secure + Domain — sent by all browsers', () => {
-    const svc = makeSvc({ NODE_ENV: 'production', COOKIE_DOMAIN: '.smartduka.org' });
+    const svc = makeSvc({
+      NODE_ENV: 'production',
+      COOKIE_DOMAIN: '.smartduka.org',
+    });
     const { res, calls } = makeRes();
     svc.setOAuthBindingCookie(res, 'nonce-abc');
     const [, , opts] = calls[0];

@@ -29,11 +29,13 @@ export class ShopSettingsService {
     if (!settings) {
       // Fetch shop data to populate receipt settings
       const shop = await this.shopModel.findOne({ shopId }).exec();
-      
+
       // Build address from shop data
       let shopAddress = '';
       if (shop) {
-        const addressParts = [shop.address, shop.city, shop.county].filter(Boolean);
+        const addressParts = [shop.address, shop.city, shop.county].filter(
+          Boolean,
+        );
         shopAddress = addressParts.join(', ');
       }
 
@@ -75,7 +77,9 @@ export class ShopSettingsService {
    * Initialize or update receipt settings from shop data
    * Call this after shop registration or when shop details change
    */
-  async syncReceiptSettingsFromShop(shopId: string): Promise<ShopSettings | null> {
+  async syncReceiptSettingsFromShop(
+    shopId: string,
+  ): Promise<ShopSettings | null> {
     const shop = await this.shopModel.findOne({ shopId }).exec();
     if (!shop) return null;
 
@@ -84,8 +88,8 @@ export class ShopSettingsService {
     const shopAddress = addressParts.join(', ');
 
     // Get existing settings or create new
-    let settings = await this.model.findOne({ shopId });
-    
+    const settings = await this.model.findOne({ shopId });
+
     const receiptDefaults = {
       shopName: shop.name,
       shopAddress: shopAddress || undefined,
@@ -107,16 +111,17 @@ export class ShopSettingsService {
       if (!currentReceipt.shopName) {
         return this.model.findOneAndUpdate(
           { shopId },
-          { 
-            $set: { 
+          {
+            $set: {
               'receipt.shopName': receiptDefaults.shopName,
               'receipt.shopAddress': receiptDefaults.shopAddress,
               'receipt.shopPhone': receiptDefaults.shopPhone,
               'receipt.shopEmail': receiptDefaults.shopEmail,
               'receipt.shopTaxPin': receiptDefaults.shopTaxPin,
-              'receipt.footerMessage': currentReceipt.footerMessage || receiptDefaults.footerMessage,
+              'receipt.footerMessage':
+                currentReceipt.footerMessage || receiptDefaults.footerMessage,
               updatedAt: new Date(),
-            } 
+            },
           },
           { new: true },
         );
@@ -144,7 +149,10 @@ export class ShopSettingsService {
     return this.model.create(dto);
   }
 
-  async update(shopId: string, dto: UpdateShopSettingsDto): Promise<ShopSettings> {
+  async update(
+    shopId: string,
+    dto: UpdateShopSettingsDto,
+  ): Promise<ShopSettings> {
     return this.model.findOneAndUpdate(
       { shopId },
       { ...dto, updatedAt: new Date() },
@@ -152,7 +160,10 @@ export class ShopSettingsService {
     );
   }
 
-  async addTaxExemptProduct(shopId: string, productId: string): Promise<ShopSettings | null> {
+  async addTaxExemptProduct(
+    shopId: string,
+    productId: string,
+  ): Promise<ShopSettings | null> {
     return this.model.findOneAndUpdate(
       { shopId },
       { $addToSet: { taxExemptProducts: productId }, updatedAt: new Date() },
@@ -160,7 +171,10 @@ export class ShopSettingsService {
     );
   }
 
-  async removeTaxExemptProduct(shopId: string, productId: string): Promise<ShopSettings | null> {
+  async removeTaxExemptProduct(
+    shopId: string,
+    productId: string,
+  ): Promise<ShopSettings | null> {
     return this.model.findOneAndUpdate(
       { shopId },
       { $pull: { taxExemptProducts: productId }, updatedAt: new Date() },
@@ -176,32 +190,41 @@ export class ShopSettingsService {
   ): Promise<ShopSettings | null> {
     return this.model.findOneAndUpdate(
       { shopId },
-      { 
-        $set: { 
+      {
+        $set: {
           [`categoryTaxRates.${categoryId}`]: { rate, exempt },
           updatedAt: new Date(),
-        } 
+        },
       },
       { new: true },
     );
   }
 
-  async removeCategoryTaxRate(shopId: string, categoryId: string): Promise<ShopSettings | null> {
+  async removeCategoryTaxRate(
+    shopId: string,
+    categoryId: string,
+  ): Promise<ShopSettings | null> {
     return this.model.findOneAndUpdate(
       { shopId },
-      { $unset: { [`categoryTaxRates.${categoryId}`]: 1 }, updatedAt: new Date() },
+      {
+        $unset: { [`categoryTaxRates.${categoryId}`]: 1 },
+        updatedAt: new Date(),
+      },
       { new: true },
     );
   }
 
-  async updateReceiptSettings(shopId: string, receiptSettings: any): Promise<ShopSettings | null> {
+  async updateReceiptSettings(
+    shopId: string,
+    receiptSettings: any,
+  ): Promise<ShopSettings | null> {
     return this.model.findOneAndUpdate(
       { shopId },
-      { 
-        $set: { 
+      {
+        $set: {
           receipt: receiptSettings,
           updatedAt: new Date(),
-        } 
+        },
       },
       { new: true, upsert: true },
     );
@@ -209,15 +232,17 @@ export class ShopSettingsService {
 
   async getReceiptSettings(shopId: string): Promise<any> {
     const settings = await this.getByShopId(shopId);
-    return settings?.receipt || {
-      printerWidth: 32,
-      showLogo: false,
-      showTaxPin: true,
-      showCashierName: true,
-      showCustomerName: true,
-      showItemSku: false,
-      footerMessage: 'Thank you for your purchase!',
-    };
+    return (
+      settings?.receipt || {
+        printerWidth: 32,
+        showLogo: false,
+        showTaxPin: true,
+        showCashierName: true,
+        showCustomerName: true,
+        showItemSku: false,
+        footerMessage: 'Thank you for your purchase!',
+      }
+    );
   }
 
   // =========================================================================
@@ -279,7 +304,10 @@ export class ShopSettingsService {
     }
 
     // Update receipt footer from business type profile
-    if (!existingSettings?.receipt?.footerMessage || existingSettings.receipt.footerMessage === 'Thank you for your purchase!') {
+    if (
+      !existingSettings?.receipt?.footerMessage ||
+      existingSettings.receipt.footerMessage === 'Thank you for your purchase!'
+    ) {
       updateData['receipt.footerMessage'] = profile.receiptConfig.footerMessage;
     }
 

@@ -1,11 +1,11 @@
 /**
  * One-time script to fix expired daily subscriptions
- * 
+ *
  * This script will:
  * 1. Find all daily subscriptions where currentPeriodEnd has passed but status is still ACTIVE
  * 2. Update their status to EXPIRED
  * 3. Send notification emails to shop admins
- * 
+ *
  * Run with: npx ts-node -r tsconfig-paths/register src/subscriptions/scripts/fix-expired-daily-subscriptions.ts
  */
 
@@ -13,8 +13,16 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from '../../app.module';
 import { Model, Types } from 'mongoose';
 import { getModelToken } from '@nestjs/mongoose';
-import { Subscription, SubscriptionDocument, SubscriptionStatus, BillingCycle } from '../schemas/subscription.schema';
-import { SubscriptionPlan, SubscriptionPlanDocument } from '../schemas/subscription-plan.schema';
+import {
+  Subscription,
+  SubscriptionDocument,
+  SubscriptionStatus,
+  BillingCycle,
+} from '../schemas/subscription.schema';
+import {
+  SubscriptionPlan,
+  SubscriptionPlanDocument,
+} from '../schemas/subscription-plan.schema';
 import { Shop, ShopDocument } from '../../shops/schemas/shop.schema';
 import { User, UserDocument } from '../../users/schemas/user.schema';
 import { EmailService } from '../../notifications/email.service';
@@ -41,11 +49,15 @@ async function fixExpiredDailySubscriptions() {
   });
 
   // Get models and services
-  const subscriptionModel = app.get<Model<SubscriptionDocument>>(getModelToken(Subscription.name));
-  const planModel = app.get<Model<SubscriptionPlanDocument>>(getModelToken(SubscriptionPlan.name));
+  const subscriptionModel = app.get<Model<SubscriptionDocument>>(
+    getModelToken(Subscription.name),
+  );
+  const planModel = app.get<Model<SubscriptionPlanDocument>>(
+    getModelToken(SubscriptionPlan.name),
+  );
   const shopModel = app.get<Model<ShopDocument>>(getModelToken(Shop.name));
   const userModel = app.get<Model<UserDocument>>(getModelToken(User.name));
-  
+
   let emailService: EmailService | null = null;
   try {
     emailService = app.get(EmailService);
@@ -62,22 +74,28 @@ async function fixExpiredDailySubscriptions() {
     // (billingCycle = 'daily', currentPeriodEnd passed, status is ACTIVE)
     // ============================================
     console.log('📋 Finding expired daily subscriptions...');
-    
+
     const expiredDailySubs = await subscriptionModel.find({
       billingCycle: BillingCycle.DAILY,
       status: SubscriptionStatus.ACTIVE,
       currentPeriodEnd: { $lt: now },
     });
 
-    console.log(`   Found ${expiredDailySubs.length} expired daily subscriptions\n`);
+    console.log(
+      `   Found ${expiredDailySubs.length} expired daily subscriptions\n`,
+    );
 
     for (const subscription of expiredDailySubs) {
       const shop = await shopModel.findById(subscription.shopId);
-      const admin = await userModel.findOne({ shopId: subscription.shopId, role: 'admin' });
+      const admin = await userModel.findOne({
+        shopId: subscription.shopId,
+        role: 'admin',
+      });
       const plan = await planModel.findById(subscription.planId);
 
       const hoursOverdue = Math.floor(
-        (now.getTime() - subscription.currentPeriodEnd.getTime()) / (60 * 60 * 1000)
+        (now.getTime() - subscription.currentPeriodEnd.getTime()) /
+          (60 * 60 * 1000),
       );
 
       const result: ProcessResult = {
@@ -95,7 +113,9 @@ async function fixExpiredDailySubscriptions() {
         subscription.status = SubscriptionStatus.EXPIRED;
         await subscription.save();
 
-        console.log(`   ✓ ${shop?.name || subscription.shopId}: ACTIVE → EXPIRED (${hoursOverdue}h overdue)`);
+        console.log(
+          `   ✓ ${shop?.name || subscription.shopId}: ACTIVE → EXPIRED (${hoursOverdue}h overdue)`,
+        );
 
         // Send expiration email
         if (admin?.email && emailService) {
@@ -132,7 +152,9 @@ async function fixExpiredDailySubscriptions() {
         }
       } catch (error: any) {
         result.error = error.message;
-        console.log(`   ✗ ${shop?.name || subscription.shopId}: ${error.message}`);
+        console.log(
+          `   ✗ ${shop?.name || subscription.shopId}: ${error.message}`,
+        );
       }
 
       results.push(result);
@@ -142,8 +164,10 @@ async function fixExpiredDailySubscriptions() {
     // Also check for daily subscriptions with incorrect period dates
     // (period is longer than expected for daily billing)
     // ============================================
-    console.log('\n📋 Checking for daily subscriptions with incorrect period dates...');
-    
+    console.log(
+      '\n📋 Checking for daily subscriptions with incorrect period dates...',
+    );
+
     const allDailySubs = await subscriptionModel.find({
       billingCycle: BillingCycle.DAILY,
       status: { $in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIAL] },
@@ -154,32 +178,40 @@ async function fixExpiredDailySubscriptions() {
       const periodStart = subscription.currentPeriodStart;
       const periodEnd = subscription.currentPeriodEnd;
       const periodDays = Math.ceil(
-        (periodEnd.getTime() - periodStart.getTime()) / (24 * 60 * 60 * 1000)
+        (periodEnd.getTime() - periodStart.getTime()) / (24 * 60 * 60 * 1000),
       );
-      
+
       const expectedDays = subscription.numberOfDays || 1;
-      
+
       // If period is significantly longer than expected (more than expected + 1 day tolerance)
       if (periodDays > expectedDays + 1) {
         incorrectPeriodCount++;
         const shop = await shopModel.findById(subscription.shopId);
-        console.log(`   ⚠️ ${shop?.name || subscription.shopId}: Period is ${periodDays} days but should be ${expectedDays} day(s)`);
-        console.log(`      Period: ${periodStart.toISOString()} to ${periodEnd.toISOString()}`);
-        
+        console.log(
+          `   ⚠️ ${shop?.name || subscription.shopId}: Period is ${periodDays} days but should be ${expectedDays} day(s)`,
+        );
+        console.log(
+          `      Period: ${periodStart.toISOString()} to ${periodEnd.toISOString()}`,
+        );
+
         // Fix the period end date
         const correctedPeriodEnd = new Date(periodStart);
         correctedPeriodEnd.setDate(correctedPeriodEnd.getDate() + expectedDays);
-        
+
         // Only update if corrected date is in the past (subscription should be expired)
         if (correctedPeriodEnd < now) {
           subscription.currentPeriodEnd = correctedPeriodEnd;
           subscription.status = SubscriptionStatus.EXPIRED;
           await subscription.save();
-          console.log(`      ✓ Fixed: Period end corrected to ${correctedPeriodEnd.toISOString()}, status set to EXPIRED`);
+          console.log(
+            `      ✓ Fixed: Period end corrected to ${correctedPeriodEnd.toISOString()}, status set to EXPIRED`,
+          );
         } else {
           subscription.currentPeriodEnd = correctedPeriodEnd;
           await subscription.save();
-          console.log(`      ✓ Fixed: Period end corrected to ${correctedPeriodEnd.toISOString()}`);
+          console.log(
+            `      ✓ Fixed: Period end corrected to ${correctedPeriodEnd.toISOString()}`,
+          );
         }
       }
     }
@@ -187,7 +219,6 @@ async function fixExpiredDailySubscriptions() {
     if (incorrectPeriodCount === 0) {
       console.log('   ✓ All daily subscription periods are correct');
     }
-
   } catch (error) {
     console.error('❌ Error processing subscriptions:', error);
   }
@@ -196,10 +227,10 @@ async function fixExpiredDailySubscriptions() {
   console.log('\n' + '='.repeat(60));
   console.log('📊 PROCESSING SUMMARY');
   console.log('='.repeat(60));
-  
-  const statusChanged = results.filter(r => r.previousStatus !== r.newStatus);
-  const emailsSent = results.filter(r => r.emailSent);
-  const errors = results.filter(r => r.error);
+
+  const statusChanged = results.filter((r) => r.previousStatus !== r.newStatus);
+  const emailsSent = results.filter((r) => r.emailSent);
+  const errors = results.filter((r) => r.error);
 
   console.log(`\n✅ Total processed: ${results.length}`);
   console.log(`📝 Status changes: ${statusChanged.length}`);
@@ -208,14 +239,16 @@ async function fixExpiredDailySubscriptions() {
 
   if (statusChanged.length > 0) {
     console.log('\n📝 Expired Subscriptions:');
-    statusChanged.forEach(r => {
-      console.log(`   - ${r.shopName}: ${r.previousStatus} → ${r.newStatus} (${r.hoursOverdue}h overdue)`);
+    statusChanged.forEach((r) => {
+      console.log(
+        `   - ${r.shopName}: ${r.previousStatus} → ${r.newStatus} (${r.hoursOverdue}h overdue)`,
+      );
     });
   }
 
   if (errors.length > 0) {
     console.log('\n❌ Errors:');
-    errors.forEach(r => {
+    errors.forEach((r) => {
       console.log(`   - ${r.shopName}: ${r.error}`);
     });
   }

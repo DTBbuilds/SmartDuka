@@ -50,7 +50,8 @@ export class ReceiptPayment {
   change?: number;
 }
 
-export const ReceiptPaymentSchema = SchemaFactory.createForClass(ReceiptPayment);
+export const ReceiptPaymentSchema =
+  SchemaFactory.createForClass(ReceiptPayment);
 
 @Schema({ timestamps: true })
 export class Receipt {
@@ -89,7 +90,7 @@ export class Receipt {
   shopTaxPin?: string;
 
   @Prop()
-  currency?: string;  // ISO 4217 currency code stored at creation time (e.g., 'KES', 'USD', 'EUR')
+  currency?: string; // ISO 4217 currency code stored at creation time (e.g., 'KES', 'USD', 'EUR')
 
   // Branch-specific customization
   @Prop()
@@ -121,7 +122,10 @@ export class Receipt {
   @Prop({ type: [ReceiptPaymentSchema], default: [] })
   payments: ReceiptPayment[];
 
-  @Prop({ required: true, enum: ['cash', 'mpesa', 'card', 'qr', 'mixed', 'other'] })
+  @Prop({
+    required: true,
+    enum: ['cash', 'mpesa', 'card', 'qr', 'mixed', 'other'],
+  })
   primaryPaymentMethod: string;
 
   // Customer details

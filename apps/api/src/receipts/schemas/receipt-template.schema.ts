@@ -54,7 +54,8 @@ export class ReceiptTemplate {
   isDefault: boolean;
 }
 
-export const ReceiptTemplateSchema = SchemaFactory.createForClass(ReceiptTemplate);
+export const ReceiptTemplateSchema =
+  SchemaFactory.createForClass(ReceiptTemplate);
 
 // Create indexes for multi-tenant queries
 ReceiptTemplateSchema.index({ shopId: 1, status: 1 });

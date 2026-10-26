@@ -1,6 +1,21 @@
-import { Body, Controller, Get, Post, Put, Param, UseGuards, Query, BadRequestException } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Put,
+  Param,
+  UseGuards,
+  Query,
+  BadRequestException,
+} from '@nestjs/common';
 import { ReconciliationService } from './reconciliation.service';
-import { CreateDailyReconciliationDto, GetReconciliationHistoryDto, InvestigateVarianceDto, ApproveReconciliationDto } from './dto/reconciliation.dto';
+import {
+  CreateDailyReconciliationDto,
+  GetReconciliationHistoryDto,
+  InvestigateVarianceDto,
+  ApproveReconciliationDto,
+} from './dto/reconciliation.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -34,7 +49,11 @@ export class ReconciliationController {
   ) {
     const startDate = query.startDate ? new Date(query.startDate) : undefined;
     const endDate = query.endDate ? new Date(query.endDate) : undefined;
-    return this.reconciliationService.getReconciliationHistory(user.shopId, startDate, endDate);
+    return this.reconciliationService.getReconciliationHistory(
+      user.shopId,
+      startDate,
+      endDate,
+    );
   }
 
   @Get('variance-report')
@@ -61,7 +80,11 @@ export class ReconciliationController {
     @Body() dto: InvestigateVarianceDto,
     @CurrentUser() user: Record<string, any>,
   ) {
-    return this.reconciliationService.investigateVariance(id, dto.varianceType, dto.investigationNotes);
+    return this.reconciliationService.investigateVariance(
+      id,
+      dto.varianceType,
+      dto.investigationNotes,
+    );
   }
 
   @Put(':id/approve')

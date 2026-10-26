@@ -18,7 +18,12 @@ describe('RELEASE-GATE1 Resend webhook', () => {
   const SECRET = 'whsec_test_abcdef';
   const MESSAGE_ID = 'resend-msg-1';
 
-  function svixHeaders(payload: string, secret: string, timestampSeconds?: number, id = 'evt_test_1') {
+  function svixHeaders(
+    payload: string,
+    secret: string,
+    timestampSeconds?: number,
+    id = 'evt_test_1',
+  ) {
     const timestamp = String(timestampSeconds ?? Math.floor(Date.now() / 1000));
     const sig = require('crypto')
       .createHmac('sha256', secret)
@@ -34,7 +39,11 @@ describe('RELEASE-GATE1 Resend webhook', () => {
   function boot(opts: { secret?: string; existingStatus?: string } = {}) {
     const updates: any[] = [];
     const suppressUpserts: any[] = [];
-    const existing = { messageId: MESSAGE_ID, status: opts.existingStatus ?? 'sent', to: 'owner@shop.example' };
+    const existing = {
+      messageId: MESSAGE_ID,
+      status: opts.existingStatus ?? 'sent',
+      to: 'owner@shop.example',
+    };
     const emailLogModel: any = Object.assign(jest.fn(), {
       updateOne: jest.fn(async (filter: any, update: any) => {
         updates.push({ filter, update });
@@ -42,7 +51,8 @@ describe('RELEASE-GATE1 Resend webhook', () => {
         // excludes the current status.
         const guard = filter.status?.$nin;
         const matched = !guard || !guard.includes(existing.status);
-        if (matched && update.$set?.status) existing.status = update.$set.status;
+        if (matched && update.$set?.status)
+          existing.status = update.$set.status;
         return { matchedCount: matched ? 1 : 0 };
       }),
       findOne: jest.fn(() => ({
@@ -51,7 +61,7 @@ describe('RELEASE-GATE1 Resend webhook', () => {
         })),
       })),
     });
-    (emailLogModel as any).db = {
+    emailLogModel.db = {
       collection: jest.fn((name: string) => ({
         updateOne: jest.fn(async (_f: any, _u: any) => {
           suppressUpserts.push({ name, filter: _f, update: _u });
@@ -92,7 +102,11 @@ describe('RELEASE-GATE1 Resend webhook', () => {
     const headers = svixHeaders(signedPayload, SECRET);
     const tampered = event('email.bounced'); // different body than signed
     await expect(
-      controller.handleResendEvent({ rawBody: Buffer.from(JSON.stringify(tampered)) }, tampered, headers),
+      controller.handleResendEvent(
+        { rawBody: Buffer.from(JSON.stringify(tampered)) },
+        tampered,
+        headers,
+      ),
     ).rejects.toThrow(BadRequestException);
     expect(updates).toHaveLength(0);
   });
@@ -103,7 +117,11 @@ describe('RELEASE-GATE1 Resend webhook', () => {
     const stale = Math.floor(Date.now() / 1000) - 600; // 10 minutes old
     const headers = svixHeaders(payload, SECRET, stale);
     await expect(
-      controller.handleResendEvent({ rawBody: Buffer.from(payload) }, event('email.delivered'), headers),
+      controller.handleResendEvent(
+        { rawBody: Buffer.from(payload) },
+        event('email.delivered'),
+        headers,
+      ),
     ).rejects.toThrow(BadRequestException);
   });
 
@@ -117,7 +135,10 @@ describe('RELEASE-GATE1 Resend webhook', () => {
   });
 
   it('out-of-order: a late bounced event does NOT regress a delivered message', async () => {
-    const { controller, updates, existing } = boot({ secret: SECRET, existingStatus: 'delivered' });
+    const { controller, updates, existing } = boot({
+      secret: SECRET,
+      existingStatus: 'delivered',
+    });
     const payload = JSON.stringify(event('email.bounced'));
     await controller.handleResendEvent(
       { rawBody: Buffer.from(payload) },
@@ -130,7 +151,10 @@ describe('RELEASE-GATE1 Resend webhook', () => {
   });
 
   it('out-of-order: a late delivered event does NOT overwrite a bounced message', async () => {
-    const { controller, updates, existing } = boot({ secret: SECRET, existingStatus: 'bounced' });
+    const { controller, updates, existing } = boot({
+      secret: SECRET,
+      existingStatus: 'bounced',
+    });
     const payload = JSON.stringify(event('email.delivered'));
     await controller.handleResendEvent(
       { rawBody: Buffer.from(payload) },
@@ -148,11 +172,15 @@ describe('RELEASE-GATE1 Resend webhook', () => {
       existingStatus: 'sent',
     });
     const payload = JSON.stringify(
-      event('email.bounced', { bounce: { type: 'permanent', message: 'address does not exist' } }),
+      event('email.bounced', {
+        bounce: { type: 'permanent', message: 'address does not exist' },
+      }),
     );
     await controller.handleResendEvent(
       { rawBody: Buffer.from(payload) },
-      event('email.bounced', { bounce: { type: 'permanent', message: 'address does not exist' } }),
+      event('email.bounced', {
+        bounce: { type: 'permanent', message: 'address does not exist' },
+      }),
       svixHeaders(payload, SECRET),
     );
     expect(suppressUpserts).toHaveLength(1);
@@ -162,13 +190,20 @@ describe('RELEASE-GATE1 Resend webhook', () => {
   });
 
   it('a TRANSIENT (soft) bounce does NOT suppress the address', async () => {
-    const { controller, suppressUpserts } = boot({ secret: SECRET, existingStatus: 'sent' });
+    const { controller, suppressUpserts } = boot({
+      secret: SECRET,
+      existingStatus: 'sent',
+    });
     const payload = JSON.stringify(
-      event('email.bounced', { bounce: { type: 'transient', message: 'mailbox full' } }),
+      event('email.bounced', {
+        bounce: { type: 'transient', message: 'mailbox full' },
+      }),
     );
     await controller.handleResendEvent(
       { rawBody: Buffer.from(payload) },
-      event('email.bounced', { bounce: { type: 'transient', message: 'mailbox full' } }),
+      event('email.bounced', {
+        bounce: { type: 'transient', message: 'mailbox full' },
+      }),
       svixHeaders(payload, SECRET),
     );
     expect(suppressUpserts).toHaveLength(0);
@@ -178,9 +213,17 @@ describe('RELEASE-GATE1 Resend webhook', () => {
     const { controller, updates } = boot({ secret: SECRET });
     const payload = JSON.stringify(event('email.delivered'));
     const headers = svixHeaders(payload, SECRET, undefined, 'evt_dup_1');
-    await controller.handleResendEvent({ rawBody: Buffer.from(payload) }, event('email.delivered'), headers);
+    await controller.handleResendEvent(
+      { rawBody: Buffer.from(payload) },
+      event('email.delivered'),
+      headers,
+    );
     // A duplicate event (same svix-id, replayed within tolerance) is also accepted.
-    await controller.handleResendEvent({ rawBody: Buffer.from(payload) }, event('email.delivered'), headers);
+    await controller.handleResendEvent(
+      { rawBody: Buffer.from(payload) },
+      event('email.delivered'),
+      headers,
+    );
     expect(updates).toHaveLength(2);
     expect(updates[0].filter.messageId).toBe(updates[1].filter.messageId);
   });

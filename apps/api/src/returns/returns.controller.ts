@@ -29,32 +29,24 @@ export class ReturnsController {
   }
 
   @Get()
-  async findAll(
-    @CurrentUser() user: Record<string, any>,
-  ) {
+  async findAll(@CurrentUser() user: Record<string, any>) {
     return this.returnsService.findAll(user.shopId);
   }
 
   @Get('pending')
   @Roles('admin')
-  async getPendingReturns(
-    @CurrentUser() user: Record<string, any>,
-  ) {
+  async getPendingReturns(@CurrentUser() user: Record<string, any>) {
     return this.returnsService.getPendingReturns(user.shopId);
   }
 
   @Get('stats')
   @Roles('admin')
-  async getStats(
-    @CurrentUser() user: Record<string, any>,
-  ) {
+  async getStats(@CurrentUser() user: Record<string, any>) {
     return this.returnsService.getReturnStats(user.shopId);
   }
 
   @Get('history')
-  async getHistory(
-    @CurrentUser() user: Record<string, any>,
-  ) {
+  async getHistory(@CurrentUser() user: Record<string, any>) {
     return this.returnsService.getReturnHistory(user.shopId);
   }
 
@@ -65,20 +57,22 @@ export class ReturnsController {
 
   @Put(':id/approve')
   @Roles('admin')
-  async approveReturn(
-    @Param('id') id: string,
-    @Body() dto: ApproveReturnDto,
-  ) {
-    return this.returnsService.approveReturn(id, dto.approvedBy, dto.approvalNotes);
+  async approveReturn(@Param('id') id: string, @Body() dto: ApproveReturnDto) {
+    return this.returnsService.approveReturn(
+      id,
+      dto.approvedBy,
+      dto.approvalNotes,
+    );
   }
 
   @Put(':id/reject')
   @Roles('admin')
-  async rejectReturn(
-    @Param('id') id: string,
-    @Body() dto: ApproveReturnDto,
-  ) {
-    return this.returnsService.rejectReturn(id, dto.approvedBy, dto.approvalNotes);
+  async rejectReturn(@Param('id') id: string, @Body() dto: ApproveReturnDto) {
+    return this.returnsService.rejectReturn(
+      id,
+      dto.approvedBy,
+      dto.approvalNotes,
+    );
   }
 
   @Put(':id/complete')

@@ -19,7 +19,7 @@ export enum StripeSubscriptionStatus {
 
 /**
  * Stripe Subscription Schema
- * 
+ *
  * Syncs Stripe subscriptions with local database for SmartDuka plans.
  * Enables real-time subscription status tracking and billing management.
  */
@@ -102,7 +102,8 @@ export class StripeSubscription {
   updatedAt?: Date;
 }
 
-export const StripeSubscriptionSchema = SchemaFactory.createForClass(StripeSubscription);
+export const StripeSubscriptionSchema =
+  SchemaFactory.createForClass(StripeSubscription);
 
 // Indexes
 // Note: stripeSubscriptionId index is already created by unique: true in @Prop decorator

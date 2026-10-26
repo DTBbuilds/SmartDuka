@@ -61,7 +61,10 @@ export class CacheService {
     }
   }
 
-  getStats(): { size: number; entries: Array<{ key: string; expiresIn: number }> } {
+  getStats(): {
+    size: number;
+    entries: Array<{ key: string; expiresIn: number }>;
+  } {
     const entries: Array<{ key: string; expiresIn: number }> = [];
 
     for (const [key, entry] of this.cache.entries()) {

@@ -5,10 +5,16 @@ import { Cron } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { ReportRun, ReportRunDocument } from './schemas/report-run.schema';
-import { ReportPreferencesDocument, ReportPreferences } from './schemas/report-preferences.schema';
+import {
+  ReportPreferencesDocument,
+  ReportPreferences,
+} from './schemas/report-preferences.schema';
 import { ReportPreferencesService } from './report-preferences.service';
 import { ReportsService } from './reports.service';
-import { ReportRendererService, ReportMetrics } from './report-renderer.service';
+import {
+  ReportRendererService,
+  ReportMetrics,
+} from './report-renderer.service';
 import { ReportNarrativeService } from './report-narrative.service';
 import { EmailService } from '../notifications/email.service';
 import { Shop } from '../shops/schemas/shop.schema';
@@ -49,8 +55,10 @@ export class ReportSchedulerService implements OnModuleInit {
   private static readonly MAX_SENDS_PER_TICK = 20;
 
   constructor(
-    @InjectModel(ReportRun.name) private readonly runModel: Model<ReportRunDocument>,
-    @InjectModel(ReportPreferences.name) private readonly prefsModel: Model<ReportPreferencesDocument>,
+    @InjectModel(ReportRun.name)
+    private readonly runModel: Model<ReportRunDocument>,
+    @InjectModel(ReportPreferences.name)
+    private readonly prefsModel: Model<ReportPreferencesDocument>,
     @InjectModel(Shop.name) private readonly shopModel: Model<any>,
     private readonly configService: ConfigService,
     private readonly preferencesService: ReportPreferencesService,
@@ -61,7 +69,9 @@ export class ReportSchedulerService implements OnModuleInit {
   ) {}
 
   async onModuleInit(): Promise<void> {
-    this.enabled = this.configService.get<string>('REPORT_EMAILS_ENABLED', 'false') === 'true';
+    this.enabled =
+      this.configService.get<string>('REPORT_EMAILS_ENABLED', 'false') ===
+      'true';
     this.logger.log(
       `Report scheduler ${this.enabled ? 'ENABLED' : 'DISABLED (REPORT_EMAILS_ENABLED=false)'} — instance ${this.instanceId}`,
     );
@@ -80,19 +90,42 @@ export class ReportSchedulerService implements OnModuleInit {
     staleClaims: number;
   }> {
     const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const [queued, processing, accepted, delivered, failed, suppressed, staleClaims] =
-      await Promise.all([
-        this.runModel.countDocuments({ status: 'queued' }),
-        this.runModel.countDocuments({ status: 'processing' }),
-        this.runModel.countDocuments({ status: 'accepted', createdAt: { $gte: since } }),
-        this.runModel.countDocuments({ status: 'delivered', createdAt: { $gte: since } }),
-        this.runModel.countDocuments({ status: 'failed', createdAt: { $gte: since } }),
-        this.runModel.countDocuments({ status: 'suppressed', createdAt: { $gte: since } }),
-        this.runModel.countDocuments({
-          status: 'processing',
-          claimedAt: { $lt: new Date(Date.now() - ReportSchedulerService.STALE_CLAIM_MINUTES * 60_000) },
-        }),
-      ]);
+    const [
+      queued,
+      processing,
+      accepted,
+      delivered,
+      failed,
+      suppressed,
+      staleClaims,
+    ] = await Promise.all([
+      this.runModel.countDocuments({ status: 'queued' }),
+      this.runModel.countDocuments({ status: 'processing' }),
+      this.runModel.countDocuments({
+        status: 'accepted',
+        createdAt: { $gte: since },
+      }),
+      this.runModel.countDocuments({
+        status: 'delivered',
+        createdAt: { $gte: since },
+      }),
+      this.runModel.countDocuments({
+        status: 'failed',
+        createdAt: { $gte: since },
+      }),
+      this.runModel.countDocuments({
+        status: 'suppressed',
+        createdAt: { $gte: since },
+      }),
+      this.runModel.countDocuments({
+        status: 'processing',
+        claimedAt: {
+          $lt: new Date(
+            Date.now() - ReportSchedulerService.STALE_CLAIM_MINUTES * 60_000,
+          ),
+        },
+      }),
+    ]);
     return {
       enabled: this.enabled,
       instanceId: this.instanceId,
@@ -108,7 +141,11 @@ export class ReportSchedulerService implements OnModuleInit {
 
   /** Recent runs for the Super Admin monitoring surface. */
   async recentRuns(limit = 50): Promise<ReportRunDocument[]> {
-    return this.runModel.find({}).sort({ createdAt: -1 }).limit(Math.min(limit, 200)).exec();
+    return this.runModel
+      .find({})
+      .sort({ createdAt: -1 })
+      .limit(Math.min(limit, 200))
+      .exec();
   }
 
   // ==================== SCHEDULING TICK ====================
@@ -153,12 +190,22 @@ export class ReportSchedulerService implements OnModuleInit {
       const eligible = await this.preferencesService.isEligible(shopId);
       if (!eligible.eligible) continue;
 
-      const due: Array<{ frequency: 'daily' | 'weekly' | 'monthly'; periodStart: Date; periodEnd: Date; periodKey: string; scheduledAt: Date }> = [];
+      const due: Array<{
+        frequency: 'daily' | 'weekly' | 'monthly';
+        periodStart: Date;
+        periodEnd: Date;
+        periodKey: string;
+        scheduledAt: Date;
+      }> = [];
       this.computeDuePeriods(p, tz, now, due);
 
       for (const d of due) {
         const late = now.getTime() - d.scheduledAt.getTime() > 60_000;
-        if (late && now.getTime() - d.scheduledAt.getTime() > ReportSchedulerService.MAX_LATE_DAYS * 86_400_000) {
+        if (
+          late &&
+          now.getTime() - d.scheduledAt.getTime() >
+            ReportSchedulerService.MAX_LATE_DAYS * 86_400_000
+        ) {
           continue; // never flood after a long outage
         }
         const runId = this.buildRunId(shopId, d.frequency, d.periodKey);
@@ -177,7 +224,9 @@ export class ReportSchedulerService implements OnModuleInit {
           created++;
         } catch (error: any) {
           if (error?.code !== 11000) {
-            this.logger.warn(`Run creation failed for ${runId}: ${error.message}`);
+            this.logger.warn(
+              `Run creation failed for ${runId}: ${error.message}`,
+            );
           }
           // 11000 = already exists (idempotent) — expected on re-ticks.
         }
@@ -196,20 +245,39 @@ export class ReportSchedulerService implements OnModuleInit {
     prefs: any,
     tz: string,
     now: Date,
-    out: Array<{ frequency: 'daily' | 'weekly' | 'monthly'; periodStart: Date; periodEnd: Date; periodKey: string; scheduledAt: Date }>,
+    out: Array<{
+      frequency: 'daily' | 'weekly' | 'monthly';
+      periodStart: Date;
+      periodEnd: Date;
+      periodKey: string;
+      scheduledAt: Date;
+    }>,
   ): void {
     const localNowYmd = this.localYmd(now, tz);
     const localNowH = Number(
-      new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', hour12: false }).format(now),
+      new Intl.DateTimeFormat('en-GB', {
+        timeZone: tz,
+        hour: '2-digit',
+        hour12: false,
+      }).format(now),
     );
 
     // DAILY: report for YESTERDAY (shop-local), sent today at hourLocal.
     if (prefs.daily?.enabled) {
       const yesterday = this.shiftYmd(localNowYmd, -1);
-      const scheduledAt = this.localInstant(`${this.todayYmd(now, tz)}T${String(prefs.daily.hourLocal ?? 20).padStart(2, '0')}:00`, tz);
+      const scheduledAt = this.localInstant(
+        `${this.todayYmd(now, tz)}T${String(prefs.daily.hourLocal ?? 20).padStart(2, '0')}:00`,
+        tz,
+      );
       if (now >= scheduledAt) {
         const { start, end } = this.ymdRangeUtc(yesterday, tz);
-        out.push({ frequency: 'daily', periodStart: start, periodEnd: end, periodKey: yesterday, scheduledAt });
+        out.push({
+          frequency: 'daily',
+          periodStart: start,
+          periodEnd: end,
+          periodKey: yesterday,
+          scheduledAt,
+        });
       }
     }
 
@@ -223,7 +291,10 @@ export class ReportSchedulerService implements OnModuleInit {
         daysSinceTarget = 7; // scheduled time not reached today → last week's send was 7 days ago
       }
       const sendDayYmd = this.shiftYmd(localNowYmd, -daysSinceTarget);
-      const scheduledAt = this.localInstant(`${sendDayYmd}T${String(prefs.weekly.hourLocal ?? 20).padStart(2, '0')}:00`, tz);
+      const scheduledAt = this.localInstant(
+        `${sendDayYmd}T${String(prefs.weekly.hourLocal ?? 20).padStart(2, '0')}:00`,
+        tz,
+      );
       if (now >= scheduledAt) {
         // The reported week ENDS on the send day: period = [sendDay-6 .. sendDay] local.
         const startYmd = this.shiftYmd(sendDayYmd, -6);
@@ -244,21 +315,32 @@ export class ReportSchedulerService implements OnModuleInit {
     if (prefs.monthly?.enabled) {
       const dayOfMonth = Number(localNowYmd.slice(8, 10));
       const targetDay = Math.min(prefs.monthly.dayOfMonthLocal ?? 1, 28);
-      const scheduledToday = dayOfMonth === targetDay && localNowH >= (prefs.monthly.hourLocal ?? 9);
-      const sendYmd = scheduledToday || dayOfMonth > targetDay
-        ? `${localNowYmd.slice(0, 7)}-${String(targetDay).padStart(2, '0')}`
-        : this.shiftYmd(`${localNowYmd.slice(0, 7)}-01`, -1); // previous month's target day
-      const scheduledAt = this.localInstant(`${sendYmd}T${String(prefs.monthly.hourLocal ?? 9).padStart(2, '0')}:00`, tz);
+      const scheduledToday =
+        dayOfMonth === targetDay && localNowH >= (prefs.monthly.hourLocal ?? 9);
+      const sendYmd =
+        scheduledToday || dayOfMonth > targetDay
+          ? `${localNowYmd.slice(0, 7)}-${String(targetDay).padStart(2, '0')}`
+          : this.shiftYmd(`${localNowYmd.slice(0, 7)}-01`, -1); // previous month's target day
+      const scheduledAt = this.localInstant(
+        `${sendYmd}T${String(prefs.monthly.hourLocal ?? 9).padStart(2, '0')}:00`,
+        tz,
+      );
       if (now >= scheduledAt) {
         // Report the PREVIOUS calendar month (complete).
         const monthOfSend = Number(sendYmd.slice(5, 7));
         const prevMonth = monthOfSend === 1 ? 12 : monthOfSend - 1;
-        const prevYear = monthOfSend === 1 ? Number(sendYmd.slice(0, 4)) - 1 : Number(sendYmd.slice(0, 4));
+        const prevYear =
+          monthOfSend === 1
+            ? Number(sendYmd.slice(0, 4)) - 1
+            : Number(sendYmd.slice(0, 4));
         const startYmd = `${prevYear}-${String(prevMonth).padStart(2, '0')}-01`;
         const nextM = prevMonth === 12 ? 1 : prevMonth + 1;
         const nextY = prevMonth === 12 ? prevYear + 1 : prevYear;
         const { start } = this.ymdRangeUtc(startYmd, tz);
-        const { start: end } = this.ymdRangeUtc(`${nextY}-${String(nextM).padStart(2, '0')}-01`, tz);
+        const { start: end } = this.ymdRangeUtc(
+          `${nextY}-${String(nextM).padStart(2, '0')}-01`,
+          tz,
+        );
         out.push({
           frequency: 'monthly',
           periodStart: start,
@@ -288,7 +370,10 @@ export class ReportSchedulerService implements OnModuleInit {
               {
                 $or: [
                   { status: 'queued' },
-                  { status: 'failed', attempts: { $lt: ReportSchedulerService.MAX_ATTEMPTS } },
+                  {
+                    status: 'failed',
+                    attempts: { $lt: ReportSchedulerService.MAX_ATTEMPTS },
+                  },
                 ],
               },
               {
@@ -328,7 +413,11 @@ export class ReportSchedulerService implements OnModuleInit {
         if (ambiguous) {
           claim.attempts = ReportSchedulerService.MAX_ATTEMPTS;
         }
-        await this.markFailed(claim, error?.message || 'delivery failed', ambiguous);
+        await this.markFailed(
+          claim,
+          error?.message || 'delivery failed',
+          ambiguous,
+        );
       }
     }
     return delivered;
@@ -336,7 +425,11 @@ export class ReportSchedulerService implements OnModuleInit {
 
   private async deliverRun(run: ReportRunDocument): Promise<void> {
     const shopId = String(run.shopId);
-    const shop = (await this.shopModel.findById(run.shopId).select('name currency ownerId').lean().exec()) as any;
+    const shop = (await this.shopModel
+      .findById(run.shopId)
+      .select('name currency ownerId')
+      .lean()
+      .exec()) as any;
     if (!shop) {
       await this.suppress(run, 'shop_not_found');
       return;
@@ -368,7 +461,9 @@ export class ReportSchedulerService implements OnModuleInit {
           .toArray()
       ).map((s: any) => s.email),
     );
-    const deliverable = to.filter((e) => !suppressedAddresses.has(e.toLowerCase()));
+    const deliverable = to.filter(
+      (e) => !suppressedAddresses.has(e.toLowerCase()),
+    );
     if (deliverable.length === 0) {
       await this.suppress(run, 'all_recipients_suppressed');
       return;
@@ -377,7 +472,8 @@ export class ReportSchedulerService implements OnModuleInit {
     // Canonical metrics for the run's explicit period (never re-derived
     // from "now" — the period is immutable on the run).
     const metrics = await this.buildMetrics(run, shop);
-    const withNarrative = await this.narrative.buildAiNarrativeIfEnabled(metrics);
+    const withNarrative =
+      await this.narrative.buildAiNarrativeIfEnabled(metrics);
     metrics.insights = withNarrative;
 
     const html = this.renderer.html(metrics);
@@ -425,7 +521,9 @@ export class ReportSchedulerService implements OnModuleInit {
           },
         },
       );
-      this.logger.log(`Report run ${run.runId} accepted by provider (${recipients.length} recipient(s))`);
+      this.logger.log(
+        `Report run ${run.runId} accepted by provider (${recipients.length} recipient(s))`,
+      );
     } else {
       const err: any = new Error(send.error || 'provider rejected the send');
       err.ambiguous = (send as any).ambiguous === true;
@@ -433,7 +531,10 @@ export class ReportSchedulerService implements OnModuleInit {
     }
   }
 
-  private async buildMetrics(run: ReportRunDocument, shop: any): Promise<ReportMetrics> {
+  private async buildMetrics(
+    run: ReportRunDocument,
+    shop: any,
+  ): Promise<ReportMetrics> {
     const shopId = String(run.shopId);
     const base: Omit<ReportMetrics, 'insights'> = {
       shopName: shop.name,
@@ -463,24 +564,43 @@ export class ReportSchedulerService implements OnModuleInit {
     // Canonical metrics from the authoritative ReportsService for the run's
     // EXPLICIT period (shop-local boundaries already baked into the run's
     // UTC instants).
-    const orders = await this.reportsService.factsForRange(shopId, run.periodStart, run.periodEnd);
+    const orders = await this.reportsService.factsForRange(
+      shopId,
+      run.periodStart,
+      run.periodEnd,
+    );
     base.billedRevenue = orders.billedRevenue;
     base.collectedPayments = orders.collectedPayments;
-    base.outstanding = Math.round((orders.billedRevenue - orders.collectedPayments) * 100) / 100;
+    base.outstanding =
+      Math.round((orders.billedRevenue - orders.collectedPayments) * 100) / 100;
     base.refunds = orders.refunds;
     base.tax = orders.tax;
     base.discounts = orders.discounts;
     base.orders = orders.orders;
     base.itemsSold = orders.itemsSold;
-    base.averageOrderValue = orders.orders > 0 ? Math.round((orders.billedRevenue / orders.orders) * 100) / 100 : 0;
+    base.averageOrderValue =
+      orders.orders > 0
+        ? Math.round((orders.billedRevenue / orders.orders) * 100) / 100
+        : 0;
     base.paymentMethods = Array.from(orders.paymentMethods.entries())
-      .map(([method, amount]) => ({ method, amount: Math.round(amount * 100) / 100 }))
+      .map(([method, amount]) => ({
+        method,
+        amount: Math.round(amount * 100) / 100,
+      }))
       .sort((a, b) => b.amount - a.amount);
     base.topProducts = Array.from(orders.productMap.entries())
-      .map(([productId, d]) => ({ productId, productName: d.name, quantity: d.quantity, revenue: Math.round(d.revenue * 100) / 100 }))
+      .map(([productId, d]) => ({
+        productId,
+        productName: d.name,
+        quantity: d.quantity,
+        revenue: Math.round(d.revenue * 100) / 100,
+      }))
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 10);
-    base.currency = (Array.from(orders.currencies.entries()).filter(([c]) => c !== '(unlabelled)').sort((a, b) => b[1] - a[1])[0]?.[0]) || shop.currency;
+    base.currency =
+      Array.from(orders.currencies.entries())
+        .filter(([c]) => c !== '(unlabelled)')
+        .sort((a, b) => b[1] - a[1])[0]?.[0] || shop.currency;
 
     // Previous comparable period for the change indicator.
     const span = run.periodEnd.getTime() - run.periodStart.getTime();
@@ -489,26 +609,40 @@ export class ReportSchedulerService implements OnModuleInit {
       new Date(run.periodStart.getTime() - span),
       run.periodStart,
     );
-    base.previousPeriod = { billedRevenue: prev.billedRevenue, orders: prev.orders };
+    base.previousPeriod = {
+      billedRevenue: prev.billedRevenue,
+      orders: prev.orders,
+    };
 
     // Low stock (current, not period-bound).
     base.lowStock = await this.lowStock(shopId);
-    return { ...base, insights: [] } as ReportMetrics;
+    return { ...base, insights: [] };
   }
 
-  private async lowStock(shopId: string): Promise<Array<{ name: string; stock: number; reorderPoint: number }>> {
+  private async lowStock(
+    shopId: string,
+  ): Promise<Array<{ name: string; stock: number; reorderPoint: number }>> {
     try {
       const products = await this.shopModel.db
         .collection('products')
         .find({
           shopId: new Types.ObjectId(shopId),
           deletedAt: { $exists: false },
-          $expr: { $and: [{ $lte: ['$stock', '$reorderLevel'] }, { $gt: ['$reorderLevel', 0] }] },
+          $expr: {
+            $and: [
+              { $lte: ['$stock', '$reorderLevel'] },
+              { $gt: ['$reorderLevel', 0] },
+            ],
+          },
         })
         .project({ name: 1, stock: 1, reorderLevel: 1 })
         .limit(8)
         .toArray();
-      return products.map((p: any) => ({ name: p.name, stock: p.stock || 0, reorderPoint: p.reorderLevel || 0 }));
+      return products.map((p: any) => ({
+        name: p.name,
+        stock: p.stock || 0,
+        reorderPoint: p.reorderLevel || 0,
+      }));
     } catch {
       return [];
     }
@@ -529,22 +663,34 @@ export class ReportSchedulerService implements OnModuleInit {
     }
   }
 
-  private async markFailed(run: ReportRunDocument, error: string, exhausted?: boolean): Promise<void> {
-    const terminal = exhausted || run.attempts >= ReportSchedulerService.MAX_ATTEMPTS;
+  private async markFailed(
+    run: ReportRunDocument,
+    error: string,
+    exhausted?: boolean,
+  ): Promise<void> {
+    const terminal =
+      exhausted || run.attempts >= ReportSchedulerService.MAX_ATTEMPTS;
     await this.runModel.updateOne(
       { _id: run._id, status: 'processing' },
       {
         $set: {
           status: 'failed',
-          ...(terminal ? { attempts: ReportSchedulerService.MAX_ATTEMPTS } : {}),
+          ...(terminal
+            ? { attempts: ReportSchedulerService.MAX_ATTEMPTS }
+            : {}),
           lastError: String(error).slice(0, 500),
         },
       },
     );
-    this.logger.warn(`Report run ${run.runId} attempt ${run.attempts} failed: ${error}`);
+    this.logger.warn(
+      `Report run ${run.runId} attempt ${run.attempts} failed: ${error}`,
+    );
   }
 
-  private async suppress(run: ReportRunDocument, reason: string): Promise<void> {
+  private async suppress(
+    run: ReportRunDocument,
+    reason: string,
+  ): Promise<void> {
     await this.runModel.updateOne(
       { _id: run._id, status: 'processing' },
       { $set: { status: 'suppressed', lastError: reason } },
@@ -554,7 +700,9 @@ export class ReportSchedulerService implements OnModuleInit {
 
   /** Re-claim runs whose owning instance crashed mid-delivery. */
   private async recoverStaleClaims(): Promise<void> {
-    const cutoff = new Date(Date.now() - ReportSchedulerService.STALE_CLAIM_MINUTES * 60_000);
+    const cutoff = new Date(
+      Date.now() - ReportSchedulerService.STALE_CLAIM_MINUTES * 60_000,
+    );
     const result = await this.runModel
       .updateMany(
         { status: 'processing', claimedAt: { $lt: cutoff } },
@@ -562,13 +710,19 @@ export class ReportSchedulerService implements OnModuleInit {
       )
       .exec();
     if (result.modifiedCount > 0) {
-      this.logger.warn(`Recovered ${result.modifiedCount} stale report claim(s)`);
+      this.logger.warn(
+        `Recovered ${result.modifiedCount} stale report claim(s)`,
+      );
     }
   }
 
   // ==================== TIME HELPERS (shop-local correctness) ====================
 
-  private buildRunId(shopId: string, frequency: string, periodKey: string): string {
+  private buildRunId(
+    shopId: string,
+    frequency: string,
+    periodKey: string,
+  ): string {
     return `${shopId}:${frequency}:${periodKey}:v1`;
   }
 
@@ -577,7 +731,12 @@ export class ReportSchedulerService implements OnModuleInit {
   }
 
   private localYmd(instant: Date, tz: string): string {
-    return new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(instant);
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: tz,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(instant);
   }
 
   private dowInZone(instant: Date, tz: string): number {
@@ -597,11 +756,25 @@ export class ReportSchedulerService implements OnModuleInit {
     const [datePart, timePart] = localIso.split('T');
     const probe = new Date(`${datePart}T12:00:00Z`);
     const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone: tz, hour12: false,
-      year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
+      timeZone: tz,
+      hour12: false,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
     }).formatToParts(probe);
-    const get = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? 0);
-    const asUtc = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour') % 24, get('minute'), get('second'));
+    const get = (t: string) =>
+      Number(parts.find((p) => p.type === t)?.value ?? 0);
+    const asUtc = Date.UTC(
+      get('year'),
+      get('month') - 1,
+      get('day'),
+      get('hour') % 24,
+      get('minute'),
+      get('second'),
+    );
     const offsetMs = asUtc - probe.getTime();
     return new Date(new Date(`${datePart}T${timePart}Z`).getTime() - offsetMs);
   }

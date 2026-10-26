@@ -216,7 +216,15 @@ describe('P0-3E mpesa order/payment convergence', () => {
           useValue: mockMpesaTxnModel,
         },
         { provide: getModelToken(Order.name), useValue: mockOrderModel },
-        { provide: getModelToken(Shop.name), useValue: { findById: jest.fn().mockReturnThis(), select: jest.fn().mockReturnThis(), lean: jest.fn().mockReturnThis(), exec: jest.fn().mockResolvedValue({ currency: 'KES' }) } },
+        {
+          provide: getModelToken(Shop.name),
+          useValue: {
+            findById: jest.fn().mockReturnThis(),
+            select: jest.fn().mockReturnThis(),
+            lean: jest.fn().mockReturnThis(),
+            exec: jest.fn().mockResolvedValue({ currency: 'KES' }),
+          },
+        },
         {
           provide: getConnectionToken(),
           useValue: { startSession: jest.fn() },
@@ -507,7 +515,12 @@ describe('P0-3E mpesa order/payment convergence', () => {
       });
       expect(retryAfter._id).toBe(first._id);
       expect(updateStock).toHaveBeenCalledTimes(1);
-      expect(updateStock).toHaveBeenCalledWith(SHOP_A, PRODUCT, -1, expect.objectContaining({ reason: 'sale' }));
+      expect(updateStock).toHaveBeenCalledWith(
+        SHOP_A,
+        PRODUCT,
+        -1,
+        expect.objectContaining({ reason: 'sale' }),
+      );
     });
   });
 });

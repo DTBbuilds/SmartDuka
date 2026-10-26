@@ -1,12 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { LoginHistory, LoginHistoryDocument } from '../../auth/schemas/login-history.schema';
+import {
+  LoginHistory,
+  LoginHistoryDocument,
+} from '../../auth/schemas/login-history.schema';
 
 @Injectable()
 export class LoginHistoryService {
   constructor(
-    @InjectModel(LoginHistory.name) private readonly loginHistoryModel: Model<LoginHistoryDocument>,
+    @InjectModel(LoginHistory.name)
+    private readonly loginHistoryModel: Model<LoginHistoryDocument>,
   ) {}
 
   async getLoginHistory(
@@ -114,9 +118,9 @@ export class LoginHistoryService {
 
     return {
       totalAttempts: stats.reduce((sum, s) => sum + s.count, 0),
-      successful: stats.find(s => s._id === 'success')?.count || 0,
-      failed: stats.find(s => s._id === 'failed')?.count || 0,
-      otpRequired: stats.find(s => s._id === 'otp_required')?.count || 0,
+      successful: stats.find((s) => s._id === 'success')?.count || 0,
+      failed: stats.find((s) => s._id === 'failed')?.count || 0,
+      otpRequired: stats.find((s) => s._id === 'otp_required')?.count || 0,
       byMethod: methodStats.reduce((acc, m) => {
         acc[m._id] = m.count;
         return acc;

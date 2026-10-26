@@ -7,7 +7,7 @@ import { nanoid } from 'nanoid';
 
 /**
  * PHASE 3: REORDER AUTOMATION
- * 
+ *
  * Automatically creates purchase orders when stock falls below reorder point
  * Multi-tenant safe: filters by shopId
  */
@@ -16,13 +16,15 @@ export class ReorderService {
   private readonly logger = new Logger(ReorderService.name);
 
   constructor(
-    @InjectModel(Product.name) private readonly productModel: Model<ProductDocument>,
-    @InjectModel(Purchase.name) private readonly purchaseModel: Model<PurchaseDocument>,
+    @InjectModel(Product.name)
+    private readonly productModel: Model<ProductDocument>,
+    @InjectModel(Purchase.name)
+    private readonly purchaseModel: Model<PurchaseDocument>,
   ) {}
 
   /**
    * Check products below reorder point and auto-create POs
-   * 
+   *
    * @param shopId - Shop ID for multi-tenant isolation
    * @param userId - User ID for audit trail
    * @returns Result with count of created POs and any errors
@@ -47,7 +49,7 @@ export class ReorderService {
         .exec();
 
       this.logger.log(
-        `Found ${productsToReorder.length} products below reorder point for shop ${shopId}`
+        `Found ${productsToReorder.length} products below reorder point for shop ${shopId}`,
       );
 
       for (const product of productsToReorder) {
@@ -61,7 +63,7 @@ export class ReorderService {
 
           if (existingPO) {
             this.logger.log(
-              `Skipping ${product.name}: PO already exists (${existingPO.purchaseNumber})`
+              `Skipping ${product.name}: PO already exists (${existingPO.purchaseNumber})`,
             );
             skipped++;
             continue;
@@ -70,7 +72,7 @@ export class ReorderService {
           // Check if product has preferred supplier
           if (!product.preferredSupplierId) {
             errors.push(
-              `${product.name}: No preferred supplier set. Cannot auto-create PO.`
+              `${product.name}: No preferred supplier set. Cannot auto-create PO.`,
             );
             skipped++;
             continue;
@@ -98,7 +100,7 @@ export class ReorderService {
             totalCost,
             status: 'pending',
             expectedDeliveryDate: this.calculateExpectedDelivery(
-              product.leadTimeDays || 3
+              product.leadTimeDays || 3,
             ),
             notes: `Auto-generated reorder: Stock ${product.stock} <= Reorder Point ${product.reorderPoint}`,
             createdBy: new Types.ObjectId(userId),
@@ -108,7 +110,7 @@ export class ReorderService {
           created++;
 
           this.logger.log(
-            `Auto-created PO ${purchaseNumber} for ${product.name}: ${reorderQty} units`
+            `Auto-created PO ${purchaseNumber} for ${product.name}: ${reorderQty} units`,
           );
         } catch (error: any) {
           const errorMsg = `Failed to create PO for ${product.name}: ${
@@ -131,7 +133,7 @@ export class ReorderService {
 
   /**
    * Get all products below reorder point
-   * 
+   *
    * @param shopId - Shop ID for multi-tenant isolation
    * @returns Products that need reordering
    */
@@ -149,7 +151,7 @@ export class ReorderService {
 
   /**
    * Get reorder status for a product
-   * 
+   *
    * @param shopId - Shop ID
    * @param productId - Product ID
    * @returns Reorder status with stock info
@@ -178,9 +180,7 @@ export class ReorderService {
     const needsReorder = (product.stock || 0) <= (product.reorderPoint || 0);
     const dailyUsage = await this.estimateDailyUsage(shopId, productId);
     const daysUntilStockout =
-      dailyUsage > 0
-        ? Math.ceil((product.stock || 0) / dailyUsage)
-        : 999; // If no usage, assume plenty of time
+      dailyUsage > 0 ? Math.ceil((product.stock || 0) / dailyUsage) : 999; // If no usage, assume plenty of time
 
     return {
       productId: product._id.toString(),
@@ -195,7 +195,7 @@ export class ReorderService {
 
   /**
    * Update reorder settings for a product
-   * 
+   *
    * @param shopId - Shop ID
    * @param productId - Product ID
    * @param settings - Reorder settings to update
@@ -221,7 +221,7 @@ export class ReorderService {
     }
     if (settings.preferredSupplierId !== undefined) {
       updateData.preferredSupplierId = new Types.ObjectId(
-        settings.preferredSupplierId
+        settings.preferredSupplierId,
       );
     }
     if (settings.leadTimeDays !== undefined) {
@@ -235,14 +235,14 @@ export class ReorderService {
           shopId: new Types.ObjectId(shopId),
         },
         updateData,
-        { new: true }
+        { new: true },
       )
       .exec();
   }
 
   /**
    * Get reorder statistics for a shop
-   * 
+   *
    * @param shopId - Shop ID
    * @returns Statistics about reorder status
    */
@@ -261,17 +261,17 @@ export class ReorderService {
       .exec();
 
     const productsWithReorderPoint = products.filter(
-      (p) => (p.reorderPoint || 0) > 0
+      (p) => (p.reorderPoint || 0) > 0,
     );
     const productsNeedingReorder = productsWithReorderPoint.filter(
-      (p) => (p.stock || 0) <= (p.reorderPoint || 0)
+      (p) => (p.stock || 0) <= (p.reorderPoint || 0),
     );
 
     const avgReorderPoint =
       productsWithReorderPoint.length > 0
         ? productsWithReorderPoint.reduce(
             (sum, p) => sum + (p.reorderPoint || 0),
-            0
+            0,
           ) / productsWithReorderPoint.length
         : 0;
 
@@ -279,7 +279,7 @@ export class ReorderService {
       productsWithReorderPoint.length > 0
         ? productsWithReorderPoint.reduce(
             (sum, p) => sum + (p.reorderQuantity || 0),
-            0
+            0,
           ) / productsWithReorderPoint.length
         : 0;
 
@@ -294,12 +294,15 @@ export class ReorderService {
 
   /**
    * Estimate daily usage for a product based on recent sales
-   * 
+   *
    * @param shopId - Shop ID
    * @param productId - Product ID
    * @returns Estimated daily usage
    */
-  private async estimateDailyUsage(shopId: string, productId: string): Promise<number> {
+  private async estimateDailyUsage(
+    shopId: string,
+    productId: string,
+  ): Promise<number> {
     // TODO: Implement by querying sales data from last 30 days
     // For now, return 0 (conservative estimate)
     return 0;
@@ -307,7 +310,7 @@ export class ReorderService {
 
   /**
    * Calculate expected delivery date based on lead time
-   * 
+   *
    * @param leadTimeDays - Lead time in days
    * @returns Expected delivery date
    */

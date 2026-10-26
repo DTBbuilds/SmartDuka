@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-assignment */
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -9,7 +8,8 @@ export class AuditService {
   private readonly logger = new Logger(AuditService.name);
 
   constructor(
-    @InjectModel(AuditLog.name) private readonly auditModel: Model<AuditLogDocument>,
+    @InjectModel(AuditLog.name)
+    private readonly auditModel: Model<AuditLogDocument>,
   ) {}
 
   /**
@@ -61,7 +61,8 @@ export class AuditService {
     if (filters?.action) query.action = filters.action;
     if (filters?.resource) query.resource = filters.resource;
     if (filters?.userId) query.userId = new Types.ObjectId(filters.userId);
-    if (filters?.branchId) query.branchId = new Types.ObjectId(filters.branchId);
+    if (filters?.branchId)
+      query.branchId = new Types.ObjectId(filters.branchId);
 
     if (filters?.startDate || filters?.endDate) {
       query.createdAt = {};

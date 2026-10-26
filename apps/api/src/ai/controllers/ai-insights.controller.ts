@@ -1,9 +1,20 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-import { Controller, Get, Patch, Post, Param, Query, Body, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Patch,
+  Post,
+  Param,
+  Query,
+  Body,
+  UseGuards,
+} from '@nestjs/common';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../../auth/strategies/jwt.strategy';
-import { AiInsightsService, InsightFilters } from '../services/ai-insights.service';
+import {
+  AiInsightsService,
+  InsightFilters,
+} from '../services/ai-insights.service';
 import { AiOrchestratorService } from '../services/ai-orchestrator.service';
 
 @Controller('ai/insights')
@@ -65,7 +76,13 @@ export class AiInsightsController {
     @Param('id') id: string,
     @Body() body: { rating: string; comment?: string },
   ) {
-    await this.insightsService.submitFeedback(user.shopId, id, user.sub, body.rating, body.comment);
+    await this.insightsService.submitFeedback(
+      user.shopId,
+      id,
+      user.sub,
+      body.rating,
+      body.comment,
+    );
     return { success: true };
   }
 

@@ -196,9 +196,7 @@ describe('BarcodeService', () => {
 
     it('should handle invalid barcodes', async () => {
       const shopId = '507f1f77bcf86cd799439011';
-      const barcodes = [
-        { barcode: 'invalid', productId: 'prod1' },
-      ];
+      const barcodes = [{ barcode: 'invalid', productId: 'prod1' }];
 
       const result = await service.bulkImportBarcodes(shopId, barcodes);
 

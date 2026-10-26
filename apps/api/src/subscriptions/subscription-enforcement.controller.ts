@@ -1,6 +1,10 @@
 import { Controller, Get, UseGuards, Request } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { SubscriptionEnforcementService, SubscriptionAccessResult, SubscriptionWarning } from './subscription-enforcement.service';
+import {
+  SubscriptionEnforcementService,
+  SubscriptionAccessResult,
+  SubscriptionWarning,
+} from './subscription-enforcement.service';
 import { SkipSubscriptionCheck } from '../auth/guards/subscription-status.guard';
 
 /**
@@ -23,7 +27,7 @@ export class SubscriptionEnforcementController {
   @SkipSubscriptionCheck()
   async checkAccess(@Request() req: any): Promise<SubscriptionAccessResult> {
     const shopId = req.user?.shopId;
-    
+
     if (!shopId) {
       return {
         accessLevel: 'full' as any,
@@ -43,9 +47,11 @@ export class SubscriptionEnforcementController {
    */
   @Get('warnings')
   @SkipSubscriptionCheck()
-  async getWarnings(@Request() req: any): Promise<{ warnings: SubscriptionWarning[] }> {
+  async getWarnings(
+    @Request() req: any,
+  ): Promise<{ warnings: SubscriptionWarning[] }> {
     const shopId = req.user?.shopId;
-    
+
     if (!shopId) {
       return { warnings: [] };
     }
@@ -60,17 +66,15 @@ export class SubscriptionEnforcementController {
    */
   @Get('can-operate')
   @SkipSubscriptionCheck()
-  async canOperate(
-    @Request() req: any,
-  ): Promise<{ 
-    canRead: boolean; 
-    canWrite: boolean; 
+  async canOperate(@Request() req: any): Promise<{
+    canRead: boolean;
+    canWrite: boolean;
     canUsePOS: boolean;
     canViewReports: boolean;
     message?: string;
   }> {
     const shopId = req.user?.shopId;
-    
+
     if (!shopId) {
       return {
         canRead: true,

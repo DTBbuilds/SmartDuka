@@ -30,7 +30,8 @@ export class PasswordResetToken {
   userAgent?: string;
 }
 
-export const PasswordResetTokenSchema = SchemaFactory.createForClass(PasswordResetToken);
+export const PasswordResetTokenSchema =
+  SchemaFactory.createForClass(PasswordResetToken);
 
 // Auto-delete expired tokens after 24 hours
 PasswordResetTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 86400 });

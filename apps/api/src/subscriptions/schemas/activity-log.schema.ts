@@ -22,7 +22,7 @@ export enum ActivityType {
 
 /**
  * Activity Log Schema
- * 
+ *
  * Tracks all important activities and events for audit trail and history
  */
 @Schema({ timestamps: true })

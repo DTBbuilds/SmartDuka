@@ -17,10 +17,10 @@ export enum SystemConfigType {
 
 /**
  * System Configuration Schema
- * 
+ *
  * Stores system-wide configuration that super admin can manage.
  * This is separate from shop-specific configurations.
- * 
+ *
  * Used for:
  * - M-Pesa credentials for subscription payments
  * - Stripe credentials for card payments
@@ -60,28 +60,28 @@ export class SystemConfig {
     consumerKey?: string;
     consumerKeyIv?: string;
     consumerKeyTag?: string;
-    
+
     consumerSecret?: string;
     consumerSecretIv?: string;
     consumerSecretTag?: string;
-    
+
     passkey?: string;
     passkeyIv?: string;
     passkeyTag?: string;
-    
+
     shortCode?: string;
     callbackUrl?: string;
-    
+
     // Stripe configuration
     secretKey?: string;
     secretKeyIv?: string;
     secretKeyTag?: string;
-    
+
     publishableKey?: string;
     webhookSecret?: string;
     webhookSecretIv?: string;
     webhookSecretTag?: string;
-    
+
     // Email configuration
     smtpHost?: string;
     smtpPort?: number;
@@ -90,13 +90,13 @@ export class SystemConfig {
     smtpPassIv?: string;
     smtpPassTag?: string;
     smtpFrom?: string;
-    
+
     // VAT configuration
-    vatEnabled?: boolean;        // Master toggle for VAT on subscription payments
-    vatRate?: number;            // VAT rate (default 0.16 = 16%)
-    vatName?: string;            // Display name (default "VAT")
-    vatDescription?: string;     // Description for invoices
-    
+    vatEnabled?: boolean; // Master toggle for VAT on subscription payments
+    vatRate?: number; // VAT rate (default 0.16 = 16%)
+    vatName?: string; // Display name (default "VAT")
+    vatDescription?: string; // Description for invoices
+
     // Generic key-value for other settings
     [key: string]: any;
   };

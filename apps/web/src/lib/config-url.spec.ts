@@ -11,6 +11,8 @@
  * call. These tests pin the normalization so neither can ever recur.
  */
 
+import * as staticConfig from './config';
+
 type ConfigModule = {
   normalizeApiOrigin: (url: string) => string;
   config: { apiUrl: string; apiBaseUrl: string };
@@ -23,13 +25,13 @@ const loadWithEnv = (apiUrl?: string): ConfigModule['config'] => {
   } else {
     process.env.NEXT_PUBLIC_API_URL = apiUrl;
   }
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const mod: ConfigModule = require('./config');
   return mod.config;
 };
 
 describe('normalizeApiOrigin', () => {
-  const { normalizeApiOrigin } = require('./config') as ConfigModule;
+  const { normalizeApiOrigin } = staticConfig;
 
   it('keeps a bare origin untouched', () => {
     expect(normalizeApiOrigin('https://api.smartduka.org')).toBe('https://api.smartduka.org');

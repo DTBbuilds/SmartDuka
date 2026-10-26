@@ -23,12 +23,15 @@ import { SystemAuditService } from './services/system-audit.service';
 import { EmailLogService } from './services/email-log.service';
 import { SystemConfigService } from './services/system-config.service';
 import { PaymentAttemptService } from '../subscriptions/services/payment-attempt.service';
-import { PaymentAttemptStatus, PaymentMethod } from '../subscriptions/schemas/payment-attempt.schema';
+import {
+  PaymentAttemptStatus,
+  PaymentMethod,
+} from '../subscriptions/schemas/payment-attempt.schema';
 import { AuditActionCategory } from './schemas/system-audit-log.schema';
 
 /**
  * System Management Controller
- * 
+ *
  * Super Admin endpoints for comprehensive system oversight:
  * - Dashboard statistics
  * - Transaction history
@@ -263,7 +266,10 @@ export class SystemManagementController {
     });
 
     res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename=audit-logs-${new Date().toISOString().split('T')[0]}.csv`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=audit-logs-${new Date().toISOString().split('T')[0]}.csv`,
+    );
     res.send(csv);
   }
 
@@ -335,7 +341,6 @@ export class SystemManagementController {
     );
   }
 
-
   /**
    * Get emails for a specific shop
    */
@@ -402,7 +407,8 @@ export class SystemManagementController {
   @Put('config/mpesa')
   async saveMpesaConfig(
     @CurrentUser() user: any,
-    @Body() body: {
+    @Body()
+    body: {
       environment: 'sandbox' | 'production';
       shortCode: string;
       consumerKey: string;
@@ -432,9 +438,7 @@ export class SystemManagementController {
    * Toggle M-Pesa active status
    */
   @Put('config/mpesa/toggle')
-  async toggleMpesaActive(
-    @Body() body: { isActive: boolean },
-  ) {
+  async toggleMpesaActive(@Body() body: { isActive: boolean }) {
     this.logger.log(`Toggling M-Pesa active status to ${body.isActive}`);
     return this.configService.toggleMpesaActive(body.isActive);
   }
@@ -503,7 +507,13 @@ export class SystemManagementController {
   @Put('vat-config')
   async updateVatConfig(
     @CurrentUser() user: any,
-    @Body() body: { enabled: boolean; rate?: number; name?: string; description?: string },
+    @Body()
+    body: {
+      enabled: boolean;
+      rate?: number;
+      name?: string;
+      description?: string;
+    },
   ) {
     this.logger.log(`Updating VAT config: enabled=${body.enabled}`);
     await this.configService.saveVatConfig({
@@ -551,7 +561,9 @@ export class SystemManagementController {
     @Param('invoiceId') invoiceId: string,
     @Param('paymentId') paymentId: string,
   ) {
-    this.logger.log(`Approving invoice payment: ${invoiceId}/${paymentId} by ${user.email}`);
+    this.logger.log(
+      `Approving invoice payment: ${invoiceId}/${paymentId} by ${user.email}`,
+    );
     return this.systemService.approveInvoicePayment(
       invoiceId,
       paymentId,
@@ -570,7 +582,9 @@ export class SystemManagementController {
     @Param('paymentId') paymentId: string,
     @Body() body: { reason: string },
   ) {
-    this.logger.log(`Rejecting invoice payment: ${invoiceId}/${paymentId} by ${user.email}`);
+    this.logger.log(
+      `Rejecting invoice payment: ${invoiceId}/${paymentId} by ${user.email}`,
+    );
     return this.systemService.rejectInvoicePayment(
       invoiceId,
       paymentId,
@@ -588,7 +602,9 @@ export class SystemManagementController {
     @CurrentUser() user: JwtPayload,
     @Param('paymentAttemptId') paymentAttemptId: string,
   ) {
-    this.logger.log(`Approving subscription payment: ${paymentAttemptId} by ${user.email}`);
+    this.logger.log(
+      `Approving subscription payment: ${paymentAttemptId} by ${user.email}`,
+    );
     return this.systemService.approveSubscriptionPayment(
       paymentAttemptId,
       user.sub,
@@ -605,7 +621,9 @@ export class SystemManagementController {
     @Param('paymentAttemptId') paymentAttemptId: string,
     @Body() body: { reason: string },
   ) {
-    this.logger.log(`Rejecting subscription payment: ${paymentAttemptId} by ${user.email}`);
+    this.logger.log(
+      `Rejecting subscription payment: ${paymentAttemptId} by ${user.email}`,
+    );
     return this.systemService.rejectSubscriptionPayment(
       paymentAttemptId,
       user.sub,

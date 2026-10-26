@@ -1,4 +1,11 @@
-import { IsDateString, IsEnum, IsNumber, IsOptional, Max, Min } from 'class-validator';
+import {
+  IsDateString,
+  IsEnum,
+  IsNumber,
+  IsOptional,
+  Max,
+  Min,
+} from 'class-validator';
 
 export class SalesQueryDto {
   @IsOptional()

@@ -1,9 +1,19 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unused-vars */
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { SupportTicket, SupportTicketDocument } from './schemas/support-ticket.schema';
-import { Conversation, ConversationDocument } from '../messaging/schemas/conversation.schema';
+import {
+  SupportTicket,
+  SupportTicketDocument,
+} from './schemas/support-ticket.schema';
+import {
+  Conversation,
+  ConversationDocument,
+} from '../messaging/schemas/conversation.schema';
 import { Message, MessageDocument } from '../messaging/schemas/message.schema';
 
 export interface CreateTicketDto {
@@ -24,9 +34,12 @@ export class SupportService {
   private readonly logger = new Logger(SupportService.name);
 
   constructor(
-    @InjectModel(SupportTicket.name) private readonly ticketModel: Model<SupportTicketDocument>,
-    @InjectModel(Conversation.name) private readonly conversationModel: Model<ConversationDocument>,
-    @InjectModel(Message.name) private readonly messageModel: Model<MessageDocument>,
+    @InjectModel(SupportTicket.name)
+    private readonly ticketModel: Model<SupportTicketDocument>,
+    @InjectModel(Conversation.name)
+    private readonly conversationModel: Model<ConversationDocument>,
+    @InjectModel(Message.name)
+    private readonly messageModel: Model<MessageDocument>,
   ) {}
 
   /**
@@ -84,10 +97,13 @@ export class SupportService {
           lastMessagePreview: dto.description.substring(0, 100),
         });
 
-        this.logger.log(`Created inbox conversation for support ticket ${savedTicket._id}`);
+        this.logger.log(
+          `Created inbox conversation for support ticket ${savedTicket._id}`,
+        );
       } catch (msgError: unknown) {
         // Don't fail the ticket creation if messaging fails
-        const errMsg = msgError instanceof Error ? msgError.message : String(msgError);
+        const errMsg =
+          msgError instanceof Error ? msgError.message : String(msgError);
         this.logger.warn(`Failed to create inbox conversation: ${errMsg}`);
       }
 
@@ -139,7 +155,9 @@ export class SupportService {
    * Get ticket by ID
    */
   async getTicketById(ticketId: string): Promise<SupportTicketDocument> {
-    const ticket = await this.ticketModel.findById(new Types.ObjectId(ticketId)).exec();
+    const ticket = await this.ticketModel
+      .findById(new Types.ObjectId(ticketId))
+      .exec();
     if (!ticket) {
       throw new NotFoundException('Support ticket not found');
     }
@@ -165,7 +183,10 @@ export class SupportService {
   /**
    * Add message to ticket
    */
-  async addMessage(ticketId: string, dto: AddMessageDto): Promise<SupportTicketDocument> {
+  async addMessage(
+    ticketId: string,
+    dto: AddMessageDto,
+  ): Promise<SupportTicketDocument> {
     const ticket = await this.getTicketById(ticketId);
 
     const updatedTicket = await this.ticketModel
@@ -215,7 +236,9 @@ export class SupportService {
     }
 
     const updatedTicket = await this.ticketModel
-      .findByIdAndUpdate(new Types.ObjectId(ticketId), updateData, { new: true })
+      .findByIdAndUpdate(new Types.ObjectId(ticketId), updateData, {
+        new: true,
+      })
       .exec();
 
     this.logger.log(`Ticket ${ticketId} status updated to ${status}`);
@@ -228,7 +251,10 @@ export class SupportService {
   /**
    * Assign ticket to super admin
    */
-  async assignTicket(ticketId: string, assignedTo: string): Promise<SupportTicketDocument> {
+  async assignTicket(
+    ticketId: string,
+    assignedTo: string,
+  ): Promise<SupportTicketDocument> {
     const ticket = await this.getTicketById(ticketId);
 
     const updatedTicket = await this.ticketModel

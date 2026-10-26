@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call */
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -85,9 +84,16 @@ export class AnalyticsService {
       .exec();
 
     // Calculate totals
-    const todayRevenue = todayOrders.reduce((sum, order) => sum + (order.total || 0), 0);
-    const totalRevenue = allOrders.reduce((sum, order) => sum + (order.total || 0), 0);
-    const averageOrderValue = allOrders.length > 0 ? totalRevenue / allOrders.length : 0;
+    const todayRevenue = todayOrders.reduce(
+      (sum, order) => sum + (order.total || 0),
+      0,
+    );
+    const totalRevenue = allOrders.reduce(
+      (sum, order) => sum + (order.total || 0),
+      0,
+    );
+    const averageOrderValue =
+      allOrders.length > 0 ? totalRevenue / allOrders.length : 0;
 
     return {
       todaySales: todayOrders.length,
@@ -104,7 +110,10 @@ export class AnalyticsService {
   /**
    * Get top selling products
    */
-  async getTopProducts(shopId: string, limit: number = 5): Promise<TopProduct[]> {
+  async getTopProducts(
+    shopId: string,
+    limit: number = 5,
+  ): Promise<TopProduct[]> {
     const shopObjectId = new Types.ObjectId(shopId);
 
     const result = await this.orderModel.aggregate([
@@ -122,7 +131,7 @@ export class AnalyticsService {
       { $limit: limit },
     ]);
 
-    return result.map(item => ({
+    return result.map((item) => ({
       productId: item._id?.toString() || 'unknown',
       name: item.name || 'Unknown Product',
       quantitySold: item.quantitySold || 0,
@@ -133,7 +142,10 @@ export class AnalyticsService {
   /**
    * Get recent sales
    */
-  async getRecentSales(shopId: string, limit: number = 5): Promise<RecentSale[]> {
+  async getRecentSales(
+    shopId: string,
+    limit: number = 5,
+  ): Promise<RecentSale[]> {
     const shopObjectId = new Types.ObjectId(shopId);
 
     const orders = await this.orderModel

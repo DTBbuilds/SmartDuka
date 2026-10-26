@@ -1,4 +1,11 @@
-import { IsEmail, IsString, MinLength, IsOptional, IsEnum, IsMongoId } from 'class-validator';
+import {
+  IsEmail,
+  IsString,
+  MinLength,
+  IsOptional,
+  IsEnum,
+  IsMongoId,
+} from 'class-validator';
 
 export class LoginDto {
   @IsEmail()

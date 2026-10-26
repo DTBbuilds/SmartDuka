@@ -1,20 +1,23 @@
 /**
  * SmartDuka Professional Email Templates
- * 
+ *
  * Design: Clean, minimal, professional
  * Accent: #f97316 (brand orange) — used sparingly
  * Text: #111827 (primary), #6b7280 (secondary)
  * Background: #f4f4f5 / #ffffff
  * All styles inline for maximum email client compatibility
- * 
+ *
  * Contact: 0450 275 013 (AU), 0727 068 107 (KE) | smartdukainfo@gmail.com | www.smartduka.org
  */
 
 // Base email wrapper with SmartDuka branding — clean, professional, all inline styles
-export const getEmailWrapper = (content: string, preheader?: string): string => {
+export const getEmailWrapper = (
+  content: string,
+  preheader?: string,
+): string => {
   const year = new Date().getFullYear();
   const url = process.env.FRONTEND_URL || 'https://www.smartduka.org';
-  
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -62,8 +65,21 @@ export const EMAIL_TEMPLATES = {
     name: 'welcome',
     subject: 'Welcome to SmartDuka, {{shopName}}!',
     description: 'Sent when a new shop is registered',
-    variables: ['shopName', 'userName', 'loginUrl', 'planName', 'trialDays', 'billingCycle', 'planPrice', 'maxShops', 'maxEmployees', 'maxProducts'],
-    getHtml: (vars: Record<string, any>) => getEmailWrapper(`
+    variables: [
+      'shopName',
+      'userName',
+      'loginUrl',
+      'planName',
+      'trialDays',
+      'billingCycle',
+      'planPrice',
+      'maxShops',
+      'maxEmployees',
+      'maxProducts',
+    ],
+    getHtml: (vars: Record<string, any>) =>
+      getEmailWrapper(
+        `
   <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#111827;text-align:center;">Welcome to SmartDuka</h1>
   <p style="margin:0 0 20px;font-size:14px;color:#6b7280;text-align:center;">Your shop is ready to go.</p>
 
@@ -97,7 +113,9 @@ export const EMAIL_TEMPLATES = {
     <p style="margin:0;font-size:12px;color:#6b7280;">Need help? Contact us at <a href="mailto:smartdukainfo@gmail.com" style="color:#f97316;text-decoration:none;">smartdukainfo@gmail.com</a> or call <a href="tel:+254729983567" style="color:#f97316;text-decoration:none;">0729 983 567</a></p>
   </td></tr>
   </table>
-    `, `Welcome to SmartDuka! Your shop ${vars.shopName || ''} is ready.`),
+    `,
+        `Welcome to SmartDuka! Your shop ${vars.shopName || ''} is ready.`,
+      ),
   },
 
   password_reset: {
@@ -105,7 +123,9 @@ export const EMAIL_TEMPLATES = {
     subject: 'Reset your SmartDuka password',
     description: 'Sent when user requests password reset',
     variables: ['userName', 'resetUrl', 'expiryMinutes'],
-    getHtml: (vars: Record<string, any>) => getEmailWrapper(`
+    getHtml: (vars: Record<string, any>) =>
+      getEmailWrapper(
+        `
   <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#111827;text-align:center;">Reset your password</h1>
   <p style="margin:0 0 20px;font-size:14px;color:#6b7280;text-align:center;">We received a request to reset your password.</p>
 
@@ -125,15 +145,26 @@ export const EMAIL_TEMPLATES = {
     <p style="margin:0;font-size:12px;color:#6b7280;line-height:1.6;">Never share your password. Use a strong, unique password. If you didn't request this reset, ignore this email or contact <a href="mailto:smartdukainfo@gmail.com" style="color:#f97316;text-decoration:none;">smartdukainfo@gmail.com</a>.</p>
   </td></tr>
   </table>
-    `, `Reset your SmartDuka password. Link expires in ${vars.expiryMinutes || 30} minutes.`),
+    `,
+        `Reset your SmartDuka password. Link expires in ${vars.expiryMinutes || 30} minutes.`,
+      ),
   },
 
   employee_invited: {
     name: 'employee_invited',
     subject: "You've been invited to join {{shopName}} on SmartDuka",
     description: 'Sent when an employee is invited',
-    variables: ['shopName', 'employeeName', 'role', 'invitedBy', 'loginUrl', 'tempPassword'],
-    getHtml: (vars: Record<string, any>) => getEmailWrapper(`
+    variables: [
+      'shopName',
+      'employeeName',
+      'role',
+      'invitedBy',
+      'loginUrl',
+      'tempPassword',
+    ],
+    getHtml: (vars: Record<string, any>) =>
+      getEmailWrapper(
+        `
   <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#111827;text-align:center;">You're invited</h1>
   <p style="margin:0 0 20px;font-size:14px;color:#6b7280;text-align:center;">Join <strong style="color:#111827;">${vars.shopName || '{{shopName}}'}</strong> on SmartDuka.</p>
 
@@ -159,7 +190,9 @@ export const EMAIL_TEMPLATES = {
   </table>
 
   <p style="margin:0;font-size:12px;color:#6b7280;text-align:center;">Questions? Contact your admin or email <a href="mailto:smartdukainfo@gmail.com" style="color:#f97316;text-decoration:none;">smartdukainfo@gmail.com</a></p>
-    `, `You've been invited to join ${vars.shopName || ''} on SmartDuka as ${vars.role || ''}.`),
+    `,
+        `You've been invited to join ${vars.shopName || ''} on SmartDuka as ${vars.role || ''}.`,
+      ),
   },
 
   low_stock_alert: {
@@ -167,7 +200,9 @@ export const EMAIL_TEMPLATES = {
     subject: 'Low Stock Alert — {{productCount}} products need attention',
     description: 'Sent when products fall below reorder level',
     variables: ['shopName', 'productCount', 'productList', 'dashboardUrl'],
-    getHtml: (vars: Record<string, any>) => getEmailWrapper(`
+    getHtml: (vars: Record<string, any>) =>
+      getEmailWrapper(
+        `
   <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#111827;text-align:center;">Low stock alert</h1>
   <p style="margin:0 0 20px;font-size:14px;color:#6b7280;text-align:center;"><strong style="color:#111827;">${vars.productCount || '{{productCount}}'}</strong> products need restocking at <strong style="color:#111827;">${vars.shopName || '{{shopName}}'}</strong></p>
 
@@ -183,15 +218,26 @@ export const EMAIL_TEMPLATES = {
   </table>
 
   <p style="margin:0;font-size:12px;color:#6b7280;text-align:center;">Restock soon to avoid stockouts and lost sales.</p>
-    `, `${vars.productCount || 0} products are running low on stock at ${vars.shopName || ''}.`),
+    `,
+        `${vars.productCount || 0} products are running low on stock at ${vars.shopName || ''}.`,
+      ),
   },
 
   daily_sales_report: {
     name: 'daily_sales_report',
     subject: 'Daily Sales Report — {{date}} | {{shopName}}',
     description: 'Daily sales summary sent to shop admins',
-    variables: ['shopName', 'date', 'totalSales', 'orderCount', 'topProducts', 'dashboardUrl'],
-    getHtml: (vars: Record<string, any>) => getEmailWrapper(`
+    variables: [
+      'shopName',
+      'date',
+      'totalSales',
+      'orderCount',
+      'topProducts',
+      'dashboardUrl',
+    ],
+    getHtml: (vars: Record<string, any>) =>
+      getEmailWrapper(
+        `
   <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#111827;text-align:center;">Daily sales report</h1>
   <p style="margin:0 0 20px;font-size:14px;color:#6b7280;text-align:center;">${vars.shopName || '{{shopName}}'} &mdash; ${vars.date || '{{date}}'}</p>
 
@@ -220,15 +266,29 @@ export const EMAIL_TEMPLATES = {
   </table>
 
   <p style="margin:0;font-size:11px;color:#9ca3af;text-align:center;">Auto-generated at end of business day.</p>
-    `, `Daily sales report for ${vars.shopName || ''}: KES ${vars.totalSales || 0} from ${vars.orderCount || 0} orders.`),
+    `,
+        `Daily sales report for ${vars.shopName || ''}: KES ${vars.totalSales || 0} from ${vars.orderCount || 0} orders.`,
+      ),
   },
 
   subscription_activated: {
     name: 'subscription_activated',
     subject: 'Your {{planName}} subscription is now active',
     description: 'Sent when subscription is activated',
-    variables: ['shopName', 'userName', 'planName', 'price', 'billingCycle', 'features', 'startDate', 'nextBillingDate', 'dashboardUrl'],
-    getHtml: (vars: Record<string, any>) => getEmailWrapper(`
+    variables: [
+      'shopName',
+      'userName',
+      'planName',
+      'price',
+      'billingCycle',
+      'features',
+      'startDate',
+      'nextBillingDate',
+      'dashboardUrl',
+    ],
+    getHtml: (vars: Record<string, any>) =>
+      getEmailWrapper(
+        `
   <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#111827;text-align:center;">Subscription active</h1>
   <p style="margin:0 0 20px;font-size:14px;color:#6b7280;text-align:center;">Your ${vars.planName || '{{planName}}'} plan for <strong style="color:#111827;">${vars.shopName || '{{shopName}}'}</strong> is ready.</p>
 
@@ -248,15 +308,26 @@ export const EMAIL_TEMPLATES = {
   </table>
 
   <p style="margin:0;font-size:12px;color:#6b7280;text-align:center;">Thank you for choosing SmartDuka.</p>
-    `, `Your ${vars.planName || ''} subscription is now active for ${vars.shopName || ''}.`),
+    `,
+        `Your ${vars.planName || ''} subscription is now active for ${vars.shopName || ''}.`,
+      ),
   },
 
   subscription_expiring: {
     name: 'subscription_expiring',
     subject: 'Your SmartDuka subscription expires in {{daysLeft}} days',
     description: 'Sent when subscription is about to expire',
-    variables: ['shopName', 'userName', 'planName', 'expiryDate', 'daysLeft', 'renewUrl'],
-    getHtml: (vars: Record<string, any>) => getEmailWrapper(`
+    variables: [
+      'shopName',
+      'userName',
+      'planName',
+      'expiryDate',
+      'daysLeft',
+      'renewUrl',
+    ],
+    getHtml: (vars: Record<string, any>) =>
+      getEmailWrapper(
+        `
   <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#111827;text-align:center;">Subscription expiring</h1>
   <p style="margin:0 0 20px;font-size:14px;color:#6b7280;text-align:center;"><strong style="color:#111827;">${vars.daysLeft || '{{daysLeft}}'} days</strong> remaining on your ${vars.planName || '{{planName}}'} plan</p>
 
@@ -271,15 +342,26 @@ export const EMAIL_TEMPLATES = {
   </table>
 
   <p style="margin:0;font-size:12px;color:#6b7280;text-align:center;">Questions? <a href="mailto:smartdukainfo@gmail.com" style="color:#f97316;text-decoration:none;">smartdukainfo@gmail.com</a> &middot; <a href="tel:+254729983567" style="color:#f97316;text-decoration:none;">0729 983 567</a></p>
-    `, `Your SmartDuka subscription expires in ${vars.daysLeft || 0} days. Renew now.`),
+    `,
+        `Your SmartDuka subscription expires in ${vars.daysLeft || 0} days. Renew now.`,
+      ),
   },
 
   subscription_expired: {
     name: 'subscription_expired',
     subject: 'Your SmartDuka subscription has expired',
     description: 'Sent when subscription expires',
-    variables: ['shopName', 'userName', 'planName', 'expiredDate', 'renewUrl', 'gracePeriodDays'],
-    getHtml: (vars: Record<string, any>) => getEmailWrapper(`
+    variables: [
+      'shopName',
+      'userName',
+      'planName',
+      'expiredDate',
+      'renewUrl',
+      'gracePeriodDays',
+    ],
+    getHtml: (vars: Record<string, any>) =>
+      getEmailWrapper(
+        `
   <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#111827;text-align:center;">Subscription expired</h1>
   <p style="margin:0 0 20px;font-size:14px;color:#6b7280;text-align:center;">Your ${vars.planName || '{{planName}}'} plan expired on ${vars.expiredDate || '{{expiredDate}}'}</p>
 
@@ -301,15 +383,29 @@ export const EMAIL_TEMPLATES = {
   </table>
 
   <p style="margin:0;font-size:12px;color:#6b7280;text-align:center;">Need help? <a href="mailto:smartdukainfo@gmail.com" style="color:#f97316;text-decoration:none;">smartdukainfo@gmail.com</a> &middot; <a href="tel:+254729983567" style="color:#f97316;text-decoration:none;">0729 983 567</a></p>
-    `, `Your SmartDuka subscription has expired. Renew within ${vars.gracePeriodDays || 7} days.`),
+    `,
+        `Your SmartDuka subscription has expired. Renew within ${vars.gracePeriodDays || 7} days.`,
+      ),
   },
 
   payment_successful: {
     name: 'payment_successful',
     subject: 'Payment Received — {{amount}} {{currency}}',
     description: 'Sent when payment is successful',
-    variables: ['shopName', 'userName', 'amount', 'currency', 'paymentMethod', 'transactionId', 'planName', 'receiptUrl', 'date'],
-    getHtml: (vars: Record<string, any>) => getEmailWrapper(`
+    variables: [
+      'shopName',
+      'userName',
+      'amount',
+      'currency',
+      'paymentMethod',
+      'transactionId',
+      'planName',
+      'receiptUrl',
+      'date',
+    ],
+    getHtml: (vars: Record<string, any>) =>
+      getEmailWrapper(
+        `
   <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#111827;text-align:center;">Payment received</h1>
   <p style="margin:0 0 20px;font-size:14px;color:#6b7280;text-align:center;">Thank you, <strong style="color:#111827;">${vars.userName || '{{userName}}'}</strong>.</p>
 
@@ -328,7 +424,9 @@ export const EMAIL_TEMPLATES = {
   </table>
 
   <p style="margin:0;font-size:12px;color:#6b7280;text-align:center;">Your subscription is now active.</p>
-    `, `Payment of ${vars.currency || 'KES'} ${vars.amount || 0} received for ${vars.shopName || ''}.`),
+    `,
+        `Payment of ${vars.currency || 'KES'} ${vars.amount || 0} received for ${vars.shopName || ''}.`,
+      ),
   },
 
   shop_verified: {
@@ -336,7 +434,9 @@ export const EMAIL_TEMPLATES = {
     subject: 'Your shop {{shopName}} is now verified',
     description: 'Sent when a shop is verified by super admin',
     variables: ['shopName', 'verificationDate', 'loginUrl', 'dashboardUrl'],
-    getHtml: (vars: Record<string, any>) => getEmailWrapper(`
+    getHtml: (vars: Record<string, any>) =>
+      getEmailWrapper(
+        `
   <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#111827;text-align:center;">Shop verified</h1>
   <p style="margin:0 0 20px;font-size:14px;color:#6b7280;text-align:center;"><strong style="color:#111827;">${vars.shopName || '{{shopName}}'}</strong> is now active on SmartDuka.</p>
 
@@ -357,7 +457,9 @@ export const EMAIL_TEMPLATES = {
     <a href="${vars.dashboardUrl || '{{dashboardUrl}}'}" style="display:inline-block;padding:12px 28px;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;">Go to Dashboard</a>
   </td></tr>
   </table>
-    `, `Your shop ${vars.shopName || ''} is now verified on SmartDuka.`),
+    `,
+        `Your shop ${vars.shopName || ''} is now verified on SmartDuka.`,
+      ),
   },
 
   shop_rejected: {
@@ -365,7 +467,9 @@ export const EMAIL_TEMPLATES = {
     subject: 'Update on your SmartDuka shop application',
     description: 'Sent when a shop application is rejected',
     variables: ['shopName', 'rejectionReason', 'supportEmail'],
-    getHtml: (vars: Record<string, any>) => getEmailWrapper(`
+    getHtml: (vars: Record<string, any>) =>
+      getEmailWrapper(
+        `
   <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#111827;text-align:center;">Application update</h1>
   <p style="margin:0 0 20px;font-size:14px;color:#6b7280;text-align:center;">Regarding <strong style="color:#111827;">${vars.shopName || '{{shopName}}'}</strong></p>
 
@@ -391,7 +495,9 @@ export const EMAIL_TEMPLATES = {
   </table>
 
   <p style="margin:0;font-size:12px;color:#6b7280;text-align:center;"><a href="tel:+254729983567" style="color:#f97316;text-decoration:none;">0729 983 567</a> &middot; <a href="mailto:smartdukainfo@gmail.com" style="color:#f97316;text-decoration:none;">smartdukainfo@gmail.com</a></p>
-    `, `Update on your SmartDuka shop application for ${vars.shopName || ''}.`),
+    `,
+        `Update on your SmartDuka shop application for ${vars.shopName || ''}.`,
+      ),
   },
 
   // Dunning templates — clean, professional, consistent
@@ -399,8 +505,17 @@ export const EMAIL_TEMPLATES = {
     name: 'subscription_expiring_7days',
     subject: 'Your SmartDuka subscription expires in 7 days',
     description: 'Sent 7 days before subscription expires',
-    variables: ['shopName', 'userName', 'planName', 'expiryDate', 'renewUrl', 'amount'],
-    getHtml: (vars: Record<string, any>) => getEmailWrapper(`
+    variables: [
+      'shopName',
+      'userName',
+      'planName',
+      'expiryDate',
+      'renewUrl',
+      'amount',
+    ],
+    getHtml: (vars: Record<string, any>) =>
+      getEmailWrapper(
+        `
   <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#111827;text-align:center;">Subscription expiring soon</h1>
   <p style="margin:0 0 20px;font-size:14px;color:#6b7280;text-align:center;"><strong style="color:#111827;">7 days</strong> remaining &mdash; expires ${vars.expiryDate || '{{expiryDate}}'}</p>
 
@@ -413,15 +528,26 @@ export const EMAIL_TEMPLATES = {
   </table>
 
   <p style="margin:0;font-size:12px;color:#6b7280;text-align:center;">Questions? <a href="mailto:smartdukainfo@gmail.com" style="color:#f97316;text-decoration:none;">smartdukainfo@gmail.com</a></p>
-    `, `Your SmartDuka subscription expires in 7 days.`),
+    `,
+        `Your SmartDuka subscription expires in 7 days.`,
+      ),
   },
 
   subscription_expiring_3days: {
     name: 'subscription_expiring_3days',
     subject: 'Urgent: Your SmartDuka subscription expires in 3 days',
     description: 'Sent 3 days before subscription expires',
-    variables: ['shopName', 'userName', 'planName', 'expiryDate', 'renewUrl', 'amount'],
-    getHtml: (vars: Record<string, any>) => getEmailWrapper(`
+    variables: [
+      'shopName',
+      'userName',
+      'planName',
+      'expiryDate',
+      'renewUrl',
+      'amount',
+    ],
+    getHtml: (vars: Record<string, any>) =>
+      getEmailWrapper(
+        `
   <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#111827;text-align:center;">3 days left</h1>
   <p style="margin:0 0 20px;font-size:14px;color:#6b7280;text-align:center;">Your ${vars.planName || '{{planName}}'} plan expires on ${vars.expiryDate || '{{expiryDate}}'}</p>
 
@@ -434,15 +560,26 @@ export const EMAIL_TEMPLATES = {
   </table>
 
   <p style="margin:0;font-size:12px;color:#6b7280;text-align:center;">Need help? <a href="tel:+254729983567" style="color:#f97316;text-decoration:none;">0729 983 567</a></p>
-    `, `Urgent: Your SmartDuka subscription expires in 3 days.`),
+    `,
+        `Urgent: Your SmartDuka subscription expires in 3 days.`,
+      ),
   },
 
   subscription_expiring_1day: {
     name: 'subscription_expiring_1day',
     subject: 'Final notice: Your SmartDuka subscription expires tomorrow',
     description: 'Sent 1 day before subscription expires',
-    variables: ['shopName', 'userName', 'planName', 'expiryDate', 'renewUrl', 'amount'],
-    getHtml: (vars: Record<string, any>) => getEmailWrapper(`
+    variables: [
+      'shopName',
+      'userName',
+      'planName',
+      'expiryDate',
+      'renewUrl',
+      'amount',
+    ],
+    getHtml: (vars: Record<string, any>) =>
+      getEmailWrapper(
+        `
   <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#111827;text-align:center;">Expires tomorrow</h1>
   <p style="margin:0 0 20px;font-size:14px;color:#6b7280;text-align:center;">This is your final reminder before service interruption.</p>
 
@@ -455,15 +592,26 @@ export const EMAIL_TEMPLATES = {
   </table>
 
   <p style="margin:0;font-size:12px;color:#6b7280;text-align:center;">Need help now? <a href="tel:+254729983567" style="color:#f97316;text-decoration:none;">0729 983 567</a></p>
-    `, `Final notice: Your SmartDuka subscription expires tomorrow.`),
+    `,
+        `Final notice: Your SmartDuka subscription expires tomorrow.`,
+      ),
   },
 
   subscription_past_due_day1: {
     name: 'subscription_past_due_day1',
     subject: 'Payment overdue — Your SmartDuka access is limited',
     description: 'Sent on day 1 of grace period',
-    variables: ['shopName', 'userName', 'planName', 'amount', 'daysUntilSuspension', 'payUrl'],
-    getHtml: (vars: Record<string, any>) => getEmailWrapper(`
+    variables: [
+      'shopName',
+      'userName',
+      'planName',
+      'amount',
+      'daysUntilSuspension',
+      'payUrl',
+    ],
+    getHtml: (vars: Record<string, any>) =>
+      getEmailWrapper(
+        `
   <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#111827;text-align:center;">Payment overdue</h1>
   <p style="margin:0 0 20px;font-size:14px;color:#6b7280;text-align:center;">Your account is in read-only mode. ${vars.daysUntilSuspension || '{{daysUntilSuspension}}'} days until suspension.</p>
 
@@ -474,15 +622,26 @@ export const EMAIL_TEMPLATES = {
     <a href="${vars.payUrl || '{{payUrl}}'}" style="display:inline-block;padding:12px 28px;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;">Pay Now &mdash; KES ${vars.amount || '{{amount}}'}</a>
   </td></tr>
   </table>
-    `, `Payment overdue for ${vars.shopName || ''}. Account in read-only mode.`),
+    `,
+        `Payment overdue for ${vars.shopName || ''}. Account in read-only mode.`,
+      ),
   },
 
   subscription_past_due_day5: {
     name: 'subscription_past_due_day5',
     subject: 'Urgent: 2 days until your SmartDuka account is suspended',
     description: 'Sent on day 5 of grace period (2 days before suspension)',
-    variables: ['shopName', 'userName', 'planName', 'amount', 'suspensionDate', 'payUrl'],
-    getHtml: (vars: Record<string, any>) => getEmailWrapper(`
+    variables: [
+      'shopName',
+      'userName',
+      'planName',
+      'amount',
+      'suspensionDate',
+      'payUrl',
+    ],
+    getHtml: (vars: Record<string, any>) =>
+      getEmailWrapper(
+        `
   <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#111827;text-align:center;">2 days until suspension</h1>
   <p style="margin:0 0 20px;font-size:14px;color:#6b7280;text-align:center;">Account will be suspended on ${vars.suspensionDate || '{{suspensionDate}}'}</p>
 
@@ -495,15 +654,26 @@ export const EMAIL_TEMPLATES = {
   </table>
 
   <p style="margin:0;font-size:12px;color:#6b7280;text-align:center;">Trouble paying? <a href="tel:+254729983567" style="color:#f97316;text-decoration:none;">0729 983 567</a></p>
-    `, `Urgent: 2 days until your SmartDuka account is suspended.`),
+    `,
+        `Urgent: 2 days until your SmartDuka account is suspended.`,
+      ),
   },
 
   subscription_suspended_notice: {
     name: 'subscription_suspended_notice',
     subject: 'Your SmartDuka account has been suspended',
     description: 'Sent when subscription is suspended due to non-payment',
-    variables: ['shopName', 'userName', 'planName', 'amount', 'payUrl', 'dataRetentionDays'],
-    getHtml: (vars: Record<string, any>) => getEmailWrapper(`
+    variables: [
+      'shopName',
+      'userName',
+      'planName',
+      'amount',
+      'payUrl',
+      'dataRetentionDays',
+    ],
+    getHtml: (vars: Record<string, any>) =>
+      getEmailWrapper(
+        `
   <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#111827;text-align:center;">Account suspended</h1>
   <p style="margin:0 0 20px;font-size:14px;color:#6b7280;text-align:center;">All operations for <strong style="color:#111827;">${vars.shopName || '{{shopName}}'}</strong> are disabled.</p>
 
@@ -516,15 +686,25 @@ export const EMAIL_TEMPLATES = {
   </table>
 
   <p style="margin:0;font-size:12px;color:#6b7280;text-align:center;">Need help? <a href="tel:+254729983567" style="color:#f97316;text-decoration:none;">0729 983 567</a> &middot; <a href="mailto:smartdukainfo@gmail.com" style="color:#f97316;text-decoration:none;">smartdukainfo@gmail.com</a></p>
-    `, `Your SmartDuka account has been suspended. Pay now to restore access.`),
+    `,
+        `Your SmartDuka account has been suspended. Pay now to restore access.`,
+      ),
   },
 
   subscription_reactivated: {
     name: 'subscription_reactivated',
     subject: 'Your SmartDuka subscription has been reactivated',
     description: 'Sent when subscription is reactivated after payment',
-    variables: ['shopName', 'userName', 'planName', 'nextBillingDate', 'dashboardUrl'],
-    getHtml: (vars: Record<string, any>) => getEmailWrapper(`
+    variables: [
+      'shopName',
+      'userName',
+      'planName',
+      'nextBillingDate',
+      'dashboardUrl',
+    ],
+    getHtml: (vars: Record<string, any>) =>
+      getEmailWrapper(
+        `
   <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#111827;text-align:center;">Subscription reactivated</h1>
   <p style="margin:0 0 20px;font-size:14px;color:#6b7280;text-align:center;">Welcome back! Your account is fully active.</p>
 
@@ -540,15 +720,26 @@ export const EMAIL_TEMPLATES = {
     <a href="${vars.dashboardUrl || '{{dashboardUrl}}'}" style="display:inline-block;padding:12px 28px;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;">Go to Dashboard</a>
   </td></tr>
   </table>
-    `, `Your SmartDuka subscription has been reactivated. Welcome back!`),
+    `,
+        `Your SmartDuka subscription has been reactivated. Welcome back!`,
+      ),
   },
 
   plan_changed: {
     name: 'plan_changed',
     subject: 'Your SmartDuka plan has been changed',
     description: 'Sent when a user changes their subscription plan',
-    variables: ['shopName', 'userName', 'previousPlan', 'newPlan', 'changeDate', 'dashboardUrl'],
-    getHtml: (vars: Record<string, any>) => getEmailWrapper(`
+    variables: [
+      'shopName',
+      'userName',
+      'previousPlan',
+      'newPlan',
+      'changeDate',
+      'dashboardUrl',
+    ],
+    getHtml: (vars: Record<string, any>) =>
+      getEmailWrapper(
+        `
   <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#111827;text-align:center;">Plan changed</h1>
   <p style="margin:0 0 20px;font-size:14px;color:#6b7280;text-align:center;">Your subscription for <strong style="color:#111827;">${vars.shopName || '{{shopName}}'}</strong> has been updated.</p>
 
@@ -567,7 +758,9 @@ export const EMAIL_TEMPLATES = {
   </table>
 
   <p style="margin:0;font-size:12px;color:#6b7280;text-align:center;">Didn't make this change? <a href="mailto:smartdukainfo@gmail.com" style="color:#f97316;text-decoration:none;">smartdukainfo@gmail.com</a></p>
-    `, `Your SmartDuka plan has been changed from ${vars.previousPlan || ''} to ${vars.newPlan || ''}.`),
+    `,
+        `Your SmartDuka plan has been changed from ${vars.previousPlan || ''} to ${vars.newPlan || ''}.`,
+      ),
   },
 
   shop_suspended: {
@@ -575,7 +768,9 @@ export const EMAIL_TEMPLATES = {
     subject: 'Your SmartDuka shop has been suspended',
     description: 'Sent when a shop is suspended',
     variables: ['shopName', 'suspensionReason', 'supportEmail'],
-    getHtml: (vars: Record<string, any>) => getEmailWrapper(`
+    getHtml: (vars: Record<string, any>) =>
+      getEmailWrapper(
+        `
   <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#111827;text-align:center;">Shop suspended</h1>
   <p style="margin:0 0 20px;font-size:14px;color:#6b7280;text-align:center;"><strong style="color:#111827;">${vars.shopName || '{{shopName}}'}</strong> has been suspended.</p>
 
@@ -595,21 +790,25 @@ export const EMAIL_TEMPLATES = {
   </table>
 
   <p style="margin:0;font-size:12px;color:#6b7280;text-align:center;"><a href="tel:+254729983567" style="color:#f97316;text-decoration:none;">0729 983 567</a> &middot; <a href="mailto:smartdukainfo@gmail.com" style="color:#f97316;text-decoration:none;">smartdukainfo@gmail.com</a></p>
-    `, `Your SmartDuka shop ${vars.shopName || ''} has been suspended.`),
+    `,
+        `Your SmartDuka shop ${vars.shopName || ''} has been suspended.`,
+      ),
   },
 };
 
 // Helper to get template HTML content for database seeding
-export const getTemplateForSeeding = (templateName: keyof typeof EMAIL_TEMPLATES) => {
+export const getTemplateForSeeding = (
+  templateName: keyof typeof EMAIL_TEMPLATES,
+) => {
   const template = EMAIL_TEMPLATES[templateName];
   if (!template) return null;
-  
+
   // Generate HTML with placeholder variables
   const placeholderVars: Record<string, string> = {};
-  template.variables.forEach(v => {
+  template.variables.forEach((v) => {
     placeholderVars[v] = `{{${v}}}`;
   });
-  
+
   return {
     name: template.name,
     subject: template.subject,
@@ -622,7 +821,7 @@ export const getTemplateForSeeding = (templateName: keyof typeof EMAIL_TEMPLATES
 
 // Get all templates for seeding
 export const getAllTemplatesForSeeding = () => {
-  return Object.keys(EMAIL_TEMPLATES).map(key => 
-    getTemplateForSeeding(key as keyof typeof EMAIL_TEMPLATES)
-  ).filter(Boolean);
+  return Object.keys(EMAIL_TEMPLATES)
+    .map((key) => getTemplateForSeeding(key as keyof typeof EMAIL_TEMPLATES))
+    .filter(Boolean);
 };

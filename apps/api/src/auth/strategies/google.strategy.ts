@@ -1,7 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
-import { Strategy, VerifyCallback, Profile, StrategyOptions } from 'passport-google-oauth20';
+import {
+  Strategy,
+  VerifyCallback,
+  Profile,
+  StrategyOptions,
+} from 'passport-google-oauth20';
 
 export type GoogleProfile = {
   googleId: string;
@@ -20,26 +25,27 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     const clientSecret = configService.get<string>('GOOGLE_CLIENT_SECRET');
 
     const isDev = process.env.NODE_ENV !== 'production';
-    const defaultCallbackUrl = isDev 
+    const defaultCallbackUrl = isDev
       ? 'http://localhost:5000/api/v1/auth/google/callback'
       : 'https://smartduka-91q6.onrender.com/api/v1/auth/google/callback';
 
     // Check if credentials are real (not placeholder/missing)
     const hasValidCredentials = !!(
-      clientID && 
-      clientSecret && 
-      clientID !== 'not-configured' && 
+      clientID &&
+      clientSecret &&
+      clientID !== 'not-configured' &&
       clientSecret !== 'not-configured' &&
       clientID !== 'your-google-client-id.apps.googleusercontent.com' &&
       clientSecret !== 'your-google-client-secret'
     );
 
     GoogleStrategy._isConfigured = hasValidCredentials;
-    
+
     const options: StrategyOptions = {
       clientID: clientID || 'placeholder-will-be-blocked',
       clientSecret: clientSecret || 'placeholder-will-be-blocked',
-      callbackURL: configService.get<string>('GOOGLE_CALLBACK_URL') || defaultCallbackUrl,
+      callbackURL:
+        configService.get<string>('GOOGLE_CALLBACK_URL') || defaultCallbackUrl,
       scope: ['email', 'profile'],
     };
     super(options);
@@ -47,7 +53,7 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     if (!hasValidCredentials) {
       this.logger.warn(
         'Google OAuth is NOT configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in your .env file. ' +
-        'See .env.example for setup instructions. Google login will be disabled until configured.',
+          'See .env.example for setup instructions. Google login will be disabled until configured.',
       );
     } else {
       this.logger.log('Google OAuth is configured and ready.');

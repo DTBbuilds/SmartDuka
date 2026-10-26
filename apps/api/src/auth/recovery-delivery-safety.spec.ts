@@ -285,7 +285,7 @@ describe('P1-13A — reset-token safety & delivery (real MongoDB + mock email)',
         html,
         category: 'password_reset',
         redactPatterns: [
-          /token=[A-Za-z0-9_\-]+/g,
+          /token=[A-Za-z0-9_-]+/g,
           new RegExp(resetToken.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
         ],
       });
@@ -300,7 +300,7 @@ describe('P1-13A — reset-token safety & delivery (real MongoDB + mock email)',
         .replace(
           new RegExp(
             [
-              /token=[A-Za-z0-9_\-]+/g.source,
+              /token=[A-Za-z0-9_-]+/g.source,
               new RegExp(resetToken.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
                 .source,
             ].join('|'),

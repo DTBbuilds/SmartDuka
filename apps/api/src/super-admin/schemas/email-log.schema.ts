@@ -5,7 +5,7 @@ export type EmailLogDocument = HydratedDocument<EmailLog>;
 
 /**
  * Email Log Schema
- * 
+ *
  * Tracks all emails sent by the system for super admin oversight.
  * Includes delivery status, template used, and recipient information.
  */
@@ -58,8 +58,8 @@ export class EmailLog {
   userName?: string;
 
   // Email category
-  @Prop({ 
-    required: true, 
+  @Prop({
+    required: true,
     enum: [
       'welcome',
       'verification',
@@ -72,17 +72,17 @@ export class EmailLog {
       'marketing',
       'support',
       'system',
-      'other'
+      'other',
     ],
-    default: 'other'
+    default: 'other',
   })
   category: string;
 
   // Delivery status
-  @Prop({ 
-    required: true, 
+  @Prop({
+    required: true,
     enum: ['pending', 'sent', 'delivered', 'failed', 'bounced', 'spam'],
-    default: 'pending'
+    default: 'pending',
   })
   status: 'pending' | 'sent' | 'delivered' | 'failed' | 'bounced' | 'spam';
 
@@ -174,7 +174,10 @@ EmailLogSchema.index({ shopId: 1, status: 1, createdAt: -1 });
 // EMAIL-REPORTS-CORE1: idempotent send keys — one successful chain per key.
 EmailLogSchema.index(
   { idempotencyKey: 1 },
-  { unique: true, partialFilterExpression: { idempotencyKey: { $exists: true } } },
+  {
+    unique: true,
+    partialFilterExpression: { idempotencyKey: { $exists: true } },
+  },
 );
 // TTL index - auto-delete after 90 days
 // EmailLogSchema.index({ createdAt: 1 }, { expireAfterSeconds: 7776000 });

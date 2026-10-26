@@ -1,4 +1,9 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import Stripe from 'stripe';
@@ -12,7 +17,7 @@ import {
 
 /**
  * Stripe Subscription Service
- * 
+ *
  * Manages Stripe subscriptions for SmartDuka plans.
  * Syncs with local subscription system for seamless billing.
  */
@@ -75,9 +80,15 @@ export class StripeSubscriptionService {
 
     // Extract client secret for payment
     let clientSecret: string | undefined;
-    if (subscription.latest_invoice && typeof subscription.latest_invoice !== 'string') {
+    if (
+      subscription.latest_invoice &&
+      typeof subscription.latest_invoice !== 'string'
+    ) {
       const invoice = subscription.latest_invoice as any;
-      if (invoice.payment_intent && typeof invoice.payment_intent !== 'string') {
+      if (
+        invoice.payment_intent &&
+        typeof invoice.payment_intent !== 'string'
+      ) {
         clientSecret = invoice.payment_intent.client_secret || undefined;
       }
     }
@@ -95,21 +106,32 @@ export class StripeSubscriptionService {
       currentPeriodEnd: new Date(subData.current_period_end * 1000),
       amount: subscription.items.data[0]?.price?.unit_amount || 0,
       currency: subscription.currency,
-      interval: subscription.items.data[0]?.price?.recurring?.interval || 'month',
-      intervalCount: subscription.items.data[0]?.price?.recurring?.interval_count || 1,
-      trialStart: subData.trial_start ? new Date(subData.trial_start * 1000) : undefined,
-      trialEnd: subData.trial_end ? new Date(subData.trial_end * 1000) : undefined,
+      interval:
+        subscription.items.data[0]?.price?.recurring?.interval || 'month',
+      intervalCount:
+        subscription.items.data[0]?.price?.recurring?.interval_count || 1,
+      trialStart: subData.trial_start
+        ? new Date(subData.trial_start * 1000)
+        : undefined,
+      trialEnd: subData.trial_end
+        ? new Date(subData.trial_end * 1000)
+        : undefined,
       metadata: params.metadata || {},
       items: subscription.items.data.map((item) => ({
         priceId: item.price.id,
-        productId: typeof item.price.product === 'string' ? item.price.product : item.price.product.id,
+        productId:
+          typeof item.price.product === 'string'
+            ? item.price.product
+            : item.price.product.id,
         quantity: item.quantity || 1,
       })),
     });
 
     await localSubscription.save();
 
-    this.logger.log(`Created Stripe subscription ${subscription.id} for shop ${params.shopId}`);
+    this.logger.log(
+      `Created Stripe subscription ${subscription.id} for shop ${params.shopId}`,
+    );
 
     return {
       subscriptionId: subscription.id,
@@ -121,17 +143,26 @@ export class StripeSubscriptionService {
   /**
    * Get subscription by shop ID
    */
-  async getSubscriptionByShopId(shopId: string): Promise<StripeSubscriptionDocument | null> {
+  async getSubscriptionByShopId(
+    shopId: string,
+  ): Promise<StripeSubscriptionDocument | null> {
     return this.subscriptionModel.findOne({
       shopId: new Types.ObjectId(shopId),
-      status: { $nin: [StripeSubscriptionStatus.CANCELED, StripeSubscriptionStatus.INCOMPLETE_EXPIRED] },
+      status: {
+        $nin: [
+          StripeSubscriptionStatus.CANCELED,
+          StripeSubscriptionStatus.INCOMPLETE_EXPIRED,
+        ],
+      },
     });
   }
 
   /**
    * Get subscription by Stripe subscription ID
    */
-  async getSubscriptionByStripeId(stripeSubscriptionId: string): Promise<StripeSubscriptionDocument | null> {
+  async getSubscriptionByStripeId(
+    stripeSubscriptionId: string,
+  ): Promise<StripeSubscriptionDocument | null> {
     return this.subscriptionModel.findOne({ stripeSubscriptionId });
   }
 
@@ -160,8 +191,12 @@ export class StripeSubscriptionService {
         $set: {
           status: this.mapStripeStatus(subscription.status),
           cancelAtPeriodEnd: subscription.cancel_at_period_end,
-          cancelAt: subscription.cancel_at ? new Date(subscription.cancel_at * 1000) : undefined,
-          canceledAt: subscription.canceled_at ? new Date(subscription.canceled_at * 1000) : undefined,
+          cancelAt: subscription.cancel_at
+            ? new Date(subscription.cancel_at * 1000)
+            : undefined,
+          canceledAt: subscription.canceled_at
+            ? new Date(subscription.canceled_at * 1000)
+            : undefined,
         },
       },
       { new: true },
@@ -179,12 +214,17 @@ export class StripeSubscriptionService {
   /**
    * Resume a canceled subscription (if cancel_at_period_end was true)
    */
-  async resumeSubscription(stripeSubscriptionId: string): Promise<StripeSubscriptionDocument> {
+  async resumeSubscription(
+    stripeSubscriptionId: string,
+  ): Promise<StripeSubscriptionDocument> {
     const stripe = this.stripeService.getClient();
 
-    const subscription = await stripe.subscriptions.update(stripeSubscriptionId, {
-      cancel_at_period_end: false,
-    });
+    const subscription = await stripe.subscriptions.update(
+      stripeSubscriptionId,
+      {
+        cancel_at_period_end: false,
+      },
+    );
 
     const localSubscription = await this.subscriptionModel.findOneAndUpdate(
       { stripeSubscriptionId },
@@ -218,26 +258,30 @@ export class StripeSubscriptionService {
     const stripe = this.stripeService.getClient();
 
     // Get current subscription
-    const currentSub = await stripe.subscriptions.retrieve(stripeSubscriptionId);
+    const currentSub =
+      await stripe.subscriptions.retrieve(stripeSubscriptionId);
 
     if (!currentSub.items.data[0]) {
       throw new BadRequestException('Subscription has no items');
     }
 
     // Update subscription with new price
-    const subscription = await stripe.subscriptions.update(stripeSubscriptionId, {
-      items: [
-        {
-          id: currentSub.items.data[0].id,
-          price: newPriceId,
+    const subscription = await stripe.subscriptions.update(
+      stripeSubscriptionId,
+      {
+        items: [
+          {
+            id: currentSub.items.data[0].id,
+            price: newPriceId,
+          },
+        ],
+        proration_behavior: 'create_prorations',
+        metadata: {
+          ...currentSub.metadata,
+          planCode: newPlanCode,
         },
-      ],
-      proration_behavior: 'create_prorations',
-      metadata: {
-        ...currentSub.metadata,
-        planCode: newPlanCode,
       },
-    });
+    );
 
     const localSubscription = await this.subscriptionModel.findOneAndUpdate(
       { stripeSubscriptionId },
@@ -248,7 +292,10 @@ export class StripeSubscriptionService {
           amount: subscription.items.data[0]?.price?.unit_amount || 0,
           items: subscription.items.data.map((item) => ({
             priceId: item.price.id,
-            productId: typeof item.price.product === 'string' ? item.price.product : item.price.product.id,
+            productId:
+              typeof item.price.product === 'string'
+                ? item.price.product
+                : item.price.product.id,
             quantity: item.quantity || 1,
           })),
         },
@@ -260,7 +307,9 @@ export class StripeSubscriptionService {
       throw new NotFoundException('Subscription not found');
     }
 
-    this.logger.log(`Updated subscription ${stripeSubscriptionId} to plan ${newPlanCode}`);
+    this.logger.log(
+      `Updated subscription ${stripeSubscriptionId} to plan ${newPlanCode}`,
+    );
 
     return localSubscription;
   }
@@ -273,12 +322,17 @@ export class StripeSubscriptionService {
 
     const updateData: any = {
       status: this.mapStripeStatus(subscription.status),
-      currentPeriodStart: new Date((subscription as any).current_period_start * 1000),
-      currentPeriodEnd: new Date((subscription as any).current_period_end * 1000),
+      currentPeriodStart: new Date(
+        (subscription as any).current_period_start * 1000,
+      ),
+      currentPeriodEnd: new Date(
+        (subscription as any).current_period_end * 1000,
+      ),
       cancelAtPeriodEnd: subscription.cancel_at_period_end,
-      latestInvoiceId: typeof subscription.latest_invoice === 'string'
-        ? subscription.latest_invoice
-        : subscription.latest_invoice?.id,
+      latestInvoiceId:
+        typeof subscription.latest_invoice === 'string'
+          ? subscription.latest_invoice
+          : subscription.latest_invoice?.id,
     };
 
     if (subscription.cancel_at) {
@@ -290,9 +344,10 @@ export class StripeSubscriptionService {
     }
 
     if (subscription.default_payment_method) {
-      updateData.defaultPaymentMethodId = typeof subscription.default_payment_method === 'string'
-        ? subscription.default_payment_method
-        : subscription.default_payment_method.id;
+      updateData.defaultPaymentMethodId =
+        typeof subscription.default_payment_method === 'string'
+          ? subscription.default_payment_method
+          : subscription.default_payment_method.id;
     }
 
     await this.subscriptionModel.updateOne(
@@ -300,7 +355,9 @@ export class StripeSubscriptionService {
       { $set: updateData },
     );
 
-    this.logger.log(`Updated subscription ${subscription.id} from webhook event ${event.type}`);
+    this.logger.log(
+      `Updated subscription ${subscription.id} from webhook event ${event.type}`,
+    );
   }
 
   /**
@@ -308,14 +365,21 @@ export class StripeSubscriptionService {
    */
   async getActiveSubscriptions(): Promise<StripeSubscriptionDocument[]> {
     return this.subscriptionModel.find({
-      status: { $in: [StripeSubscriptionStatus.ACTIVE, StripeSubscriptionStatus.TRIALING] },
+      status: {
+        $in: [
+          StripeSubscriptionStatus.ACTIVE,
+          StripeSubscriptionStatus.TRIALING,
+        ],
+      },
     });
   }
 
   /**
    * Map Stripe subscription status to local status
    */
-  private mapStripeStatus(stripeStatus: Stripe.Subscription.Status): StripeSubscriptionStatus {
+  private mapStripeStatus(
+    stripeStatus: Stripe.Subscription.Status,
+  ): StripeSubscriptionStatus {
     const statusMap: Record<string, StripeSubscriptionStatus> = {
       incomplete: StripeSubscriptionStatus.INCOMPLETE,
       incomplete_expired: StripeSubscriptionStatus.INCOMPLETE_EXPIRED,

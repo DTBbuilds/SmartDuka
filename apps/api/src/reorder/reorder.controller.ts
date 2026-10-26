@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, Put, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Put,
+  UseGuards,
+} from '@nestjs/common';
 import { ReorderService } from './reorder.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -7,7 +15,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
 /**
  * PHASE 3: REORDER AUTOMATION CONTROLLER
- * 
+ *
  * Endpoints for managing automatic reorder settings and checking stock levels
  */
 @Controller('reorder')
@@ -16,7 +24,7 @@ export class ReorderController {
 
   /**
    * Check products below reorder point and auto-create POs
-   * 
+   *
    * POST /reorder/check-and-create
    * Admin only
    */
@@ -29,7 +37,7 @@ export class ReorderController {
 
   /**
    * Get all products below reorder point
-   * 
+   *
    * GET /reorder/low-stock
    * Admin only
    */
@@ -42,7 +50,7 @@ export class ReorderController {
 
   /**
    * Get reorder statistics for shop
-   * 
+   *
    * GET /reorder/stats
    * Admin only
    */
@@ -55,7 +63,7 @@ export class ReorderController {
 
   /**
    * Get reorder status for a specific product
-   * 
+   *
    * GET /reorder/status/:productId
    * Admin only
    */
@@ -71,10 +79,10 @@ export class ReorderController {
 
   /**
    * Update reorder settings for a product
-   * 
+   *
    * PUT /reorder/settings/:productId
    * Admin only
-   * 
+   *
    * Body:
    * {
    *   reorderPoint: number,
@@ -91,6 +99,10 @@ export class ReorderController {
     @Body() settings: any,
     @CurrentUser() user: Record<string, any>,
   ) {
-    return this.reorderService.updateReorderSettings(user.shopId, productId, settings);
+    return this.reorderService.updateReorderSettings(
+      user.shopId,
+      productId,
+      settings,
+    );
   }
 }

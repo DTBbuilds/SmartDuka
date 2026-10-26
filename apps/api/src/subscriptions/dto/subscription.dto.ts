@@ -1,6 +1,18 @@
-import { IsString, IsNumber, IsEnum, IsOptional, IsBoolean, IsDate, Min, Max } from 'class-validator';
+import {
+  IsString,
+  IsNumber,
+  IsEnum,
+  IsOptional,
+  IsBoolean,
+  IsDate,
+  Min,
+  Max,
+} from 'class-validator';
 import { Type } from 'class-transformer';
-import { BillingCycle, SubscriptionStatus } from '../schemas/subscription.schema';
+import {
+  BillingCycle,
+  SubscriptionStatus,
+} from '../schemas/subscription.schema';
 
 /**
  * DTO for creating a new subscription
@@ -105,7 +117,7 @@ export class SubscriptionResponseDto {
   autoRenew: boolean;
   numberOfDays?: number; // For daily billing - how many days were purchased
   isTrialExpired?: boolean; // True if trial period has ended
-  
+
   // Usage vs limits
   usage: {
     shops: { current: number; limit: number };
@@ -142,7 +154,7 @@ export class SubscriptionPlanResponseDto {
   };
   badge?: string;
   colorTheme?: string;
-  
+
   // Calculated fields
   annualSavings: number; // How much saved vs monthly
   pricePerMonth: number; // Monthly equivalent for annual

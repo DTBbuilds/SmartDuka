@@ -50,16 +50,20 @@ export class ExpiryAlertService {
     try {
       // Get all shops with expiry tracking enabled
       const shops = await this.getShopsWithExpiryTracking();
-      
+
       for (const shop of shops) {
         try {
           await this.processShopExpiryAlerts(shop);
         } catch (error) {
-          this.logger.error(`Failed to process expiry alerts for shop ${shop._id}: ${error.message}`);
+          this.logger.error(
+            `Failed to process expiry alerts for shop ${shop._id}: ${error.message}`,
+          );
         }
       }
 
-      this.logger.log(`Daily expiry check completed. Processed ${shops.length} shops.`);
+      this.logger.log(
+        `Daily expiry check completed. Processed ${shops.length} shops.`,
+      );
     } catch (error) {
       this.logger.error(`Daily expiry check failed: ${error.message}`);
     }
@@ -74,12 +78,13 @@ export class ExpiryAlertService {
 
     try {
       const shops = await this.getShopsWithExpiryTracking();
-      
+
       for (const shop of shops) {
-        const criticalProducts = await this.expiryService.getProductsExpiringWithinDays(
-          shop._id.toString(),
-          1, // Within 1 day
-        );
+        const criticalProducts =
+          await this.expiryService.getProductsExpiringWithinDays(
+            shop._id.toString(),
+            1, // Within 1 day
+          );
 
         if (criticalProducts.length > 0) {
           // Send immediate critical alert
@@ -100,11 +105,10 @@ export class ExpiryAlertService {
 
     try {
       const shops = await this.getShopsWithExpiryTracking();
-      
+
       for (const shop of shops) {
-        const { stats, products } = await this.expiryService.getExpiringProducts(
-          shop._id.toString(),
-        );
+        const { stats, products } =
+          await this.expiryService.getExpiringProducts(shop._id.toString());
 
         if (stats.total > 0) {
           await this.sendWeeklySummary(shop, stats, products);
@@ -134,10 +138,12 @@ export class ExpiryAlertService {
       'beauty_cosmetics',
     ];
 
-    return this.shopModel.find({
-      status: { $in: ['active', 'verified'] },
-      businessType: { $in: businessTypesRequiringExpiry },
-    }).lean();
+    return this.shopModel
+      .find({
+        status: { $in: ['active', 'verified'] },
+        businessType: { $in: businessTypesRequiringExpiry },
+      })
+      .lean();
   }
 
   /**
@@ -155,7 +161,10 @@ export class ExpiryAlertService {
 
     // Filter products that need attention
     const alertProducts = products.filter(
-      p => p.status === 'expired' || p.status === 'critical' || p.status === 'warning'
+      (p) =>
+        p.status === 'expired' ||
+        p.status === 'critical' ||
+        p.status === 'warning',
     );
 
     if (alertProducts.length === 0) {
@@ -182,27 +191,36 @@ export class ExpiryAlertService {
    */
   private async sendExpiryAlertEmail(alert: ExpiryAlert) {
     const subject = `⚠️ ${alert.expired > 0 ? 'URGENT: ' : ''}Daily Expiry Alert - ${alert.shopName}`;
-    
-    const expiredSection = alert.expired > 0 ? `
+
+    const expiredSection =
+      alert.expired > 0
+        ? `
       <div style="background: #fee2e2; border-left: 4px solid #dc2626; padding: 12px; margin: 12px 0;">
         <h3 style="color: #dc2626; margin: 0;">🔴 ${alert.expired} Expired Products - Action Required</h3>
         <p style="margin: 8px 0 0 0;">These products should be removed from shelves immediately.</p>
       </div>
-    ` : '';
+    `
+        : '';
 
-    const criticalSection = alert.critical > 0 ? `
+    const criticalSection =
+      alert.critical > 0
+        ? `
       <div style="background: #ffedd5; border-left: 4px solid #ea580c; padding: 12px; margin: 12px 0;">
         <h3 style="color: #ea580c; margin: 0;">🟠 ${alert.critical} Critical (≤7 days)</h3>
         <p style="margin: 8px 0 0 0;">Consider discounting these items to sell quickly.</p>
       </div>
-    ` : '';
+    `
+        : '';
 
-    const warningSection = alert.warning > 0 ? `
+    const warningSection =
+      alert.warning > 0
+        ? `
       <div style="background: #fef9c3; border-left: 4px solid #ca8a04; padding: 12px; margin: 12px 0;">
         <h3 style="color: #ca8a04; margin: 0;">🟡 ${alert.warning} Warning (≤30 days)</h3>
         <p style="margin: 8px 0 0 0;">Plan promotions or bundle with faster-moving items.</p>
       </div>
-    ` : '';
+    `
+        : '';
 
     const productsTable = `
       <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
@@ -215,7 +233,9 @@ export class ExpiryAlertService {
           </tr>
         </thead>
         <tbody>
-          ${alert.products.map(p => `
+          ${alert.products
+            .map(
+              (p) => `
             <tr style="border-bottom: 1px solid #e5e7eb;">
               <td style="padding: 12px;">
                 <strong>${p.name}</strong><br>
@@ -230,7 +250,9 @@ export class ExpiryAlertService {
               <td style="padding: 12px; text-align: right;">${p.stock} units</td>
               <td style="padding: 12px; text-align: right;">KSh ${(p.cost * p.stock).toLocaleString()}</td>
             </tr>
-          `).join('')}
+          `,
+            )
+            .join('')}
         </tbody>
       </table>
     `;
@@ -257,11 +279,15 @@ export class ExpiryAlertService {
         <h3 style="margin-top: 24px; color: #111827;">Products Requiring Action:</h3>
         ${productsTable}
 
-        ${alert.products.length >= 20 ? `
+        ${
+          alert.products.length >= 20
+            ? `
           <p style="color: #6b7280; font-style: italic; margin-top: 12px;">
             Showing first 20 products. View all in your dashboard.
           </p>
-        ` : ''}
+        `
+            : ''
+        }
 
         <div style="background: #eff6ff; border-left: 4px solid #2563eb; padding: 12px; margin: 24px 0;">
           <h4 style="color: #2563eb; margin: 0 0 8px 0;">💡 Recommended Actions:</h4>
@@ -304,7 +330,7 @@ export class ExpiryAlertService {
    */
   private async sendCriticalAlert(shop: ShopDocument, products: any[]) {
     const subject = `🚨 URGENT: ${products.length} Products Expire Within 24 Hours - ${shop.name}`;
-    
+
     const html = `
       <div style="font-family: system-ui, -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="background: #fee2e2; border: 2px solid #dc2626; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
@@ -323,7 +349,9 @@ export class ExpiryAlertService {
             </tr>
           </thead>
           <tbody>
-            ${products.map(p => `
+            ${products
+              .map(
+                (p) => `
               <tr style="border-bottom: 1px solid #e5e7eb;">
                 <td style="padding: 12px;">
                   <strong>${p.name}</strong><br>
@@ -334,7 +362,9 @@ export class ExpiryAlertService {
                 </td>
                 <td style="padding: 12px; text-align: right;">${p.stock} units</td>
               </tr>
-            `).join('')}
+            `,
+              )
+              .join('')}
           </tbody>
         </table>
 
@@ -357,9 +387,13 @@ export class ExpiryAlertService {
   /**
    * Send weekly summary report
    */
-  private async sendWeeklySummary(shop: ShopDocument, stats: any, products: any[]) {
+  private async sendWeeklySummary(
+    shop: ShopDocument,
+    stats: any,
+    products: any[],
+  ) {
     const subject = `📊 Weekly Expiry Summary - ${shop.name}`;
-    
+
     const html = `
       <div style="font-family: system-ui, -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <h2 style="color: #111827;">📊 Weekly Inventory Health Report</h2>
@@ -411,7 +445,7 @@ export class ExpiryAlertService {
     if (!shop) {
       throw new Error('Shop not found');
     }
-    
+
     await this.processShopExpiryAlerts(shop as ShopDocument);
     return { success: true, message: 'Expiry check triggered' };
   }

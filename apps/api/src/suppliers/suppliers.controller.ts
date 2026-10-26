@@ -1,4 +1,13 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Put,
+  UseGuards,
+} from '@nestjs/common';
 import type { CreateSupplierDto, UpdateSupplierDto } from './suppliers.service';
 import { SuppliersService } from './suppliers.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -31,7 +40,10 @@ export class SuppliersController {
 
   @UseGuards(JwtAuthGuard)
   @Get(':id')
-  async findById(@Param('id') id: string, @CurrentUser() user: Record<string, any>) {
+  async findById(
+    @Param('id') id: string,
+    @CurrentUser() user: Record<string, any>,
+  ) {
     return this.suppliersService.findById(id, user.shopId);
   }
 
@@ -49,7 +61,10 @@ export class SuppliersController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
   @Delete(':id')
-  async delete(@Param('id') id: string, @CurrentUser() user: Record<string, any>) {
+  async delete(
+    @Param('id') id: string,
+    @CurrentUser() user: Record<string, any>,
+  ) {
     const deleted = await this.suppliersService.delete(id, user.shopId);
     return { deleted };
   }

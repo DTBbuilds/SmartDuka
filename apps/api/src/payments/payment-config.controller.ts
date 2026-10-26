@@ -29,11 +29,14 @@ import {
   DeleteConfigDto,
   PaymentConfigResponseDto,
 } from './dto/payment-config.dto';
-import { PaymentProvider, ConfigEnvironment } from './schemas/payment-config.schema';
+import {
+  PaymentProvider,
+  ConfigEnvironment,
+} from './schemas/payment-config.schema';
 
 /**
  * Payment Configuration Controller
- * 
+ *
  * Manages payment configurations (tills, paybills) for shops.
  * Supports:
  * - Multiple configurations per shop
@@ -72,7 +75,7 @@ export class PaymentConfigController {
 
     return {
       success: true,
-      data: configs.map(c => PaymentConfigResponseDto.fromDocument(c)),
+      data: configs.map((c) => PaymentConfigResponseDto.fromDocument(c)),
       count: configs.length,
     };
   }
@@ -83,10 +86,7 @@ export class PaymentConfigController {
    */
   @Get(':id')
   @Roles('admin', 'branch_admin', 'branch_manager')
-  async getConfig(
-    @CurrentUser() user: JwtPayload,
-    @Param('id') id: string,
-  ) {
+  async getConfig(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
     const config = await this.paymentConfigService.getConfig(user.shopId, id);
 
     return {
@@ -237,7 +237,9 @@ export class PaymentConfigController {
     @Body() dto: DeactivateConfigDto,
     @Req() req: Request,
   ) {
-    this.logger.log(`Deactivating payment config ${id} for shop ${user.shopId}`);
+    this.logger.log(
+      `Deactivating payment config ${id} for shop ${user.shopId}`,
+    );
 
     const config = await this.paymentConfigService.deactivateConfig(
       user.shopId,
@@ -269,7 +271,9 @@ export class PaymentConfigController {
     @Param('id') id: string,
     @Req() req: Request,
   ) {
-    this.logger.log(`Setting payment config ${id} as default for shop ${user.shopId}`);
+    this.logger.log(
+      `Setting payment config ${id} as default for shop ${user.shopId}`,
+    );
 
     const config = await this.paymentConfigService.setDefaultConfig(
       user.shopId,

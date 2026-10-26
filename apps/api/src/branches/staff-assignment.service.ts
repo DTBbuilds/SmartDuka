@@ -7,7 +7,7 @@ import { AuditLog, AuditLogDocument } from '../audit/audit-log.schema';
 
 /**
  * PHASE 2: STAFF ASSIGNMENT SERVICE
- * 
+ *
  * Manages assignment of staff to branches
  * Multi-tenant safe: all operations filtered by shopId
  */
@@ -17,8 +17,10 @@ export class StaffAssignmentService {
 
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
-    @InjectModel(Branch.name) private readonly branchModel: Model<BranchDocument>,
-    @InjectModel(AuditLog.name) private readonly auditModel: Model<AuditLogDocument>,
+    @InjectModel(Branch.name)
+    private readonly branchModel: Model<BranchDocument>,
+    @InjectModel(AuditLog.name)
+    private readonly auditModel: Model<AuditLogDocument>,
   ) {}
 
   /**
@@ -91,7 +93,7 @@ export class StaffAssignmentService {
   ): Promise<UserDocument> {
     // Verify all branches exist
     const branches = await this.branchModel.find({
-      _id: { $in: branchIds.map(id => new Types.ObjectId(id)) },
+      _id: { $in: branchIds.map((id) => new Types.ObjectId(id)) },
       shopId: new Types.ObjectId(shopId),
     });
 
@@ -113,7 +115,7 @@ export class StaffAssignmentService {
     const updated = await this.userModel.findByIdAndUpdate(
       new Types.ObjectId(userId),
       {
-        branches: branchIds.map(id => new Types.ObjectId(id)),
+        branches: branchIds.map((id) => new Types.ObjectId(id)),
       },
       { new: true },
     );
@@ -127,7 +129,7 @@ export class StaffAssignmentService {
       resourceId: new Types.ObjectId(userId),
       changes: {
         before: { branches: user.branches },
-        after: { branches: branchIds.map(id => new Types.ObjectId(id)) },
+        after: { branches: branchIds.map((id) => new Types.ObjectId(id)) },
       },
     });
 
@@ -139,7 +141,10 @@ export class StaffAssignmentService {
    * Get staff for a branch
    * Multi-tenant safe: filters by shopId and branchId
    */
-  async getStaffByBranch(shopId: string, branchId: string): Promise<UserDocument[]> {
+  async getStaffByBranch(
+    shopId: string,
+    branchId: string,
+  ): Promise<UserDocument[]> {
     return this.userModel
       .find({
         shopId: new Types.ObjectId(shopId),
@@ -201,7 +206,7 @@ export class StaffAssignmentService {
     // Remove from multiple branch assignments
     if (user.branches && user.branches.length > 0) {
       const updatedBranches = user.branches.filter(
-        b => b.toString() !== branchId,
+        (b) => b.toString() !== branchId,
       );
 
       const updated = await this.userModel.findByIdAndUpdate(
@@ -276,7 +281,9 @@ export class StaffAssignmentService {
       },
     });
 
-    this.logger.log(`Permissions updated for user ${userId} in branch ${branchId}`);
+    this.logger.log(
+      `Permissions updated for user ${userId} in branch ${branchId}`,
+    );
     return updated!;
   }
 

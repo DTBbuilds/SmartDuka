@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { AppController } from './app.controller';
@@ -7,7 +6,10 @@ import { ConfigModule } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { SubscriptionStatusGuard } from './auth/guards/subscription-status.guard';
-import { Subscription, SubscriptionSchema } from './subscriptions/schemas/subscription.schema';
+import {
+  Subscription,
+  SubscriptionSchema,
+} from './subscriptions/schemas/subscription.schema';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
@@ -52,19 +54,22 @@ import { EventsModule } from './events/events.module';
   imports: [
     CommonModule,
     QueueModule,
-    ConfigModule.forRoot({ 
+    ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: ['.env.local', '.env'],
     }),
-    MongooseModule.forRoot(process.env.MONGODB_URI ?? 'mongodb://localhost:27017/smartduka', {
-      // Connection resilience settings for MongoDB Atlas
-      serverSelectionTimeoutMS: 10000, // Timeout for server selection (10s)
-      socketTimeoutMS: 45000, // Socket timeout (45s)
-      maxPoolSize: 10, // Maximum connections in pool
-      minPoolSize: 2, // Keep minimum connections alive
-      retryWrites: true, // Retry failed writes
-      retryReads: true, // Retry failed reads
-    }),
+    MongooseModule.forRoot(
+      process.env.MONGODB_URI ?? 'mongodb://localhost:27017/smartduka',
+      {
+        // Connection resilience settings for MongoDB Atlas
+        serverSelectionTimeoutMS: 10000, // Timeout for server selection (10s)
+        socketTimeoutMS: 45000, // Socket timeout (45s)
+        maxPoolSize: 10, // Maximum connections in pool
+        minPoolSize: 2, // Keep minimum connections alive
+        retryWrites: true, // Retry failed writes
+        retryReads: true, // Retry failed reads
+      },
+    ),
     // Import Subscription schema for global SubscriptionStatusGuard
     MongooseModule.forFeature([
       { name: Subscription.name, schema: SubscriptionSchema },

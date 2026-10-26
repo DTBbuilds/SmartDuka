@@ -1,4 +1,14 @@
-import { Controller, Get, Post, Put, Query, Param, Body, UseGuards, BadRequestException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Query,
+  Param,
+  Body,
+  UseGuards,
+  BadRequestException,
+} from '@nestjs/common';
 import { SupportService } from './support.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -45,7 +55,9 @@ export class SupportController {
       parseInt(limit),
       parseInt(skip),
     );
-    const count = await this.supportService.getShopOpenTicketsCount(user.shopId);
+    const count = await this.supportService.getShopOpenTicketsCount(
+      user.shopId,
+    );
     return { tickets, count };
   }
 

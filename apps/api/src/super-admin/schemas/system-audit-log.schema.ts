@@ -38,7 +38,7 @@ export enum AuditActionType {
 
 /**
  * System Audit Log Schema
- * 
+ *
  * Comprehensive audit logging for super admin oversight.
  * Based on industry best practices:
  * - Immutable records
@@ -61,7 +61,10 @@ export class SystemAuditLog {
   @Prop({ required: false })
   actorName?: string;
 
-  @Prop({ required: false, enum: ['user', 'admin', 'super_admin', 'system', 'anonymous'] })
+  @Prop({
+    required: false,
+    enum: ['user', 'admin', 'super_admin', 'system', 'anonymous'],
+  })
   actorType?: string;
 
   // WHAT - The action and target
@@ -125,7 +128,11 @@ export class SystemAuditLog {
   notes?: string;
 
   // Status tracking
-  @Prop({ required: true, enum: ['success', 'failure', 'warning'], default: 'success' })
+  @Prop({
+    required: true,
+    enum: ['success', 'failure', 'warning'],
+    default: 'success',
+  })
   status: 'success' | 'failure' | 'warning';
 
   @Prop({ required: false })
@@ -146,7 +153,8 @@ export class SystemAuditLog {
   updatedAt?: Date;
 }
 
-export const SystemAuditLogSchema = SchemaFactory.createForClass(SystemAuditLog);
+export const SystemAuditLogSchema =
+  SchemaFactory.createForClass(SystemAuditLog);
 
 // Indexes for efficient querying
 SystemAuditLogSchema.index({ createdAt: -1 });

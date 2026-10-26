@@ -34,7 +34,9 @@ describe('EMAIL-REPORTS-CORE1 durable report scheduler', () => {
     jest.useRealTimers();
   });
 
-  function boot(opts: { flag?: string; prefs?: any; shop?: any; sendResult?: any } = {}) {
+  function boot(
+    opts: { flag?: string; prefs?: any; shop?: any; sendResult?: any } = {},
+  ) {
     const runs: any[] = [];
     let runSeq = 0;
 
@@ -77,19 +79,41 @@ describe('EMAIL-REPORTS-CORE1 durable report scheduler', () => {
           const matches = (r: any) => {
             for (const clause of filter.$and ?? [filter]) {
               const ors = clause.$or ? clause.$or : [clause];
-              if (!ors.some((cond: any) => {
-                if (cond.status !== undefined && cond.status !== r.status) return false;
-                if (cond.attempts?.$lt !== undefined && !(r.attempts < cond.attempts.$lt)) return false;
-                if (cond.lastAttemptAt?.$lt !== undefined && !(r.lastAttemptAt && r.lastAttemptAt < cond.lastAttemptAt.$lt)) return false;
-                if (cond.lastAttemptAt?.$exists === false && r.lastAttemptAt !== undefined) return false;
-                return true;
-              })) return false;
+              if (
+                !ors.some((cond: any) => {
+                  if (cond.status !== undefined && cond.status !== r.status)
+                    return false;
+                  if (
+                    cond.attempts?.$lt !== undefined &&
+                    !(r.attempts < cond.attempts.$lt)
+                  )
+                    return false;
+                  if (
+                    cond.lastAttemptAt?.$lt !== undefined &&
+                    !(
+                      r.lastAttemptAt &&
+                      r.lastAttemptAt < cond.lastAttemptAt.$lt
+                    )
+                  )
+                    return false;
+                  if (
+                    cond.lastAttemptAt?.$exists === false &&
+                    r.lastAttemptAt !== undefined
+                  )
+                    return false;
+                  return true;
+                })
+              )
+                return false;
             }
             return true;
           };
           const candidate = runs.find(matches);
-          if (!candidate || candidate.status === 'processing') return { exec: jest.fn().mockResolvedValue(null) };
-          Object.assign(candidate, update.$set, { attempts: candidate.attempts + 1 });
+          if (!candidate || candidate.status === 'processing')
+            return { exec: jest.fn().mockResolvedValue(null) };
+          Object.assign(candidate, update.$set, {
+            attempts: candidate.attempts + 1,
+          });
           return { exec: jest.fn().mockResolvedValue(candidate) };
         }),
         updateOne: jest.fn(async (filter: any, update: any) => {
@@ -101,7 +125,11 @@ describe('EMAIL-REPORTS-CORE1 durable report scheduler', () => {
           exec: jest.fn(async () => {
             let n = 0;
             for (const r of runs) {
-              if (r.status === 'processing' && r.claimedAt && r.claimedAt < filter.claimedAt.$lt) {
+              if (
+                r.status === 'processing' &&
+                r.claimedAt &&
+                r.claimedAt < filter.claimedAt.$lt
+              ) {
                 Object.assign(r, update.$set);
                 n++;
               }
@@ -109,8 +137,15 @@ describe('EMAIL-REPORTS-CORE1 durable report scheduler', () => {
             return { modifiedCount: n };
           }),
         })),
-        countDocuments: jest.fn(async (filter: any) => runs.filter((r) => r.status === filter.status).length),
-        find: jest.fn(() => ({ sort: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), exec: jest.fn().mockResolvedValue(runs.slice(-25).reverse()) })),
+        countDocuments: jest.fn(
+          async (filter: any) =>
+            runs.filter((r) => r.status === filter.status).length,
+        ),
+        find: jest.fn(() => ({
+          sort: jest.fn().mockReturnThis(),
+          limit: jest.fn().mockReturnThis(),
+          exec: jest.fn().mockResolvedValue(runs.slice(-25).reverse()),
+        })),
       },
     );
 
@@ -119,9 +154,24 @@ describe('EMAIL-REPORTS-CORE1 durable report scheduler', () => {
       timezone: 'Africa/Nairobi',
       paused: false,
       unsubscribedAt: undefined,
-      daily: { enabled: true, hourLocal: 20, dayOfWeekLocal: 1, dayOfMonthLocal: 1 },
-      weekly: { enabled: false, hourLocal: 20, dayOfWeekLocal: 1, dayOfMonthLocal: 1 },
-      monthly: { enabled: false, hourLocal: 9, dayOfWeekLocal: 1, dayOfMonthLocal: 1 },
+      daily: {
+        enabled: true,
+        hourLocal: 20,
+        dayOfWeekLocal: 1,
+        dayOfMonthLocal: 1,
+      },
+      weekly: {
+        enabled: false,
+        hourLocal: 20,
+        dayOfWeekLocal: 1,
+        dayOfMonthLocal: 1,
+      },
+      monthly: {
+        enabled: false,
+        hourLocal: 9,
+        dayOfWeekLocal: 1,
+        dayOfMonthLocal: 1,
+      },
       recipientUserIds: [],
       ...(opts.prefs || {}),
     };
@@ -135,11 +185,13 @@ describe('EMAIL-REPORTS-CORE1 durable report scheduler', () => {
       findById: jest.fn(() => ({
         select: jest.fn(() => ({
           lean: jest.fn(() => ({
-            exec: jest.fn().mockResolvedValue(
-              opts.shop === undefined
-                ? { name: 'Load & Go', currency: 'KES', ownerId: 'owner-1' }
-                : opts.shop,
-            ),
+            exec: jest
+              .fn()
+              .mockResolvedValue(
+                opts.shop === undefined
+                  ? { name: 'Load & Go', currency: 'KES', ownerId: 'owner-1' }
+                  : opts.shop,
+              ),
           })),
         })),
       })),
@@ -169,7 +221,9 @@ describe('EMAIL-REPORTS-CORE1 durable report scheduler', () => {
         discounts: 0,
         orders: 1,
         itemsSold: 1,
-        productMap: new Map([['p1', { name: 'InkWave', quantity: 1, revenue: 1000 }]]),
+        productMap: new Map([
+          ['p1', { name: 'InkWave', quantity: 1, revenue: 1000 }],
+        ]),
         currencies: new Map([['KES', 1]]),
         paymentMethods: new Map([['cash', 1160]]),
       }),
@@ -181,7 +235,9 @@ describe('EMAIL-REPORTS-CORE1 durable report scheduler', () => {
       isEligible: jest.fn().mockResolvedValue({ eligible: true }),
       resolveRecipients: jest
         .fn()
-        .mockResolvedValue([{ userId: 'owner-1', email: 'owner@loadgo.example', name: 'Owner' }]),
+        .mockResolvedValue([
+          { userId: 'owner-1', email: 'owner@loadgo.example', name: 'Owner' },
+        ]),
       getOrCreate: jest.fn().mockResolvedValue(prefsDoc),
     } as any;
 
@@ -190,7 +246,11 @@ describe('EMAIL-REPORTS-CORE1 durable report scheduler', () => {
 
     const emailService = {
       sendEmail: jest.fn().mockResolvedValue(
-        opts.sendResult ?? { success: true, messageId: 'resend-1', emailLogId: 'log-1' },
+        opts.sendResult ?? {
+          success: true,
+          messageId: 'resend-1',
+          emailLogId: 'log-1',
+        },
       ),
     } as any;
 
@@ -206,7 +266,17 @@ describe('EMAIL-REPORTS-CORE1 durable report scheduler', () => {
       emailService,
     );
 
-    return { scheduler, runModel, runs, prefsModel, shopModel, preferencesService, reportsService, emailService, configService };
+    return {
+      scheduler,
+      runModel,
+      runs,
+      prefsModel,
+      shopModel,
+      preferencesService,
+      reportsService,
+      emailService,
+      configService,
+    };
   }
 
   it('feature flag OFF (default): the tick does nothing', async () => {
@@ -240,15 +310,21 @@ describe('EMAIL-REPORTS-CORE1 durable report scheduler', () => {
     await scheduler.createDueRuns();
     expect(runs.length).toBe(1);
     expect(runs[0].status).toBe('queued');
-    expect(runs[0].runId).toMatch(new RegExp(`^${SHOP}:daily:\\d{4}-\\d{2}-\\d{2}:v1$`));
+    expect(runs[0].runId).toMatch(
+      new RegExp(`^${SHOP}:daily:\\d{4}-\\d{2}-\\d{2}:v1$`),
+    );
 
     await scheduler.deliverPendingRuns();
     expect(emailService.sendEmail).toHaveBeenCalledTimes(1);
     expect(runs[0].status).toBe('accepted'); // provider acceptance — NEVER 'delivered' without webhook
     expect(runs[0].recipients).toEqual(['owner@loadgo.example']);
     // The send carries the run's idempotency key — one send per logical report, ever.
-    expect(emailService.sendEmail.mock.calls[0][0].idempotencyKey).toBe(runs[0].runId);
-    expect(emailService.sendEmail.mock.calls[0][0].attachments[0].contentType).toBe('application/pdf');
+    expect(emailService.sendEmail.mock.calls[0][0].idempotencyKey).toBe(
+      runs[0].runId,
+    );
+    expect(
+      emailService.sendEmail.mock.calls[0][0].attachments[0].contentType,
+    ).toBe('application/pdf');
   });
 
   it('duplicate prevention: a second tick does not create a second run for the same period', async () => {
@@ -271,7 +347,12 @@ describe('EMAIL-REPORTS-CORE1 durable report scheduler', () => {
     run.status = 'processing'; // another instance holds the claim
     const claimed = await (scheduler as any).runModel
       .findOneAndUpdate(
-        { $or: [{ status: 'queued' }, { status: 'failed', attempts: { $lt: 3 } }] },
+        {
+          $or: [
+            { status: 'queued' },
+            { status: 'failed', attempts: { $lt: 3 } },
+          ],
+        },
         { $set: { status: 'processing' }, $inc: { attempts: 1 } },
       )
       .exec();
@@ -280,12 +361,17 @@ describe('EMAIL-REPORTS-CORE1 durable report scheduler', () => {
   });
 
   it('suppression: paused/unsubscribed shops are marked suppressed, never sent', async () => {
-    const { scheduler, runs, emailService, preferencesService } = boot({ flag: 'true' });
+    const { scheduler, runs, emailService, preferencesService } = boot({
+      flag: 'true',
+    });
     await scheduler.onModuleInit();
     // The run is created while eligible, then eligibility FLIPS before
     // delivery — the delivery-time re-check must suppress it.
     await scheduler.createDueRuns();
-    (preferencesService.isEligible as jest.Mock).mockResolvedValue({ eligible: false, reason: 'unsubscribed' });
+    (preferencesService.isEligible as jest.Mock).mockResolvedValue({
+      eligible: false,
+      reason: 'unsubscribed',
+    });
     await scheduler.deliverPendingRuns();
     expect(emailService.sendEmail).not.toHaveBeenCalled();
     expect(runs[0].status).toBe('suppressed');
@@ -293,7 +379,9 @@ describe('EMAIL-REPORTS-CORE1 durable report scheduler', () => {
   });
 
   it('no verified recipients → suppressed (never sent, never silently "delivered")', async () => {
-    const { scheduler, runs, emailService, preferencesService } = boot({ flag: 'true' });
+    const { scheduler, runs, emailService, preferencesService } = boot({
+      flag: 'true',
+    });
     await scheduler.onModuleInit();
     (preferencesService.resolveRecipients as jest.Mock).mockResolvedValue([]);
     await scheduler.createDueRuns();
@@ -342,18 +430,30 @@ describe('EMAIL-REPORTS-CORE1 durable report scheduler', () => {
   });
 
   it('no-sales shop: the report is still delivered with honest zeros (not skipped)', async () => {
-    const { scheduler, runs, emailService, reportsService } = boot({ flag: 'true' });
+    const { scheduler, runs, emailService, reportsService } = boot({
+      flag: 'true',
+    });
     await scheduler.onModuleInit();
     (reportsService.factsForRange as jest.Mock).mockResolvedValue({
-      billedRevenue: 0, collectedPayments: 0, refunds: 0, tax: 0, discounts: 0,
-      orders: 0, itemsSold: 0,
-      productMap: new Map(), currencies: new Map(), paymentMethods: new Map(),
+      billedRevenue: 0,
+      collectedPayments: 0,
+      refunds: 0,
+      tax: 0,
+      discounts: 0,
+      orders: 0,
+      itemsSold: 0,
+      productMap: new Map(),
+      currencies: new Map(),
+      paymentMethods: new Map(),
     });
     await scheduler.createDueRuns();
     await scheduler.deliverPendingRuns();
     expect(emailService.sendEmail).toHaveBeenCalledTimes(1);
     expect(runs[0].status).toBe('accepted');
-    expect(runs[0].metricsSummary).toMatchObject({ billedRevenue: 0, orders: 0 });
+    expect(runs[0].metricsSummary).toMatchObject({
+      billedRevenue: 0,
+      orders: 0,
+    });
   });
 
   it('multi-shop safety: runs are scoped per shop (different runIds)', async () => {
@@ -365,24 +465,58 @@ describe('EMAIL-REPORTS-CORE1 durable report scheduler', () => {
       timezone: 'Africa/Nairobi',
       paused: false,
       unsubscribedAt: undefined,
-      daily: { enabled: true, hourLocal: 20, dayOfWeekLocal: 1, dayOfMonthLocal: 1 },
-      weekly: { enabled: false, hourLocal: 20, dayOfWeekLocal: 1, dayOfMonthLocal: 1 },
-      monthly: { enabled: false, hourLocal: 9, dayOfWeekLocal: 1, dayOfMonthLocal: 1 },
+      daily: {
+        enabled: true,
+        hourLocal: 20,
+        dayOfWeekLocal: 1,
+        dayOfMonthLocal: 1,
+      },
+      weekly: {
+        enabled: false,
+        hourLocal: 20,
+        dayOfWeekLocal: 1,
+        dayOfMonthLocal: 1,
+      },
+      monthly: {
+        enabled: false,
+        hourLocal: 9,
+        dayOfWeekLocal: 1,
+        dayOfMonthLocal: 1,
+      },
       recipientUserIds: [],
     };
-    ((scheduler as any).prefsModel.find as jest.Mock).mockImplementation(() => ({
-      lean: jest.fn().mockResolvedValue([
-        {
-          shopId: SHOP,
-          timezone: 'Africa/Nairobi', paused: false, unsubscribedAt: undefined,
-          daily: { enabled: true, hourLocal: 20, dayOfWeekLocal: 1, dayOfMonthLocal: 1 },
-          weekly: { enabled: false, hourLocal: 20, dayOfWeekLocal: 1, dayOfMonthLocal: 1 },
-          monthly: { enabled: false, hourLocal: 9, dayOfWeekLocal: 1, dayOfMonthLocal: 1 },
-          recipientUserIds: [],
-        },
-        prefsB,
-      ]),
-    }));
+    ((scheduler as any).prefsModel.find as jest.Mock).mockImplementation(
+      () => ({
+        lean: jest.fn().mockResolvedValue([
+          {
+            shopId: SHOP,
+            timezone: 'Africa/Nairobi',
+            paused: false,
+            unsubscribedAt: undefined,
+            daily: {
+              enabled: true,
+              hourLocal: 20,
+              dayOfWeekLocal: 1,
+              dayOfMonthLocal: 1,
+            },
+            weekly: {
+              enabled: false,
+              hourLocal: 20,
+              dayOfWeekLocal: 1,
+              dayOfMonthLocal: 1,
+            },
+            monthly: {
+              enabled: false,
+              hourLocal: 9,
+              dayOfWeekLocal: 1,
+              dayOfMonthLocal: 1,
+            },
+            recipientUserIds: [],
+          },
+          prefsB,
+        ]),
+      }),
+    );
     await scheduler.createDueRuns();
     expect(runs.length).toBe(2);
     const ids = runs.map((r) => r.runId);
@@ -423,7 +557,8 @@ describe('EMAIL-REPORTS-CORE1 durable report scheduler', () => {
     await scheduler.createDueRuns();
     (emailService.sendEmail as jest.Mock).mockResolvedValue({
       success: false,
-      error: 'AMBIGUOUS: provider may hold the message — resend: network timeout',
+      error:
+        'AMBIGUOUS: provider may hold the message — resend: network timeout',
       ambiguous: true,
     });
     await scheduler.deliverPendingRuns();

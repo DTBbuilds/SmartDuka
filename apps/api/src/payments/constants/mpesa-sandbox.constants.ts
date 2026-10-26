@@ -1,9 +1,9 @@
 /**
  * M-Pesa Sandbox Test Numbers and Simulation Configuration
- * 
+ *
  * These are the official Safaricom sandbox test numbers that work with M-Pesa sandbox.
  * Real phone numbers should NOT be used in sandbox mode - they will get an error.
- * 
+ *
  * Documentation: https://developer.safaricom.co.ke/Documentation
  */
 
@@ -25,7 +25,7 @@ export const MPESA_SANDBOX_TEST_NUMBERS = [
 // Alternative patterns for sandbox numbers (for flexibility)
 export const SANDBOX_NUMBER_PATTERNS = [
   /^2547083741\d{2}$/, // Variations of the official test number
-  /^254700000\d{3}$/,  // 254700000XXX pattern
+  /^254700000\d{3}$/, // 254700000XXX pattern
 ];
 
 /**
@@ -45,19 +45,20 @@ export enum SandboxSimulationScenario {
 /**
  * Map phone numbers to simulation scenarios
  */
-export const SANDBOX_SIMULATION_MAP: Record<string, SandboxSimulationScenario> = {
-  '254708374149': SandboxSimulationScenario.SUCCESS,
-  '254700000000': SandboxSimulationScenario.SUCCESS,
-  '254711111111': SandboxSimulationScenario.SUCCESS,
-  '254722222222': SandboxSimulationScenario.USER_CANCELLED,
-  '254733333333': SandboxSimulationScenario.TIMEOUT,
-  '254744444444': SandboxSimulationScenario.WRONG_PIN,
-  '254755555555': SandboxSimulationScenario.INSUFFICIENT_FUNDS,
-  '254766666666': SandboxSimulationScenario.FAILED,
-  '254777777777': SandboxSimulationScenario.SUCCESS,
-  '254788888888': SandboxSimulationScenario.SUCCESS,
-  '254799999999': SandboxSimulationScenario.SYSTEM_ERROR,
-};
+export const SANDBOX_SIMULATION_MAP: Record<string, SandboxSimulationScenario> =
+  {
+    '254708374149': SandboxSimulationScenario.SUCCESS,
+    '254700000000': SandboxSimulationScenario.SUCCESS,
+    '254711111111': SandboxSimulationScenario.SUCCESS,
+    '254722222222': SandboxSimulationScenario.USER_CANCELLED,
+    '254733333333': SandboxSimulationScenario.TIMEOUT,
+    '254744444444': SandboxSimulationScenario.WRONG_PIN,
+    '254755555555': SandboxSimulationScenario.INSUFFICIENT_FUNDS,
+    '254766666666': SandboxSimulationScenario.FAILED,
+    '254777777777': SandboxSimulationScenario.SUCCESS,
+    '254788888888': SandboxSimulationScenario.SUCCESS,
+    '254799999999': SandboxSimulationScenario.SYSTEM_ERROR,
+  };
 
 /**
  * M-Pesa result codes for simulation
@@ -89,7 +90,10 @@ export interface SimulationResponse {
   shouldSucceed: boolean;
 }
 
-export const SIMULATION_RESPONSES: Record<SandboxSimulationScenario, SimulationResponse> = {
+export const SIMULATION_RESPONSES: Record<
+  SandboxSimulationScenario,
+  SimulationResponse
+> = {
   [SandboxSimulationScenario.SUCCESS]: {
     resultCode: MPESA_RESULT_CODES.SUCCESS,
     resultDesc: 'The service request is processed successfully.',
@@ -142,17 +146,21 @@ export function isSandboxTestNumber(phoneNumber: string): boolean {
   if (MPESA_SANDBOX_TEST_NUMBERS.includes(phoneNumber)) {
     return true;
   }
-  
+
   // Pattern match
-  return SANDBOX_NUMBER_PATTERNS.some(pattern => pattern.test(phoneNumber));
+  return SANDBOX_NUMBER_PATTERNS.some((pattern) => pattern.test(phoneNumber));
 }
 
 /**
  * Get the simulation scenario for a phone number
  * Defaults to SUCCESS if number is valid but not in map
  */
-export function getSimulationScenario(phoneNumber: string): SandboxSimulationScenario {
-  return SANDBOX_SIMULATION_MAP[phoneNumber] || SandboxSimulationScenario.SUCCESS;
+export function getSimulationScenario(
+  phoneNumber: string,
+): SandboxSimulationScenario {
+  return (
+    SANDBOX_SIMULATION_MAP[phoneNumber] || SandboxSimulationScenario.SUCCESS
+  );
 }
 
 /**
@@ -176,7 +184,8 @@ export function generateSandboxReceiptNumber(): string {
  */
 export const SANDBOX_MODE_ERROR = {
   code: 'SANDBOX_ONLY',
-  message: 'M-Pesa is in SANDBOX mode. Real phone numbers cannot be used for testing. Please use one of the sandbox test numbers:\n\n' +
+  message:
+    'M-Pesa is in SANDBOX mode. Real phone numbers cannot be used for testing. Please use one of the sandbox test numbers:\n\n' +
     '• 254708374149 - Success scenario\n' +
     '• 254711111111 - Success scenario\n' +
     '• 254722222222 - User cancelled\n' +

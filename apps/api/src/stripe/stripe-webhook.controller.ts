@@ -291,13 +291,17 @@ export class StripeWebhookController {
         ? charge.payment_intent
         : charge.payment_intent?.id;
     if (!paymentIntentId) {
-      this.logger.log(`Charge ${charge.id} refunded without a payment intent — ignoring`);
+      this.logger.log(
+        `Charge ${charge.id} refunded without a payment intent — ignoring`,
+      );
       return;
     }
     try {
       await this.paymentService.convergeExternalRefund(paymentIntentId, charge);
     } catch (err: any) {
-      this.logger.error(`External refund convergence failed for ${paymentIntentId}: ${err.message}`);
+      this.logger.error(
+        `External refund convergence failed for ${paymentIntentId}: ${err.message}`,
+      );
       throw err; // non-2xx → Stripe redelivers
     }
   }

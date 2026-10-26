@@ -51,7 +51,9 @@ export class PaymentReadinessController {
    */
   @UseGuards(JwtAuthGuard)
   @Get()
-  async getReadiness(@CurrentUser() user: JwtPayload): Promise<PaymentReadinessStatus> {
+  async getReadiness(
+    @CurrentUser() user: JwtPayload,
+  ): Promise<PaymentReadinessStatus> {
     const shopId = user.shopId;
     const warnings: string[] = [];
     const blockers: string[] = [];
@@ -67,7 +69,8 @@ export class PaymentReadinessController {
       message: 'M-Pesa not configured.',
     };
     try {
-      const mpesa = await this.mpesaMultiTenantService.getMpesaConfigStatus(shopId);
+      const mpesa =
+        await this.mpesaMultiTenantService.getMpesaConfigStatus(shopId);
       mpesaResult = {
         configured: mpesa.isConfigured,
         enabled: mpesa.isEnabled,
@@ -78,14 +81,18 @@ export class PaymentReadinessController {
         message: mpesa.message,
       };
       if (!mpesa.isConfigured) {
-        warnings.push('M-Pesa is not configured. Mobile payments are disabled.');
+        warnings.push(
+          'M-Pesa is not configured. Mobile payments are disabled.',
+        );
       } else if (!mpesa.isEnabled) {
         warnings.push('M-Pesa credentials saved but not enabled.');
       } else if (!mpesa.isVerified) {
         warnings.push('M-Pesa credentials pending verification.');
       }
     } catch (err: any) {
-      this.logger.error(`M-Pesa readiness check failed for shop ${shopId}: ${err.message}`);
+      this.logger.error(
+        `M-Pesa readiness check failed for shop ${shopId}: ${err.message}`,
+      );
       mpesaResult.message = 'Failed to check M-Pesa status.';
       warnings.push('Could not check M-Pesa status.');
     }
@@ -115,13 +122,19 @@ export class PaymentReadinessController {
               : 'Stripe not connected. Card payments are disabled.',
         };
         if (!stripe.isConnected) {
-          warnings.push('Stripe is not connected. Card payments (Visa, Mastercard) are disabled.');
+          warnings.push(
+            'Stripe is not connected. Card payments (Visa, Mastercard) are disabled.',
+          );
         } else if (!stripe.isCardReady) {
-          warnings.push('Stripe is connected but charges not enabled. Complete Stripe onboarding.');
+          warnings.push(
+            'Stripe is connected but charges not enabled. Complete Stripe onboarding.',
+          );
         }
       }
     } catch (err: any) {
-      this.logger.error(`Stripe readiness check failed for shop ${shopId}: ${err.message}`);
+      this.logger.error(
+        `Stripe readiness check failed for shop ${shopId}: ${err.message}`,
+      );
       cardResult.message = 'Failed to check Stripe status.';
       warnings.push('Could not check Stripe/card status.');
     }

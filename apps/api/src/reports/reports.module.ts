@@ -10,7 +10,10 @@ import { ReportNarrativeService } from './report-narrative.service';
 import { Order, OrderSchema } from '../sales/schemas/order.schema';
 import { Shop, ShopSchema } from '../shops/schemas/shop.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
-import { ReportPreferences, ReportPreferencesSchema } from './schemas/report-preferences.schema';
+import {
+  ReportPreferences,
+  ReportPreferencesSchema,
+} from './schemas/report-preferences.schema';
 import { ReportRun, ReportRunSchema } from './schemas/report-run.schema';
 import { NotificationsModule } from '../notifications/notifications.module';
 

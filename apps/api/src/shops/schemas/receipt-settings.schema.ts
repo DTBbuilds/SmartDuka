@@ -13,9 +13,9 @@ export enum ReceiptTemplate {
 }
 
 export enum ReceiptWidth {
-  NARROW_58MM = 32,    // 58mm paper ~ 32 chars
-  STANDARD_80MM = 42,  // 80mm paper ~ 42 chars
-  WIDE_80MM = 48,      // 80mm paper with small font
+  NARROW_58MM = 32, // 58mm paper ~ 32 chars
+  STANDARD_80MM = 42, // 80mm paper ~ 42 chars
+  WIDE_80MM = 48, // 80mm paper with small font
 }
 
 export enum BarcodeType {
@@ -176,7 +176,12 @@ export class ReceiptSettings {
   showBarcode: boolean;
 
   @Prop({ default: 'receipt_number' })
-  barcodeContent: 'receipt_number' | 'transaction_id' | 'shop_url' | 'verify_url' | 'custom';
+  barcodeContent:
+    | 'receipt_number'
+    | 'transaction_id'
+    | 'shop_url'
+    | 'verify_url'
+    | 'custom';
 
   @Prop({ required: false })
   customBarcodeText?: string;
@@ -281,7 +286,8 @@ export class ReceiptSettings {
   updatedBy?: Types.ObjectId;
 }
 
-export const ReceiptSettingsSchema = SchemaFactory.createForClass(ReceiptSettings);
+export const ReceiptSettingsSchema =
+  SchemaFactory.createForClass(ReceiptSettings);
 
 // Indexes
 ReceiptSettingsSchema.index({ shopId: 1 }, { unique: true });

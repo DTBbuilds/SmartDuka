@@ -1,6 +1,9 @@
 import { ReportPreferencesService } from './report-preferences.service';
 import { ReportNarrativeService } from './report-narrative.service';
-import { ReportRendererService, type ReportMetrics } from './report-renderer.service';
+import {
+  ReportRendererService,
+  type ReportMetrics,
+} from './report-renderer.service';
 
 /**
  * EMAIL-REPORTS-CORE1 (Phase C/E/F/I) — preferences, narrative guardrails,
@@ -16,9 +19,24 @@ describe('EMAIL-REPORTS-CORE1 preferences, narrative & renderer', () => {
         timezone: 'Africa/Nairobi',
         paused: false,
         unsubscribedAt: undefined,
-        daily: { enabled: false, hourLocal: 20, dayOfWeekLocal: 1, dayOfMonthLocal: 1 },
-        weekly: { enabled: false, hourLocal: 20, dayOfWeekLocal: 1, dayOfMonthLocal: 1 },
-        monthly: { enabled: false, hourLocal: 9, dayOfWeekLocal: 1, dayOfMonthLocal: 1 },
+        daily: {
+          enabled: false,
+          hourLocal: 20,
+          dayOfWeekLocal: 1,
+          dayOfMonthLocal: 1,
+        },
+        weekly: {
+          enabled: false,
+          hourLocal: 20,
+          dayOfWeekLocal: 1,
+          dayOfMonthLocal: 1,
+        },
+        monthly: {
+          enabled: false,
+          hourLocal: 9,
+          dayOfWeekLocal: 1,
+          dayOfMonthLocal: 1,
+        },
         recipientUserIds: [],
         ...(opts.prefs || {}),
         save: jest.fn(async () => prefsDoc),
@@ -31,7 +49,11 @@ describe('EMAIL-REPORTS-CORE1 preferences, narrative & renderer', () => {
         findById: jest.fn(() => ({
           select: jest.fn(() => ({
             lean: jest.fn(() => ({
-              exec: jest.fn().mockResolvedValue(opts.owner ?? { ownerId: '507f1f77bcf86cd799439071' }),
+              exec: jest
+                .fn()
+                .mockResolvedValue(
+                  opts.owner ?? { ownerId: '507f1f77bcf86cd799439071' },
+                ),
             })),
           })),
         })),
@@ -45,16 +67,33 @@ describe('EMAIL-REPORTS-CORE1 preferences, narrative & renderer', () => {
           })),
         })),
       };
-      const service = new ReportPreferencesService(prefsModel as any, shopModel as any, userModel as any);
+      const service = new ReportPreferencesService(
+        prefsModel as any,
+        shopModel as any,
+        userModel as any,
+      );
       return { service, prefsDoc, userModel };
     }
 
     it('default recipients: the shop owner only (never another shop\u2019s users)', async () => {
       const { service, userModel } = bootPrefs({
-        users: [{ _id: '507f1f77bcf86cd799439071', email: 'Owner@LoadGo.example', name: 'Owner', role: 'admin' }],
+        users: [
+          {
+            _id: '507f1f77bcf86cd799439071',
+            email: 'Owner@LoadGo.example',
+            name: 'Owner',
+            role: 'admin',
+          },
+        ],
       });
       const recipients = await service.resolveRecipients(SHOP);
-      expect(recipients).toEqual([{ userId: '507f1f77bcf86cd799439071', email: 'owner@loadgo.example', name: 'Owner' }]);
+      expect(recipients).toEqual([
+        {
+          userId: '507f1f77bcf86cd799439071',
+          email: 'owner@loadgo.example',
+          name: 'Owner',
+        },
+      ]);
       // tenant scope enforced in the query
       expect(userModel.find).toHaveBeenCalledWith(
         expect.objectContaining({ shopId: expect.anything() }),
@@ -63,10 +102,23 @@ describe('EMAIL-REPORTS-CORE1 preferences, narrative & renderer', () => {
 
     it('recipient emails are deduplicated (case-insensitively)', async () => {
       const { service } = bootPrefs({
-        prefs: { recipientUserIds: ['507f1f77bcf86cd799439072', '507f1f77bcf86cd799439073'] },
+        prefs: {
+          recipientUserIds: [
+            '507f1f77bcf86cd799439072',
+            '507f1f77bcf86cd799439073',
+          ],
+        },
         users: [
-          { _id: '507f1f77bcf86cd799439072', email: 'same@shop.example', role: 'admin' },
-          { _id: '507f1f77bcf86cd799439073', email: 'SAME@shop.example', role: 'admin' },
+          {
+            _id: '507f1f77bcf86cd799439072',
+            email: 'same@shop.example',
+            role: 'admin',
+          },
+          {
+            _id: '507f1f77bcf86cd799439073',
+            email: 'SAME@shop.example',
+            role: 'admin',
+          },
         ],
       });
       const recipients = await service.resolveRecipients(SHOP);
@@ -75,10 +127,25 @@ describe('EMAIL-REPORTS-CORE1 preferences, narrative & renderer', () => {
 
     it('unverified accounts are excluded from OPTIONAL report delivery', async () => {
       const { service } = bootPrefs({
-        prefs: { recipientUserIds: ['507f1f77bcf86cd799439072', '507f1f77bcf86cd799439073'] },
+        prefs: {
+          recipientUserIds: [
+            '507f1f77bcf86cd799439072',
+            '507f1f77bcf86cd799439073',
+          ],
+        },
         users: [
-          { _id: '507f1f77bcf86cd799439072', email: 'verified@shop.example', role: 'admin', emailVerified: true },
-          { _id: '507f1f77bcf86cd799439073', email: 'unverified@shop.example', role: 'admin', emailVerified: false },
+          {
+            _id: '507f1f77bcf86cd799439072',
+            email: 'verified@shop.example',
+            role: 'admin',
+            emailVerified: true,
+          },
+          {
+            _id: '507f1f77bcf86cd799439073',
+            email: 'unverified@shop.example',
+            role: 'admin',
+            emailVerified: false,
+          },
         ],
       });
       const recipients = await service.resolveRecipients(SHOP);
@@ -87,16 +154,28 @@ describe('EMAIL-REPORTS-CORE1 preferences, narrative & renderer', () => {
 
     it('eligibility: unsubscribed > paused > recipients', async () => {
       const unsub = bootPrefs({ prefs: { unsubscribedAt: new Date() } });
-      await expect((await unsub.service.isEligible(SHOP)).reason).toBe('unsubscribed');
+      await expect((await unsub.service.isEligible(SHOP)).reason).toBe(
+        'unsubscribed',
+      );
 
       const paused = bootPrefs({ prefs: { paused: true } });
-      await expect((await paused.service.isEligible(SHOP)).reason).toBe('paused');
+      await expect((await paused.service.isEligible(SHOP)).reason).toBe(
+        'paused',
+      );
 
       const noRecipients = bootPrefs({ owner: {}, users: [] });
-      await expect((await noRecipients.service.isEligible(SHOP)).reason).toBe('no_verified_recipients');
+      await expect((await noRecipients.service.isEligible(SHOP)).reason).toBe(
+        'no_verified_recipients',
+      );
 
       const ok = bootPrefs({
-        users: [{ _id: '507f1f77bcf86cd799439071', email: 'o@s.example', role: 'admin' }],
+        users: [
+          {
+            _id: '507f1f77bcf86cd799439071',
+            email: 'o@s.example',
+            role: 'admin',
+          },
+        ],
       });
       await expect((await ok.service.isEligible(SHOP)).eligible).toBe(true);
     });
@@ -106,7 +185,12 @@ describe('EMAIL-REPORTS-CORE1 preferences, narrative & renderer', () => {
         users: [{ _id: '507f1f77bcf86cd799439072', role: 'admin' }], // only 1 of the 2 requested exists in this shop
       });
       await expect(
-        service.update(SHOP, { recipientUserIds: ['507f1f77bcf86cd799439072', '507f1f77bcf86cd799439074'] }),
+        service.update(SHOP, {
+          recipientUserIds: [
+            '507f1f77bcf86cd799439072',
+            '507f1f77bcf86cd799439074',
+          ],
+        }),
       ).rejects.toThrow(/users of this shop/i);
     });
 
@@ -115,7 +199,9 @@ describe('EMAIL-REPORTS-CORE1 preferences, narrative & renderer', () => {
         users: [{ _id: '507f1f77bcf86cd799439072', role: 'cashier' }],
       });
       await expect(
-        service.update(SHOP, { recipientUserIds: ['507f1f77bcf86cd799439072'] }),
+        service.update(SHOP, {
+          recipientUserIds: ['507f1f77bcf86cd799439072'],
+        }),
       ).rejects.toThrow(/admins or the owner/i);
     });
 
@@ -132,7 +218,13 @@ describe('EMAIL-REPORTS-CORE1 preferences, narrative & renderer', () => {
       // The recipient list still contains u1, but u1 is now a cashier.
       const { service } = bootPrefs({
         prefs: { recipientUserIds: ['507f1f77bcf86cd799439072'] },
-        users: [{ _id: '507f1f77bcf86cd799439072', email: 'downgraded@shop.example', role: 'cashier' }],
+        users: [
+          {
+            _id: '507f1f77bcf86cd799439072',
+            email: 'downgraded@shop.example',
+            role: 'cashier',
+          },
+        ],
       });
       const recipients = await service.resolveRecipients(SHOP);
       expect(recipients).toEqual([]); // role re-checked at RESOLVE time
@@ -143,7 +235,13 @@ describe('EMAIL-REPORTS-CORE1 preferences, narrative & renderer', () => {
       // resolves ONLY its own user document.
       const { service, userModel } = bootPrefs({
         prefs: { recipientUserIds: ['507f1f77bcf86cd799439072'] },
-        users: [{ _id: '507f1f77bcf86cd799439072', email: 'owner@gmail.example', role: 'admin' }],
+        users: [
+          {
+            _id: '507f1f77bcf86cd799439072',
+            email: 'owner@gmail.example',
+            role: 'admin',
+          },
+        ],
       });
       const recipients = await service.resolveRecipients(SHOP);
       expect(recipients.map((r) => r.email)).toEqual(['owner@gmail.example']);
@@ -194,17 +292,38 @@ describe('EMAIL-REPORTS-CORE1 preferences, narrative & renderer', () => {
 
     it('no-sales period: honest, useful guidance (not generic cheer)', () => {
       const narrative = new ReportNarrativeService();
-      const insights = narrative.buildInsights({ ...base, orders: 0, billedRevenue: 0, topProducts: [] });
-      expect(insights.some((i) => i.kind === 'fact' && /No completed sales/.test(i.text))).toBe(true);
-      expect(insights.some((i) => i.kind === 'suggestion' && /first checkout/.test(i.text))).toBe(true);
-      expect(insights.some((i) => /Keep up the great work/.test(i.text))).toBe(false);
+      const insights = narrative.buildInsights({
+        ...base,
+        orders: 0,
+        billedRevenue: 0,
+        topProducts: [],
+      });
+      expect(
+        insights.some(
+          (i) => i.kind === 'fact' && /No completed sales/.test(i.text),
+        ),
+      ).toBe(true);
+      expect(
+        insights.some(
+          (i) => i.kind === 'suggestion' && /first checkout/.test(i.text),
+        ),
+      ).toBe(true);
+      expect(insights.some((i) => /Keep up the great work/.test(i.text))).toBe(
+        false,
+      );
     });
 
     it('outstanding balances surface as a fact + a suggestion', () => {
       const narrative = new ReportNarrativeService();
       const insights = narrative.buildInsights({ ...base, outstanding: 128.8 });
-      expect(insights.some((i) => i.kind === 'fact' && /128\.80/.test(i.text))).toBe(true);
-      expect(insights.some((i) => i.kind === 'suggestion' && /outstanding/i.test(i.text))).toBe(true);
+      expect(
+        insights.some((i) => i.kind === 'fact' && /128\.80/.test(i.text)),
+      ).toBe(true);
+      expect(
+        insights.some(
+          (i) => i.kind === 'suggestion' && /outstanding/i.test(i.text),
+        ),
+      ).toBe(true);
     });
 
     it('AI narrative is DISABLED by default (deterministic insights returned unchanged)', async () => {
@@ -245,7 +364,9 @@ describe('EMAIL-REPORTS-CORE1 preferences, narrative & renderer', () => {
       itemsSold: 1,
       averageOrderValue: 1160,
       paymentMethods: [{ method: 'cash', amount: 1160 }],
-      topProducts: [{ productName: 'InkWave & Sons <test>', quantity: 1, revenue: 1000 }],
+      topProducts: [
+        { productName: 'InkWave & Sons <test>', quantity: 1, revenue: 1000 },
+      ],
       lowStock: [{ name: 'SweetJoy Candy', stock: 2, reorderPoint: 5 }],
       insights: [
         { kind: 'fact', text: '1 completed order.' },

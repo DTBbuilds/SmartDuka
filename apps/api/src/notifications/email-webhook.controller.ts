@@ -1,4 +1,14 @@
-import { Controller, Post, Body, Headers, Req, Logger, HttpCode, HttpStatus, BadRequestException } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Headers,
+  Req,
+  Logger,
+  HttpCode,
+  HttpStatus,
+  BadRequestException,
+} from '@nestjs/common';
 import type { RawBodyRequest } from '@nestjs/common';
 import { createHmac, timingSafeEqual } from 'crypto';
 import type { Request } from 'express';
@@ -55,16 +65,16 @@ export class EmailWebhookController {
     if (skew > EmailWebhookController.TOLERANCE_SECONDS) return false;
 
     const signedContent = `${id}.${timestamp}.${payload}`;
-    const expected = createHmac('sha256', secret).update(signedContent).digest('base64');
-    return signatures
-      .split(' ')
-      .some((sig) => {
-        const [version, value] = sig.split(',');
-        if (version !== 'v1' || !value) return false;
-        const a = Buffer.from(value);
-        const b = Buffer.from(expected);
-        return a.length === b.length && timingSafeEqual(a, b);
-      });
+    const expected = createHmac('sha256', secret)
+      .update(signedContent)
+      .digest('base64');
+    return signatures.split(' ').some((sig) => {
+      const [version, value] = sig.split(',');
+      if (version !== 'v1' || !value) return false;
+      const a = Buffer.from(value);
+      const b = Buffer.from(expected);
+      return a.length === b.length && timingSafeEqual(a, b);
+    });
   }
 
   @Post('resend')
@@ -78,8 +88,7 @@ export class EmailWebhookController {
     // Svix signs the EXACT raw bytes — Nest's rawBody capture (enabled in
     // main.ts) provides them; JSON re-serialization would break signatures.
     const rawPayload =
-      (request?.rawBody as Buffer | undefined)?.toString('utf8') ??
-      JSON.stringify(payload ?? {});
+      request?.rawBody?.toString('utf8') ?? JSON.stringify(payload ?? {});
 
     // CANARY-PREP1 — NO TRUSTED-STATE MUTATION WITHOUT VERIFICATION.
     // Without the signing secret the endpoint previously processed events
@@ -96,7 +105,9 @@ export class EmailWebhookController {
     }
     const verified = this.verifySvix(rawPayload, headers, secret);
     if (!verified) {
-      this.logger.warn('Resend webhook signature verification FAILED — event rejected');
+      this.logger.warn(
+        'Resend webhook signature verification FAILED — event rejected',
+      );
       throw new BadRequestException('Invalid webhook signature');
     }
 
@@ -115,21 +126,28 @@ export class EmailWebhookController {
     if (!status) return { received: true }; // e.g. email.sent — already recorded at send time
 
     const isPermanentBounce =
-      status === 'bounced' && (payload?.data as any)?.bounce?.type === 'permanent';
+      status === 'bounced' &&
+      (payload?.data as any)?.bounce?.type === 'permanent';
 
     try {
       const guard =
         status === 'delivered'
           ? { status: { $nin: ['bounced', 'spam'] } } // never regress a negative terminal state
-          : { status: { $nin: ['delivered'] } };       // never regress a positive terminal state
+          : { status: { $nin: ['delivered'] } }; // never regress a positive terminal state
       const result = await this.emailLogModel.updateOne(
         { messageId, ...guard },
         {
           $set: {
             status,
-            ...(status === 'delivered' ? { deliveredAt: new Date() } : { failedAt: new Date() }),
+            ...(status === 'delivered'
+              ? { deliveredAt: new Date() }
+              : { failedAt: new Date() }),
             ...(isPermanentBounce || status === 'bounced'
-              ? { errorMessage: JSON.stringify((payload?.data as any)?.bounce || {}).slice(0, 500) }
+              ? {
+                  errorMessage: JSON.stringify(
+                    (payload?.data as any)?.bounce || {},
+                  ).slice(0, 500),
+                }
               : {}),
             'metadata.webhookVerified': !!secret,
           },
@@ -161,11 +179,19 @@ export class EmailWebhookController {
               },
               { upsert: true },
             );
-          this.logger.warn(`Permanent bounce → address suppressed for optional mail: ${String(to).toLowerCase().replace(/(.{2}).*(@.*)/, '$1***$2')}`);
+          this.logger.warn(
+            `Permanent bounce → address suppressed for optional mail: ${String(
+              to,
+            )
+              .toLowerCase()
+              .replace(/(.{2}).*(@.*)/, '$1***$2')}`,
+          );
         }
       }
 
-      this.logger.log(`Resend webhook: ${type} → email ${messageId} marked ${status}`);
+      this.logger.log(
+        `Resend webhook: ${type} → email ${messageId} marked ${status}`,
+      );
     } catch (error: any) {
       this.logger.error(`Webhook status update failed: ${error.message}`);
     }

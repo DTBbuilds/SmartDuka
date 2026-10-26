@@ -10,7 +10,11 @@ import {
   Max,
   MaxLength,
 } from 'class-validator';
-import { PaymentProvider, ConfigEnvironment, ConfigStatus } from '../schemas/payment-config.schema';
+import {
+  PaymentProvider,
+  ConfigEnvironment,
+  ConfigStatus,
+} from '../schemas/payment-config.schema';
 
 /**
  * DTO for creating a new payment configuration
@@ -283,9 +287,10 @@ export class PaymentConfigResponseDto {
       monthlyLimit: doc.monthlyLimit,
       totalTransactions: doc.totalTransactions || 0,
       successfulTransactions: doc.successfulTransactions || 0,
-      successRate: doc.totalTransactions > 0
-        ? (doc.successfulTransactions / doc.totalTransactions) * 100
-        : 0,
+      successRate:
+        doc.totalTransactions > 0
+          ? (doc.successfulTransactions / doc.totalTransactions) * 100
+          : 0,
       createdAt: doc.createdAt,
       updatedAt: doc.updatedAt,
     };

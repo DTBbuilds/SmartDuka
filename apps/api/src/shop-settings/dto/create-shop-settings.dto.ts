@@ -1,4 +1,13 @@
-import { IsString, IsNumber, IsBoolean, IsArray, IsObject, IsOptional, Min, Max } from 'class-validator';
+import {
+  IsString,
+  IsNumber,
+  IsBoolean,
+  IsArray,
+  IsObject,
+  IsOptional,
+  Min,
+  Max,
+} from 'class-validator';
 
 export class TaxConfigDto {
   @IsBoolean()

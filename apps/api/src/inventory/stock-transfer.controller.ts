@@ -1,6 +1,20 @@
-import { Body, Controller, Get, Post, Put, Param, UseGuards, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Put,
+  Param,
+  UseGuards,
+  Query,
+} from '@nestjs/common';
 import { StockTransferService } from './stock-transfer.service';
-import { RequestStockTransferDto, ApproveStockTransferDto, RejectStockTransferDto, GetTransferHistoryDto } from './dto/stock-transfer.dto';
+import {
+  RequestStockTransferDto,
+  ApproveStockTransferDto,
+  RejectStockTransferDto,
+  GetTransferHistoryDto,
+} from './dto/stock-transfer.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -64,7 +78,11 @@ export class StockTransferController {
     @Query() query: GetTransferHistoryDto,
     @CurrentUser() user: Record<string, any>,
   ) {
-    return this.transferService.getTransferHistory(user.shopId, query.locationId, query.status);
+    return this.transferService.getTransferHistory(
+      user.shopId,
+      query.locationId,
+      query.status,
+    );
   }
 
   @Get('stats')
