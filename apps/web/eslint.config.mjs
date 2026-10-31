@@ -40,6 +40,14 @@ const eslintConfig = defineConfig([
       'no-unused-vars': 'off',
     },
   },
+  {
+    // CommonJS files (jest.config.js, node build scripts) use require()
+    // idiomatically; the TS-targeted no-require-imports rule does not apply.
+    files: ['**/*.js'],
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
 ]);
 
 export default eslintConfig;
