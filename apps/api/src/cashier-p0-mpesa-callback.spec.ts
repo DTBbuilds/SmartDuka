@@ -167,4 +167,57 @@ describe('CASHIER-P0 F-08 mpesa callback verification', () => {
     expect(result.ResultCode).toBe(0);
     expect(querySTKStatus).not.toHaveBeenCalled();
   });
+
+  // ── GATE1: forged FAILURE claims are verified too ──
+
+  it('GATE1: a forged failure claim cannot prematurely fail a legitimate payment (provider unreachable → stays PENDING)', async () => {
+    boot();
+    querySTKStatus.mockRejectedValue(new Error('provider unreachable'));
+
+    const result = await service.processCallback(callback(1032));
+
+    expect(transaction.status).toBe(MpesaTransactionStatus.PENDING);
+    expect(transaction.errorCategory).toBe('failure_claim_unverified');
+    expect(markIntentFailed).not.toHaveBeenCalled();
+    expect(result.ResultCode).toBe(0);
+  });
+
+  it('GATE1: a provider-confirmed failure completes the failure flow (FAILED + intent released)', async () => {
+    boot();
+    querySTKStatus.mockResolvedValue({
+      success: false,
+      status: 'FAILED',
+      resultCode: '1032',
+    });
+
+    await service.processCallback(callback(1032));
+
+    expect(transaction.status).toBe(MpesaTransactionStatus.FAILED);
+    expect(markIntentFailed).toHaveBeenCalledWith(
+      SHOP_A,
+      expect.any(String),
+      'mpesa',
+    );
+  });
+
+  it('GATE1: a failure claim overruled by the provider completes the payment (money moved)', async () => {
+    boot();
+    querySTKStatus.mockResolvedValue({
+      success: true,
+      status: 'COMPLETED',
+      resultCode: '0',
+    });
+
+    await service.processCallback(callback(1032));
+
+    expect(transaction.status).toBe(MpesaTransactionStatus.COMPLETED);
+    // A forged failure callback carries no CallbackMetadata, so no receipt
+    // number is available locally; the reconciliation loop can attach it
+    // later via the provider query trail.
+    expect(transaction.mpesaReceiptNumber).toBeUndefined();
+    expect(createTransaction).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'completed', mpesaTransactionId: CRX }),
+    );
+    expect(markIntentFailed).not.toHaveBeenCalled();
+  });
 });

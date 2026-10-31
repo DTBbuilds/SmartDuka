@@ -523,5 +523,32 @@ describe('CASHIER-P0 negative authorization', () => {
       for (let i = 0; i < 5; i++) service.recordFailure(SHOP_A, '9.9.9.9');
       expect(() => service.assertAllowed(SHOP_B, '9.9.9.9')).not.toThrow();
     });
+
+    it('GATE1: rotating IPs cannot bypass the shop-wide aggregate lock', () => {
+      // Each fresh IP stays under the per-IP threshold, but the aggregate
+      // across all identities trips the shop-wide lock.
+      for (let i = 0; i < 30; i++) {
+        const ip = `10.0.${Math.floor(i / 250)}.${(i % 250) + 1}`;
+        expect(() => service.assertAllowed(SHOP_A, ip)).not.toThrow();
+        service.recordFailure(SHOP_A, ip);
+      }
+      expect(() => service.assertAllowed(SHOP_A, '10.0.9.9')).toThrow(
+        HttpException,
+      );
+      // A different shop is unaffected by SHOP_A's aggregate lock.
+      expect(() => service.assertAllowed(SHOP_B, '10.0.9.9')).not.toThrow();
+    });
+
+    it('GATE1: legitimate shared-device traffic erodes the shop-wide counter', () => {
+      // 29 attacker failures from rotating IPs, then legitimate successes —
+      // the counter erodes and a fresh failure burst does not lock the shop.
+      for (let i = 0; i < 29; i++) {
+        service.recordFailure(SHOP_A, `10.1.0.${i + 1}`);
+      }
+      for (let i = 0; i < 29; i++) {
+        service.recordSuccess(SHOP_A, `10.2.0.${i + 1}`);
+      }
+      expect(() => service.assertAllowed(SHOP_A, '10.3.0.1')).not.toThrow();
+    });
   });
 });
