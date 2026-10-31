@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { getModelToken } from '@nestjs/mongoose';
 import { SalesController } from './sales.controller';
 import { SalesService } from './sales.service';
 import { ReceiptService } from './services/receipt.service';
@@ -18,6 +19,7 @@ describe('SalesController', () => {
         { provide: SalesService, useValue: { checkout: jest.fn() } },
         { provide: ReceiptService, useValue: {} },
         { provide: InvoiceService, useValue: {} },
+        { provide: getModelToken('Branch'), useValue: {} },
       ],
     }).compile();
 

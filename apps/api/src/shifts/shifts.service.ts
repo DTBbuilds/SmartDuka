@@ -1,4 +1,9 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Shift, ShiftDocument } from './schemas/shift.schema';
@@ -10,6 +15,24 @@ export class ShiftsService {
     @InjectModel(Shift.name) private shiftModel: Model<ShiftDocument>,
     @InjectModel('Order') private orderModel: Model<Order>,
   ) {}
+
+  /**
+   * CASHIER-P0 F-11: shift ownership enforcement.
+   * A cashier may only act on their OWN shift. Admins may act on any shift
+   * within their shop (explicit override, logged). Cross-shop access remains
+   * impossible because every query is shopId-scoped.
+   */
+  private assertShiftAccess(
+    shift: Shift,
+    actorId: string,
+    actorRole: string,
+    action: string,
+  ): void {
+    if (actorRole === 'admin') return; // authorized override
+    if (shift.cashierId?.toString() !== actorId) {
+      throw new ForbiddenException(`You can only ${action} your own shift`);
+    }
+  }
 
   async clockIn(
     shopId: string,
@@ -40,7 +63,12 @@ export class ShiftsService {
     return shift.save();
   }
 
-  async clockOut(shiftId: string, shopId: string): Promise<Shift> {
+  async clockOut(
+    shiftId: string,
+    shopId: string,
+    actorId?: string,
+    actorRole?: string,
+  ): Promise<Shift> {
     const shift = await this.shiftModel.findOne({
       _id: new Types.ObjectId(shiftId),
       shopId: new Types.ObjectId(shopId),
@@ -48,6 +76,10 @@ export class ShiftsService {
 
     if (!shift) {
       throw new NotFoundException('Shift not found');
+    }
+
+    if (actorId && actorRole) {
+      this.assertShiftAccess(shift, actorId, actorRole, 'clock out');
     }
 
     if (shift.status !== 'open') {
@@ -59,7 +91,10 @@ export class ShiftsService {
     return shift.save();
   }
 
-  async getCurrentShift(shopId: string, cashierId: string): Promise<Shift | null> {
+  async getCurrentShift(
+    shopId: string,
+    cashierId: string,
+  ): Promise<Shift | null> {
     return this.shiftModel.findOne({
       shopId: new Types.ObjectId(shopId),
       cashierId: new Types.ObjectId(cashierId),
@@ -67,12 +102,17 @@ export class ShiftsService {
     });
   }
 
-  async getShiftSalesData(shiftId: string, shopId: string): Promise<{
+  async getShiftSalesData(
+    shiftId: string,
+    shopId: string,
+    actorId?: string,
+    actorRole?: string,
+  ): Promise<{
     totalSales: number;
     transactionCount: number;
     expectedCash: number;
   }> {
-    const shift = await this.getShiftById(shiftId, shopId);
+    const shift = await this.getShiftById(shiftId, shopId, actorId, actorRole);
     if (!shift) {
       return { totalSales: 0, transactionCount: 0, expectedCash: 0 };
     }
@@ -167,11 +207,24 @@ export class ShiftsService {
     };
   }
 
-  async getShiftById(shiftId: string, shopId: string): Promise<Shift | null> {
-    return this.shiftModel.findOne({
+  /**
+   * F-11: ownership-aware shift read. Cashiers may only load their own
+   * shifts; admins may load any shift in the shop.
+   */
+  async getShiftById(
+    shiftId: string,
+    shopId: string,
+    actorId?: string,
+    actorRole?: string,
+  ): Promise<Shift | null> {
+    const shift = await this.shiftModel.findOne({
       _id: new Types.ObjectId(shiftId),
       shopId: new Types.ObjectId(shopId),
     });
+    if (shift && actorId && actorRole) {
+      this.assertShiftAccess(shift, actorId, actorRole, 'view');
+    }
+    return shift;
   }
 
   async reconcileShift(
@@ -180,6 +233,7 @@ export class ShiftsService {
     actualCash: number,
     reconciliedBy: string,
     notes?: string,
+    actorRole?: string,
   ): Promise<Shift> {
     const shift = await this.shiftModel.findOne({
       _id: new Types.ObjectId(shiftId),
@@ -190,8 +244,18 @@ export class ShiftsService {
       throw new NotFoundException('Shift not found');
     }
 
+    // F-11: cashiers reconcile only their own shift; admins may reconcile
+    // any shift in their shop (the reconciler is recorded on the shift).
+    if (actorRole && actorRole !== 'admin') {
+      if (shift.cashierId?.toString() !== reconciliedBy) {
+        throw new ForbiddenException('You can only reconcile your own shift');
+      }
+    }
+
     if (shift.status !== 'closed') {
-      throw new BadRequestException('Shift must be closed before reconciliation');
+      throw new BadRequestException(
+        'Shift must be closed before reconciliation',
+      );
     }
 
     // Calculate actual sales from orders during this shift. P0-10: net cash
@@ -295,6 +359,8 @@ export class ShiftsService {
     shopId: string,
     cashierId?: string,
     limit: number = 10,
+    actorId?: string,
+    actorRole?: string,
   ): Promise<Shift[]> {
     const query: any = {
       shopId: new Types.ObjectId(shopId),
@@ -302,6 +368,12 @@ export class ShiftsService {
 
     if (cashierId) {
       query.cashierId = new Types.ObjectId(cashierId);
+    }
+
+    // F-11: cashiers may only browse their own shift history — a supplied
+    // foreign cashierId is overridden, not honored.
+    if (actorRole && actorRole !== 'admin' && actorId) {
+      query.cashierId = new Types.ObjectId(actorId);
     }
 
     return this.shiftModel
@@ -328,7 +400,9 @@ export class ShiftsService {
     if (!shift.endTime) {
       return Date.now() - new Date(shift.startTime).getTime();
     }
-    return new Date(shift.endTime).getTime() - new Date(shift.startTime).getTime();
+    return (
+      new Date(shift.endTime).getTime() - new Date(shift.startTime).getTime()
+    );
   }
 
   async formatDuration(milliseconds: number): Promise<string> {
@@ -351,7 +425,12 @@ export class ShiftsService {
     shiftId: string,
     shopId: string,
     isActive: boolean,
-  ): Promise<{ success: boolean; activeTimeMs: number; inactiveTimeMs: number }> {
+    actorId?: string,
+  ): Promise<{
+    success: boolean;
+    activeTimeMs: number;
+    inactiveTimeMs: number;
+  }> {
     const shift = await this.shiftModel.findOne({
       _id: new Types.ObjectId(shiftId),
       shopId: new Types.ObjectId(shopId),
@@ -359,6 +438,11 @@ export class ShiftsService {
     });
 
     if (!shift) {
+      return { success: false, activeTimeMs: 0, inactiveTimeMs: 0 };
+    }
+
+    // F-11: pings only count for the shift owner.
+    if (actorId && shift.cashierId?.toString() !== actorId) {
       return { success: false, activeTimeMs: 0, inactiveTimeMs: 0 };
     }
 
@@ -394,6 +478,7 @@ export class ShiftsService {
     shiftId: string,
     shopId: string,
     reason?: string,
+    actorId?: string,
   ): Promise<Shift> {
     const shift = await this.shiftModel.findOne({
       _id: new Types.ObjectId(shiftId),
@@ -405,11 +490,17 @@ export class ShiftsService {
       throw new NotFoundException('Shift not found');
     }
 
+    // F-11: only the shift owner may start a break.
+    if (actorId && shift.cashierId?.toString() !== actorId) {
+      throw new ForbiddenException('You can only manage your own shift');
+    }
+
     const now = new Date();
 
     // Close any open activity period
     if (shift.activityPeriods && shift.activityPeriods.length > 0) {
-      const lastPeriod = shift.activityPeriods[shift.activityPeriods.length - 1];
+      const lastPeriod =
+        shift.activityPeriods[shift.activityPeriods.length - 1];
       if (!lastPeriod.endTime) {
         lastPeriod.endTime = now;
       }
@@ -430,7 +521,11 @@ export class ShiftsService {
   /**
    * End a break period
    */
-  async endBreak(shiftId: string, shopId: string): Promise<Shift> {
+  async endBreak(
+    shiftId: string,
+    shopId: string,
+    actorId?: string,
+  ): Promise<Shift> {
     const shift = await this.shiftModel.findOne({
       _id: new Types.ObjectId(shiftId),
       shopId: new Types.ObjectId(shopId),
@@ -441,14 +536,21 @@ export class ShiftsService {
       throw new NotFoundException('Shift not found');
     }
 
+    // F-11: only the shift owner may end a break.
+    if (actorId && shift.cashierId?.toString() !== actorId) {
+      throw new ForbiddenException('You can only manage your own shift');
+    }
+
     const now = new Date();
 
     // Find and close the open break period
     if (shift.activityPeriods && shift.activityPeriods.length > 0) {
-      const lastPeriod = shift.activityPeriods[shift.activityPeriods.length - 1];
+      const lastPeriod =
+        shift.activityPeriods[shift.activityPeriods.length - 1];
       if (lastPeriod.type === 'break' && !lastPeriod.endTime) {
         lastPeriod.endTime = now;
-        const breakDuration = now.getTime() - new Date(lastPeriod.startTime).getTime();
+        const breakDuration =
+          now.getTime() - new Date(lastPeriod.startTime).getTime();
         shift.breakTimeMs = (shift.breakTimeMs || 0) + breakDuration;
       }
     }
@@ -466,7 +568,12 @@ export class ShiftsService {
   /**
    * Get shift statistics with activity breakdown
    */
-  async getShiftStats(shiftId: string, shopId: string): Promise<{
+  async getShiftStats(
+    shiftId: string,
+    shopId: string,
+    actorId?: string,
+    actorRole?: string,
+  ): Promise<{
     totalDurationMs: number;
     activeTimeMs: number;
     inactiveTimeMs: number;
@@ -477,7 +584,7 @@ export class ShiftsService {
     averageTransactionValue: number;
     salesPerActiveHour: number;
   }> {
-    const shift = await this.getShiftById(shiftId, shopId);
+    const shift = await this.getShiftById(shiftId, shopId, actorId, actorRole);
     if (!shift) {
       throw new NotFoundException('Shift not found');
     }
@@ -491,20 +598,19 @@ export class ShiftsService {
 
     // Calculate active percentage
     const trackedTime = activeTimeMs + inactiveTimeMs + breakTimeMs;
-    const activePercentage = trackedTime > 0 
-      ? Math.round((activeTimeMs / trackedTime) * 100) 
-      : 100; // Default to 100% if no tracking data
+    const activePercentage =
+      trackedTime > 0 ? Math.round((activeTimeMs / trackedTime) * 100) : 100; // Default to 100% if no tracking data
 
     // Calculate sales per active hour
     const activeHours = activeTimeMs / (1000 * 60 * 60);
-    const salesPerActiveHour = activeHours > 0 
-      ? Math.round(salesData.totalSales / activeHours) 
-      : 0;
+    const salesPerActiveHour =
+      activeHours > 0 ? Math.round(salesData.totalSales / activeHours) : 0;
 
     // Average transaction value
-    const averageTransactionValue = salesData.transactionCount > 0
-      ? Math.round(salesData.totalSales / salesData.transactionCount)
-      : 0;
+    const averageTransactionValue =
+      salesData.transactionCount > 0
+        ? Math.round(salesData.totalSales / salesData.transactionCount)
+        : 0;
 
     return {
       totalDurationMs,
@@ -568,10 +674,12 @@ export class ShiftsService {
       totalTransactions += shift.transactionCount || 0;
     }
 
-    const totalTrackedTime = totalActiveTimeMs + totalInactiveTimeMs + totalBreakTimeMs;
-    const averageActivePercentage = totalTrackedTime > 0
-      ? Math.round((totalActiveTimeMs / totalTrackedTime) * 100)
-      : 100;
+    const totalTrackedTime =
+      totalActiveTimeMs + totalInactiveTimeMs + totalBreakTimeMs;
+    const averageActivePercentage =
+      totalTrackedTime > 0
+        ? Math.round((totalActiveTimeMs / totalTrackedTime) * 100)
+        : 100;
 
     return {
       totalShifts: shifts.length,

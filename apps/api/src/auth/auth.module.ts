@@ -31,9 +31,11 @@ import { DeviceFingerprint, DeviceFingerprintSchema } from './schemas/device-fin
 import { CookieService } from './services/cookie.service';
 import { CsrfService } from './services/csrf.service';
 import { LoginAttemptService } from './services/login-attempt.service';
+import { PinAttemptService } from './services/pin-attempt.service';
 import { CsrfGuard } from './guards/csrf.guard';
 import { RefreshTokenGuard } from './guards/refresh-token.guard';
 import { JwtCookieAuthGuard } from './guards/jwt-cookie-auth.guard';
+import { PinRateLimitGuard } from './guards/pin-rate-limit.guard';
 
 @Module({
   imports: [
@@ -98,6 +100,8 @@ import { JwtCookieAuthGuard } from './guards/jwt-cookie-auth.guard';
     CookieService,
     CsrfService,
     LoginAttemptService,
+    PinAttemptService,
+    PinRateLimitGuard,
     JwtStrategy,
     OAuthExchangeService,
     GoogleStrategy,

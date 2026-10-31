@@ -32,14 +32,16 @@ export class ShiftsController {
   ) {
     // Use shopId from JWT if available, otherwise from body
     const shopId = user.shopId || body.shopId;
-    
+
     if (!shopId) {
       throw new ForbiddenException('No shop associated with your account');
     }
 
     // If body.shopId is provided, verify it matches user's shop
     if (body.shopId && user.shopId && body.shopId !== user.shopId) {
-      throw new ForbiddenException('You are not allowed to clock in for this shop');
+      throw new ForbiddenException(
+        'You are not allowed to clock in for this shop',
+      );
     }
 
     const shift = await this.shiftsService.clockIn(
@@ -55,11 +57,15 @@ export class ShiftsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin', 'cashier')
   @Post('clock-out')
-  async clockOut(
-    @Body() body: { shiftId: string },
-    @CurrentUser() user: any,
-  ) {
-    const shift = await this.shiftsService.clockOut(body.shiftId, user.shopId);
+  async clockOut(@Body() body: { shiftId: string }, @CurrentUser() user: any) {
+    // CASHIER-P0 F-11: cashiers may only clock out their OWN shift; admins
+    // may close any shift in their shop (override recorded in logs).
+    const shift = await this.shiftsService.clockOut(
+      body.shiftId,
+      user.shopId,
+      user.sub,
+      user.role,
+    );
     return shift;
   }
 
@@ -75,18 +81,23 @@ export class ShiftsController {
     if (user.role !== 'admin' && user.role !== 'cashier') {
       return null;
     }
-    const shift = await this.shiftsService.getCurrentShift(user.shopId, user.sub);
+    const shift = await this.shiftsService.getCurrentShift(
+      user.shopId,
+      user.sub,
+    );
     return shift || null;
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin', 'cashier')
   @Get(':id')
-  async getShift(
-    @Param('id') shiftId: string,
-    @CurrentUser() user: any,
-  ) {
-    const shift = await this.shiftsService.getShiftById(shiftId, user.shopId);
+  async getShift(@Param('id') shiftId: string, @CurrentUser() user: any) {
+    const shift = await this.shiftsService.getShiftById(
+      shiftId,
+      user.shopId,
+      user.sub,
+      user.role,
+    );
     return shift;
   }
 
@@ -108,6 +119,7 @@ export class ShiftsController {
       body.actualCash,
       user.sub,
       body.notes,
+      user.role,
     );
 
     return shift;
@@ -125,6 +137,8 @@ export class ShiftsController {
       user.shopId,
       cashierId,
       parseInt(limit, 10),
+      user.sub,
+      user.role,
     );
     return shifts;
   }
@@ -132,11 +146,13 @@ export class ShiftsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin', 'cashier')
   @Get(':id/sales')
-  async getShiftSales(
-    @Param('id') shiftId: string,
-    @CurrentUser() user: any,
-  ) {
-    const salesData = await this.shiftsService.getShiftSalesData(shiftId, user.shopId);
+  async getShiftSales(@Param('id') shiftId: string, @CurrentUser() user: any) {
+    const salesData = await this.shiftsService.getShiftSalesData(
+      shiftId,
+      user.shopId,
+      user.sub,
+      user.role,
+    );
     return salesData;
   }
 
@@ -147,7 +163,10 @@ export class ShiftsController {
     @Param('status') status: 'open' | 'closed' | 'reconciled',
     @CurrentUser() user: any,
   ) {
-    const shifts = await this.shiftsService.getShiftsByStatus(user.shopId, status);
+    const shifts = await this.shiftsService.getShiftsByStatus(
+      user.shopId,
+      status,
+    );
     return shifts;
   }
 
@@ -167,6 +186,7 @@ export class ShiftsController {
       shiftId,
       user.shopId,
       body.isActive,
+      user.sub,
     );
   }
 
@@ -181,7 +201,12 @@ export class ShiftsController {
     @Body() body: { reason?: string },
     @CurrentUser() user: any,
   ) {
-    return this.shiftsService.recordBreak(shiftId, user.shopId, body.reason);
+    return this.shiftsService.recordBreak(
+      shiftId,
+      user.shopId,
+      body.reason,
+      user.sub,
+    );
   }
 
   /**
@@ -190,11 +215,8 @@ export class ShiftsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('cashier')
   @Post(':id/break/end')
-  async endBreak(
-    @Param('id') shiftId: string,
-    @CurrentUser() user: any,
-  ) {
-    return this.shiftsService.endBreak(shiftId, user.shopId);
+  async endBreak(@Param('id') shiftId: string, @CurrentUser() user: any) {
+    return this.shiftsService.endBreak(shiftId, user.shopId, user.sub);
   }
 
   /**
@@ -203,11 +225,13 @@ export class ShiftsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin', 'cashier')
   @Get(':id/stats')
-  async getShiftStats(
-    @Param('id') shiftId: string,
-    @CurrentUser() user: any,
-  ) {
-    return this.shiftsService.getShiftStats(shiftId, user.shopId);
+  async getShiftStats(@Param('id') shiftId: string, @CurrentUser() user: any) {
+    return this.shiftsService.getShiftStats(
+      shiftId,
+      user.shopId,
+      user.sub,
+      user.role,
+    );
   }
 
   /**

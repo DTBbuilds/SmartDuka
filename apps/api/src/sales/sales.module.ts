@@ -28,6 +28,7 @@ import { ShopSettingsModule } from '../shop-settings/shop-settings.module';
 import { LoyaltyModule } from '../loyalty/loyalty.module';
 import { CustomersModule } from '../customers/customers.module';
 import { ShiftsModule } from '../shifts/shifts.module';
+import { Branch, BranchSchema } from '../branches/branch.schema';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { ShiftsModule } from '../shifts/shifts.module';
       { name: Shop.name, schema: ShopSchema },
       { name: StockAdjustment.name, schema: StockAdjustmentSchema },
       { name: PaymentTransaction.name, schema: PaymentTransactionSchema },
+      { name: Branch.name, schema: BranchSchema },
     ]),
     InventoryModule,
     ActivityModule,

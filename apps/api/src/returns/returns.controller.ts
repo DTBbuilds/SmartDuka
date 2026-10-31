@@ -15,6 +15,11 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
+/**
+ * CASHIER-P0 F-10: every route is tenant-scoped by the JWT shopId and every
+ * actor identity (requestedBy / approvedBy) is derived from the
+ * authenticated token — request-supplied identity fields are never trusted.
+ */
 @Controller('returns')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ReturnsController {
@@ -25,42 +30,37 @@ export class ReturnsController {
     @Body() dto: CreateReturnDto,
     @CurrentUser() user: Record<string, any>,
   ) {
-    return this.returnsService.createReturn(user.shopId, dto);
+    return this.returnsService.createReturn(user.shopId, dto, user.sub);
   }
 
   @Get()
-  async findAll(
-    @CurrentUser() user: Record<string, any>,
-  ) {
+  async findAll(@CurrentUser() user: Record<string, any>) {
     return this.returnsService.findAll(user.shopId);
   }
 
   @Get('pending')
   @Roles('admin')
-  async getPendingReturns(
-    @CurrentUser() user: Record<string, any>,
-  ) {
+  async getPendingReturns(@CurrentUser() user: Record<string, any>) {
     return this.returnsService.getPendingReturns(user.shopId);
   }
 
   @Get('stats')
   @Roles('admin')
-  async getStats(
-    @CurrentUser() user: Record<string, any>,
-  ) {
+  async getStats(@CurrentUser() user: Record<string, any>) {
     return this.returnsService.getReturnStats(user.shopId);
   }
 
   @Get('history')
-  async getHistory(
-    @CurrentUser() user: Record<string, any>,
-  ) {
+  async getHistory(@CurrentUser() user: Record<string, any>) {
     return this.returnsService.getReturnHistory(user.shopId);
   }
 
   @Get(':id')
-  async findById(@Param('id') id: string) {
-    return this.returnsService.findById(id);
+  async findById(
+    @Param('id') id: string,
+    @CurrentUser() user: Record<string, any>,
+  ) {
+    return this.returnsService.findByIdForShop(user.shopId, id);
   }
 
   @Put(':id/approve')
@@ -68,8 +68,15 @@ export class ReturnsController {
   async approveReturn(
     @Param('id') id: string,
     @Body() dto: ApproveReturnDto,
+    @CurrentUser() user: Record<string, any>,
   ) {
-    return this.returnsService.approveReturn(id, dto.approvedBy, dto.approvalNotes);
+    // F-10: the approver is the authenticated admin — never a body field.
+    return this.returnsService.approveReturn(
+      user.shopId,
+      id,
+      user.sub,
+      dto.approvalNotes,
+    );
   }
 
   @Put(':id/reject')
@@ -77,13 +84,22 @@ export class ReturnsController {
   async rejectReturn(
     @Param('id') id: string,
     @Body() dto: ApproveReturnDto,
+    @CurrentUser() user: Record<string, any>,
   ) {
-    return this.returnsService.rejectReturn(id, dto.approvedBy, dto.approvalNotes);
+    return this.returnsService.rejectReturn(
+      user.shopId,
+      id,
+      user.sub,
+      dto.approvalNotes,
+    );
   }
 
   @Put(':id/complete')
   @Roles('admin')
-  async completeReturn(@Param('id') id: string) {
-    return this.returnsService.completeReturn(id);
+  async completeReturn(
+    @Param('id') id: string,
+    @CurrentUser() user: Record<string, any>,
+  ) {
+    return this.returnsService.completeReturn(user.shopId, id);
   }
 }

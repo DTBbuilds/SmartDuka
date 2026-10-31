@@ -1,5 +1,21 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unused-vars, @typescript-eslint/require-await */
-import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, Req, UseGuards, BadRequestException, ForbiddenException, NotFoundException, Optional, Inject } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Put,
+  Query,
+  Req,
+  UseGuards,
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+  Optional,
+  Inject,
+} from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { CreateCashierDto } from './dto/create-cashier.dto';
@@ -9,11 +25,16 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { OtpService } from '../auth/services/otp.service';
+import { TokenService } from '../auth/token.service';
+
+/** CASHIER-P0 F-04: staff roles that may read another user's record within their shop. */
+const STAFF_READER_ROLES = ['admin', 'branch_admin', 'branch_manager'];
 
 @Controller('users')
 export class UsersController {
   constructor(
     private readonly usersService: UsersService,
+    private readonly tokenService: TokenService,
     @Optional() private readonly otpService: OtpService,
   ) {}
 
@@ -23,7 +44,9 @@ export class UsersController {
   async create(@Body() dto: CreateUserDto, @CurrentUser() user: any) {
     // Ensure user is creating cashier for their own shop
     if (dto.shopId !== user.shopId) {
-      throw new ForbiddenException('You are not allowed to create users for this shop');
+      throw new ForbiddenException(
+        'You are not allowed to create users for this shop',
+      );
     }
     const createdUser = await this.usersService.create(dto);
     const { passwordHash, ...safe } = (createdUser as any).toObject();
@@ -55,14 +78,16 @@ export class UsersController {
         receiptPrinterEnabled: false,
       };
     }
-    return (fullUser as any).preferences || {
-      theme: 'system',
-      language: 'en',
-      currency: 'KES',
-      dateFormat: 'DD/MM/YYYY',
-      soundEnabled: true,
-      receiptPrinterEnabled: false,
-    };
+    return (
+      (fullUser as any).preferences || {
+        theme: 'system',
+        language: 'en',
+        currency: 'KES',
+        dateFormat: 'DD/MM/YYYY',
+        soundEnabled: true,
+        receiptPrinterEnabled: false,
+      }
+    );
   }
 
   /**
@@ -73,7 +98,8 @@ export class UsersController {
   @Patch('preferences')
   async updatePreferences(
     @CurrentUser() user: any,
-    @Body() dto: {
+    @Body()
+    dto: {
       theme?: 'light' | 'dark' | 'system';
       language?: string;
       currency?: string;
@@ -86,11 +112,43 @@ export class UsersController {
     return updated?.preferences || dto;
   }
 
+  /**
+   * CASHIER-P0 F-04: user records are no longer publicly readable.
+   * - A user may always read their OWN record (self-read, any role).
+   * - Staff roles (admin/branch_admin/branch_manager) may read users within
+   *   their own shop only.
+   * - passwordHash AND pinHash are stripped from every response (the PIN
+   *   hash is offline-crackable given the 10^4 keyspace and must never leave
+   *   the server).
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Get(':id')
-  async findById(@Param('id') id: string) {
-    const user = await this.usersService.findById(id);
-    if (!user) return null;
-    const { passwordHash, ...safe } = (user as any).toObject();
+  async findById(@Param('id') id: string, @CurrentUser() user: any) {
+    const isSelf = user?.sub === id;
+    const isStaffReader = STAFF_READER_ROLES.includes(user?.role);
+
+    if (!isSelf && !isStaffReader) {
+      throw new ForbiddenException(
+        'You are not allowed to view this user record',
+      );
+    }
+
+    const found = await this.usersService.findById(id);
+    if (!found) return null;
+
+    if (!isSelf) {
+      // Tenant boundary for staff readers: same shop only.
+      const targetShopId = (found as any).shopId?.toString();
+      if (targetShopId !== user.shopId) {
+        throw new ForbiddenException(
+          'You are not allowed to view users from another shop',
+        );
+      }
+    }
+
+    const { passwordHash, pinHash, ...safe } = (found as any).toObject
+      ? (found as any).toObject()
+      : found;
     return safe;
   }
 
@@ -117,11 +175,12 @@ export class UsersController {
     }
 
     // Get users with filters
-    const users = await this.usersService.findUsersWithFilters(
-      user.shopId,
-      { role, branchId, status },
-    );
-    
+    const users = await this.usersService.findUsersWithFilters(user.shopId, {
+      role,
+      branchId,
+      status,
+    });
+
     return users.map((u: any) => {
       const { passwordHash, pinHash, ...safe } = u.toObject ? u.toObject() : u;
       return safe;
@@ -140,14 +199,17 @@ export class UsersController {
     if (user.shopId !== shopId) {
       throw new ForbiddenException('You are not allowed to access this shop');
     }
-    
+
     // Branch managers can only see cashiers in their branch
     let effectiveBranchId = branchId;
     if (user.role === 'branch_manager' && user.branchId) {
       effectiveBranchId = user.branchId;
     }
-    
-    const cashiers = await this.usersService.findCashiersByShop(shopId, effectiveBranchId);
+
+    const cashiers = await this.usersService.findCashiersByShop(
+      shopId,
+      effectiveBranchId,
+    );
     return cashiers.map((c: any) => {
       const { passwordHash, pinHash, ...safe } = c.toObject ? c.toObject() : c;
       return safe;
@@ -167,9 +229,11 @@ export class UsersController {
   ) {
     // Branch managers can only access their own branch
     if (user.role === 'branch_manager' && user.branchId !== branchId) {
-      throw new ForbiddenException('You can only access cashiers in your branch');
+      throw new ForbiddenException(
+        'You can only access cashiers in your branch',
+      );
     }
-    
+
     const cashiers = await this.usersService.findCashiersByBranch(branchId);
     return cashiers.map((c: any) => {
       const { passwordHash, pinHash, ...safe } = c.toObject ? c.toObject() : c;
@@ -184,12 +248,11 @@ export class UsersController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin', 'branch_admin', 'branch_manager')
   @Get(':id/details')
-  async getCashierDetails(
-    @Param('id') id: string,
-    @CurrentUser() user: any,
-  ) {
+  async getCashierDetails(@Param('id') id: string, @CurrentUser() user: any) {
     const cashier = await this.usersService.getCashierDetails(user.shopId, id);
-    const { passwordHash, pinHash, ...safe } = cashier.toObject ? cashier.toObject() : cashier;
+    const { passwordHash, pinHash, ...safe } = cashier.toObject
+      ? cashier.toObject()
+      : cashier;
     return safe;
   }
 
@@ -204,9 +267,11 @@ export class UsersController {
     // Verify user belongs to same shop
     const targetUser = await this.usersService.findById(id);
     if (!targetUser || (targetUser as any).shopId.toString() !== user.shopId) {
-      throw new ForbiddenException('You are not allowed to update users from this shop');
+      throw new ForbiddenException(
+        'You are not allowed to update users from this shop',
+      );
     }
-    
+
     // Use updateCashier for comprehensive updates
     const updated = await this.usersService.updateCashier(user.shopId, id, {
       name: dto.name,
@@ -214,7 +279,7 @@ export class UsersController {
       branchId: dto.branchId,
       permissions: dto.permissions,
     });
-    
+
     if (!updated) return null;
     const { passwordHash, pinHash, ...safe } = (updated as any).toObject();
     return safe;
@@ -223,6 +288,11 @@ export class UsersController {
   /**
    * Update user status (enable/disable)
    * PATCH /users/:id/status
+   *
+   * CASHIER-P0 F-05: disabling an account immediately terminates every
+   * active session and revokes all refresh tokens for that user. The JWT
+   * strategy validates session activity fail-closed, so session-bound
+   * access tokens stop working on the next request.
    */
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
@@ -235,14 +305,23 @@ export class UsersController {
     // Verify user belongs to same shop
     const targetUser = await this.usersService.findById(id);
     if (!targetUser || (targetUser as any).shopId.toString() !== user.shopId) {
-      throw new ForbiddenException('You are not allowed to update users from this shop');
+      throw new ForbiddenException(
+        'You are not allowed to update users from this shop',
+      );
     }
-    
+
     const updated = await this.usersService.updateStatus(id, dto.status);
     if (!updated) {
       throw new NotFoundException('User not found');
     }
-    
+
+    if (dto.status === 'disabled') {
+      await this.tokenService.revokeAllUserTokens(
+        id,
+        `Account disabled by ${user.email ?? user.sub}`,
+      );
+    }
+
     const { passwordHash, pinHash, ...safe } = (updated as any).toObject();
     return safe;
   }
@@ -256,7 +335,8 @@ export class UsersController {
   @Patch(':id/permissions')
   async updateCashierPermissions(
     @Param('id') id: string,
-    @Body() dto: {
+    @Body()
+    dto: {
       canVoid?: boolean;
       canRefund?: boolean;
       canDiscount?: boolean;
@@ -271,11 +351,11 @@ export class UsersController {
     const updated = await this.usersService.updateCashier(user.shopId, id, {
       permissions: dto,
     });
-    
+
     if (!updated) {
       throw new NotFoundException('User not found');
     }
-    
+
     const { passwordHash, pinHash, ...safe } = (updated as any).toObject();
     return safe;
   }
@@ -285,7 +365,17 @@ export class UsersController {
   @Delete(':id')
   async deleteUser(@Param('id') id: string, @CurrentUser() user: any) {
     // The service handles multi-tenant safety and admin check
-    return this.usersService.deleteUser(user.shopId, id);
+    const result = await this.usersService.deleteUser(user.shopId, id);
+
+    // CASHIER-P0 F-05: a deleted user must lose all live sessions and
+    // refresh tokens immediately — the JWT strategy's session check then
+    // rejects their access tokens on the next request.
+    await this.tokenService.revokeAllUserTokens(
+      id,
+      `Account deleted by ${user.email ?? user.sub}`,
+    );
+
+    return result;
   }
 
   /**
@@ -296,23 +386,23 @@ export class UsersController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin', 'branch_admin', 'branch_manager')
   @Post('cashier')
-  async createCashier(
-    @Body() dto: CreateCashierDto,
-    @CurrentUser() user: any,
-  ) {
+  async createCashier(@Body() dto: CreateCashierDto, @CurrentUser() user: any) {
     // Branch managers must assign cashier to their branch
     let branchId = dto.branchId;
     if (user.role === 'branch_manager') {
       if (!user.branchId) {
-        throw new ForbiddenException('Branch manager must be assigned to a branch');
+        throw new ForbiddenException(
+          'Branch manager must be assigned to a branch',
+        );
       }
       branchId = user.branchId;
     }
 
-    const { user: createdUser, pin } = await this.usersService.createCashierWithPin(
-      user.shopId,
-      { ...dto, branchId },
-    );
+    const { user: createdUser, pin } =
+      await this.usersService.createCashierWithPin(user.shopId, {
+        ...dto,
+        branchId,
+      });
 
     return {
       user: {
@@ -355,7 +445,9 @@ export class UsersController {
       throw new NotFoundException('Cashier not found');
     }
 
-    const { passwordHash, pinHash, ...safe } = (updated as any).toObject ? (updated as any).toObject() : updated;
+    const { passwordHash, pinHash, ...safe } = (updated as any).toObject
+      ? (updated as any).toObject()
+      : updated;
     return safe;
   }
 
@@ -379,7 +471,9 @@ export class UsersController {
       throw new NotFoundException('Cashier not found');
     }
 
-    const { passwordHash, pinHash, ...safe } = (updated as any).toObject ? (updated as any).toObject() : updated;
+    const { passwordHash, pinHash, ...safe } = (updated as any).toObject
+      ? (updated as any).toObject()
+      : updated;
     return safe;
   }
 
@@ -409,22 +503,23 @@ export class UsersController {
       throw new NotFoundException('Cashier not found');
     }
 
-    const { passwordHash, pinHash, ...safe } = (updated as any).toObject ? (updated as any).toObject() : updated;
+    const { passwordHash, pinHash, ...safe } = (updated as any).toObject
+      ? (updated as any).toObject()
+      : updated;
     return safe;
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin', 'branch_admin', 'branch_manager')
   @Post(':id/reset-pin')
-  async resetPin(
-    @Param('id') userId: string,
-    @CurrentUser() user: any,
-  ) {
+  async resetPin(@Param('id') userId: string, @CurrentUser() user: any) {
     // Branch managers can only reset PIN for cashiers in their branch
     if (user.role === 'branch_manager') {
       const cashier = await this.usersService.findById(userId);
       if (!cashier || (cashier as any).branchId?.toString() !== user.branchId) {
-        throw new ForbiddenException('You can only reset PIN for cashiers in your branch');
+        throw new ForbiddenException(
+          'You can only reset PIN for cashiers in your branch',
+        );
       }
     }
 
@@ -460,10 +555,7 @@ export class UsersController {
    */
   @UseGuards(JwtAuthGuard)
   @Post('me/send-password-change-otp')
-  async sendPasswordChangeOtp(
-    @CurrentUser() user: any,
-    @Req() req: any,
-  ) {
+  async sendPasswordChangeOtp(@CurrentUser() user: any, @Req() req: any) {
     if (!this.otpService) {
       throw new BadRequestException('OTP service not available');
     }
@@ -471,7 +563,12 @@ export class UsersController {
     const userName = (fullUser as any)?.name || user.email;
     const ipAddress = req.ip || req.connection?.remoteAddress;
     const userAgent = req.get('user-agent');
-    return this.otpService.sendPasswordChangeOtp(user.email, userName, ipAddress, userAgent);
+    return this.otpService.sendPasswordChangeOtp(
+      user.email,
+      userName,
+      ipAddress,
+      userAgent,
+    );
   }
 
   /**
@@ -481,19 +578,28 @@ export class UsersController {
   @UseGuards(JwtAuthGuard)
   @Post('me/change-password')
   async changePassword(
-    @Body() dto: { currentPassword: string; newPassword: string; otpCode?: string },
+    @Body()
+    dto: { currentPassword: string; newPassword: string; otpCode?: string },
     @CurrentUser() user: any,
   ) {
     if (!dto.currentPassword || !dto.newPassword) {
-      throw new BadRequestException('Current password and new password are required');
+      throw new BadRequestException(
+        'Current password and new password are required',
+      );
     }
     if (dto.newPassword.length < 6) {
-      throw new BadRequestException('New password must be at least 6 characters');
+      throw new BadRequestException(
+        'New password must be at least 6 characters',
+      );
     }
 
     // Verify OTP if service is available
     if (this.otpService && dto.otpCode) {
-      const otpResult = await this.otpService.verifyOtp(user.email, dto.otpCode, 'password_change');
+      const otpResult = await this.otpService.verifyOtp(
+        user.email,
+        dto.otpCode,
+        'password_change',
+      );
       if (!otpResult.valid) {
         throw new BadRequestException('Invalid verification code');
       }
@@ -501,25 +607,22 @@ export class UsersController {
       throw new BadRequestException('Verification code is required');
     }
 
-    await this.usersService.changePassword(user.sub, dto.currentPassword, dto.newPassword);
+    await this.usersService.changePassword(
+      user.sub,
+      dto.currentPassword,
+      dto.newPassword,
+    );
     return { message: 'Password changed successfully' };
   }
 
   @UseGuards(JwtAuthGuard)
   @Post('me/change-pin')
-  async changePin(
-    @Body() dto: ChangePinDto,
-    @CurrentUser() user: any,
-  ) {
+  async changePin(@Body() dto: ChangePinDto, @CurrentUser() user: any) {
     if (dto.newPin !== dto.confirmPin) {
       throw new BadRequestException('New PINs do not match');
     }
 
-    await this.usersService.changePin(
-      user.sub,
-      dto.currentPin,
-      dto.newPin,
-    );
+    await this.usersService.changePin(user.sub, dto.currentPin, dto.newPin);
 
     return { message: 'PIN changed successfully' };
   }
