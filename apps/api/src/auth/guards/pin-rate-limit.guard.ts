@@ -1,47 +1,29 @@
-import {
-  Injectable,
-  CanActivate,
-  ExecutionContext,
-  HttpException,
-  HttpStatus,
-} from '@nestjs/common';
+import { Injectable, CanActivate, ExecutionContext } from '@nestjs/common';
+import { PinAttemptService } from '../services/pin-attempt.service';
 
+/**
+ * CASHIER-P0 F-17: PIN login abuse protection.
+ *
+ * Delegates to PinAttemptService, which keys attempts by shop + client IP —
+ * varying the attempted PIN no longer resets the counter. Successful
+ * verifications clear the counter (see auth.service), so legitimate
+ * shared-device logins are not punished. The guard only *asserts*; failure
+ * recording happens in the auth service where the verification outcome is
+ * known.
+ */
 @Injectable()
 export class PinRateLimitGuard implements CanActivate {
-  private attempts = new Map<string, { count: number; timestamp: number }>();
-  private readonly MAX_ATTEMPTS = 3;
-  private readonly LOCKOUT_TIME = 15 * 60 * 1000; // 15 minutes
+  constructor(private readonly pinAttemptService: PinAttemptService) {}
 
-  async canActivate(context: ExecutionContext): Promise<boolean> {
+  canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest();
-    const { pin, shopId } = request.body;
+    const shopId = request.body?.shopId;
+    const ip = request.ip || request.connection?.remoteAddress || 'unknown';
 
-    if (!pin || !shopId) {
-      return true; // Allow if missing parameters (will be caught by validation)
-    }
+    // Missing parameters are rejected by validation later; nothing to gate.
+    if (!shopId) return true;
 
-    const key = `${shopId}:${pin}`;
-    const now = Date.now();
-
-    const attempt = this.attempts.get(key);
-
-    if (attempt) {
-      if (now - attempt.timestamp < this.LOCKOUT_TIME) {
-        if (attempt.count >= this.MAX_ATTEMPTS) {
-          throw new HttpException(
-            'Too many failed attempts. Please try again later.',
-            HttpStatus.TOO_MANY_REQUESTS,
-          );
-        }
-        attempt.count++;
-      } else {
-        // Reset after lockout period
-        this.attempts.set(key, { count: 1, timestamp: now });
-      }
-    } else {
-      this.attempts.set(key, { count: 1, timestamp: now });
-    }
-
+    this.pinAttemptService.assertAllowed(shopId, ip);
     return true;
   }
 }

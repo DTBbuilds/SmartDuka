@@ -25,11 +25,16 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { OtpService } from '../auth/services/otp.service';
+import { TokenService } from '../auth/token.service';
+
+/** CASHIER-P0 F-04: staff roles that may read another user's record within their shop. */
+const STAFF_READER_ROLES = ['admin', 'branch_admin', 'branch_manager'];
 
 @Controller('users')
 export class UsersController {
   constructor(
     private readonly usersService: UsersService,
+    private readonly tokenService: TokenService,
     @Optional() private readonly otpService: OtpService,
   ) {}
 
@@ -107,11 +112,43 @@ export class UsersController {
     return updated?.preferences || dto;
   }
 
+  /**
+   * CASHIER-P0 F-04: user records are no longer publicly readable.
+   * - A user may always read their OWN record (self-read, any role).
+   * - Staff roles (admin/branch_admin/branch_manager) may read users within
+   *   their own shop only.
+   * - passwordHash AND pinHash are stripped from every response (the PIN
+   *   hash is offline-crackable given the 10^4 keyspace and must never leave
+   *   the server).
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Get(':id')
-  async findById(@Param('id') id: string) {
-    const user = await this.usersService.findById(id);
-    if (!user) return null;
-    const { passwordHash, ...safe } = (user as any).toObject();
+  async findById(@Param('id') id: string, @CurrentUser() user: any) {
+    const isSelf = user?.sub === id;
+    const isStaffReader = STAFF_READER_ROLES.includes(user?.role);
+
+    if (!isSelf && !isStaffReader) {
+      throw new ForbiddenException(
+        'You are not allowed to view this user record',
+      );
+    }
+
+    const found = await this.usersService.findById(id);
+    if (!found) return null;
+
+    if (!isSelf) {
+      // Tenant boundary for staff readers: same shop only.
+      const targetShopId = (found as any).shopId?.toString();
+      if (targetShopId !== user.shopId) {
+        throw new ForbiddenException(
+          'You are not allowed to view users from another shop',
+        );
+      }
+    }
+
+    const { passwordHash, pinHash, ...safe } = (found as any).toObject
+      ? (found as any).toObject()
+      : found;
     return safe;
   }
 
@@ -251,6 +288,11 @@ export class UsersController {
   /**
    * Update user status (enable/disable)
    * PATCH /users/:id/status
+   *
+   * CASHIER-P0 F-05: disabling an account immediately terminates every
+   * active session and revokes all refresh tokens for that user. The JWT
+   * strategy validates session activity fail-closed, so session-bound
+   * access tokens stop working on the next request.
    */
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
@@ -271,6 +313,13 @@ export class UsersController {
     const updated = await this.usersService.updateStatus(id, dto.status);
     if (!updated) {
       throw new NotFoundException('User not found');
+    }
+
+    if (dto.status === 'disabled') {
+      await this.tokenService.revokeAllUserTokens(
+        id,
+        `Account disabled by ${user.email ?? user.sub}`,
+      );
     }
 
     const { passwordHash, pinHash, ...safe } = (updated as any).toObject();
@@ -316,7 +365,17 @@ export class UsersController {
   @Delete(':id')
   async deleteUser(@Param('id') id: string, @CurrentUser() user: any) {
     // The service handles multi-tenant safety and admin check
-    return this.usersService.deleteUser(user.shopId, id);
+    const result = await this.usersService.deleteUser(user.shopId, id);
+
+    // CASHIER-P0 F-05: a deleted user must lose all live sessions and
+    // refresh tokens immediately — the JWT strategy's session check then
+    // rejects their access tokens on the next request.
+    await this.tokenService.revokeAllUserTokens(
+      id,
+      `Account deleted by ${user.email ?? user.sub}`,
+    );
+
+    return result;
   }
 
   /**

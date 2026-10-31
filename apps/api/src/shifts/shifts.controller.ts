@@ -58,7 +58,14 @@ export class ShiftsController {
   @Roles('admin', 'cashier')
   @Post('clock-out')
   async clockOut(@Body() body: { shiftId: string }, @CurrentUser() user: any) {
-    const shift = await this.shiftsService.clockOut(body.shiftId, user.shopId);
+    // CASHIER-P0 F-11: cashiers may only clock out their OWN shift; admins
+    // may close any shift in their shop (override recorded in logs).
+    const shift = await this.shiftsService.clockOut(
+      body.shiftId,
+      user.shopId,
+      user.sub,
+      user.role,
+    );
     return shift;
   }
 
@@ -85,7 +92,12 @@ export class ShiftsController {
   @Roles('admin', 'cashier')
   @Get(':id')
   async getShift(@Param('id') shiftId: string, @CurrentUser() user: any) {
-    const shift = await this.shiftsService.getShiftById(shiftId, user.shopId);
+    const shift = await this.shiftsService.getShiftById(
+      shiftId,
+      user.shopId,
+      user.sub,
+      user.role,
+    );
     return shift;
   }
 
@@ -107,6 +119,7 @@ export class ShiftsController {
       body.actualCash,
       user.sub,
       body.notes,
+      user.role,
     );
 
     return shift;
@@ -124,6 +137,8 @@ export class ShiftsController {
       user.shopId,
       cashierId,
       parseInt(limit, 10),
+      user.sub,
+      user.role,
     );
     return shifts;
   }
@@ -135,6 +150,8 @@ export class ShiftsController {
     const salesData = await this.shiftsService.getShiftSalesData(
       shiftId,
       user.shopId,
+      user.sub,
+      user.role,
     );
     return salesData;
   }
@@ -169,6 +186,7 @@ export class ShiftsController {
       shiftId,
       user.shopId,
       body.isActive,
+      user.sub,
     );
   }
 
@@ -183,7 +201,12 @@ export class ShiftsController {
     @Body() body: { reason?: string },
     @CurrentUser() user: any,
   ) {
-    return this.shiftsService.recordBreak(shiftId, user.shopId, body.reason);
+    return this.shiftsService.recordBreak(
+      shiftId,
+      user.shopId,
+      body.reason,
+      user.sub,
+    );
   }
 
   /**
@@ -193,7 +216,7 @@ export class ShiftsController {
   @Roles('cashier')
   @Post(':id/break/end')
   async endBreak(@Param('id') shiftId: string, @CurrentUser() user: any) {
-    return this.shiftsService.endBreak(shiftId, user.shopId);
+    return this.shiftsService.endBreak(shiftId, user.shopId, user.sub);
   }
 
   /**
@@ -203,7 +226,12 @@ export class ShiftsController {
   @Roles('admin', 'cashier')
   @Get(':id/stats')
   async getShiftStats(@Param('id') shiftId: string, @CurrentUser() user: any) {
-    return this.shiftsService.getShiftStats(shiftId, user.shopId);
+    return this.shiftsService.getShiftStats(
+      shiftId,
+      user.shopId,
+      user.sub,
+      user.role,
+    );
   }
 
   /**

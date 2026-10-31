@@ -21,6 +21,7 @@ import { LoginDto } from './dto/login.dto';
 import { TokenService } from './token.service';
 import { OtpService } from './services/otp.service';
 import { LoginAttemptService } from './services/login-attempt.service';
+import { PinAttemptService } from './services/pin-attempt.service';
 import { DeviceFingerprintService } from './services/device-fingerprint.service';
 import { EmailService } from '../notifications/email.service';
 import { validatePhoneForCountry } from '../common/phone-validation';
@@ -53,6 +54,7 @@ export class AuthService {
     private readonly deviceFingerprintService?: DeviceFingerprintService,
     @Optional() private readonly emailService?: EmailService,
     @Optional() private readonly loginAttemptService?: LoginAttemptService,
+    @Optional() private readonly pinAttemptService?: PinAttemptService,
   ) {}
 
   async registerShop(dto: RegisterShopDto) {
@@ -497,13 +499,17 @@ export class AuthService {
     // Find user by PIN and shop
     const user = await this.usersService.findByPin(pin, shopId);
     if (!user) {
+      this.pinAttemptService?.recordFailure(shopId, ipAddress || 'unknown');
       throw new UnauthorizedException('Invalid PIN');
     }
 
     // Check if user is active
     if (user.status !== 'active') {
+      this.pinAttemptService?.recordFailure(shopId, ipAddress || 'unknown');
       throw new UnauthorizedException('Account is disabled');
     }
+
+    this.pinAttemptService?.recordSuccess(shopId, ipAddress || 'unknown');
 
     // Get shop info
     const shop = await this.shopsService.findById(
@@ -1179,6 +1185,7 @@ export class AuthService {
     // Find cashier by PIN in the specified shop
     const cashier = await this.usersService.findByPin(pin, shopId);
     if (!cashier) {
+      this.pinAttemptService?.recordFailure(shopId, ipAddress || 'unknown');
       throw new UnauthorizedException(
         'Invalid PIN. Please check your PIN and try again.',
       );
@@ -1186,10 +1193,13 @@ export class AuthService {
 
     // Verify cashier is active
     if (cashier.status !== 'active') {
+      this.pinAttemptService?.recordFailure(shopId, ipAddress || 'unknown');
       throw new UnauthorizedException(
         'Account is disabled. Contact your admin.',
       );
     }
+
+    this.pinAttemptService?.recordSuccess(shopId, ipAddress || 'unknown');
 
     // Verify cashier role
     if (cashier.role !== 'cashier') {
@@ -2016,12 +2026,18 @@ If you did not request a password reset, you can safely ignore this email — yo
   ) {
     const user = await this.usersService.findByPin(pin, shopId);
     if (!user) {
+      // CASHIER-P0 F-17: record the failure against shop+IP so varying the
+      // attempted PIN cannot bypass the limiter.
+      this.pinAttemptService?.recordFailure(shopId, ipAddress || 'unknown');
       throw new UnauthorizedException('Invalid PIN');
     }
 
     if (user.status !== 'active') {
+      this.pinAttemptService?.recordFailure(shopId, ipAddress || 'unknown');
       throw new UnauthorizedException('Account is disabled');
     }
+
+    this.pinAttemptService?.recordSuccess(shopId, ipAddress || 'unknown');
 
     const shop = await this.shopsService.findById(
       (user as any).shopId.toString(),
@@ -2162,6 +2178,23 @@ If you did not request a password reset, you can safely ignore this email — yo
 
     if (!session) {
       throw new UnauthorizedException('Session not found');
+    }
+
+    // CASHIER-P0 F-05: a disabled or deleted user must not be able to mint
+    // new access tokens via refresh. The user lookup already fails for
+    // deleted users (getUserFromSession → null); here we additionally
+    // reject disabled accounts and burn their remaining tokens.
+    if (session.role !== 'super_admin') {
+      const user = await this.usersService.findById(session.userId);
+      if (!user || user.status !== 'active') {
+        await this.tokenService
+          .revokeAllUserTokens(
+            session.userId,
+            'Refresh attempted for disabled or deleted account',
+          )
+          .catch(() => undefined);
+        throw new UnauthorizedException('Account is disabled or deleted');
+      }
     }
 
     // Generate new access token with user payload

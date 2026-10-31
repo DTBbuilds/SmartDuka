@@ -9,9 +9,12 @@ import {
   Query,
   UseGuards,
   BadRequestException,
+  ForbiddenException,
   Res,
 } from '@nestjs/common';
 import type { Response } from 'express';
+import { Model, Types } from 'mongoose';
+import { InjectModel } from '@nestjs/mongoose';
 import { SalesService } from './sales.service';
 import { ReceiptService } from './services/receipt.service';
 import { InvoiceService } from './services/invoice.service';
@@ -23,6 +26,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { Branch } from '../branches/branch.schema';
 
 @Controller('sales')
 export class SalesController {
@@ -30,9 +34,59 @@ export class SalesController {
     private readonly salesService: SalesService,
     private readonly receiptService: ReceiptService,
     private readonly invoiceService: InvoiceService,
+    @InjectModel(Branch.name) private readonly branchModel: Model<any>,
   ) {}
 
-  @UseGuards(JwtAuthGuard)
+  /**
+   * CASHIER-P0 F-16: branch-level authorization, enforced server-side.
+   *
+   * The BranchValidationMiddleware written for this purpose was never
+   * registered (and could never work as middleware — it reads req.user,
+   * which guards populate after middleware runs). Access is therefore
+   * asserted here, per endpoint:
+   *   - the branch must exist inside the caller's shop (cross-tenant → 403);
+   *   - admin: any branch in their shop;
+   *   - branch_admin: branches assigned via user.branches;
+   *   - branch_manager / supervisor / cashier: their own branch only.
+   */
+  private async assertBranchAccess(user: any, branchId: string): Promise<void> {
+    if (!branchId) {
+      throw new BadRequestException('Branch id is required');
+    }
+
+    const branch = await this.branchModel
+      .findOne({
+        _id: new Types.ObjectId(branchId),
+        shopId: new Types.ObjectId(user.shopId),
+      })
+      .lean()
+      .exec();
+
+    if (!branch) {
+      throw new ForbiddenException('Branch not found in your shop');
+    }
+
+    if (user.role === 'admin') return;
+
+    const assignedBranches: string[] = (user.branches ?? []).map((b: any) =>
+      b?.toString(),
+    );
+    if (user.role === 'branch_admin') {
+      if (!assignedBranches.includes(branchId)) {
+        throw new ForbiddenException('You are not assigned to this branch');
+      }
+      return;
+    }
+
+    if (user.branchId?.toString() !== branchId) {
+      throw new ForbiddenException('You can only access your own branch');
+    }
+  }
+
+  // CASHIER-P0 F-16: shop-wide revenue is business-sensitive — staff roles
+  // only. Cashiers read their own numbers via GET /sales/cashier-stats.
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'branch_admin', 'branch_manager')
   @Get('stats')
   async getStats(
     @CurrentUser() user: any,
@@ -41,7 +95,8 @@ export class SalesController {
     return this.salesService.getShopStats(user.shopId, branchId);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'branch_admin', 'branch_manager')
   @Get('today')
   async getTodaySales(@CurrentUser() user: any) {
     return this.salesService.getDailySales(user.shopId, new Date());
@@ -174,11 +229,13 @@ export class SalesController {
   // PHASE 3: Branch-specific endpoints
   @UseGuards(JwtAuthGuard)
   @Get('branch/:branchId/orders')
-  listOrdersByBranch(
+  async listOrdersByBranch(
     @Param('branchId') branchId: string,
     @Query() query: OrdersQueryDto,
     @CurrentUser() user: any,
   ) {
+    // CASHIER-P0 F-16: branch access enforced server-side.
+    await this.assertBranchAccess(user, branchId);
     return this.salesService.listOrdersByBranch(
       user.shopId,
       branchId,
@@ -188,11 +245,13 @@ export class SalesController {
 
   @UseGuards(JwtAuthGuard)
   @Get('branch/:branchId/daily-sales/:date')
-  dailySalesByBranch(
+  async dailySalesByBranch(
     @Param('branchId') branchId: string,
     @Param('date') dateStr: string,
     @CurrentUser() user: any,
   ) {
+    // CASHIER-P0 F-16: branch access enforced server-side.
+    await this.assertBranchAccess(user, branchId);
     const date = new Date(dateStr);
     if (isNaN(date.getTime())) {
       throw new BadRequestException(

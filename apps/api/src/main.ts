@@ -72,6 +72,12 @@ async function bootstrap() {
   // Performance: Response compression
   app.use(compression());
 
+  // CASHIER-P0 F-17: behind Render's reverse proxy, req.ip would otherwise be
+  // the proxy's address for every client — making per-IP rate limiting (PIN
+  // attempts, login lockout) and login-history IP recording meaningless.
+  // Trust the first proxy hop so req.ip resolves from X-Forwarded-For.
+  app.getHttpAdapter().getInstance().set('trust proxy', 1);
+
   // Cookie parser for httpOnly cookie support
   app.use(cookieParser());
 

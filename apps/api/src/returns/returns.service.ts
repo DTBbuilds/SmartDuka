@@ -1,8 +1,14 @@
-import { Injectable, BadRequestException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Return, ReturnDocument } from './schemas/return.schema';
 import { CreateReturnDto } from './dto/create-return.dto';
+import { Order } from '../sales/schemas/order.schema';
 
 @Injectable()
 export class ReturnsService {
@@ -10,11 +16,34 @@ export class ReturnsService {
 
   constructor(
     @InjectModel(Return.name) private returnModel: Model<ReturnDocument>,
+    @InjectModel(Order.name) private orderModel: any,
   ) {}
 
-  async createReturn(shopId: string, dto: CreateReturnDto): Promise<Return> {
-    // Validate return window
-    const orderDate = new Date(dto.orderDate);
+  /**
+   * CASHIER-P0 F-10: the requester is the authenticated user (JWT), the
+   * referenced order must exist inside the same shop, and the return window
+   * is computed from the ORDER's actual creation date — not a client-supplied
+   * orderDate.
+   */
+  async createReturn(
+    shopId: string,
+    dto: CreateReturnDto,
+    requestedBy: string,
+  ): Promise<Return> {
+    const order = await this.orderModel
+      .findOne({
+        _id: new Types.ObjectId(dto.orderId),
+        shopId: new Types.ObjectId(shopId),
+      })
+      .exec();
+    if (!order) {
+      throw new NotFoundException('Order not found in this shop');
+    }
+
+    // Validate return window against the order's real creation date.
+    const orderDate = order.createdAt
+      ? new Date(order.createdAt)
+      : new Date(dto.orderDate);
     const returnWindow = dto.returnWindow || 7;
     const returnDeadline = new Date(orderDate);
     returnDeadline.setDate(returnDeadline.getDate() + returnWindow);
@@ -42,7 +71,7 @@ export class ReturnsService {
         reason: item.reason,
       })),
       totalRefundAmount,
-      requestedBy: new Types.ObjectId(dto.requestedBy),
+      requestedBy: new Types.ObjectId(requestedBy),
       returnWindow,
     });
 
@@ -57,8 +86,18 @@ export class ReturnsService {
     return this.returnModel.find(filter).sort({ createdAt: -1 }).exec();
   }
 
-  async findById(id: string): Promise<Return | null> {
-    return this.returnModel.findById(id).exec();
+  /**
+   * CASHIER-P0 F-10: tenant-scoped single-return read. The previous
+   * findById(id) had no shop scoping — any authenticated user of ANY shop
+   * could read any return record by id.
+   */
+  async findByIdForShop(shopId: string, id: string): Promise<Return | null> {
+    return this.returnModel
+      .findOne({
+        _id: new Types.ObjectId(id),
+        shopId: new Types.ObjectId(shopId),
+      })
+      .exec();
   }
 
   async getPendingReturns(shopId: string): Promise<Return[]> {
@@ -71,15 +110,30 @@ export class ReturnsService {
       .exec();
   }
 
+  /** Shared loader enforcing tenant scope for approval-state transitions. */
+  private async loadForShop(
+    shopId: string,
+    returnId: string,
+  ): Promise<ReturnDocument> {
+    const returnRequest = await this.returnModel
+      .findOne({
+        _id: new Types.ObjectId(returnId),
+        shopId: new Types.ObjectId(shopId),
+      })
+      .exec();
+    if (!returnRequest) {
+      throw new NotFoundException('Return request not found');
+    }
+    return returnRequest;
+  }
+
   async approveReturn(
+    shopId: string,
     returnId: string,
     approvedBy: string,
     approvalNotes?: string,
   ): Promise<Return | null> {
-    const returnRequest = await this.returnModel.findById(returnId).exec();
-    if (!returnRequest) {
-      throw new BadRequestException('Return request not found');
-    }
+    const returnRequest = await this.loadForShop(shopId, returnId);
 
     if (returnRequest.status !== 'pending') {
       throw new BadRequestException(
@@ -101,14 +155,12 @@ export class ReturnsService {
   }
 
   async rejectReturn(
+    shopId: string,
     returnId: string,
     approvedBy: string,
     approvalNotes?: string,
   ): Promise<Return | null> {
-    const returnRequest = await this.returnModel.findById(returnId).exec();
-    if (!returnRequest) {
-      throw new BadRequestException('Return request not found');
-    }
+    const returnRequest = await this.loadForShop(shopId, returnId);
 
     if (returnRequest.status !== 'pending') {
       throw new BadRequestException(
@@ -129,11 +181,11 @@ export class ReturnsService {
       .exec();
   }
 
-  async completeReturn(returnId: string): Promise<Return | null> {
-    const returnRequest = await this.returnModel.findById(returnId).exec();
-    if (!returnRequest) {
-      throw new BadRequestException('Return request not found');
-    }
+  async completeReturn(
+    shopId: string,
+    returnId: string,
+  ): Promise<Return | null> {
+    const returnRequest = await this.loadForShop(shopId, returnId);
 
     if (returnRequest.status !== 'approved') {
       throw new BadRequestException('Only approved returns can be completed');

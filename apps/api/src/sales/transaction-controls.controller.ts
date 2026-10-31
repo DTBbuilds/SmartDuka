@@ -8,15 +8,18 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { TransactionControlsService } from './transaction-controls.service';
+import { ShiftsService } from '../shifts/shifts.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { ForbiddenException } from '@nestjs/common';
 
 @Controller('transactions')
 export class TransactionControlsController {
   constructor(
     private readonly transactionControlsService: TransactionControlsService,
+    private readonly shiftsService: ShiftsService,
   ) {}
 
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -131,6 +134,13 @@ export class TransactionControlsController {
     @Query('limit') limit: string = '50',
     @CurrentUser() user: any,
   ) {
+    // CASHIER-P0 F-11: cashiers may only view their own transaction record;
+    // admins may view any cashier in the shop.
+    if (user.role !== 'admin' && cashierId !== user.sub) {
+      throw new ForbiddenException(
+        'You can only view your own transaction record',
+      );
+    }
     const transactions =
       await this.transactionControlsService.getTransactionsByCashier(
         user.shopId,
@@ -148,6 +158,16 @@ export class TransactionControlsController {
     @Query('limit') limit: string = '100',
     @CurrentUser() user: any,
   ) {
+    // CASHIER-P0 F-11: cashiers may only view transactions of their OWN
+    // shift; admins may view any shift in the shop.
+    if (user.role !== 'admin') {
+      const shift = await this.shiftsService.getShiftById(shiftId, user.shopId);
+      if (!shift || shift.cashierId?.toString() !== user.sub) {
+        throw new ForbiddenException(
+          'You can only view transactions for your own shift',
+        );
+      }
+    }
     const transactions =
       await this.transactionControlsService.getShiftTransactions(
         user.shopId,

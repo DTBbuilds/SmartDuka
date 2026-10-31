@@ -90,7 +90,7 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     if (token) {
       try {
-        user = this.jwtService.verify(token);
+        user = this.jwtService.verify(token) as JwtPayload;
       } catch (error) {
         client.emit('error', { message: 'Invalid token' });
         return;
