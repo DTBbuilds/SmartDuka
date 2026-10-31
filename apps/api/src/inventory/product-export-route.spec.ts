@@ -26,12 +26,17 @@ describe('FIX1-A — product export route reliability', () => {
   });
 
   it('route paths are distinct: export is not captured by :id', () => {
+    // unbound-method is intentional: the route metadata lives on the
+    // prototype method itself — binding would create a new function without
+    // the metadata and break the assertion.
     const exportPath = Reflect.getMetadata(
       'path',
+      // eslint-disable-next-line @typescript-eslint/unbound-method
       InventoryController.prototype.exportProducts,
     );
     const idPath = Reflect.getMetadata(
       'path',
+      // eslint-disable-next-line @typescript-eslint/unbound-method
       InventoryController.prototype.getProduct,
     );
     expect(exportPath).toBe('products/export');

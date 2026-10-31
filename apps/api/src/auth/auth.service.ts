@@ -169,7 +169,10 @@ export class AuthService {
     });
 
     // Send welcome email - fire and forget (don't block registration)
-    if (this.systemEventManager && false) { // FREE_MODE: Welcome emails disabled - system is free
+    // FREE_MODE: Welcome emails disabled - system is free (constant flag
+    // instead of `&& false` so the condition is not a lint error).
+    const WELCOME_EMAILS_DISABLED = false as const;
+    if (this.systemEventManager && WELCOME_EMAILS_DISABLED) {
       // Use setImmediate to defer email sending to next tick - doesn't block response
       const eventManager = this.systemEventManager!;
       setImmediate(() => {
@@ -1203,8 +1206,8 @@ export class AuthService {
       preferredProvider: 'resend',
       redactPatterns: [
         // token in query strings and bare token material
-        /token=[A-Za-z0-9_\-]+/g,
-        new RegExp(resetToken.replace(/[\.\*\+\?\$\(\)\{\}\(\)\|\[\]\\]/g, '\\$&'), 'g'),
+        /token=[A-Za-z0-9_-]+/g,
+        new RegExp(resetToken.replace(/[.*+?$(){}()|[\]\\]/g, '\\$&'), 'g'),
       ],
     });
 
