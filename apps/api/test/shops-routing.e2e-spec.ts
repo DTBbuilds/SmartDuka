@@ -9,6 +9,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { ShopsController } from '../src/shops/shops.controller';
 import { ShopsService } from '../src/shops/shops.service';
+import { CurrencyPolicyService } from '../src/shops/services/currency-policy.service';
 import { JwtAuthGuard } from '../src/auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../src/auth/guards/roles.guard';
 
@@ -65,6 +66,16 @@ describe('ShopsController routing (e2e)', () => {
       controllers: [ShopsController],
       providers: [
         { provide: ShopsService, useValue: shopsService },
+        {
+          provide: CurrencyPolicyService,
+          useValue: {
+            getCurrencyActivityStatus: jest.fn(async () => ({
+              hasActivity: false,
+              evidence: [],
+            })),
+            assertCurrencyChangeAllowed: jest.fn(async () => undefined),
+          },
+        },
         RolesGuard,
         Reflector,
       ],
