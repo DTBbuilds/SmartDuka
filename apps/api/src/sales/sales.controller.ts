@@ -54,9 +54,18 @@ export class SalesController {
       throw new BadRequestException('Branch id is required');
     }
 
+    let branchObjectId: Types.ObjectId;
+    try {
+      branchObjectId = new Types.ObjectId(branchId);
+    } catch {
+      // Malformed ids (e.g. a user id passed as a branch id) are a clean 403,
+      // never a 500 from the BSON parser.
+      throw new ForbiddenException('Invalid branch id');
+    }
+
     const branch = await this.branchModel
       .findOne({
-        _id: new Types.ObjectId(branchId),
+        _id: branchObjectId,
         shopId: new Types.ObjectId(user.shopId),
       })
       .lean()
