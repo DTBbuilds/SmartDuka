@@ -16,6 +16,7 @@ import {
   isTerminalMpesaResultCode,
 } from '../schemas/mpesa-transaction.schema';
 import { OrderPaymentAuthorityService } from './order-payment-authority.service';
+import { MpesaMultiTenantService } from './mpesa-multi-tenant.service';
 import { DarajaService } from '../daraja.service';
 import { PaymentTransactionService } from './payment-transaction.service';
 import {
@@ -49,6 +50,7 @@ export class MpesaService {
     private readonly paymentTransactionService: PaymentTransactionService,
     private readonly configService: ConfigService,
     private readonly orderPaymentAuthority: OrderPaymentAuthorityService,
+    private readonly mpesaMultiTenantService: MpesaMultiTenantService,
   ) {}
 
   /**
@@ -388,9 +390,109 @@ export class MpesaService {
 
     // STEP 4: Process based on result code
     if (ResultCode === 0) {
-      // SUCCESS
+      // SUCCESS CLAIM from the callback payload.
+      //
+      // CASHIER-P0 F-08: the M-Pesa STK callback endpoint is public and the
+      // Daraja STK callback carries NO cryptographic signature — the
+      // controller comment claiming "signature validation in the service"
+      // was never implemented. An untrusted callback must therefore never,
+      // by itself, mark money as received. Before any local state is
+      // mutated we:
+      //   1. correlate the claimed amount with the initiated transaction,
+      //   2. verify the outcome with the provider (STK status query using
+      //      the SHOP's own credentials — server-to-server, trusted).
+      // Only a provider-confirmed success completes the transaction. If the
+      // provider cannot be reached or is still deciding, the transaction
+      // stays unresolved and the existing reconciliation loop
+      // (mpesa-reconciliation.service, every 5 min) settles it later.
       const metadata = parseCallbackMetadata(CallbackMetadata?.Item);
 
+      const claimedAmount = metadata.amount;
+      if (
+        typeof claimedAmount === 'number' &&
+        Math.abs(claimedAmount - transaction.amount) > 1
+      ) {
+        this.logger.error(
+          `M-Pesa callback amount mismatch for transaction ${transaction._id}: claimed ${claimedAmount}, initiated ${transaction.amount} — NOT completing; manual reconciliation required`,
+        );
+        transaction.previousStatus = transaction.status;
+        transaction.errorCategory = 'amount_mismatch';
+        transaction.callbackPayload = payload;
+        transaction.callbackReceivedAt = callbackReceivedAt;
+        transaction.callbackReceived = true;
+        await transaction.save();
+        return { ResultCode: 0, ResultDesc: 'Callback received' };
+      }
+
+      let providerVerified = false;
+      let providerFailed = false;
+      try {
+        const verification = await this.mpesaMultiTenantService.querySTKStatus(
+          transaction.shopId.toString(),
+          CheckoutRequestID,
+          { converge: false },
+        );
+        if (verification.status === 'COMPLETED' && verification.success) {
+          providerVerified = true;
+        } else if (verification.status === 'FAILED') {
+          providerFailed = true;
+        }
+      } catch (verificationError: any) {
+        this.logger.error(
+          `M-Pesa callback verification query failed for ${transaction._id}: ${verificationError?.message} — transaction left unresolved for reconciliation`,
+        );
+      }
+
+      if (providerFailed) {
+        // Provider says the payment did NOT happen — the callback claim is
+        // false (forged or stale). Mark failed and release the order intent.
+        transaction.previousStatus = transaction.status;
+        transaction.status = MpesaTransactionStatus.FAILED;
+        transaction.lastError =
+          'Callback claimed success but provider query reported failure';
+        transaction.errorCategory = 'callback_verification_failed';
+        transaction.callbackPayload = payload;
+        transaction.callbackReceivedAt = callbackReceivedAt;
+        transaction.callbackReceived = true;
+        await transaction.save();
+
+        if (transaction.orderId) {
+          try {
+            await this.orderPaymentAuthority.markIntentFailed(
+              transaction.shopId.toString(),
+              transaction.orderId.toString(),
+              'mpesa',
+            );
+          } catch (error: any) {
+            this.logger.error(
+              `Failed to release order intent for ${transaction.orderId}: ${error?.message}`,
+            );
+          }
+        }
+        this.logger.warn(
+          `M-Pesa callback for ${transaction._id} REJECTED by provider verification — marked failed`,
+        );
+        return { ResultCode: 0, ResultDesc: 'Callback received' };
+      }
+
+      if (!providerVerified) {
+        // Unverified success claim (provider unreachable / still pending).
+        // Keep the transaction unresolved: no completion, no convergence,
+        // no receipt. The reconciliation loop or a later callback settles it.
+        transaction.previousStatus = transaction.status;
+        transaction.errorCategory = 'callback_unverified';
+        transaction.callbackPayload = payload;
+        transaction.callbackReceivedAt = callbackReceivedAt;
+        transaction.callbackReceived = true;
+        await transaction.save();
+
+        this.logger.warn(
+          `M-Pesa callback for transaction ${transaction._id} claimed success but provider verification did not confirm — transaction left PENDING for reconciliation`,
+        );
+        return { ResultCode: 0, ResultDesc: 'Callback received' };
+      }
+
+      // Provider-confirmed success — the original completion flow.
       transaction.previousStatus = transaction.status;
       transaction.status = MpesaTransactionStatus.COMPLETED;
       transaction.mpesaReceiptNumber = metadata.mpesaReceiptNumber;
@@ -399,7 +501,7 @@ export class MpesaService {
       await transaction.save();
 
       this.logger.log(
-        `M-Pesa payment successful for transaction ${transaction._id}, receipt: ${metadata.mpesaReceiptNumber}, responseTime: ${transaction.responseTimeMs}ms`,
+        `M-Pesa payment successful (provider-verified) for transaction ${transaction._id}, receipt: ${metadata.mpesaReceiptNumber}, responseTime: ${transaction.responseTimeMs}ms`,
       );
 
       // STEP 5: Create payment transaction record

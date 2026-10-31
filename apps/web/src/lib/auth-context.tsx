@@ -4,7 +4,7 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import { activityTracker } from './activity-tracker';
 import { statusManager } from './status-manager';
 import { config } from './config';
-import { clearAllLocalData } from './db';
+import { clearSessionDataPreservingPendingOrders } from './db';
 import { clearAllCache } from './data-cache';
 import { hotDataManager } from './hot-data-manager';
 import { recordShopLogin, getPreferredShop, getRecentShops, getDeviceId, type RecentShop } from './device-memory';
@@ -336,10 +336,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Cleanup status manager
     statusManager.cleanup();
     
-    // Clear all local IndexedDB data to prevent data leakage between shops
-    // This is critical for multi-tenancy security
+    // CASHIER-P0 F-09: clear session-bound local data but PRESERVE unsynced
+    // offline orders. The previous behaviour (clearAllLocalData) destroyed
+    // queued sales that had never reached the server — permanent revenue
+    // loss on logout or inactivity logout. Pending orders are shopId-keyed
+    // (tenant-isolated) and idempotency-keyed (no duplicate on replay), so
+    // preserving them is safe; the POS syncs them after re-login.
+    // Products/metadata caches are cleared (re-fetchable).
     try {
-      await clearAllLocalData();
+      await clearSessionDataPreservingPendingOrders();
     } catch (err) {
       console.warn('Failed to clear local data on logout:', err);
     }

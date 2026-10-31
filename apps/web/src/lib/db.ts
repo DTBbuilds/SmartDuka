@@ -161,3 +161,23 @@ export async function clearAllLocalData(): Promise<void> {
     db.metadata.clear(),
   ]);
 }
+
+/**
+ * CASHIER-P0 F-09: session-scoped clear that PRESERVES unsynced offline
+ * orders. Logout (manual or inactivity-triggered) previously wiped the
+ * entire IndexedDB including pendingOrders — permanently destroying queued
+ * sales that had never reached the server.
+ *
+ * Safety of preservation:
+ * - pendingOrders rows are keyed by shopId; every reader/writer
+ *   (getPendingOrdersByShop / deletePendingOrder) filters by the *current*
+ *   shopId, so a different shop's user on the same device cannot see or
+ *   sync another shop's queued sales.
+ * - Queued payloads carry their original idempotencyKey; replaying them
+ *   after re-login resolves to the canonical order (tenant-scoped unique
+ *   index) — no duplicate sale can be created.
+ * - Products/metadata caches are still cleared (they are re-fetchable).
+ */
+export async function clearSessionDataPreservingPendingOrders(): Promise<void> {
+  await Promise.all([db.products.clear(), db.metadata.clear()]);
+}
