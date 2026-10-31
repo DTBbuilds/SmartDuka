@@ -26,59 +26,116 @@ export class PinAttemptService {
   private readonly LOCK_DURATION_MS = 15 * 60 * 1000; // 15 minutes
   private readonly FAILURE_WINDOW_MS = 15 * 60 * 1000; // rolling window
   private readonly MAX_TRACKED_KEYS = 5000;
+  /**
+   * CASHIER-P0 GATE1: second layer against IDENTITY ROTATION. A per-IP
+   * limiter alone can be bypassed by an attacker who rotates IPs (each new
+   * IP starts a fresh counter). The shop-wide counter aggregates failures
+   * across ALL IPs of one shop and locks PIN login for the whole shop when
+   * the aggregate threshold is crossed. The threshold is set high enough
+   * that a legitimate shared-device shop (several cashiers, occasional
+   * typos) never reaches it in a rolling 15-minute window.
+   */
+  private readonly SHOP_WIDE_MAX_FAILURES = 30;
 
   private readonly attempts = new Map<
     string,
     { count: number; firstFailureAt: number; lockedUntil: number | null }
   >();
+  private readonly shopWide = new Map<
+    string,
+    { count: number; firstFailureAt: number; lockedUntil: number | null }
+  >();
 
-  /** Throws 429 when this shop+IP is currently locked out. */
+  /** Throws 429 when this shop+IP — or the whole shop — is locked out. */
   assertAllowed(shopId: string, ip: string): void {
     this.pruneIfLarge();
-    const entry = this.attempts.get(this.key(shopId, ip));
+    this.assertEntry(this.attempts, this.key(shopId, ip), 'PIN attempts');
+    this.assertEntry(
+      this.shopWide,
+      `shop:${shopId}`,
+      'PIN attempts (shop-wide)',
+    );
+  }
+
+  private assertEntry(
+    store: Map<
+      string,
+      { count: number; firstFailureAt: number; lockedUntil: number | null }
+    >,
+    key: string,
+    label: string,
+  ): void {
+    const entry = store.get(key);
     if (!entry?.lockedUntil) return;
 
     const now = Date.now();
     if (entry.lockedUntil > now) {
       const minutesLeft = Math.ceil((entry.lockedUntil - now) / 60000);
       throw new HttpException(
-        `Too many failed PIN attempts. Try again in ${minutesLeft} minute(s).`,
+        `Too many failed ${label}. Try again in ${minutesLeft} minute(s).`,
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
     // Lock expired — start fresh.
-    this.attempts.delete(this.key(shopId, ip));
+    store.delete(key);
   }
 
-  /** Record a failed PIN verification for this shop+IP. */
+  /** Record a failed PIN verification for this shop+IP (and shop-wide). */
   recordFailure(shopId: string, ip: string): number {
-    const key = this.key(shopId, ip);
+    const perIp = this.recordInto(
+      this.attempts,
+      this.key(shopId, ip),
+      this.MAX_FAILURES,
+    );
+    this.recordInto(
+      this.shopWide,
+      `shop:${shopId}`,
+      this.SHOP_WIDE_MAX_FAILURES,
+    );
+    return perIp;
+  }
+
+  private recordInto(
+    store: Map<
+      string,
+      { count: number; firstFailureAt: number; lockedUntil: number | null }
+    >,
+    key: string,
+    maxFailures: number,
+  ): number {
     const now = Date.now();
-    const existing = this.attempts.get(key);
+    const existing = store.get(key);
 
     if (!existing || now - existing.firstFailureAt > this.FAILURE_WINDOW_MS) {
-      this.attempts.set(key, {
-        count: 1,
-        firstFailureAt: now,
-        lockedUntil: null,
-      });
+      store.set(key, { count: 1, firstFailureAt: now, lockedUntil: null });
       return 1;
     }
 
     existing.count += 1;
-    if (existing.count >= this.MAX_FAILURES) {
+    if (existing.count >= maxFailures && !existing.lockedUntil) {
       existing.lockedUntil = now + this.LOCK_DURATION_MS;
+      const scope = key.startsWith('shop:')
+        ? `shop-wide (${key})`
+        : `shop/ip (${this.maskIp(key)})`;
       this.logger.warn(
-        `PIN attempts locked for shop ${shopId} ip ${this.maskIp(ip)} after ${existing.count} failures (lock ${this.LOCK_DURATION_MS / 60000} min)`,
+        `PIN attempts locked ${scope} after ${existing.count} failures (lock ${this.LOCK_DURATION_MS / 60000} min)`,
       );
     }
-    this.attempts.set(key, existing);
+    store.set(key, existing);
     return existing.count;
   }
 
   /** Clear failures/lock after a successful PIN verification. */
   recordSuccess(shopId: string, ip: string): void {
     this.attempts.delete(this.key(shopId, ip));
+    // Shop-wide: a success erodes one failure so legitimate traffic on a
+    // shared device slowly clears aggregate noise, but a burst attacker
+    // still hits the shop-wide threshold.
+    const entry = this.shopWide.get(`shop:${shopId}`);
+    if (entry) {
+      entry.count = Math.max(0, entry.count - 1);
+      if (entry.count === 0) this.shopWide.delete(`shop:${shopId}`);
+    }
   }
 
   /** Diagnostics for admin tooling / monitoring. */
@@ -114,14 +171,16 @@ export class PinAttemptService {
 
   /** Opportunistic prune: drop expired windows/locks when the map grows. */
   private pruneIfLarge(): void {
-    if (this.attempts.size < this.MAX_TRACKED_KEYS) return;
+    if (this.attempts.size + this.shopWide.size < this.MAX_TRACKED_KEYS) return;
     const now = Date.now();
-    for (const [key, entry] of this.attempts) {
-      const windowExpired =
-        now - entry.firstFailureAt > this.FAILURE_WINDOW_MS &&
-        !entry.lockedUntil;
-      const lockExpired = !!entry.lockedUntil && entry.lockedUntil <= now;
-      if (windowExpired || lockExpired) this.attempts.delete(key);
+    for (const store of [this.attempts, this.shopWide]) {
+      for (const [key, entry] of store) {
+        const windowExpired =
+          now - entry.firstFailureAt > this.FAILURE_WINDOW_MS &&
+          !entry.lockedUntil;
+        const lockExpired = !!entry.lockedUntil && entry.lockedUntil <= now;
+        if (windowExpired || lockExpired) store.delete(key);
+      }
     }
   }
 }

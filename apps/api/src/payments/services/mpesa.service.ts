@@ -549,7 +549,91 @@ export class MpesaService {
         `M-Pesa callback for transaction ${transaction._id} reported ambiguous resultCode ${ResultCode} (${ResultDesc}) — transaction kept unresolved`,
       );
     } else {
-      // TERMINAL FAILURE - Categorize the error and release the order intent
+      // TERMINAL FAILURE CLAIM.
+      //
+      // CASHIER-P0 GATE1: a failure claim is as untrusted as a success
+      // claim — a forged "cancelled" callback must not prematurely fail a
+      // legitimate payment (the customer may still be completing it; the
+      // real success callback would then hit the already-terminal guard and
+      // the money→order binding would be lost). Verify with the provider:
+      //   - provider confirms failure  → FAILED + release intent;
+      //   - provider says COMPLETED    → provider truth wins, complete;
+      //   - provider unreachable/pending → stay PENDING for reconciliation.
+      let providerOutcome: 'FAILED' | 'COMPLETED' | 'UNRESOLVED' = 'UNRESOLVED';
+      try {
+        const verification = await this.mpesaMultiTenantService.querySTKStatus(
+          transaction.shopId.toString(),
+          CheckoutRequestID,
+          { converge: false },
+        );
+        if (verification.status === 'FAILED') providerOutcome = 'FAILED';
+        else if (verification.status === 'COMPLETED' && verification.success)
+          providerOutcome = 'COMPLETED';
+      } catch (verificationError: any) {
+        this.logger.error(
+          `M-Pesa failure-claim verification query failed for ${transaction._id}: ${verificationError?.message} — transaction left unresolved for reconciliation`,
+        );
+      }
+
+      if (providerOutcome === 'UNRESOLVED') {
+        transaction.previousStatus = transaction.status;
+        transaction.errorCategory = 'failure_claim_unverified';
+        transaction.callbackPayload = payload;
+        transaction.callbackReceivedAt = callbackReceivedAt;
+        transaction.callbackReceived = true;
+        await transaction.save();
+
+        this.logger.warn(
+          `M-Pesa callback for transaction ${transaction._id} claimed failure (${ResultCode}) but provider verification did not confirm — transaction left PENDING for reconciliation`,
+        );
+        return { ResultCode: 0, ResultDesc: 'Callback received' };
+      }
+
+      if (providerOutcome === 'COMPLETED') {
+        // The provider says money moved — the failure claim was forged or
+        // stale. Complete exactly like a verified success (the provider
+        // query path may have already converged — createTransaction dedups
+        // on the CRX id).
+        const metadata = parseCallbackMetadata(CallbackMetadata?.Item);
+        transaction.previousStatus = transaction.status;
+        transaction.status = MpesaTransactionStatus.COMPLETED;
+        transaction.mpesaReceiptNumber = metadata.mpesaReceiptNumber;
+        transaction.completedAt = callbackReceivedAt;
+        transaction.callbackPayload = payload;
+        transaction.callbackReceivedAt = callbackReceivedAt;
+        transaction.callbackReceived = true;
+        await transaction.save();
+
+        this.logger.warn(
+          `M-Pesa failure claim for ${transaction._id} OVERRULED by provider verification — payment completed`,
+        );
+
+        try {
+          await this.paymentTransactionService.createTransaction({
+            shopId: transaction.shopId.toString(),
+            orderId: transaction.orderId.toString(),
+            orderNumber: transaction.orderNumber,
+            cashierId: transaction.cashierId.toString(),
+            cashierName: transaction.cashierName,
+            branchId: transaction.branchId?.toString(),
+            paymentMethod: 'mpesa',
+            amount: transaction.amount,
+            status: 'completed',
+            customerName: transaction.customerName,
+            customerPhone: transaction.phoneNumber,
+            mpesaReceiptNumber: metadata.mpesaReceiptNumber,
+            mpesaTransactionId: CheckoutRequestID,
+            referenceNumber: metadata.mpesaReceiptNumber,
+          });
+        } catch (error: any) {
+          this.logger.error(
+            `Failed to create payment transaction for ${transaction._id}: ${error.message}`,
+          );
+        }
+        return { ResultCode: 0, ResultDesc: 'Callback received' };
+      }
+
+      // Provider-confirmed terminal failure — the original failure flow.
       transaction.previousStatus = transaction.status;
       transaction.status = MpesaTransactionStatus.FAILED;
       transaction.lastError = getMpesaErrorMessage(ResultCode);
