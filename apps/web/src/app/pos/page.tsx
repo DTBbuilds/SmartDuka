@@ -44,7 +44,7 @@ import {
 } from "lucide-react";
 
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
-import { db, getPendingOrdersByShop, getPendingOrderCountByShop, addPendingOrder, deletePendingOrder, clearAllLocalData, type PendingOrder } from "@/lib/db";
+import { db, getPendingOrdersByShop, getPendingOrderCountByShop, addPendingOrder, deletePendingOrder, type PendingOrder } from "@/lib/db";
 import { useAuth } from "@/lib/auth-context";
 import { useBranch } from "@/lib/branch-context";
 import { config } from "@/lib/config";

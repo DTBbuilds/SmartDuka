@@ -441,16 +441,23 @@ export class MpesaMultiTenantService {
 
   /**
    * Query STK Push status
+   *
+   * CASHIER-P0 F-08: `options.converge === false` turns this into a PURE
+   * provider verification read — no transaction update, no order convergence,
+   * no intent release. Used by the callback path to confirm an untrusted
+   * callback against Daraja before any local state is mutated.
    */
   async querySTKStatus(
     shopId: string,
     checkoutRequestId: string,
+    options?: { converge?: boolean },
   ): Promise<{
     success: boolean;
     resultCode?: string;
     resultDesc?: string;
     status?: string;
   }> {
+    const converge = options?.converge !== false;
     const config = await this.getShopMpesaConfig(shopId);
     const timestamp = this.generateTimestamp();
     const password = Buffer.from(
@@ -481,6 +488,22 @@ export class MpesaMultiTenantService {
       );
 
       const data = await response.json();
+
+      // CASHIER-P0 F-08: pure verification mode — report the provider's
+      // verdict without touching local state.
+      if (!converge) {
+        return {
+          success: data.ResultCode === '0' || data.ResultCode === 0,
+          resultCode: data.ResultCode,
+          resultDesc: data.ResultDesc,
+          status:
+            data.ResultCode === '0' || data.ResultCode === 0
+              ? 'COMPLETED'
+              : isTerminalMpesaResultCode(data.ResultCode)
+                ? 'FAILED'
+                : 'PENDING',
+        };
+      }
 
       // Update transaction status. P0-10D: only a DEFINITIVE terminal code
       // marks FAILED — ambiguous codes (1037 DS timeout, system busy, unknown)
