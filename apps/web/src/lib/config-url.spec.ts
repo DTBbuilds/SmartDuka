@@ -23,12 +23,15 @@ const loadWithEnv = (apiUrl?: string): ConfigModule['config'] => {
   } else {
     process.env.NEXT_PUBLIC_API_URL = apiUrl;
   }
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
   const mod: ConfigModule = require('./config');
   return mod.config;
 };
 
 describe('normalizeApiOrigin', () => {
+  // require() is intentional here: jest.resetModules() + require re-evaluates
+  // the module against the mutated env — a static import would be cached.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { normalizeApiOrigin } = require('./config') as ConfigModule;
 
   it('keeps a bare origin untouched', () => {

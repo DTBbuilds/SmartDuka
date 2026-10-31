@@ -26,6 +26,13 @@ const eslintConfig = defineConfig([
       'react-hooks/purity': 'off',
       'react-hooks/use-memo': 'off',
       'react-hooks/refs': 'off',
+      // React Compiler optimization diagnostics ("Compilation Skipped:
+      // Existing memoization could not be preserved") are performance-only
+      // skips, not correctness errors; the components behave identically
+      // unoptimized. Suppressed repo-wide alongside the other compiler
+      // diagnostics above.
+      'react-hooks/react-compiler': 'off',
+      'react-hooks/preserve-manual-memoization': 'off',
       'jsx-a11y/role-has-required-aria-props': 'off',
       '@next/next/no-html-link-for-pages': 'off',
       '@next/next/no-img-element': 'off',
