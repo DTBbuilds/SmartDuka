@@ -79,6 +79,26 @@ export class MpesaController {
   ) {}
 
   /**
+   * MPESA-P0-EMERGENCY-DEPLOY1: public, read-only pause indicator.
+   *
+   * Lets the operator verify — without credentials — that the
+   * MPESA_PAYMENTS_PAUSED kill switch is actually effective in the RUNNING
+   * application (and that Render's blueprint sync applied the render.yaml
+   * env var). Reveals only the operational pause state, which the
+   * initiation error message already reveals to any merchant who attempts
+   * a payment.
+   */
+  @Get('pause-status')
+  getPauseStatus() {
+    const rawValue = process.env.MPESA_PAYMENTS_PAUSED ?? null;
+    return {
+      paused: rawValue === 'true',
+      envVar: 'MPESA_PAYMENTS_PAUSED',
+      rawValue,
+    };
+  }
+
+  /**
    * INITIATE M-PESA STK PUSH PAYMENT
    *
    * MULTI-TENANT: Each shop MUST configure their own M-Pesa credentials.
