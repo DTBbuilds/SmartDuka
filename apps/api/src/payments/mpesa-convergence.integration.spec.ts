@@ -758,4 +758,60 @@ describe('MPESA-P0 CONVERGENCE1 integration (disposable MongoDB)', () => {
     const reloaded = await reloadOrder(order._id);
     expect(reloaded.paymentStatus).toBe('paid');
   });
+
+  it('MPESA-CANARY-GATE1: unset pause + canary allowlist → canary shop initiates, every other shop blocked', async () => {
+    const canaryShop = await createShopWithMpesa('C1');
+    const otherShop = await createShopWithMpesa('O1');
+    const canaryOrder = await createPendingOrder(canaryShop._id, 'C1');
+    const otherOrder = await createPendingOrder(otherShop._id, 'O1');
+
+    // Simulate the DEPLOYED fail-closed default: the pause variable is
+    // UNSET, and only the allowlisted canary shop is permitted.
+    delete configValues.MPESA_PAYMENTS_PAUSED;
+    configValues.MPESA_CANARY_SHOP_IDS = canaryShop._id.toString();
+    try {
+      const { checkoutRequestId } = await initiateFor(canaryShop, canaryOrder);
+      expect(checkoutRequestId).toBeTruthy();
+
+      await expect(
+        multiTenant.initiateSTKPush({
+          shopId: otherShop._id.toString(),
+          phoneNumber: '254712345678',
+          amount: AMOUNT,
+          orderId: otherOrder._id.toString(),
+          orderNumber: otherOrder.orderNumber,
+          cashierId: CASHIER_ID,
+          cashierName: 'Alice',
+        }),
+      ).rejects.toThrow(/paused/i);
+    } finally {
+      delete configValues.MPESA_CANARY_SHOP_IDS;
+      configValues.MPESA_PAYMENTS_PAUSED = 'false';
+    }
+  });
+
+  it('MPESA-CANARY-GATE1: EMERGENCY hard pause (true) overrides the canary allowlist', async () => {
+    const canaryShop = await createShopWithMpesa('C2');
+    const canaryOrder = await createPendingOrder(canaryShop._id, 'C2');
+
+    configValues.MPESA_PAYMENTS_PAUSED = 'true';
+    configValues.MPESA_CANARY_SHOP_IDS = canaryShop._id.toString();
+    try {
+      await expect(
+        multiTenant.initiateSTKPush({
+          shopId: canaryShop._id.toString(),
+          phoneNumber: '254712345678',
+          amount: AMOUNT,
+          orderId: canaryOrder._id.toString(),
+          orderNumber: canaryOrder.orderNumber,
+          cashierId: CASHIER_ID,
+          cashierName: 'Alice',
+        }),
+      ).rejects.toThrow(/paused/i);
+      expect(await mpesaTxnModel.countDocuments({})).toBe(0); // no new record
+    } finally {
+      delete configValues.MPESA_CANARY_SHOP_IDS;
+      configValues.MPESA_PAYMENTS_PAUSED = 'false';
+    }
+  });
 });

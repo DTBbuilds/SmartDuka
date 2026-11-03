@@ -7,6 +7,10 @@ import {
   StkPushResponse,
 } from './daraja.service';
 import { OrderPaymentAuthorityService } from './services/order-payment-authority.service';
+import {
+  mpesaInitiationBlockedForShop,
+  MPESA_PAUSE_MESSAGE,
+} from './mpesa-pause';
 
 export type StkResponse = {
   requestId: string;
@@ -45,17 +49,12 @@ export class PaymentsService {
   ): Promise<StkResponse> {
     // MPESA-P0 CONVERGENCE1: platform-level kill switch — the legacy
     // initiation surface honors the same pause as the primary paths.
-    // MPESA-P0-EMERGENCY-DEPLOY1: fail-closed — initiation is PAUSED unless
-    // the environment explicitly opts in (MPESA_PAYMENTS_PAUSED=false).
-    const pauseRaw = this.configService.get<string>('MPESA_PAYMENTS_PAUSED');
-    if (
-      pauseRaw !== 'false' &&
-      pauseRaw !== 'active' &&
-      pauseRaw !== 'enabled'
-    ) {
-      throw new BadRequestException(
-        'M-Pesa payments are temporarily paused by the platform operator. Existing pending payments continue to settle normally.',
-      );
+    // MPESA-CANARY-GATE1: merchant-isolated pause — the platform-wide
+    // fail-closed pause holds for every shop except explicitly allowlisted
+    // canary shops; an EMERGENCY hard pause ('true') takes precedence over
+    // the allowlist. Merchant identity = server-side shopId only.
+    if (mpesaInitiationBlockedForShop(this.configService, shopId)) {
+      throw new BadRequestException(MPESA_PAUSE_MESSAGE);
     }
 
     // P0-10C/D: ORDER AUTHORITY — resolve the order by {dto.orderId,

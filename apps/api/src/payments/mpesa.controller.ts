@@ -92,10 +92,27 @@ export class MpesaController {
   getPauseStatus() {
     const rawValue = process.env.MPESA_PAYMENTS_PAUSED ?? null;
     // Fail-closed: unset or unrecognized values keep initiation PAUSED.
-    const paused =
+    const platformWidePauseActive =
       rawValue !== 'false' && rawValue !== 'active' && rawValue !== 'enabled';
+    // MPESA-CANARY-GATE1: canary allowlist size only — never the shop IDs
+    // (this endpoint is public; shop identifiers are internal).
+    const canaryAllowlistSize = (
+      process.env.MPESA_CANARY_SHOP_IDS ?? ''
+    )
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean).length;
+    const mode = !platformWidePauseActive
+      ? 'active'
+      : rawValue === 'true'
+        ? 'emergency'
+        : canaryAllowlistSize > 0
+          ? 'canary'
+          : 'paused';
     return {
-      paused,
+      paused: platformWidePauseActive,
+      mode,
+      canaryAllowlistSize,
       envVar: 'MPESA_PAYMENTS_PAUSED',
       rawValue,
     };

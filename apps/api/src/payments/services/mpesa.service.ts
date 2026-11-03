@@ -18,6 +18,10 @@ import {
 import { OrderPaymentAuthorityService } from './order-payment-authority.service';
 import { MpesaMultiTenantService } from './mpesa-multi-tenant.service';
 import { DarajaService } from '../daraja.service';
+import {
+  mpesaInitiationBlockedForShop,
+  MPESA_PAUSE_MESSAGE,
+} from '../mpesa-pause';
 import { PaymentTransactionService } from './payment-transaction.service';
 import {
   InitiateMpesaPaymentDto,
@@ -77,17 +81,12 @@ export class MpesaService {
   ): Promise<MpesaPaymentResponseDto> {
     // MPESA-P0 CONVERGENCE1: platform-level kill switch — every active
     // initiation path honors the same pause (primary, v2, retry, legacy).
-    // MPESA-P0-EMERGENCY-DEPLOY1: fail-closed — initiation is PAUSED unless
-    // the environment explicitly opts in (MPESA_PAYMENTS_PAUSED=false).
-    const pauseRaw = this.configService.get<string>('MPESA_PAYMENTS_PAUSED');
-    if (
-      pauseRaw !== 'false' &&
-      pauseRaw !== 'active' &&
-      pauseRaw !== 'enabled'
-    ) {
-      throw new BadRequestException(
-        'M-Pesa payments are temporarily paused by the platform operator. Existing pending payments continue to settle normally.',
-      );
+    // MPESA-CANARY-GATE1: merchant-isolated pause — the platform-wide
+    // fail-closed pause holds for every shop except explicitly allowlisted
+    // canary shops; an EMERGENCY hard pause ('true') takes precedence over
+    // the allowlist. Merchant identity = server-side shopId only.
+    if (mpesaInitiationBlockedForShop(this.configService, shopId)) {
+      throw new BadRequestException(MPESA_PAUSE_MESSAGE);
     }
 
     // Generate idempotency key if not provided
@@ -832,17 +831,12 @@ export class MpesaService {
   ): Promise<MpesaPaymentResponseDto> {
     // MPESA-P0 CONVERGENCE1: a retry sends a NEW STK prompt — it must honor
     // the platform pause like every other initiation path.
-    // MPESA-P0-EMERGENCY-DEPLOY1: fail-closed — initiation is PAUSED unless
-    // the environment explicitly opts in (MPESA_PAYMENTS_PAUSED=false).
-    const pauseRaw = this.configService.get<string>('MPESA_PAYMENTS_PAUSED');
-    if (
-      pauseRaw !== 'false' &&
-      pauseRaw !== 'active' &&
-      pauseRaw !== 'enabled'
-    ) {
-      throw new BadRequestException(
-        'M-Pesa payments are temporarily paused by the platform operator. Existing pending payments continue to settle normally.',
-      );
+    // MPESA-CANARY-GATE1: merchant-isolated pause — the platform-wide
+    // fail-closed pause holds for every shop except explicitly allowlisted
+    // canary shops; an EMERGENCY hard pause ('true') takes precedence over
+    // the allowlist. Merchant identity = server-side shopId only.
+    if (mpesaInitiationBlockedForShop(this.configService, shopId)) {
+      throw new BadRequestException(MPESA_PAUSE_MESSAGE);
     }
 
     const transaction = await this.mpesaTransactionModel.findOne({
