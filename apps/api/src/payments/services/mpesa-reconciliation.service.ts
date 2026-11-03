@@ -8,8 +8,7 @@ import {
   MpesaTransactionDocument,
   MpesaTransactionStatus,
 } from '../schemas/mpesa-transaction.schema';
-import { DarajaService } from '../daraja.service';
-import { PaymentTransactionService } from './payment-transaction.service';
+import { MpesaMultiTenantService } from './mpesa-multi-tenant.service';
 
 /**
  * M-Pesa Reconciliation Service
@@ -17,23 +16,50 @@ import { PaymentTransactionService } from './payment-transaction.service';
  * Handles automatic reconciliation of M-Pesa transactions:
  * 1. Queries M-Pesa for pending transactions that haven't received callbacks
  * 2. Auto-expires transactions that have timed out
- * 3. Generates reconciliation reports
+ * 3. Re-queries recently-expired transactions whose callback never arrived
+ *    (a payment that succeeded just before expiry must still converge)
+ * 4. Generates reconciliation reports
  *
  * This ensures no transaction gets "stuck" due to:
  * - Network issues preventing callback delivery
  * - Callback processing failures
  * - M-Pesa system delays
+ * - Application restarts (pending work is picked up on the next tick)
+ *
+ * MPESA-P0 CONVERGENCE1:
+ * - Settlement runs on the SHOP'S OWN Daraja credentials via
+ *   MpesaMultiTenantService.querySTKStatus (merchant-specific credentials) —
+ *   the previous direct DarajaService query used the platform's global
+ *   credentials and could never resolve shop-specific CheckoutRequestIDs.
+ * - The provider verdict is normalized there: ResultCode 0 → COMPLETED,
+ *   definitive terminal codes → FAILED, everything else (1037 DS timeout,
+ *   system busy, unknown, missing) stays UNRESOLVED — never silently success
+ *   or failure.
+ * - A provider-confirmed success ALWAYS converges the canonical order and
+ *   payment record (deduped on CheckoutRequestID), with or without a receipt
+ *   number. A missing receipt delays receipt bookkeeping, never the
+ *   money→order binding.
+ * - Terminal transitions are atomic status-preconditioned updates, so a
+ *   concurrent callback always wins and no settlement is applied twice.
  */
 @Injectable()
 export class MpesaReconciliationService {
   private readonly logger = new Logger(MpesaReconciliationService.name);
   private readonly isEnabled: boolean;
 
+  /** In-process overlap guard: cron ticks never stack on a slow run. */
+  private isReconciling = false;
+  private isExpiring = false;
+
+  /** How long after expiry a callback-less transaction is still re-queried. */
+  private static readonly POST_EXPIRY_WINDOW_MS = 24 * 60 * 60 * 1000;
+  /** Max provider queries per expired transaction before giving up. */
+  private static readonly MAX_POST_EXPIRY_QUERIES = 3;
+
   constructor(
     @InjectModel(MpesaTransaction.name)
     private readonly transactionModel: Model<MpesaTransactionDocument>,
-    private readonly darajaService: DarajaService,
-    private readonly paymentTransactionService: PaymentTransactionService,
+    private readonly mpesaMultiTenantService: MpesaMultiTenantService,
     private readonly configService: ConfigService,
   ) {
     this.isEnabled =
@@ -47,18 +73,19 @@ export class MpesaReconciliationService {
   }
 
   /**
-   * Reconcile pending transactions every 2 minutes
+   * Reconcile pending transactions every 5 minutes
    *
    * Finds transactions that:
    * - Are in PENDING status
    * - Were sent more than 30 seconds ago (callback should have arrived)
    * - Haven't expired yet
    *
-   * Then queries M-Pesa for their actual status
+   * Then queries M-Pesa (shop credentials) for their actual status.
    */
   @Cron(CronExpression.EVERY_5_MINUTES)
   async reconcilePendingTransactions(): Promise<void> {
-    if (!this.isEnabled) return;
+    if (!this.isEnabled || this.isReconciling) return;
+    this.isReconciling = true;
 
     try {
       // Find transactions pending for more than 30 seconds but not expired
@@ -87,8 +114,7 @@ export class MpesaReconciliationService {
 
       for (const transaction of pendingTransactions) {
         try {
-          const wasReconciled =
-            await this.queryAndUpdateTransaction(transaction);
+          const wasReconciled = await this.settleViaProviderQuery(transaction);
           if (wasReconciled) reconciled++;
         } catch (error: any) {
           this.logger.error(
@@ -106,6 +132,8 @@ export class MpesaReconciliationService {
       );
     } catch (error: any) {
       this.logger.error(`Reconciliation job error: ${error.message}`);
+    } finally {
+      this.isReconciling = false;
     }
   }
 
@@ -114,10 +142,15 @@ export class MpesaReconciliationService {
    *
    * Transactions that have passed their expiry time are marked as EXPIRED.
    * This prevents them from being processed if a very late callback arrives.
+   *
+   * A transaction expired here is NOT a financial verdict — the post-expiry
+   * pass below keeps querying the provider for recently expired transactions
+   * so a payment that succeeded around the expiry boundary still converges.
    */
   @Cron(CronExpression.EVERY_5_MINUTES)
   async expireOldTransactions(): Promise<void> {
-    if (!this.isEnabled) return;
+    if (!this.isEnabled || this.isExpiring) return;
+    this.isExpiring = true;
 
     try {
       const result = await this.transactionModel.updateMany(
@@ -141,6 +174,76 @@ export class MpesaReconciliationService {
       }
     } catch (error: any) {
       this.logger.error(`Expiry job error: ${error.message}`);
+    } finally {
+      this.isExpiring = false;
+    }
+  }
+
+  /**
+   * MPESA-P0 CONVERGENCE1 — post-expiry reconciliation (every 5 minutes).
+   *
+   * A transaction can expire while its payment actually succeeded (missed
+   * callback, Daraja delay, app restart at the wrong moment). Expiry is a
+   * local housekeeping state, not provider truth — so recently expired
+   * callback-less transactions are re-queried against the provider (bounded:
+   * within 24h of expiry, max 3 queries) and settled if the provider
+   * confirms an outcome. Anything still unresolved after the bound is left
+   * EXPIRED for manual review — never guessed.
+   */
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async reconcileRecentlyExpiredTransactions(): Promise<void> {
+    if (!this.isEnabled || this.isReconciling) return;
+    this.isReconciling = true;
+
+    try {
+      const windowStart = new Date(
+        Date.now() - MpesaReconciliationService.POST_EXPIRY_WINDOW_MS,
+      );
+      const candidates = await this.transactionModel
+        .find({
+          status: MpesaTransactionStatus.EXPIRED,
+          callbackReceived: { $ne: true },
+          recoveredViaQuery: { $ne: true },
+          queryCount: {
+            $lt: MpesaReconciliationService.MAX_POST_EXPIRY_QUERIES,
+          },
+          expiresAt: { $gt: windowStart },
+          checkoutRequestId: { $exists: true, $ne: '' },
+        })
+        .sort({ expiresAt: -1 })
+        .limit(20)
+        .exec();
+
+      if (candidates.length === 0) return;
+
+      this.logger.log(
+        `Post-expiry reconciliation: querying ${candidates.length} recently expired transactions`,
+      );
+
+      let settled = 0;
+      for (const transaction of candidates) {
+        try {
+          const wasSettled = await this.settleViaProviderQuery(transaction);
+          if (wasSettled) settled++;
+        } catch (error: any) {
+          this.logger.error(
+            `Post-expiry reconciliation failed for ${transaction._id}: ${error.message}`,
+          );
+        }
+        await this.delay(500);
+      }
+
+      if (settled > 0) {
+        this.logger.log(
+          `Post-expiry reconciliation settled ${settled} transaction(s) that expired without a callback`,
+        );
+      }
+    } catch (error: any) {
+      this.logger.error(
+        `Post-expiry reconciliation job error: ${error.message}`,
+      );
+    } finally {
+      this.isReconciling = false;
     }
   }
 
@@ -194,9 +297,15 @@ export class MpesaReconciliationService {
   }
 
   /**
-   * Query M-Pesa for transaction status and update local record
+   * Query the provider (shop credentials) for a transaction's outcome and let
+   * MpesaMultiTenantService.querySTKStatus settle it atomically and converge
+   * the canonical order/payment record.
+   *
+   * Returns true only when the transaction reached a TERMINAL state
+   * (COMPLETED or FAILED). Unresolved verdicts (provider unreachable, still
+   * processing, missing result code) leave the transaction untouched.
    */
-  private async queryAndUpdateTransaction(
+  private async settleViaProviderQuery(
     transaction: MpesaTransactionDocument,
   ): Promise<boolean> {
     if (!transaction.checkoutRequestId) {
@@ -206,137 +315,26 @@ export class MpesaReconciliationService {
       return false;
     }
 
-    try {
-      const result = await this.darajaService.queryStkStatus(
-        transaction.checkoutRequestId,
-        transaction.merchantRequestId || '',
-      );
+    // Track the query attempt itself (bounded retries for the post-expiry
+    // pass) — independent of the outcome.
+    await this.transactionModel
+      .updateOne(
+        { _id: transaction._id },
+        { $inc: { queryCount: 1 }, $set: { lastQueryAt: new Date() } },
+      )
+      .exec();
 
-      this.logger.debug(
-        `STK Query result for ${transaction._id}: ${JSON.stringify(result)}`,
-      );
-
-      // Handle based on result code (lowercase property from DarajaService)
-      if (result.resultCode === 0) {
-        // Payment successful
-        await this.markTransactionCompleted(transaction, result);
-        return true;
-      } else if (result.resultCode === 1037) {
-        // DS Timeout - transaction still processing, leave as pending
-        this.logger.debug(
-          `Transaction ${transaction._id} still processing (DS timeout)`,
-        );
-        return false;
-      } else if (result.resultCode !== undefined) {
-        // Payment failed
-        await this.markTransactionFailed(transaction, result);
-        return true;
-      }
-
-      return false;
-    } catch (error: any) {
-      // Query failed - might be network issue, don't change status
-      this.logger.warn(
-        `STK query failed for ${transaction._id}: ${error.message}`,
-      );
-      return false;
-    }
-  }
-
-  /**
-   * Mark transaction as completed and create payment record
-   */
-  private async markTransactionCompleted(
-    transaction: MpesaTransactionDocument,
-    result: any,
-  ): Promise<void> {
-    transaction.previousStatus = transaction.status;
-    transaction.status = MpesaTransactionStatus.COMPLETED;
-    transaction.mpesaResultCode = parseInt(result.ResultCode);
-    transaction.mpesaResultDesc = result.ResultDesc || 'Success';
-    transaction.completedAt = new Date();
-
-    // Try to extract receipt number from result
-    if (result.MpesaReceiptNumber) {
-      transaction.mpesaReceiptNumber = result.MpesaReceiptNumber;
-    }
-
-    await transaction.save();
-
-    this.logger.log(`Reconciled transaction ${transaction._id} as COMPLETED`);
-
-    // Create payment transaction record if we have receipt number
-    if (transaction.mpesaReceiptNumber) {
-      try {
-        await this.paymentTransactionService.createTransaction({
-          shopId: transaction.shopId.toString(),
-          orderId: transaction.orderId.toString(),
-          orderNumber: transaction.orderNumber,
-          cashierId: transaction.cashierId.toString(),
-          cashierName: transaction.cashierName,
-          branchId: transaction.branchId?.toString(),
-          paymentMethod: 'mpesa',
-          amount: transaction.amount,
-          status: 'completed',
-          customerName: transaction.customerName,
-          customerPhone: transaction.phoneNumber,
-          mpesaReceiptNumber: transaction.mpesaReceiptNumber,
-          mpesaTransactionId: transaction.checkoutRequestId,
-          referenceNumber: transaction.mpesaReceiptNumber,
-          notes: 'Reconciled via STK query',
-        });
-      } catch (error: any) {
-        this.logger.error(
-          `Failed to create payment record for reconciled transaction ${transaction._id}: ${error.message}`,
-        );
-      }
-    }
-  }
-
-  /**
-   * Mark transaction as failed
-   */
-  private async markTransactionFailed(
-    transaction: MpesaTransactionDocument,
-    result: any,
-  ): Promise<void> {
-    transaction.previousStatus = transaction.status;
-    transaction.status = MpesaTransactionStatus.FAILED;
-    transaction.mpesaResultCode = parseInt(result.ResultCode);
-    transaction.mpesaResultDesc = result.ResultDesc || 'Payment failed';
-    transaction.lastError = this.getErrorMessage(parseInt(result.ResultCode));
-
-    await transaction.save();
-
-    this.logger.log(
-      `Reconciled transaction ${transaction._id} as FAILED: ${transaction.lastError}`,
+    const verdict = await this.mpesaMultiTenantService.querySTKStatus(
+      transaction.shopId.toString(),
+      transaction.checkoutRequestId,
+      { converge: true },
     );
-  }
 
-  /**
-   * Get user-friendly error message for M-Pesa result code
-   */
-  private getErrorMessage(resultCode: number): string {
-    const errorMessages: Record<number, string> = {
-      1: 'Insufficient balance in M-Pesa account',
-      2: 'Amount is less than minimum allowed',
-      3: 'Amount exceeds maximum allowed',
-      4: 'Daily transaction limit exceeded',
-      5: 'Invalid amount',
-      6: 'Invalid account number',
-      7: 'Invalid sender phone number',
-      8: 'Invalid receiver number',
-      9: 'Duplicate request',
-      10: 'Invalid initiator',
-      11: 'Invalid security credential',
-      12: 'Invalid shortcode',
-      17: 'M-Pesa system busy, please try again',
-      1032: 'Payment cancelled by user',
-      1037: 'Request timeout - please try again',
-      2001: 'Wrong M-Pesa PIN entered',
-    };
+    this.logger.debug(
+      `STK Query result for ${transaction._id}: ${JSON.stringify(verdict)}`,
+    );
 
-    return errorMessages[resultCode] || `Payment failed (code: ${resultCode})`;
+    return verdict.status === 'COMPLETED' || verdict.status === 'FAILED';
   }
 
   /**
@@ -353,7 +351,10 @@ export class MpesaReconciliationService {
       return { success: false, message: 'Transaction not found' };
     }
 
-    if (transaction.status !== MpesaTransactionStatus.PENDING) {
+    if (
+      transaction.status !== MpesaTransactionStatus.PENDING &&
+      transaction.status !== MpesaTransactionStatus.EXPIRED
+    ) {
       return {
         success: false,
         status: transaction.status,
@@ -361,7 +362,7 @@ export class MpesaReconciliationService {
       };
     }
 
-    const wasReconciled = await this.queryAndUpdateTransaction(transaction);
+    const wasReconciled = await this.settleViaProviderQuery(transaction);
 
     if (wasReconciled) {
       const updated = await this.transactionModel.findById(transactionId);

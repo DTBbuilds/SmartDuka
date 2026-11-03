@@ -12,6 +12,8 @@ import {
   SANDBOX_MODE_ERROR,
   SandboxSimulationScenario,
 } from './constants/mpesa-sandbox.constants';
+import { isTerminalMpesaResultCode } from './schemas/mpesa-transaction.schema';
+import { parseCallbackMetadata } from './dto/mpesa.dto';
 
 export interface DarajaConfig {
   consumerKey: string;
@@ -272,10 +274,31 @@ export class DarajaService {
     }
   }
 
+  /**
+   * Query STK Push status.
+   *
+   * MPESA-P0 CONVERGENCE1: the previous implementation did
+   * `ResultCode || 0` — a MISSING ResultCode was silently treated as
+   * SUCCESS, and a numeric-string "0" failed the `=== 0` check and was
+   * classified as FAILED. Both mis-normalizations could settle money
+   * incorrectly. Now:
+   *   - ResultCode is normalized (number | numeric string → number);
+   *   - a missing/unparseable ResultCode is UNRESOLVED (status 'pending',
+   *     resultCode undefined) — never success, never failure;
+   *   - 0 → completed; definitive terminal codes → failed; ambiguous codes
+   *     (1037 DS timeout, 17 system busy, unknown) → pending;
+   *   - CallbackMetadata (present on some completed query responses) is
+   *     parsed so the receipt number can be attached when available.
+   */
   async queryStkStatus(
     checkoutRequestId: string,
     merchantRequestId: string,
-  ): Promise<{ status: string; resultCode: number; resultDesc: string }> {
+  ): Promise<{
+    status: 'completed' | 'failed' | 'pending';
+    resultCode?: number;
+    resultDesc?: string;
+    receiptNumber?: string;
+  }> {
     try {
       const accessToken = await this.getAccessToken();
       const timestamp = this.getTimestamp();
@@ -298,13 +321,32 @@ export class DarajaService {
         },
       );
 
-      const resultCode = response.data.ResultCode || 0;
-      const status = resultCode === 0 ? 'completed' : 'failed';
+      const raw = response.data?.ResultCode;
+      const resultCode =
+        raw === undefined || raw === null || raw === ''
+          ? undefined
+          : Number.isFinite(Number(raw))
+            ? Number(raw)
+            : undefined;
+
+      const metadata = parseCallbackMetadata(
+        response.data?.CallbackMetadata?.Item,
+      );
+
+      const status: 'completed' | 'failed' | 'pending' =
+        resultCode === undefined
+          ? 'pending'
+          : resultCode === 0
+            ? 'completed'
+            : isTerminalMpesaResultCode(resultCode)
+              ? 'failed'
+              : 'pending';
 
       return {
         status,
         resultCode,
-        resultDesc: response.data.ResultDesc,
+        resultDesc: response.data?.ResultDesc,
+        receiptNumber: metadata.mpesaReceiptNumber,
       };
     } catch (error: any) {
       this.logger.error(

@@ -355,11 +355,59 @@ export class MpesaService {
     // STEP 2: Check if already processed (idempotent callback handling)
     if (
       transaction.status === MpesaTransactionStatus.COMPLETED ||
-      transaction.status === MpesaTransactionStatus.FAILED
+      transaction.status === MpesaTransactionStatus.FAILED ||
+      transaction.status === MpesaTransactionStatus.REVERSED
     ) {
       this.logger.log(
         `Transaction ${transaction._id} already processed with status: ${transaction.status}`,
       );
+
+      // MPESA-P0 CONVERGENCE1: a query-settled payment may be COMPLETED
+      // without a receipt (the STK query response carried none). When the
+      // late callback finally delivers the receipt, backfill it — pure
+      // bookkeeping on an already-terminal transaction, no financial state
+      // change. createTransaction dedups on the CheckoutRequestID, so this
+      // never produces a second payment record.
+      if (
+        transaction.status === MpesaTransactionStatus.COMPLETED &&
+        ResultCode === 0
+      ) {
+        const lateMetadata = parseCallbackMetadata(CallbackMetadata?.Item);
+        if (
+          lateMetadata.mpesaReceiptNumber &&
+          transaction.mpesaReceiptNumber !== lateMetadata.mpesaReceiptNumber
+        ) {
+          try {
+            transaction.mpesaReceiptNumber = lateMetadata.mpesaReceiptNumber;
+            await transaction.save();
+
+            await this.paymentTransactionService.createTransaction({
+              shopId: transaction.shopId.toString(),
+              orderId: transaction.orderId.toString(),
+              orderNumber: transaction.orderNumber,
+              cashierId: transaction.cashierId.toString(),
+              cashierName: transaction.cashierName,
+              branchId: transaction.branchId?.toString(),
+              paymentMethod: 'mpesa',
+              amount: transaction.amount,
+              status: 'completed',
+              customerName: transaction.customerName,
+              customerPhone: transaction.phoneNumber,
+              mpesaReceiptNumber: lateMetadata.mpesaReceiptNumber,
+              mpesaTransactionId: CheckoutRequestID,
+              referenceNumber: lateMetadata.mpesaReceiptNumber,
+            });
+            this.logger.log(
+              `Late callback backfilled receipt ${lateMetadata.mpesaReceiptNumber} for transaction ${transaction._id}`,
+            );
+          } catch (error: any) {
+            this.logger.error(
+              `Failed to backfill receipt for ${transaction._id}: ${error?.message}`,
+            );
+          }
+        }
+      }
+
       return { ResultCode: 0, ResultDesc: 'Already processed' };
     }
 
@@ -984,6 +1032,14 @@ export class MpesaService {
    *
    * Queries M-Pesa directly for transaction status (fallback for missed callbacks)
    *
+   * MPESA-P0 CONVERGENCE1: settlement is delegated to
+   * MpesaMultiTenantService.querySTKStatus (the SHOP's own Daraja
+   * credentials — the previous direct DarajaService query used platform
+   * credentials and mis-normalized result codes, defaulting a missing
+   * ResultCode to SUCCESS). The delegated path performs the atomic,
+   * status-preconditioned settlement and the deduped order/payment
+   * convergence; this method only locates the transaction.
+   *
    * @param transactionId - Transaction ID to query
    */
   async queryMpesaStatus(shopId: string, transactionId: string): Promise<void> {
@@ -998,58 +1054,11 @@ export class MpesaService {
       );
     }
 
-    try {
-      const status = await this.darajaService.queryStkStatus(
-        transaction.checkoutRequestId,
-        transaction.merchantRequestId || '',
-      );
-
-      if (
-        status.resultCode === 0 &&
-        transaction.status === MpesaTransactionStatus.PENDING
-      ) {
-        // Payment was successful but callback was missed
-        transaction.previousStatus = transaction.status;
-        transaction.status = MpesaTransactionStatus.COMPLETED;
-        transaction.mpesaResultCode = status.resultCode;
-        transaction.mpesaResultDesc = status.resultDesc;
-        transaction.completedAt = new Date();
-        await transaction.save();
-
-        this.logger.log(
-          `Transaction ${transactionId} marked complete via status query`,
-        );
-
-        // P0-10D: a status query is trusted provider truth — converge the
-        // canonical order exactly like the callback path (deduped on
-        // CheckoutRequestID, so a callback arriving later is a no-op).
-        try {
-          await this.paymentTransactionService.createTransaction({
-            shopId: transaction.shopId.toString(),
-            orderId: transaction.orderId.toString(),
-            orderNumber: transaction.orderNumber,
-            cashierId: transaction.cashierId.toString(),
-            cashierName: transaction.cashierName,
-            branchId: transaction.branchId?.toString(),
-            paymentMethod: 'mpesa',
-            amount: transaction.amount,
-            status: 'completed',
-            customerName: transaction.customerName,
-            customerPhone: transaction.phoneNumber,
-            mpesaReceiptNumber: transaction.mpesaReceiptNumber,
-            mpesaTransactionId: transaction.checkoutRequestId,
-          });
-        } catch (error: any) {
-          this.logger.error(
-            `Failed to record payment/convergence for query-settled ${transaction._id}: ${error?.message}`,
-          );
-        }
-      }
-    } catch (error: any) {
-      this.logger.error(
-        `Failed to query M-Pesa status for ${transactionId}: ${error.message}`,
-      );
-    }
+    await this.mpesaMultiTenantService.querySTKStatus(
+      shopId,
+      transaction.checkoutRequestId,
+      { converge: true },
+    );
   }
 
   // ============================================

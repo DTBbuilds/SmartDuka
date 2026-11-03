@@ -145,6 +145,26 @@ describe('CASHIER-P0 F-08 mpesa callback verification', () => {
   });
 
   it('duplicate callbacks are idempotent (already-terminal transactions are not reprocessed)', async () => {
+    boot({
+      status: MpesaTransactionStatus.COMPLETED,
+      mpesaReceiptNumber: 'RECEIPT01',
+    });
+    querySTKStatus.mockResolvedValue({
+      success: true,
+      status: 'COMPLETED',
+      resultCode: '0',
+    });
+
+    const result = await service.processCallback(callback(0, 1000));
+
+    expect(result.ResultDesc).toBe('Already processed');
+    expect(transaction.status).toBe(MpesaTransactionStatus.COMPLETED);
+    // Receipt already present — the duplicate is a pure no-op.
+    expect(createTransaction).not.toHaveBeenCalled();
+  });
+
+  it('CONVERGENCE1: a late callback backfills a missing receipt on an already-completed transaction (bookkeeping only — still one payment record)', async () => {
+    // Query-settled completion carried no receipt; the late callback does.
     boot({ status: MpesaTransactionStatus.COMPLETED });
     querySTKStatus.mockResolvedValue({
       success: true,
@@ -155,7 +175,16 @@ describe('CASHIER-P0 F-08 mpesa callback verification', () => {
     const result = await service.processCallback(callback(0, 1000));
 
     expect(result.ResultDesc).toBe('Already processed');
-    expect(createTransaction).not.toHaveBeenCalled();
+    expect(transaction.status).toBe(MpesaTransactionStatus.COMPLETED);
+    expect(transaction.mpesaReceiptNumber).toBe('RECEIPT01');
+    // Deduped createTransaction — receipt bookkeeping, never a second credit.
+    expect(createTransaction).toHaveBeenCalledTimes(1);
+    expect(createTransaction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mpesaTransactionId: CRX,
+        mpesaReceiptNumber: 'RECEIPT01',
+      }),
+    );
   });
 
   it('a callback for an unknown CheckoutRequestID is acknowledged but ignored', async () => {

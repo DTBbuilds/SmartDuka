@@ -12,7 +12,11 @@ import {
 import { MpesaEncryptionService } from './mpesa-encryption.service';
 import { PaymentTransactionService } from './payment-transaction.service';
 import { OrderPaymentAuthorityService } from './order-payment-authority.service';
-import { generateIdempotencyKey } from '../dto/mpesa.dto';
+import {
+  generateIdempotencyKey,
+  getMpesaErrorMessage,
+  parseCallbackMetadata,
+} from '../dto/mpesa.dto';
 
 /**
  * Multi-Tenant M-Pesa Service
@@ -314,6 +318,16 @@ export class MpesaMultiTenantService {
     const { shopId, phoneNumber, amount, orderId, orderNumber, description } =
       params;
 
+    // MPESA-P0 CONVERGENCE1: platform-level kill switch. When set, no new STK
+    // push is sent (existing pending payments keep settling via callback and
+    // reconciliation — they are never cancelled silently). Used to pause
+    // initiation while payment convergence is being repaired/verified.
+    if (this.configService.get('MPESA_PAYMENTS_PAUSED', 'false') === 'true') {
+      throw new BadRequestException(
+        'M-Pesa payments are temporarily paused by the platform operator. Existing pending payments continue to settle normally.',
+      );
+    }
+
     // Get shop's M-Pesa configuration
     const config = await this.getShopMpesaConfig(shopId);
 
@@ -393,6 +407,12 @@ export class MpesaMultiTenantService {
         // schema-required; without them the save fails AFTER Daraja has sent
         // the STK prompt, orphaning the payment (no record for the callback
         // to converge).
+        //
+        // MPESA-P0 CONVERGENCE1: `status: 'PENDING'` (uppercase) failed the
+        // schema's lowercase Mongoose enum validation on save — the record was
+        // never created even though the STK prompt was already live on the
+        // customer's phone. A customer who paid left no transaction for the
+        // callback/reconciliation to converge. Always write the enum VALUE.
         const transaction = new this.transactionModel({
           shopId: new Types.ObjectId(shopId),
           orderId: new Types.ObjectId(orderId),
@@ -407,7 +427,9 @@ export class MpesaMultiTenantService {
           amount,
           phoneNumber: formattedPhone,
           accountReference,
-          status: 'PENDING',
+          status: MpesaTransactionStatus.PENDING,
+          stkPushSentAt: new Date(),
+          expiresAt: new Date(Date.now() + 5 * 60 * 1000),
           shortCode: config.shortCode,
           isShopSpecific: true, // All configs are now shop-specific
         });
@@ -446,6 +468,19 @@ export class MpesaMultiTenantService {
    * provider verification read — no transaction update, no order convergence,
    * no intent release. Used by the callback path to confirm an untrusted
    * callback against Daraja before any local state is mutated.
+   *
+   * MPESA-P0 CONVERGENCE1 (converge mode — used by the reconciliation loop,
+   * manual reconciliation and the transaction manager): the provider's
+   * verdict settles the transaction ATOMICALLY (status precondition blocks
+   * overwriting a terminal state a concurrent callback may just have written)
+   * and a confirmed success ALWAYS converges the canonical order via a
+   * deduped PaymentTransaction — with or without a receipt number. A missing
+   * receipt delays the receipt bookkeeping, never the money→order binding.
+   *
+   * Result-code normalization: Daraja reports ResultCode as a number or a
+   * numeric string depending on surface; a MISSING ResultCode is an
+   * UNRESOLVED outcome and is never treated as success (the old
+   * `ResultCode || 0` default-to-success is gone).
    */
   async querySTKStatus(
     shopId: string,
@@ -453,9 +488,10 @@ export class MpesaMultiTenantService {
     options?: { converge?: boolean },
   ): Promise<{
     success: boolean;
-    resultCode?: string;
+    resultCode?: number;
     resultDesc?: string;
-    status?: string;
+    status?: 'COMPLETED' | 'FAILED' | 'PENDING';
+    receiptNumber?: string;
   }> {
     const converge = options?.converge !== false;
     const config = await this.getShopMpesaConfig(shopId);
@@ -489,73 +525,115 @@ export class MpesaMultiTenantService {
 
       const data = await response.json();
 
+      const resultCode = this.normalizeResultCode(data?.ResultCode);
+      const queryMetadata = parseCallbackMetadata(data?.CallbackMetadata?.Item);
+      const receiptNumber = queryMetadata.mpesaReceiptNumber;
+
+      // P0-10D: only a DEFINITIVE terminal code marks FAILED — ambiguous
+      // codes (1037 DS timeout, system busy, unknown) and a MISSING code keep
+      // the transaction unresolved so no second STK push can double-charge
+      // and void stays blocked until a later query/callback settles it.
+      const status: 'COMPLETED' | 'FAILED' | 'PENDING' =
+        resultCode === undefined
+          ? 'PENDING'
+          : resultCode === 0
+            ? 'COMPLETED'
+            : isTerminalMpesaResultCode(resultCode)
+              ? 'FAILED'
+              : 'PENDING';
+
       // CASHIER-P0 F-08: pure verification mode — report the provider's
       // verdict without touching local state.
       if (!converge) {
         return {
-          success: data.ResultCode === '0' || data.ResultCode === 0,
-          resultCode: data.ResultCode,
-          resultDesc: data.ResultDesc,
-          status:
-            data.ResultCode === '0' || data.ResultCode === 0
-              ? 'COMPLETED'
-              : isTerminalMpesaResultCode(data.ResultCode)
-                ? 'FAILED'
-                : 'PENDING',
+          success: status === 'COMPLETED',
+          resultCode,
+          resultDesc: data?.ResultDesc,
+          status,
+          receiptNumber,
         };
       }
 
-      // Update transaction status. P0-10D: only a DEFINITIVE terminal code
-      // marks FAILED — ambiguous codes (1037 DS timeout, system busy, unknown)
-      // keep the transaction unresolved so no second STK push can double-
-      // charge and void stays blocked until a later query/callback settles it.
-      if (data.ResultCode !== undefined) {
-        const terminal = isTerminalMpesaResultCode(data.ResultCode);
-        const status =
-          data.ResultCode === '0'
-            ? 'COMPLETED'
-            : terminal
-              ? 'FAILED'
-              : 'PENDING';
-        const updated = await this.transactionModel.findOneAndUpdate(
-          { checkoutRequestId },
-          {
-            status,
-            resultCode: data.ResultCode,
-            resultDesc: data.ResultDesc,
-          },
-          { new: true },
-        );
-        if (terminal && updated) {
-          await this.orderPaymentAuthority
-            .markIntentFailed(
-              updated.shopId.toString(),
-              updated.orderId.toString(),
-              'mpesa',
-            )
-            .catch((e) =>
-              this.logger.error(
-                `Failed to release order intent for ${updated.orderId}: ${e?.message}`,
-              ),
-            );
+      if (status === 'PENDING') {
+        return {
+          success: false,
+          resultCode,
+          resultDesc: data?.ResultDesc,
+          status,
+        };
+      }
+
+      // ATOMIC SETTLEMENT: only a transaction still in a resolvable state
+      // (created/pending/expired) may transition. A concurrent callback that
+      // just wrote a terminal state wins; we re-read and report its truth.
+      // Pipeline update captures previousStatus in the same atomic write.
+      const resolvableStatuses = [
+        MpesaTransactionStatus.CREATED,
+        MpesaTransactionStatus.PENDING,
+        MpesaTransactionStatus.EXPIRED,
+      ];
+
+      if (status === 'COMPLETED') {
+        await this.transactionModel
+          .findOneAndUpdate(
+            {
+              checkoutRequestId,
+              shopId: new Types.ObjectId(shopId),
+              status: { $in: resolvableStatuses },
+            },
+            [
+              {
+                $set: {
+                  previousStatus: '$status',
+                  status: MpesaTransactionStatus.COMPLETED,
+                  mpesaResultCode: resultCode,
+                  mpesaResultDesc: data?.ResultDesc,
+                  ...(receiptNumber
+                    ? { mpesaReceiptNumber: receiptNumber }
+                    : {}),
+                  completedAt: new Date(),
+                  recoveredViaQuery: true,
+                },
+              },
+            ],
+          )
+          .exec();
+
+        const settled = await this.transactionModel
+          .findOne({ checkoutRequestId, shopId: new Types.ObjectId(shopId) })
+          .exec();
+
+        if (!settled || settled.status !== MpesaTransactionStatus.COMPLETED) {
+          this.logger.warn(
+            `Provider query confirmed success for ${checkoutRequestId} but the transaction could not be settled atomically (status: ${settled?.status ?? 'not found'}) — manual reconciliation required`,
+          );
+          return {
+            success: false,
+            resultCode,
+            resultDesc: data?.ResultDesc,
+            status: 'PENDING',
+          };
         }
+
         // P0-10D: a status query is trusted provider truth — converge the
-        // canonical order on success exactly like the callback path.
-        if (data.ResultCode === '0' && updated?.cashierId) {
+        // canonical order exactly like the callback path. ALWAYS record the
+        // payment (deduped on CheckoutRequestID); a missing receipt must not
+        // leave paid money un-converged.
+        if (settled.cashierId) {
           try {
             await this.paymentTransactionService.createTransaction({
-              shopId: updated.shopId.toString(),
-              orderId: updated.orderId.toString(),
-              orderNumber: updated.orderNumber,
-              cashierId: updated.cashierId.toString(),
-              cashierName: updated.cashierName ?? 'Unknown',
-              branchId: updated.branchId?.toString(),
+              shopId: settled.shopId.toString(),
+              orderId: settled.orderId.toString(),
+              orderNumber: settled.orderNumber,
+              cashierId: settled.cashierId.toString(),
+              cashierName: settled.cashierName ?? 'Unknown',
+              branchId: settled.branchId?.toString(),
               paymentMethod: 'mpesa',
-              amount: updated.amount,
+              amount: settled.amount,
               status: 'completed',
-              customerName: updated.customerName,
-              customerPhone: updated.phoneNumber,
-              mpesaReceiptNumber: updated.mpesaReceiptNumber,
+              customerName: settled.customerName,
+              customerPhone: settled.phoneNumber,
+              mpesaReceiptNumber: settled.mpesaReceiptNumber,
               mpesaTransactionId: checkoutRequestId,
             });
           } catch (e: any) {
@@ -563,19 +641,82 @@ export class MpesaMultiTenantService {
               `Failed to record payment/convergence for query-settled ${checkoutRequestId}: ${e?.message}`,
             );
           }
+        } else {
+          this.logger.warn(
+            `Confirmed payment for ${checkoutRequestId} lacks cashier attribution - payment recorded on transaction only, order convergence requires manual reconciliation`,
+          );
         }
+
+        return {
+          success: true,
+          resultCode,
+          resultDesc: data?.ResultDesc,
+          status: 'COMPLETED',
+          receiptNumber: settled.mpesaReceiptNumber,
+        };
       }
 
+      // status === 'FAILED' (provider-confirmed terminal failure)
+      const failed = await this.transactionModel
+        .findOneAndUpdate(
+          {
+            checkoutRequestId,
+            shopId: new Types.ObjectId(shopId),
+            status: { $in: resolvableStatuses },
+          },
+          [
+            {
+              $set: {
+                previousStatus: '$status',
+                status: MpesaTransactionStatus.FAILED,
+                mpesaResultCode: resultCode,
+                mpesaResultDesc: data?.ResultDesc,
+                lastError: getMpesaErrorMessage(resultCode ?? -1),
+              },
+            },
+          ],
+        )
+        .exec();
+
+      if (failed) {
+        // Release the order's unresolved intent to terminal failure — the
+        // order becomes voidable and a genuinely new initiation may retry.
+        await this.orderPaymentAuthority
+          .markIntentFailed(
+            failed.shopId.toString(),
+            failed.orderId.toString(),
+            'mpesa',
+          )
+          .catch((e) =>
+            this.logger.error(
+              `Failed to release order intent for ${failed.orderId}: ${e?.message}`,
+            ),
+          );
+        return {
+          success: false,
+          resultCode,
+          resultDesc: data?.ResultDesc,
+          status: 'FAILED',
+        };
+      }
+
+      // Already terminal locally (a concurrent callback won the race).
+      // Report the LOCAL truth — a completed payment is never un-completed by
+      // a later query, and a failed one is not re-failed.
+      const existing = await this.transactionModel
+        .findOne({ checkoutRequestId, shopId: new Types.ObjectId(shopId) })
+        .exec();
+      const existingStatus =
+        existing?.status === MpesaTransactionStatus.COMPLETED
+          ? 'COMPLETED'
+          : existing?.status === MpesaTransactionStatus.FAILED
+            ? 'FAILED'
+            : 'PENDING';
       return {
-        success: data.ResultCode === '0',
-        resultCode: data.ResultCode,
-        resultDesc: data.ResultDesc,
-        status:
-          data.ResultCode === '0'
-            ? 'COMPLETED'
-            : isTerminalMpesaResultCode(data.ResultCode)
-              ? 'FAILED'
-              : 'PENDING',
+        success: existingStatus === 'COMPLETED',
+        resultCode,
+        resultDesc: data?.ResultDesc,
+        status: existingStatus,
       };
     } catch (error: any) {
       this.logger.error(`STK Query error: ${error.message}`);
@@ -584,6 +725,17 @@ export class MpesaMultiTenantService {
         resultDesc: error.message,
       };
     }
+  }
+
+  /**
+   * MPESA-P0 CONVERGENCE1: normalize a Daraja result code (number | numeric
+   * string) to a number. Missing/unparseable codes return undefined — an
+   * UNRESOLVED outcome, never success, never failure.
+   */
+  private normalizeResultCode(raw: unknown): number | undefined {
+    if (raw === undefined || raw === null || raw === '') return undefined;
+    const code = typeof raw === 'number' ? raw : Number(raw);
+    return Number.isFinite(code) ? code : undefined;
   }
 
   /**
@@ -642,16 +794,49 @@ export class MpesaMultiTenantService {
       // may still settle. Keep the transaction unresolved so the order's
       // pending external intent continues to block void AND blocks a second
       // STK push. Only definitive terminal failure codes release the intent.
+      //
+      // MPESA-P0 CONVERGENCE1: this method previously wrote UPPERCASE status
+      // strings ('COMPLETED') and non-schema fields (resultCode/resultDesc)
+      // through an unguarded findByIdAndUpdate — enum-invalid values stored
+      // raw (update ops skip validators) and a concurrent callback could be
+      // overwritten. Now: schema enum values, schema field names, atomic
+      // status-preconditioned transition.
+      // DEPRECATED: the callback-v2 route now runs the hardened, provider-
+      // verified pipeline (MpesaService.processCallback); this method remains
+      // only as an internal fallback and must not gain new callers.
       const terminal = isTerminalMpesaResultCode(resultCode);
-      const status =
-        resultCode === 0 ? 'COMPLETED' : terminal ? 'FAILED' : 'PENDING';
-      await this.transactionModel.findByIdAndUpdate(transaction._id, {
-        status,
-        resultCode: resultCode.toString(),
-        resultDesc,
-        mpesaReceiptNumber,
-        completedAt: resultCode === 0 ? new Date() : undefined,
-      });
+      const nextStatus =
+        resultCode === 0
+          ? MpesaTransactionStatus.COMPLETED
+          : terminal
+            ? MpesaTransactionStatus.FAILED
+            : MpesaTransactionStatus.PENDING;
+      await this.transactionModel.findOneAndUpdate(
+        {
+          _id: transaction._id,
+          status: {
+            $in: [
+              MpesaTransactionStatus.CREATED,
+              MpesaTransactionStatus.PENDING,
+              MpesaTransactionStatus.EXPIRED,
+            ],
+          },
+        },
+        [
+          {
+            $set: {
+              previousStatus: '$status',
+              status: nextStatus,
+              mpesaResultCode: resultCode,
+              mpesaResultDesc: resultDesc,
+              ...(resultCode === 0 && mpesaReceiptNumber
+                ? { mpesaReceiptNumber }
+                : {}),
+              ...(resultCode === 0 ? { completedAt: new Date() } : {}),
+            },
+          },
+        ],
+      );
 
       if (terminal && resultCode !== 0) {
         // Release the order's unresolved intent to terminal failure — the
@@ -892,7 +1077,7 @@ export class MpesaMultiTenantService {
         shopId: new Types.ObjectId(shopId),
         orderId: new Types.ObjectId(orderId),
         status: {
-          $in: ['PENDING', MpesaTransactionStatus.PENDING, 'CREATED'],
+          $in: [MpesaTransactionStatus.PENDING, MpesaTransactionStatus.CREATED],
         },
       })
       .sort({ createdAt: -1 })
