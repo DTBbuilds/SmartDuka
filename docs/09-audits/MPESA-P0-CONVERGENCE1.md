@@ -207,7 +207,8 @@ It prints, strictly read-only: counts by status; pending population (with unreco
 **Rollback:**
 
 - `git revert 9c907c0` (single commit; no migrations; additive optional schema fields are backward-compatible — a rollback leaves them dormant).
-- Rollback restores the known fail-closed state: callbacks 400 (F-48), initiation persisting nothing (RC-2). **Keep `MPESA_PAYMENTS_PAUSED=true` through any rollback** — the pre-fix state must not accept new customer prompts.
+- Rollback restores the known fail-closed state: callbacks 400 (F-48), initiation persisting nothing (RC-2).
+- **ROLLBACK SAFETY CORRECTION (MPESA-P0-POSTDEPLOY1):** `MPESA_PAYMENTS_PAUSED` exists only in revisions from the repair onward — **pre-repair versions (`2615f39` and earlier) do not contain the kill switch, so the env flag is inert there and a rollback to them RE-ENABLES initiation** on RC-2-affected code paths. Before any rollback to pre-repair code, independently verified containment is REQUIRED (deactivate all shops' M-Pesa payment configs via the admin API and verify initiation returns `MPESA_NOT_CONFIGURED`/`MPESA_DISABLED`, or edge-block the initiation routes). After any rollback, re-verify containment with the same probes — never rely on the env flag alone across a rollback to vulnerable code. On revisions from `d2a470a` onward the fail-closed default (unset = paused) holds by itself.
 - No financial records are created, modified or deleted by either deploy or rollback path.
 
 ---
