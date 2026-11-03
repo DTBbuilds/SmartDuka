@@ -779,7 +779,11 @@ describe('P0-10C external payment initiation authority', () => {
           CustomerMessage: 'Success',
         })),
       };
-      paymentsService = new PaymentsService(daraja as any, authority);
+      paymentsService = new PaymentsService(
+        daraja as any,
+        authority,
+        { get: () => 'false' } as any,
+      );
     });
 
     it('cannot bypass order authority — void order → zero provider calls', async () => {

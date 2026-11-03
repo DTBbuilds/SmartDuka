@@ -75,6 +75,14 @@ export class MpesaService {
     orderNumber: string,
     dto: InitiateMpesaPaymentDto,
   ): Promise<MpesaPaymentResponseDto> {
+    // MPESA-P0 CONVERGENCE1: platform-level kill switch — every active
+    // initiation path honors the same pause (primary, v2, retry, legacy).
+    if (this.configService.get('MPESA_PAYMENTS_PAUSED', 'false') === 'true') {
+      throw new BadRequestException(
+        'M-Pesa payments are temporarily paused by the platform operator. Existing pending payments continue to settle normally.',
+      );
+    }
+
     // Generate idempotency key if not provided
     const idempotencyKey =
       dto.idempotencyKey || generateIdempotencyKey(shopId, orderId);
@@ -815,6 +823,14 @@ export class MpesaService {
     transactionId: string,
     newPhoneNumber?: string,
   ): Promise<MpesaPaymentResponseDto> {
+    // MPESA-P0 CONVERGENCE1: a retry sends a NEW STK prompt — it must honor
+    // the platform pause like every other initiation path.
+    if (this.configService.get('MPESA_PAYMENTS_PAUSED', 'false') === 'true') {
+      throw new BadRequestException(
+        'M-Pesa payments are temporarily paused by the platform operator. Existing pending payments continue to settle normally.',
+      );
+    }
+
     const transaction = await this.mpesaTransactionModel.findOne({
       _id: new Types.ObjectId(transactionId),
       shopId: new Types.ObjectId(shopId),

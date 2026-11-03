@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
 import { PaymentsService } from './payments.service';
 import { DarajaService } from './daraja.service';
 import { OrderPaymentAuthorityService } from './services/order-payment-authority.service';
@@ -12,6 +13,7 @@ describe('PaymentsService', () => {
         PaymentsService,
         { provide: DarajaService, useValue: {} },
         { provide: OrderPaymentAuthorityService, useValue: {} },
+        { provide: ConfigService, useValue: { get: () => 'false' } },
       ],
     }).compile();
 

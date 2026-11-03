@@ -1,4 +1,5 @@
-import { ConflictException, Injectable, Logger } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InitiateStkDto } from './dto/initiate-stk.dto';
 import {
   DarajaService,
@@ -35,12 +36,21 @@ export class PaymentsService {
   constructor(
     private darajaService: DarajaService,
     private readonly orderPaymentAuthority: OrderPaymentAuthorityService,
+    private readonly configService: ConfigService,
   ) {}
 
   async initiateStkPush(
     shopId: string,
     dto: InitiateStkDto,
   ): Promise<StkResponse> {
+    // MPESA-P0 CONVERGENCE1: platform-level kill switch — the legacy
+    // initiation surface honors the same pause as the primary paths.
+    if (this.configService.get('MPESA_PAYMENTS_PAUSED', 'false') === 'true') {
+      throw new BadRequestException(
+        'M-Pesa payments are temporarily paused by the platform operator. Existing pending payments continue to settle normally.',
+      );
+    }
+
     // P0-10C/D: ORDER AUTHORITY — resolve the order by {dto.orderId,
     // authenticated shopId}, reject void/voiding/non-payable orders, and
     // atomically claim the pending M-Pesa allocation BEFORE the provider
