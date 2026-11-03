@@ -72,7 +72,15 @@ const maskPhone = (p) =>
         MPESA_RECONCILIATION_ENABLED:
           (process.env.MPESA_RECONCILIATION_ENABLED || 'true') === 'true',
         MPESA_PAYMENTS_PAUSED:
-          (process.env.MPESA_PAYMENTS_PAUSED || 'false') === 'true',
+          // MPESA-P0-POSTDEPLOY1: fail-closed interpretation matching the
+          // deployed kill switch (payments/mpesa-pause.ts + all four
+          // initiation paths) — initiation is PAUSED unless the environment
+          // explicitly opts in with 'false'/'active'/'enabled'. The previous
+          // interpretation (unset → not paused) contradicted the running
+          // application and would misreport the containment state.
+          process.env.MPESA_PAYMENTS_PAUSED !== 'false' &&
+          process.env.MPESA_PAYMENTS_PAUSED !== 'active' &&
+          process.env.MPESA_PAYMENTS_PAUSED !== 'enabled',
         MPESA_CALLBACK_URL_configured: !!process.env.MPESA_CALLBACK_URL,
         MPESA_ENCRYPTION_KEY_configured: !!process.env.MPESA_ENCRYPTION_KEY,
       },
