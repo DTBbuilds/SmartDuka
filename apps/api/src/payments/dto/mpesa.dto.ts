@@ -7,8 +7,13 @@ import {
   Matches,
   IsNotEmpty,
   IsEnum,
+  IsDefined,
+  IsObject,
+  ValidateNested,
+  ValidateBy,
+  ValidationOptions,
 } from 'class-validator';
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { MpesaTransactionStatus } from '../schemas/mpesa-transaction.schema';
 
 /**
@@ -52,23 +57,141 @@ export class InitiateMpesaPaymentDto {
 }
 
 /**
+ * F-48: validator accepting a metadata `Value` that may be a string OR a
+ * number. Safaricom sends `Amount`/`PhoneNumber`/`TransactionDate` as JSON
+ * numbers and `MpesaReceiptNumber` as a string, so a plain `@IsString()` or
+ * `@IsNumber()` would reject genuine callbacks.
+ */
+function IsStringOrNumber(validationOptions?: ValidationOptions) {
+  return ValidateBy(
+    {
+      name: 'isStringOrNumber',
+      validator: {
+        validate: (value: unknown) =>
+          typeof value === 'string' || typeof value === 'number',
+        defaultMessage: () =>
+          'Value must be a string or a number (as sent by Daraja)',
+      },
+    },
+    validationOptions,
+  );
+}
+
+/**
+ * F-48: one CallbackMetadata name/value pair. `Value` is OPTIONAL — the real
+ * Safaricom callback sends a `Balance` item with no `Value` at all when the
+ * balance is zero, and rejecting it would reject a genuine callback.
+ */
+export class MpesaCallbackMetadataItemDto {
+  @IsString()
+  @IsNotEmpty()
+  Name: string;
+
+  @IsOptional()
+  @IsStringOrNumber()
+  Value?: string | number;
+}
+
+/**
+ * F-48: `CallbackMetadata` — present ONLY on successful payments; Daraja
+ * omits it entirely on failure callbacks, so it must stay optional.
+ */
+export class MpesaCallbackMetadataDto {
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => MpesaCallbackMetadataItemDto)
+  Item?: MpesaCallbackMetadataItemDto[];
+}
+
+/**
+ * F-48: the `stkCallback` object of a real Daraja STK callback.
+ *
+ * ResultCode arrives as a JSON number (0 = success, 1032 = cancelled, ...);
+ * some Daraja surfaces report it as a numeric string, so it is normalized to
+ * a number here. A non-numeric string fails validation (400) — it can never
+ * be silently interpreted as success or failure.
+ */
+export class MpesaStkCallbackDto {
+  @IsString()
+  @IsNotEmpty()
+  MerchantRequestID: string;
+
+  @IsString()
+  @IsNotEmpty()
+  CheckoutRequestID: string;
+
+  @Transform(({ value }) => {
+    if (typeof value === 'string' && value.trim() !== '') {
+      const n = Number(value);
+      return Number.isNaN(n) ? value : n;
+    }
+    return value;
+  })
+  @IsNumber()
+  ResultCode: number;
+
+  @IsOptional()
+  @IsString()
+  ResultDesc?: string;
+
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => MpesaCallbackMetadataDto)
+  CallbackMetadata?: MpesaCallbackMetadataDto;
+}
+
+/**
+ * F-48: the `Body` envelope of a real Daraja STK callback.
+ */
+export class MpesaCallbackBodyDto {
+  @IsDefined()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => MpesaStkCallbackDto)
+  stkCallback: MpesaStkCallbackDto;
+}
+
+/**
  * DTO for M-Pesa callback payload
+ *
+ * F-48: this DTO previously declared `Body` with NO class-validator
+ * decorators. The global ValidationPipe (`whitelist: true,
+ * forbidNonWhitelisted: true`) therefore rejected EVERY callback — including
+ * genuine Daraja callbacks — with 400 "property Body should not exist", so
+ * no callback ever reached `MpesaService.processCallback`.
+ *
+ * The structure below mirrors the real Safaricom Daraja STK callback:
+ * {
+ *   "Body": {
+ *     "stkCallback": {
+ *       "MerchantRequestID": "29115-34620561-1",
+ *       "CheckoutRequestID": "ws_CO_191220191020363925",
+ *       "ResultCode": 0,
+ *       "ResultDesc": "The service request is processed successfully.",
+ *       "CallbackMetadata": {
+ *         "Item": [
+ *           { "Name": "Amount", "Value": 1245.00 },
+ *           { "Name": "MpesaReceiptNumber", "Value": "SGR51YAB3C" },
+ *           { "Name": "Balance" },
+ *           { "Name": "TransactionDate", "Value": 20191219102115 },
+ *           { "Name": "PhoneNumber", "Value": 254712345678 }
+ *         ]
+ *       }
+ *     }
+ *   }
+ * }
+ *
+ * Validation only shapes the payload — it is NOT proof of payment. The
+ * unsigned callback is still verified server-to-server against Daraja
+ * (CASHIER-P0 F-08) before any money is marked received.
  */
 export class MpesaCallbackDto {
-  Body: {
-    stkCallback: {
-      MerchantRequestID: string;
-      CheckoutRequestID: string;
-      ResultCode: number;
-      ResultDesc: string;
-      CallbackMetadata?: {
-        Item: Array<{
-          Name: string;
-          Value: string | number;
-        }>;
-      };
-    };
-  };
+  @IsDefined()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => MpesaCallbackBodyDto)
+  Body: MpesaCallbackBodyDto;
 }
 
 /**
@@ -213,15 +336,20 @@ export function maskPhoneNumber(phone: string): string {
 
 /**
  * Parse callback metadata from M-Pesa
+ *
+ * F-48: `Value` is optional — the real callback sends a `Balance` item with
+ * no `Value` when the balance is zero. Items without a value are skipped.
  */
 export function parseCallbackMetadata(
-  items?: Array<{ Name: string; Value: string | number }>,
+  items?: Array<{ Name: string; Value?: string | number }>,
 ): ParsedCallbackMetadata {
   if (!items) return {};
 
   const result: ParsedCallbackMetadata = {};
 
   for (const item of items) {
+    if (item.Value === undefined || item.Value === null) continue;
+
     switch (item.Name) {
       case 'Amount':
         result.amount = Number(item.Value);

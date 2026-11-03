@@ -96,6 +96,11 @@ export class PaymentTransactionService {
           .findOne({ mpesaTransactionId: dto.mpesaTransactionId })
           .exec();
         if (existing) {
+          // MPESA-P0 CONVERGENCE1: a query-settled payment may be recorded
+          // without a receipt (the STK query response carried none); when the
+          // callback later delivers the receipt, backfill it instead of
+          // silently dropping it.
+          await this.backfillMpesaReceipt(existing, dto.mpesaReceiptNumber);
           return existing;
         }
       }
@@ -150,10 +155,62 @@ export class PaymentTransactionService {
         const winner = await this.paymentTransactionModel
           .findOne({ mpesaTransactionId: dto.mpesaTransactionId })
           .exec();
-        if (winner) return winner;
+        if (winner) {
+          await this.backfillMpesaReceipt(winner, dto.mpesaReceiptNumber);
+          return winner;
+        }
       }
       throw new InternalServerErrorException(
         `Failed to create payment transaction: ${error?.message || 'Unknown error'}`,
+      );
+    }
+  }
+
+  /**
+   * MPESA-P0 CONVERGENCE1: backfill the M-Pesa receipt number onto an already
+   * recorded payment when the first settlement (e.g. a status query without
+   * callback metadata) had none, and mirror it onto the order's embedded
+   * pending mpesa allocation. Never overwrites an existing receipt.
+   */
+  private async backfillMpesaReceipt(
+    existing: PaymentTransactionDocument,
+    receiptNumber?: string,
+  ): Promise<void> {
+    if (!receiptNumber || existing.mpesaReceiptNumber === receiptNumber) {
+      return;
+    }
+
+    try {
+      existing.mpesaReceiptNumber = receiptNumber;
+      if (!existing.referenceNumber) {
+        existing.referenceNumber = receiptNumber;
+      }
+      await existing.save();
+
+      await this.orderModel
+        .updateOne(
+          {
+            _id: existing.orderId,
+            shopId: existing.shopId,
+          },
+          {
+            $set: {
+              'payments.$[p].mpesaReceiptNumber': receiptNumber,
+            },
+          },
+          {
+            arrayFilters: [
+              {
+                'p.method': 'mpesa',
+                'p.mpesaReceiptNumber': { $exists: false },
+              },
+            ],
+          },
+        )
+        .exec();
+    } catch (error: any) {
+      this.logger.error(
+        `Failed to backfill M-Pesa receipt on payment ${existing._id}: ${error?.message}`,
       );
     }
   }

@@ -142,6 +142,20 @@ export class MpesaTransaction {
   @Prop({ required: false })
   mpesaTransactionId?: string;
 
+  /**
+   * MPESA-P0 CONVERGENCE1: the Paybill/Till shortCode the STK push was sent
+   * against (shop-specific credential audit trail).
+   */
+  @Prop({ required: false })
+  shortCode?: string;
+
+  /**
+   * MPESA-P0 CONVERGENCE1: true when the push used the shop's own Daraja
+   * credentials (all initiations are shop-specific since P0-10C).
+   */
+  @Prop({ required: false })
+  isShopSpecific?: boolean;
+
   // ============================================
   // TRANSACTION DETAILS
   // ============================================

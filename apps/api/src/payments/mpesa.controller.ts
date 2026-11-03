@@ -605,18 +605,27 @@ export class MpesaController {
   }
 
   /**
-   * MULTI-TENANT CALLBACK
+   * MULTI-TENANT CALLBACK (legacy alias)
    *
-   * Handles callbacks for all shops. Routes to correct shop based on transaction.
+   * MPESA-P0 CONVERGENCE1: this route previously fed the payload to
+   * `MpesaMultiTenantService.handleCallback`, which marked transactions
+   * COMPLETED and converged orders on the strength of an UNSIGNED callback
+   * with no provider verification — a live bypass of the CASHIER-P0 F-08
+   * trust shield. It now runs the exact same hardened, provider-verified
+   * pipeline as the primary callback endpoint. Kept only so shops whose
+   * stored callbackUrl still points here do not lose callback delivery.
    */
   @Post('callback-v2')
   @HttpCode(HttpStatus.OK)
-  async handleCallbackV2(@Body() payload: any) {
-    this.logger.log('Received multi-tenant M-Pesa callback');
+  async handleCallbackV2(@Body() payload: MpesaCallbackDto) {
+    this.logger.log('Received multi-tenant M-Pesa callback (verified path)');
 
-    const result = await this.mpesaMultiTenantService.handleCallback(payload);
-
-    return { ResultCode: 0, ResultDesc: 'Callback processed' };
+    try {
+      return await this.mpesaService.processCallback(payload);
+    } catch (error: any) {
+      this.logger.error(`Callback processing error: ${error.message}`);
+      return { ResultCode: 0, ResultDesc: 'Callback received' };
+    }
   }
 
   // ============================================

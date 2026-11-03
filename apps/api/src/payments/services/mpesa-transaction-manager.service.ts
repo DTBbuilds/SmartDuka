@@ -17,6 +17,7 @@ import {
 } from '../schemas/mpesa-transaction.schema';
 import { DarajaService } from '../daraja.service';
 import { PaymentTransactionService } from './payment-transaction.service';
+import { MpesaMultiTenantService } from './mpesa-multi-tenant.service';
 
 /**
  * M-Pesa Transaction Timing Configuration
@@ -133,6 +134,7 @@ export class MpesaTransactionManagerService {
     private readonly darajaService: DarajaService,
     private readonly configService: ConfigService,
     private readonly paymentTransactionService: PaymentTransactionService,
+    private readonly mpesaMultiTenantService: MpesaMultiTenantService,
   ) {}
 
   /**
@@ -422,6 +424,16 @@ export class MpesaTransactionManagerService {
   /**
    * Query M-Pesa directly for transaction status
    */
+  /**
+   * Query M-Pesa directly for transaction status
+   *
+   * MPESA-P0 CONVERGENCE1: settlement is delegated to
+   * MpesaMultiTenantService.querySTKStatus — the SHOP's own Daraja
+   * credentials, normalized result codes (a missing ResultCode is unresolved,
+   * never success), atomic status-preconditioned transitions and the deduped
+   * order/payment convergence. This method keeps the real-time state/event
+   * surface on top of the settled record.
+   */
   async queryMpesaStatus(transactionId: string): Promise<TransactionState> {
     const transaction = await this.transactionModel.findById(transactionId);
 
@@ -438,80 +450,22 @@ export class MpesaTransactionManagerService {
       return this.getTransactionState(transactionId);
     }
 
-    try {
-      const result = await this.darajaService.queryStkStatus(
-        transaction.checkoutRequestId,
-        transaction.merchantRequestId || '',
-      );
+    const verdict = await this.mpesaMultiTenantService.querySTKStatus(
+      transaction.shopId.toString(),
+      transaction.checkoutRequestId,
+      { converge: true },
+    );
 
-      this.logger.debug(
-        `STK query result for ${transactionId}: ${JSON.stringify(result)}`,
-      );
-
-      if (result.resultCode === 0) {
-        // Success
-        transaction.previousStatus = transaction.status;
-        transaction.status = MpesaTransactionStatus.COMPLETED;
-        transaction.mpesaResultCode = result.resultCode;
-        transaction.mpesaResultDesc = result.resultDesc;
-        transaction.completedAt = new Date();
-        await transaction.save();
-
-        // CONVERGENCE: a Daraja status-query confirmation is trusted provider
-        // truth just like a callback. Record the payment (idempotent on
-        // CheckoutRequestID) so the canonical order converges even when the
-        // live callback never arrives.
-        if (transaction.checkoutRequestId && transaction.cashierId) {
-          try {
-            await this.paymentTransactionService.createTransaction({
-              shopId: transaction.shopId.toString(),
-              orderId: transaction.orderId.toString(),
-              orderNumber: transaction.orderNumber,
-              cashierId: transaction.cashierId.toString(),
-              cashierName: transaction.cashierName ?? 'Unknown',
-              branchId: transaction.branchId?.toString(),
-              paymentMethod: 'mpesa',
-              amount: transaction.amount,
-              status: 'completed',
-              customerName: transaction.customerName,
-              customerPhone: transaction.phoneNumber,
-              mpesaTransactionId: transaction.checkoutRequestId,
-            });
-          } catch (error: any) {
-            this.logger.error(
-              `Failed to record convergence payment for ${transaction.orderNumber}: ${error?.message}`,
-            );
-          }
-        }
-
-        this.events.emit('mpesa.transaction.completed', {
-          transactionId,
-          receipt: transaction.mpesaReceiptNumber,
-        });
-      } else if (result.resultCode === MpesaResultCode.DS_TIMEOUT) {
-        // Still processing - don't change status
-        this.logger.debug(`Transaction ${transactionId} still processing`);
-      } else if (result.resultCode !== undefined) {
-        // Failed
-        transaction.previousStatus = transaction.status;
-        transaction.status = MpesaTransactionStatus.FAILED;
-        transaction.mpesaResultCode = result.resultCode;
-        transaction.mpesaResultDesc = result.resultDesc;
-        transaction.lastError = this.getErrorInfo(
-          result.resultCode,
-        ).userMessage;
-        await transaction.save();
-
-        this.events.emit('mpesa.transaction.failed', {
-          transactionId,
-          error: this.getErrorInfo(result.resultCode),
-        });
-      }
-    } catch (error: any) {
-      this.logger.warn(
-        `STK query failed for ${transactionId}: ${error.message}`,
-      );
-      // Don't change status on query failure
+    if (verdict.status === 'COMPLETED') {
+      this.events.emit('mpesa.transaction.completed', {
+        transactionId,
+        receipt: verdict.receiptNumber,
+      });
+    } else if (verdict.status === 'FAILED') {
+      this.events.emit('mpesa.transaction.failed', {
+        transactionId,
+        error: this.getErrorInfo(verdict.resultCode ?? -1),
+      });
     }
 
     return this.getTransactionState(transactionId);
@@ -588,6 +542,12 @@ export class MpesaTransactionManagerService {
 
   /**
    * Handle transaction timeout
+   *
+   * MPESA-P0 CONVERGENCE1: before expiring, the provider is queried on the
+   * SHOP's own credentials; a confirmed outcome settles atomically (and
+   * converges the order) via querySTKStatus. Expiry itself is an atomic
+   * status-preconditioned update — a concurrent callback that just completed
+   * the transaction can never be overwritten.
    */
   async handleTimeout(transactionId: string): Promise<void> {
     const transaction = await this.transactionModel.findById(transactionId);
@@ -600,37 +560,54 @@ export class MpesaTransactionManagerService {
     // Check if actually expired
     if (new Date() <= transaction.expiresAt) return;
 
-    // First, try to query M-Pesa for actual status
-    try {
-      const result = await this.darajaService.queryStkStatus(
-        transaction.checkoutRequestId || '',
-        transaction.merchantRequestId || '',
-      );
+    // First, try to query M-Pesa for actual status (shop credentials;
+    // settlement + convergence happen inside querySTKStatus)
+    if (transaction.checkoutRequestId) {
+      try {
+        const verdict = await this.mpesaMultiTenantService.querySTKStatus(
+          transaction.shopId.toString(),
+          transaction.checkoutRequestId,
+          { converge: true },
+        );
 
-      if (result.resultCode === 0) {
-        // Actually completed - callback was missed
-        transaction.previousStatus = transaction.status;
-        transaction.status = MpesaTransactionStatus.COMPLETED;
-        transaction.mpesaResultCode = result.resultCode;
-        transaction.mpesaResultDesc = result.resultDesc;
-        transaction.completedAt = new Date();
-        await transaction.save();
-
-        this.events.emit('mpesa.transaction.completed', {
-          transactionId,
-          recoveredFromTimeout: true,
-        });
-        return;
+        if (verdict.status === 'COMPLETED') {
+          this.events.emit('mpesa.transaction.completed', {
+            transactionId,
+            receipt: verdict.receiptNumber,
+            recoveredFromTimeout: true,
+          });
+          return;
+        }
+        if (verdict.status === 'FAILED') {
+          this.events.emit('mpesa.transaction.failed', {
+            transactionId,
+            error: this.getErrorInfo(verdict.resultCode ?? -1),
+          });
+          return;
+        }
+      } catch (error: any) {
+        this.logger.warn(
+          `Timeout provider query failed for ${transactionId}: ${error?.message}`,
+        );
       }
-    } catch (error) {
-      // Query failed, proceed with timeout
     }
 
-    // Mark as expired
-    transaction.previousStatus = transaction.status;
-    transaction.status = MpesaTransactionStatus.EXPIRED;
-    transaction.lastError = 'Transaction timed out - no response received';
-    await transaction.save();
+    // Mark as expired (atomic: only while still PENDING)
+    const expired = await this.transactionModel.updateOne(
+      {
+        _id: transaction._id,
+        status: MpesaTransactionStatus.PENDING,
+      },
+      {
+        $set: {
+          status: MpesaTransactionStatus.EXPIRED,
+          previousStatus: MpesaTransactionStatus.PENDING,
+          lastError: 'Transaction timed out - no response received',
+        },
+      },
+    );
+
+    if (!expired.modifiedCount) return;
 
     this.events.emit('mpesa.transaction.expired', {
       transactionId,
