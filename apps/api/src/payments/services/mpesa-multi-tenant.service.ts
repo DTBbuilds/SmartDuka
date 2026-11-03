@@ -322,7 +322,14 @@ export class MpesaMultiTenantService {
     // push is sent (existing pending payments keep settling via callback and
     // reconciliation — they are never cancelled silently). Used to pause
     // initiation while payment convergence is being repaired/verified.
-    if (this.configService.get('MPESA_PAYMENTS_PAUSED', 'false') === 'true') {
+    // MPESA-P0-EMERGENCY-DEPLOY1: fail-closed — initiation is PAUSED unless
+    // the environment explicitly opts in (MPESA_PAYMENTS_PAUSED=false).
+    const pauseRaw = this.configService.get<string>('MPESA_PAYMENTS_PAUSED');
+    if (
+      pauseRaw !== 'false' &&
+      pauseRaw !== 'active' &&
+      pauseRaw !== 'enabled'
+    ) {
       throw new BadRequestException(
         'M-Pesa payments are temporarily paused by the platform operator. Existing pending payments continue to settle normally.',
       );

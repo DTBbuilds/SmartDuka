@@ -77,7 +77,14 @@ export class MpesaService {
   ): Promise<MpesaPaymentResponseDto> {
     // MPESA-P0 CONVERGENCE1: platform-level kill switch — every active
     // initiation path honors the same pause (primary, v2, retry, legacy).
-    if (this.configService.get('MPESA_PAYMENTS_PAUSED', 'false') === 'true') {
+    // MPESA-P0-EMERGENCY-DEPLOY1: fail-closed — initiation is PAUSED unless
+    // the environment explicitly opts in (MPESA_PAYMENTS_PAUSED=false).
+    const pauseRaw = this.configService.get<string>('MPESA_PAYMENTS_PAUSED');
+    if (
+      pauseRaw !== 'false' &&
+      pauseRaw !== 'active' &&
+      pauseRaw !== 'enabled'
+    ) {
       throw new BadRequestException(
         'M-Pesa payments are temporarily paused by the platform operator. Existing pending payments continue to settle normally.',
       );
@@ -825,7 +832,14 @@ export class MpesaService {
   ): Promise<MpesaPaymentResponseDto> {
     // MPESA-P0 CONVERGENCE1: a retry sends a NEW STK prompt — it must honor
     // the platform pause like every other initiation path.
-    if (this.configService.get('MPESA_PAYMENTS_PAUSED', 'false') === 'true') {
+    // MPESA-P0-EMERGENCY-DEPLOY1: fail-closed — initiation is PAUSED unless
+    // the environment explicitly opts in (MPESA_PAYMENTS_PAUSED=false).
+    const pauseRaw = this.configService.get<string>('MPESA_PAYMENTS_PAUSED');
+    if (
+      pauseRaw !== 'false' &&
+      pauseRaw !== 'active' &&
+      pauseRaw !== 'enabled'
+    ) {
       throw new BadRequestException(
         'M-Pesa payments are temporarily paused by the platform operator. Existing pending payments continue to settle normally.',
       );

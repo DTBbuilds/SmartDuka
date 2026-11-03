@@ -91,8 +91,11 @@ export class MpesaController {
   @Get('pause-status')
   getPauseStatus() {
     const rawValue = process.env.MPESA_PAYMENTS_PAUSED ?? null;
+    // Fail-closed: unset or unrecognized values keep initiation PAUSED.
+    const paused =
+      rawValue !== 'false' && rawValue !== 'active' && rawValue !== 'enabled';
     return {
-      paused: rawValue === 'true',
+      paused,
       envVar: 'MPESA_PAYMENTS_PAUSED',
       rawValue,
     };
