@@ -54,7 +54,14 @@ services:
         value: sandbox
       - key: MPESA_ENCRYPTION_KEY
         sync: false
-      
+      # MPESA-P0-EMERGENCY-DEPLOY1: kill switch — new M-Pesa STK initiation is
+      # PAUSED until post-deployment verification succeeds and a separate
+      # activation approval is given. Existing pending payments keep settling
+      # via callback + reconciliation. Flip to 'false' only on explicit
+      # activation authorization.
+      - key: MPESA_PAYMENTS_PAUSED
+        value: 'true'
+
       # ==================== STRIPE ====================
       - key: STRIPE_SECRET_KEY
         sync: false
