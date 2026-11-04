@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, Logger, Inject, forwardRef, Optional } from '@nestjs/common';
+import { Injectable, BadRequestException, ForbiddenException, Logger, Inject, forwardRef, Optional } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Branch, BranchDocument, BranchPaymentConfig, BranchLocation, BranchOperations, BranchContacts } from './branch.schema';
