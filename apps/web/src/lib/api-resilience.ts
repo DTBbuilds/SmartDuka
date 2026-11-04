@@ -247,17 +247,44 @@ class ApiResilience {
 
   /**
    * Execute a fetch request with resilience (retries, timeout, wake-up detection)
+   *
+   * ERROR-UX-RELIABILITY1 (PR A):
+   *  - ONLY idempotent methods (GET/HEAD/OPTIONS) are retried automatically.
+   *    A retried POST/PATCH/PUT/DELETE can duplicate a financial or
+   *    destructive operation when the first attempt actually reached the
+   *    server (timeout ≠ not processed). Callers may still opt in per
+   *    request with `retryOnNonIdempotent: true` when the operation is
+   *    demonstrably idempotent or carries a server-side idempotency key.
+   *  - The caller's own AbortSignal is now COMBINED with the per-attempt
+   *    timeout signal (previously it was silently overwritten — navigation
+   *    cancellation never worked through this path).
+   *  - A user cancellation or a timeout is NOT retried: a timeout means the
+   *    request may have reached the server; retrying it blindly is exactly
+   *    the duplicate-submission hazard above.
    */
   async resilientFetch<T>(
     url: string,
-    options: RequestInit = {},
+    options: RequestInit & { retryOnNonIdempotent?: boolean } = {},
     retryConfig: Partial<RetryConfig> = {}
   ): Promise<Response> {
     const cfg = { ...DEFAULT_RETRY_CONFIG, ...retryConfig };
+    const method = (options.method || 'GET').toUpperCase();
+    const idempotentMethod = ['GET', 'HEAD', 'OPTIONS'].includes(method);
+    const mayRetry = idempotentMethod || options.retryOnNonIdempotent === true;
+    const callerSignal = options.signal;
     let lastError: Error | null = null;
     let delay = cfg.initialDelayMs;
 
     for (let attempt = 0; attempt <= cfg.maxRetries; attempt++) {
+      // Per-attempt timeout signal, combined with the caller's signal.
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), cfg.timeoutMs);
+      const onCallerAbort = () => controller.abort();
+      if (callerSignal) {
+        if (callerSignal.aborted) controller.abort();
+        else callerSignal.addEventListener('abort', onCallerAbort);
+      }
+
       try {
         // Check if offline
         if (typeof navigator !== 'undefined' && !navigator.onLine) {
@@ -266,12 +293,10 @@ class ApiResilience {
           throw new Error('No internet connection');
         }
 
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), cfg.timeoutMs);
-
+        const { retryOnNonIdempotent: _omit, ...fetchOptions } = options;
         const startTime = Date.now();
         const response = await fetch(url, {
-          ...options,
+          ...fetchOptions,
           signal: controller.signal,
         });
         clearTimeout(timeoutId);
@@ -291,18 +316,23 @@ class ApiResilience {
         return response;
       } catch (error: any) {
         lastError = error;
+        clearTimeout(timeoutId);
+        if (callerSignal) {
+          callerSignal.removeEventListener('abort', onCallerAbort);
+        }
 
-        // Don't retry on abort (user cancelled) or if offline
-        if (error.name === 'AbortError') {
-          if (attempt === 0) {
-            const { message, detail } = this.getStatusMessage('waking', attempt);
-            this.updateState({
-              status: 'waking',
-              message,
-              detail,
-              retryCount: attempt,
-            });
+        const isAbort = error?.name === 'AbortError';
+        const callerCancelled =
+          isAbort && (callerSignal?.aborted || false);
+
+        // A timeout abort may have reached the server; a caller cancellation
+        // is intentional. NEITHER is ever retried.
+        if (isAbort || !mayRetry) {
+          if (callerCancelled) {
+            this.updateState({ status: 'ready', message: '', retryCount: 0 });
+            throw error;
           }
+          break;
         }
 
         if (attempt < cfg.maxRetries) {
@@ -320,7 +350,7 @@ class ApiResilience {
       }
     }
 
-    // All retries exhausted
+    // All retries exhausted (or a non-retryable failure)
     const unreachableMsg = this.getStatusMessage('unreachable', cfg.maxRetries);
     this.updateState({
       status: 'unreachable',

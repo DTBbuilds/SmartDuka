@@ -4,6 +4,7 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
 import helmet from 'helmet';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
@@ -31,6 +32,11 @@ async function bootstrap() {
   // Increase body parser limits for large CSV imports (50MB)
   app.use(json({ limit: '50mb' }));
   app.use(urlencoded({ limit: '50mb', extended: true }));
+
+  // ERROR-UX-RELIABILITY1 (PR A/B): correlation ID on every request —
+  // echoed as x-request-id and embedded in canonical error responses.
+  const requestIdMiddleware = new RequestIdMiddleware();
+  app.use(requestIdMiddleware.use.bind(requestIdMiddleware));
 
   // Enable CORS FIRST - before any other middleware
   // This ensures preflight requests work correctly
