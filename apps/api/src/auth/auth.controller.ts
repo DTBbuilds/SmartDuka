@@ -32,10 +32,13 @@ import { CurrentUser } from './decorators/current-user.decorator';
 import { ConfigService } from '@nestjs/config';
 import { CookieService } from './services/cookie.service';
 import { Throttle } from '@nestjs/throttler';
+import { Logger } from '@nestjs/common';
 
 @Controller('auth')
 @SkipSubscriptionCheck() // All auth routes should bypass subscription check
 export class AuthController {
+  private readonly logger = new Logger(AuthController.name);
+
   constructor(
     private readonly authService: AuthService,
     private readonly tokenService: TokenService,
@@ -438,7 +441,11 @@ export class AuthController {
         }
       } else {
         // Existing user - verify they have the correct role if this is a cashier flow
-        if (isCashierSignup && result.user?.role !== 'cashier') {
+        // AUTH-GOOGLE-OTP-HOTFIX1: on the OTP path `result.user` is null and
+        // the role arrives at `result.role` — read both so a legitimate
+        // cashier requiring OTP is not rejected as an admin.
+        const effectiveRole = result.user?.role ?? result.role;
+        if (isCashierSignup && effectiveRole !== 'cashier') {
           // User exists but is not a cashier - reject with clear message
           const errorMsg =
             'This Google account is linked to an admin account, not a cashier account. Please use the Admin login instead.';
@@ -491,8 +498,20 @@ export class AuthController {
         }
       }
     } catch (error: any) {
+      // AUTH-GOOGLE-OTP-HOTFIX1: never leak raw database/validation
+      // exception details into the frontend redirect URL (it is displayed
+      // verbatim on the login page). Full diagnostics stay server-side;
+      // the user gets one stable, actionable message. The log line carries
+      // only the exception message/stack — never tokens, tickets or other
+      // credentials (those never appear in exception text on this path).
+      this.logger.error(
+        `Google sign-in callback failed: ${error?.message}`,
+        error?.stack,
+      );
       res.redirect(
-        `${frontendUrl}/login?error=${encodeURIComponent(error.message || 'Google login failed')}`,
+        `${frontendUrl}/login?error=${encodeURIComponent(
+          'Google sign-in failed. Please try again, or sign in with your email and password.',
+        )}`,
       );
     }
   }

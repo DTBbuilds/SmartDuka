@@ -5,6 +5,7 @@ import * as crypto from 'crypto';
 import {
   OAuthExchangeTicket,
   OAuthExchangeTicketDocument,
+  OAuthExchangePurpose,
   OAuthState,
   OAuthStateDocument,
 } from '../schemas/oauth-exchange-ticket.schema';
@@ -99,7 +100,7 @@ export class OAuthExchangeService {
    */
   async issueTicket(
     payload: Record<string, unknown>,
-    purpose: 'admin_login' | 'cashier_signup' | 'shop_registration' | 'otp_verification',
+    purpose: OAuthExchangePurpose,
   ): Promise<{ ticket: string; bindNonce: string }> {
     const ticket = crypto.randomBytes(32).toString('hex');
     const bindNonce = crypto.randomBytes(16).toString('hex');
@@ -121,7 +122,7 @@ export class OAuthExchangeService {
    */
   async redeemTicket(
     ticket: string,
-    expectedPurpose?: 'admin_login' | 'cashier_signup' | 'shop_registration' | 'otp_verification',
+    expectedPurpose?: OAuthExchangePurpose,
     browserNonce?: string,
   ): Promise<Record<string, unknown>> {
     if (!ticket || typeof ticket !== 'string' || ticket.length < 32) {
@@ -143,9 +144,14 @@ export class OAuthExchangeService {
     if (expectedPurpose && live.purpose !== expectedPurpose) {
       // Transaction mismatch — consume it anyway so it cannot be reused.
       await this.ticketModel
-        .updateOne({ _id: live._id }, { $set: { isUsed: true, usedAt: new Date() } })
+        .updateOne(
+          { _id: live._id },
+          { $set: { isUsed: true, usedAt: new Date() } },
+        )
         .exec();
-      throw new UnauthorizedException('Authentication ticket is invalid. Please sign in again.');
+      throw new UnauthorizedException(
+        'Authentication ticket is invalid. Please sign in again.',
+      );
     }
 
     // Atomic consume: exactly one redemption wins.
@@ -166,7 +172,9 @@ export class OAuthExchangeService {
     try {
       parsed = JSON.parse(consumed.payload);
     } catch {
-      throw new UnauthorizedException('Authentication ticket is invalid. Please sign in again.');
+      throw new UnauthorizedException(
+        'Authentication ticket is invalid. Please sign in again.',
+      );
     }
     // OAUTH-SEC2: browser transaction binding — the ticket is only
     // redeemable in the browser that received the OAuth redirect (the

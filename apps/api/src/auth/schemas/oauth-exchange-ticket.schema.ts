@@ -15,8 +15,29 @@ import { Document } from 'mongoose';
  *  - ~90-second expiry
  *  - atomic single-use redemption (CAS consume — replays and concurrent
  *    redemptions lose)
- *  - purpose-bound (login / cashier_signup / shop_registration)
+ *  - purpose-bound (admin_login / cashier_signup / shop_registration /
+ *    otp_verification)
  */
+/**
+ * AUTH-GOOGLE-OTP-HOTFIX1 — single source of truth for OAuth exchange
+ * ticket purposes, shared by the schema enum and the service signatures so
+ * they can never drift again.
+ *
+ * `otp_verification` carries the Google sign-in OTP handoff for EXISTING
+ * users whose login requires email/device verification: the callback stores
+ * {email, userName, shopName} server-side and redirects to
+ * /login?otp=true&otp_ticket=… — it MUST be an allowed enum value or the
+ * ticket write fails and those users cannot complete authentication.
+ */
+export const OAUTH_EXCHANGE_PURPOSES = [
+  'admin_login',
+  'cashier_signup',
+  'shop_registration',
+  'otp_verification',
+] as const;
+
+export type OAuthExchangePurpose = (typeof OAUTH_EXCHANGE_PURPOSES)[number];
+
 @Schema({ timestamps: true, collection: 'oauth_exchange_tickets' })
 export class OAuthExchangeTicket {
   @Prop({ required: true, index: true })
@@ -26,7 +47,10 @@ export class OAuthExchangeTicket {
   @Prop({ required: true })
   payload: string;
 
-  @Prop({ required: true, enum: ['admin_login', 'cashier_signup', 'shop_registration'] })
+  @Prop({
+    required: true,
+    enum: [...OAUTH_EXCHANGE_PURPOSES],
+  })
   purpose: string;
 
   @Prop({ required: true, index: true })
