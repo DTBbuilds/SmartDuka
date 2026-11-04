@@ -808,6 +808,10 @@ export class AuthService {
         user: null,
         shop: null,
         tokens: null,
+        // AUTH-GOOGLE-OTP-HOTFIX1: `user` is null on the OTP path — the
+        // controller's cashier-flow role check reads the role from here so a
+        // legitimate cashier requiring OTP is not misclassified as an admin.
+        role: user.role,
       };
     }
 
