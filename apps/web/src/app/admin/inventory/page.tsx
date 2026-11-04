@@ -25,6 +25,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useBranch } from "@/lib/branch-context";
 import { useToast } from "@/lib/use-toast";
 import { ToastContainer } from "@/components/toast-container";
+import { ErrorBanner, LoadingState } from "@/components/feedback";
 import { AlertCircle, TrendingDown, Package, Calendar } from "lucide-react";
 
 interface InventoryStats {
@@ -50,6 +51,10 @@ export default function InventoryPage() {
   const [stats, setStats] = useState<InventoryStats | null>(null);
   const [expiringProducts, setExpiringProducts] = useState<ExpiringProduct[]>([]);
   const [loading, setLoading] = useState(true);
+  // ERROR-UX-RELIABILITY1 (PR D): HTTP failures were silent — a failed
+  // stats request rendered zeros as if they were real inventory data.
+  // Distinguish "no data" from "failed to load" and offer a retry.
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<ExpiringProduct | null>(null);
 
   useEffect(() => {
@@ -63,6 +68,7 @@ export default function InventoryPage() {
     if (!token) return;
 
     setLoading(true);
+    setLoadError(null);
     try {
       const branchParam = currentBranch ? `branchId=${currentBranch._id}` : '';
 
@@ -73,6 +79,10 @@ export default function InventoryPage() {
       if (statsRes.ok) {
         const statsData = await statsRes.json();
         setStats(statsData);
+      } else {
+        setLoadError(
+          `Inventory stats failed to load (HTTP ${statsRes.status}). The figures below may be incomplete.`,
+        );
       }
 
       // Load expiring products
@@ -82,8 +92,15 @@ export default function InventoryPage() {
       if (expiringRes.ok) {
         const expiringData = await expiringRes.json();
         setExpiringProducts(expiringData);
+      } else if (!loadError) {
+        setLoadError(
+          (l) =>
+            l ||
+            `Expiry watch failed to load (HTTP ${expiringRes.status}). Expiring products may be missing.`,
+        );
       }
     } catch (err: any) {
+      setLoadError('Could not reach the server. Check your connection and try again.');
       toast({
         type: "error",
         title: "Failed to load inventory data",
@@ -119,13 +136,19 @@ export default function InventoryPage() {
         </div>
 
         {loading ? (
-          <Card>
-            <CardContent className="py-8">
-              <p className="text-center text-muted-foreground">Loading inventory data...</p>
-            </CardContent>
-          </Card>
+          <LoadingState label="Loading inventory data…" />
         ) : (
           <>
+            {loadError && (
+              <div className="mb-6">
+                <ErrorBanner
+                  title="Inventory data incomplete"
+                  message={loadError}
+                  onRetry={loadInventoryData}
+                  retrying={loading}
+                />
+              </div>
+            )}
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
               <Card>
