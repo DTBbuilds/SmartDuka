@@ -1,0 +1,1675 @@
+[
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\(marketing)\\barcode-pos-system\\",
+  "lines": 185,
+  "methods": "-",
+  "endpoints": [],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\(marketing)\\blog\\",
+  "lines": 260,
+  "methods": "-",
+  "endpoints": [],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\(marketing)\\blog\\[slug]\\",
+  "lines": 273,
+  "methods": "-",
+  "endpoints": [],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\(marketing)\\contact\\",
+  "lines": 280,
+  "methods": "-",
+  "endpoints": [],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\(marketing)\\features\\analytics\\",
+  "lines": 382,
+  "methods": "-",
+  "endpoints": [],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\(marketing)\\features\\inventory\\",
+  "lines": 401,
+  "methods": "-",
+  "endpoints": [],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\(marketing)\\features\\mpesa\\",
+  "lines": 385,
+  "methods": "-",
+  "endpoints": [],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\(marketing)\\features\\",
+  "lines": 220,
+  "methods": "-",
+  "endpoints": [],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\(marketing)\\features\\pos\\",
+  "lines": 367,
+  "methods": "-",
+  "endpoints": [],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\(marketing)\\inventory-management-software\\",
+  "lines": 294,
+  "methods": "-",
+  "endpoints": [],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\(marketing)\\",
+  "lines": 592,
+  "methods": "-",
+  "endpoints": [],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\(marketing)\\point-of-sale-software\\",
+  "lines": 295,
+  "methods": "-",
+  "endpoints": [],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\(marketing)\\pricing\\",
+  "lines": 312,
+  "methods": "-",
+  "endpoints": [],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\(marketing)\\privacy\\",
+  "lines": 113,
+  "methods": "-",
+  "endpoints": [],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\(marketing)\\reports-and-analytics\\",
+  "lines": 185,
+  "methods": "-",
+  "endpoints": [],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\(marketing)\\terms\\",
+  "lines": 138,
+  "methods": "-",
+  "endpoints": [],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\admin\\analytics\\all-time\\",
+  "lines": 427,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/sales/analytics?range=all${branchParam}`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\admin\\analytics\\inventory\\",
+  "lines": 396,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/inventory/analytics${branchParam}`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\admin\\analytics\\orders\\",
+  "lines": 416,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/sales/orders/${orderId}`",
+   "`${config.apiUrl}/sales/orders/analytics${branchParam}`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\admin\\analytics\\",
+  "lines": 177,
+  "methods": "-",
+  "endpoints": [],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\admin\\analytics\\payments\\",
+  "lines": 519,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/payments/analytics${branchParam}`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\admin\\analytics\\profit\\",
+  "lines": 582,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/sales/profit/analytics?range=${dateRange}${branchParam}`",
+   "`${config.apiUrl}/purchases`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\admin\\analytics\\sales\\",
+  "lines": 509,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/sales/analytics?range=${dateRange}${branchParam}`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\admin\\audit-logs\\",
+  "lines": 399,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/branches`",
+   "`${config.apiUrl}/audit/logs?${params}`",
+   "`${config.apiUrl}/audit/logs/export?${params}`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": true,
+  "hasEmptyState": true,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\admin\\branch-inventory\\",
+  "lines": 251,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/branches`",
+   "`${config.apiUrl}/inventory/branch/${selectedBranch}/stats`",
+   "`${config.apiUrl}/inventory/branch/${selectedBranch}/low-stock`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": true,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\admin\\branch-reports\\",
+  "lines": 321,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/branches`",
+   "`${config.apiUrl}/sales/branch/${selectedBranch}/daily-sales/${today}`",
+   "`${config.apiUrl}/inventory/branch/${selectedBranch}/stats`",
+   "`${config.apiUrl}/purchases/branch/${selectedBranch}/stats`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": true,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\admin\\branches\\",
+  "lines": 343,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/branches`",
+   "`${config.apiUrl}/branches/${branchId}`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": true,
+  "hasEmptyState": false,
+  "hasConfirm": true
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\admin\\branches\\[id]\\",
+  "lines": 729,
+  "methods": "-",
+  "endpoints": [
+   "`${apiUrl}/branches/${branchId}`",
+   "`${apiUrl}/branches/${branchId}/stats`",
+   "`${apiUrl}/activity?branchId=${branchId}&limit=20`",
+   "`${apiUrl}/staff-assignment/branch/${branchId}`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": true,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\admin\\branches\\[id]\\settings\\",
+  "lines": 1189,
+  "methods": "-",
+  "endpoints": [
+   "`${apiUrl}/branches/${branchId}`",
+   "`${apiUrl}/branches/${branchId}/payment-config`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": true,
+  "hasEmptyState": true,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\admin\\cashiers\\",
+  "lines": 1117,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/branches`",
+   "`${config.apiUrl}/users/${cashier._id}/status`",
+   "`${config.apiUrl}/users/${cashierId}`",
+   "`${config.apiUrl}/users/${selectedCashierForPin._id}/pin`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": true,
+  "hasEmptyState": true,
+  "hasConfirm": true
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\admin\\cashiers\\[id]\\",
+  "lines": 887,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/shifts/cashier/${cashierId}/summary`",
+   "`${base}/users/${cashierId}/details`",
+   "`${base}/activity/cashier/${cashierId}/transactions?limit=50`",
+   "`${base}/users/${cashierId}/permissions`",
+   "`${base}/users/${cashierId}/reset-pin`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": true
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\admin\\categories\\",
+  "lines": 691,
+  "methods": "DELETEx1",
+  "endpoints": [
+   "`${config.apiUrl}/inventory/categories`",
+   "`${config.apiUrl}/inventory/products?categoryId=${category._id}`",
+   "`${config.apiUrl}/inventory/categories/${category._id}`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": true,
+  "hasEmptyState": true,
+  "hasConfirm": true
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\admin\\customers\\",
+  "lines": 113,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/customers`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\admin\\dashboard\\",
+  "lines": 210,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/sales/stats`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\admin\\discounts\\",
+  "lines": 316,
+  "methods": "DELETEx1",
+  "endpoints": [
+   "`${config.apiUrl}/discounts`",
+   "`${config.apiUrl}/discounts/${id}`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": true
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\admin\\inventory\\",
+  "lines": 339,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/inventory/stats${branchParam ? `",
+   "`${config.apiUrl}/inventory/expiring-products?days=30${branchParam ? `"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\admin\\locations\\",
+  "lines": 385,
+  "methods": "POSTx1,DELETEx1",
+  "endpoints": [
+   "`${config.apiUrl}/locations`",
+   "`${config.apiUrl}/locations/${id}`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": true
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\admin\\loyalty\\",
+  "lines": 272,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/loyalty/stats`",
+   "`${config.apiUrl}/loyalty/top-customers?limit=10`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\admin\\monitoring\\",
+  "lines": 297,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/users/shop/${shop.id}/cashiers`",
+   "`${config.apiUrl}/sales/all-cashier-stats`",
+   "`${config.apiUrl}/activity/shop?limit=50`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\admin\\",
+  "lines": 686,
+  "methods": "-",
+  "endpoints": [
+   "`${base}/inventory/categories`",
+   "`${base}/payments/mpesa/config/status`",
+   "`${base}/payments/stripe/config/status`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\admin\\payments\\",
+  "lines": 20,
+  "methods": "-",
+  "endpoints": [],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\admin\\permissions\\",
+  "lines": 256,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/users`",
+   "`${config.apiUrl}/branches`",
+   "`${config.apiUrl}/staff-assignment/permissions`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": true,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\admin\\products\\",
+  "lines": 804,
+  "methods": "-",
+  "endpoints": [
+   "`${base}/inventory/products?limit=200${branchQuery}`",
+   "`${base}/inventory/categories`",
+   "`${base}/shop-settings/${shop.id}/business-type-config`",
+   "`${base}/inventory/products/${id}`",
+   "`${base}/inventory/products/import`",
+   "`${base}/inventory/products/export`",
+   "`${base}/inventory/products/${productId}`",
+   "`${base}/inventory/products`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": true
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\admin\\purchase-orders\\",
+  "lines": 662,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/purchases`",
+   "`${config.apiUrl}/suppliers`",
+   "`${config.apiUrl}/inventory/products`",
+   "`${config.apiUrl}/purchases/export/csv`",
+   "`${config.apiUrl}/purchases/import/csv`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": true,
+  "hasEmptyState": true,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\admin\\receipts\\",
+  "lines": 438,
+  "methods": "POSTx1,DELETEx1",
+  "endpoints": [
+   "`${config.apiUrl}/receipts/templates`",
+   "`${config.apiUrl}/receipts/templates/${id}`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": true
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\admin\\reconciliation\\",
+  "lines": 381,
+  "methods": "POSTx1",
+  "endpoints": [
+   "`${config.apiUrl}/financial/reconciliation/history`",
+   "`${config.apiUrl}/financial/reconciliation/stats`",
+   "`${config.apiUrl}/financial/reconciliation`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\admin\\reports\\",
+  "lines": 52,
+  "methods": "-",
+  "endpoints": [],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\admin\\returns\\",
+  "lines": 389,
+  "methods": "PUTx2",
+  "endpoints": [
+   "`${config.apiUrl}/returns`",
+   "`${config.apiUrl}/returns/${returnId}/approve`",
+   "`${config.apiUrl}/returns/${returnId}/reject`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\admin\\sales-analytics\\",
+  "lines": 235,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/sales/daily-sales/${today}`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": true,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\admin\\settings\\tax\\",
+  "lines": 395,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/shop-settings/${shop?.id}`",
+   "`${config.apiUrl}/shop-settings/${shop.id}`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\admin\\staff-assignment\\",
+  "lines": 314,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/users`",
+   "`${config.apiUrl}/branches`",
+   "`${config.apiUrl}/staff-assignment/assign`",
+   "`${config.apiUrl}/staff-assignment/remove`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": true,
+  "hasEmptyState": true,
+  "hasConfirm": true
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\admin\\staff-monitoring\\",
+  "lines": 755,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/activity?limit=100${branchQuery}`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": true,
+  "hasEmptyState": true,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\admin\\stock-transfer\\",
+  "lines": 9,
+  "methods": "-",
+  "endpoints": [],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\admin\\stock-transfers\\",
+  "lines": 1193,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/stock-transfers?${params}`",
+   "`${config.apiUrl}/stock-transfers/stats`",
+   "`${config.apiUrl}/branches/active`",
+   "`${config.apiUrl}/inventory/products?${params.toString()}`",
+   "`${config.apiUrl}/stock-transfers`",
+   "`${config.apiUrl}/stock-transfers/${transferId}/${action}`",
+   "`${config.apiUrl}/stock-transfers/${viewTransfer._id}/receive`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": true,
+  "hasEmptyState": true,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\admin\\suppliers\\",
+  "lines": 590,
+  "methods": "-",
+  "endpoints": [],
+  "usesApiClient": true,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": true,
+  "hasEmptyState": true,
+  "hasConfirm": true
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\auth\\callback\\",
+  "lines": 274,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/auth/oauth/exchange`",
+   "`${config.apiUrl}/auth/clear-cookies`",
+   "`${config.apiUrl}/shops/my-shop`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": true,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\auth\\cashier-google-signup\\",
+  "lines": 434,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/auth/oauth/exchange`",
+   "`${config.apiUrl}/shops`",
+   "`${config.apiUrl}/auth/link-google-cashier`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": true,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\branch-manager\\dashboard\\",
+  "lines": 265,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/branches/${branchId}`",
+   "`${config.apiUrl}/sales/branch/${branchId}/daily-sales/${today}`",
+   "`${config.apiUrl}/inventory/branch/${branchId}/stats`",
+   "`${config.apiUrl}/purchases/branch/${branchId}/stats`",
+   "`${config.apiUrl}/staff-assignment/branch/${branchId}`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": true,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\cashier\\checkout\\",
+  "lines": 149,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/sales/checkout`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\cashier\\dashboard\\",
+  "lines": 575,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/shifts/current`",
+   "`${config.apiUrl}/shifts/${data._id}/sales`",
+   "`${config.apiUrl}/sales/cashier-stats`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": true,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\cashier\\pos\\",
+  "lines": 247,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/inventory/products?limit=200${branchParam}`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\cashier\\receipt\\",
+  "lines": 88,
+  "methods": "-",
+  "endpoints": [],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\cashier\\shift-end\\",
+  "lines": 530,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/shifts/current`",
+   "`${config.apiUrl}/shifts/${data._id}/sales`",
+   "`${config.apiUrl}/shifts/${data._id}/stats`",
+   "`${config.apiUrl}/shifts/clock-out`",
+   "`${config.apiUrl}/shifts/${shift._id}/reconcile`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": true,
+  "hasEmptyState": true,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\cashier\\shift-start\\",
+  "lines": 182,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/shifts/clock-in`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": true,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\cashier\\void-refund\\",
+  "lines": 190,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/transactions/void`",
+   "`${config.apiUrl}/transactions/refund`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": true,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\customers\\",
+  "lines": 450,
+  "methods": "DELETEx1",
+  "endpoints": [
+   "`${base}/customers${branchParam}`",
+   "`${base}/customers/${deletingCustomer._id}`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": true,
+  "hasConfirm": true
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\customers\\[id]\\",
+  "lines": 325,
+  "methods": "-",
+  "endpoints": [
+   "`${apiUrl}/customers/${customerId}/stats`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\forgot-password\\",
+  "lines": 136,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/auth/forgot-password`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": true,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\help\\",
+  "lines": 375,
+  "methods": "-",
+  "endpoints": [],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": false,
+  "hasEmptyState": true,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\inbox\\",
+  "lines": 780,
+  "methods": "-",
+  "endpoints": [],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\inventory\\[id]\\edit\\",
+  "lines": 597,
+  "methods": "PUTx1",
+  "endpoints": [
+   "`${apiUrl}/inventory/products/${productId}`",
+   "`${apiUrl}/inventory/categories`",
+   "`${apiUrl}/suppliers`",
+   "`${apiUrl}/shop-settings/${shop?.id}/business-type-config`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": true,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\inventory\\[id]\\",
+  "lines": 524,
+  "methods": "DELETEx1",
+  "endpoints": [
+   "`${apiUrl}/inventory/products/${productId}`",
+   "`${apiUrl}/inventory/stock/movements/${productId}?limit=10`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\login\\",
+  "lines": 778,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/auth/oauth/exchange`",
+   "`${config.apiUrl}/auth/google/status`",
+   "`${base}/shops`",
+   "`${config.apiUrl}/auth/verify-login-otp`",
+   "`${config.apiUrl}/auth/resend-login-otp`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": true,
+  "hasEmptyState": true,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\onboarding\\",
+  "lines": 290,
+  "methods": "POSTx1,PUTx1",
+  "endpoints": [
+   "`${base}/shops/${shop?.id}`",
+   "`${base}/shops/${shop?.id}/complete-onboarding`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": true,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\orders\\",
+  "lines": 612,
+  "methods": "-",
+  "endpoints": [
+   "`${base}/sales/orders?${params.toString()}`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": true,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\",
+  "lines": 761,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/stripe/config`",
+   "`${config.apiUrl}/stripe/donation/create-payment`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": true,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\payments\\",
+  "lines": 629,
+  "methods": "-",
+  "endpoints": [
+   "`${base}/payments/export?${params.toString()}`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": true,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\pos\\",
+  "lines": 2537,
+  "methods": "POSTx5",
+  "endpoints": [
+   "`${config.apiUrl}/shifts/current`",
+   "`${config.apiUrl}/inventory/categories`",
+   "`${base}/shop-settings/${shop.id}`",
+   "`${base}/shop-settings/${shop.id}/business-type-config`",
+   "`${base}/sales/checkout-capabilities`",
+   "`${config.apiUrl}/payments/mpesa/config/status`",
+   "`${config.apiUrl}/stripe/connect/status`",
+   "`${config.apiUrl}/inventory/products/barcode/${encodeURIComponent(trimmedBarcode)}`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": true,
+  "hasEmptyState": true,
+  "hasConfirm": true
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\purchases\\new\\",
+  "lines": 489,
+  "methods": "POSTx2",
+  "endpoints": [
+   "`${config.apiUrl}/suppliers/active`",
+   "`${config.apiUrl}/suppliers`",
+   "`${config.apiUrl}/inventory/products`",
+   "`${config.apiUrl}/purchases`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": false,
+  "hasEmptyState": true,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\purchases\\",
+  "lines": 251,
+  "methods": "-",
+  "endpoints": [],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": true,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\purchases\\[id]\\",
+  "lines": 217,
+  "methods": "-",
+  "endpoints": [
+   "`${apiUrl}/purchases/${purchaseId}`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\purchases\\[id]\\receive\\",
+  "lines": 204,
+  "methods": "PUTx1",
+  "endpoints": [
+   "`${apiUrl}/purchases/${purchaseId}`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\register-shop\\",
+  "lines": 1633,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/auth/google/status`",
+   "`${config.apiUrl}/auth/oauth/exchange`",
+   "`${config.apiUrl}/auth/send-otp`",
+   "`${config.apiUrl}/auth/verify-otp`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": true,
+  "hasEmptyState": true,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\reports\\monthly\\",
+  "lines": 225,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/reports/monthly-sales?month=${selectedMonth}`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\reports\\",
+  "lines": 211,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/sales/daily-sales/${date}`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\reports\\trends\\",
+  "lines": 307,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/reports/trends?period=${period}`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\reports\\weekly\\",
+  "lines": 226,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/reports/weekly-sales?week=${selectedWeek}`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\reset-password\\",
+  "lines": 190,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/auth/reset-password`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": true,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\select-plan\\",
+  "lines": 365,
+  "methods": "-",
+  "endpoints": [],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": true,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\settings\\billing\\",
+  "lines": 382,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/subscriptions/billing/history?limit=100&status=paid`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": true,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\settings\\invoices\\",
+  "lines": 402,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/subscriptions/billing/history?limit=100`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": true,
+  "hasEmptyState": true,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\settings\\",
+  "lines": 3052,
+  "methods": "POSTx2,PUTx1,PATCHx1",
+  "endpoints": [
+   "`${config.apiUrl}/shops/currency-policy`",
+   "`${config.apiUrl}/users/${user.sub}`",
+   "`${config.apiUrl}/users/me/profile`",
+   "`${base}/shops/my-shop`",
+   "`${config.apiUrl}/users/me/send-password-change-otp`",
+   "`${config.apiUrl}/users/me/change-password`",
+   "`${config.apiUrl}/subscriptions/payments/manual/confirm`",
+   "`${config.apiUrl}/stripe/config`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": true,
+  "hasEmptyState": true,
+  "hasConfirm": true
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\signup\\",
+  "lines": 304,
+  "methods": "POSTx1",
+  "endpoints": [
+   "`${config.apiUrl}/auth/google/status`",
+   "`${config.apiUrl}/users`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": true,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\stock\\adjustments\\",
+  "lines": 489,
+  "methods": "POSTx1",
+  "endpoints": [
+   "`${config.apiUrl}/stock/adjustments`",
+   "`${config.apiUrl}/inventory/products?limit=200`",
+   "`${config.apiUrl}/stock/adjustments/summary`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": true,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\super-admin\\communications\\",
+  "lines": 1465,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/super-admin/communications/shops`",
+   "`${config.apiUrl}/super-admin/communications/invoices?${params}`",
+   "`${config.apiUrl}/super-admin/communications/invoices/${id}/send-email`",
+   "`${config.apiUrl}/super-admin/communications/email/send`",
+   "`${config.apiUrl}/super-admin/communications/invoices`",
+   "`${config.apiUrl}/super-admin/communications/invoices/${invoiceId}/send-email`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": true,
+  "hasEmptyState": true,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\super-admin\\dashboard\\",
+  "lines": 483,
+  "methods": "-",
+  "endpoints": [],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\super-admin\\devices\\",
+  "lines": 324,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/super-admin/devices?${params}`",
+   "`${config.apiUrl}/super-admin/devices/stats`",
+   "`${config.apiUrl}/super-admin/devices/revoke`",
+   "`${config.apiUrl}/super-admin/devices/deactivate`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": true,
+  "hasEmptyState": false,
+  "hasConfirm": true
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\super-admin\\email-logs\\",
+  "lines": 375,
+  "methods": "-",
+  "endpoints": [
+   "`/api/admin/emails/logs?${params}`",
+   "'/api/admin/emails/stats'",
+   "'/api/admin/emails/templates'",
+   "`/api/admin/emails/logs/${id}/retry`",
+   "`/api/admin/emails/logs/${id}`",
+   "'/api/admin/emails/export/csv'"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": true,
+  "hasConfirm": true
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\super-admin\\email-settings\\",
+  "lines": 345,
+  "methods": "-",
+  "endpoints": [
+   "'/api/admin/emails/config/status'",
+   "'/api/admin/emails/config/test-connection'"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": true,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\super-admin\\emails\\",
+  "lines": 1333,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/admin/emails/stats`",
+   "`${config.apiUrl}/admin/emails/config/status`",
+   "`${config.apiUrl}/admin/emails/logs?${params}`",
+   "`${config.apiUrl}/admin/emails/logs?limit=10`",
+   "`${config.apiUrl}/admin/emails/templates`",
+   "`${config.apiUrl}/admin/emails/test`",
+   "`${config.apiUrl}/admin/emails/templates/${templateName}/toggle`",
+   "`${config.apiUrl}/admin/emails/templates/${template.name}/preview`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": true,
+  "hasEmptyState": true,
+  "hasConfirm": true
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\super-admin\\inbox\\",
+  "lines": 475,
+  "methods": "-",
+  "endpoints": [],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\super-admin\\",
+  "lines": 463,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/super-admin/dashboard/stats`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\super-admin\\payments\\",
+  "lines": 1579,
+  "methods": "-",
+  "endpoints": [],
+  "usesApiClient": true,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": true,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\super-admin\\settings\\",
+  "lines": 718,
+  "methods": "-",
+  "endpoints": [],
+  "usesApiClient": true,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": true,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\super-admin\\shops\\",
+  "lines": 807,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/super-admin/shops/${shopId}/verify`",
+   "`${config.apiUrl}/super-admin/shops/${shopId}/reject`",
+   "`${config.apiUrl}/super-admin/shops/${shopId}/suspend`",
+   "`${config.apiUrl}/super-admin/shops/${shopId}/reactivate`",
+   "`${config.apiUrl}/super-admin/shops/${shopToDelete._id}`",
+   "`${config.apiUrl}/super-admin/shops/${shopToPermanentDelete._id}/permanent`",
+   "`${config.apiUrl}/super-admin/shops/${shopId}/restore`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": true,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\super-admin\\shops\\[id]\\",
+  "lines": 460,
+  "methods": "-",
+  "endpoints": [
+   "`${base}/super-admin/shops/${shopId}`",
+   "`${base}/super-admin/shops/${shopId}/suspend`",
+   "`${base}/super-admin/shops/${shopId}/reactivate`",
+   "`${base}/super-admin/shops/${shopId}/flag`",
+   "`${base}/super-admin/shops/${shopId}/unflag`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\super-admin\\subscriptions\\",
+  "lines": 1284,
+  "methods": "-",
+  "endpoints": [],
+  "usesApiClient": true,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": true,
+  "hasConfirm": true
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\super-admin\\support\\",
+  "lines": 352,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/support/admin/tickets?status=${activeTab}`",
+   "`${config.apiUrl}/support/admin/tickets/${ticketId}/status`",
+   "`${config.apiUrl}/support/tickets/${ticketId}/messages`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\suppliers\\",
+  "lines": 362,
+  "methods": "DELETEx1",
+  "endpoints": [
+   "`${base}/suppliers${branchParam}`",
+   "`${base}/suppliers/${deletingSupplier._id}`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": true,
+  "hasConfirm": true
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\support\\",
+  "lines": 252,
+  "methods": "-",
+  "endpoints": [],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\users\\cashiers\\",
+  "lines": 480,
+  "methods": "POSTx2,PUTx1,DELETEx1",
+  "endpoints": [
+   "`${config.apiUrl}/users/shop/${shop.id}/cashiers`",
+   "`${config.apiUrl}/users/cashier`",
+   "`${config.apiUrl}/users/${cashierId}/reset-pin`",
+   "`${config.apiUrl}/users/${cashierId}`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": true,
+  "hasEmptyState": false,
+  "hasConfirm": true
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\users\\",
+  "lines": 357,
+  "methods": "-",
+  "endpoints": [
+   "`${config.apiUrl}/users`"
+  ],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": true,
+  "hasErrorState": false,
+  "hasEmptyState": true,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\verification-pending\\",
+  "lines": 427,
+  "methods": "-",
+  "endpoints": [],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ },
+ {
+  "route": "X:\\Builds\\SmartDuka-main\\apps\\web\\src\\app\\verification-rejected\\",
+  "lines": 215,
+  "methods": "-",
+  "endpoints": [],
+  "usesApiClient": false,
+  "usesErrorHandler": false,
+  "hasLoading": false,
+  "hasErrorState": false,
+  "hasEmptyState": false,
+  "hasConfirm": false
+ }
+]
