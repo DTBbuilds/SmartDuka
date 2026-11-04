@@ -15,6 +15,7 @@ import { SubscriptionInvoice, SubscriptionInvoiceDocument, InvoiceStatus, Invoic
 import { Shop, ShopDocument } from '../shops/schemas/shop.schema';
 import { Product, ProductDocument } from '../inventory/schemas/product.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
+import { Branch, BranchDocument } from '../branches/branch.schema';
 import {
   CreateSubscriptionDto,
   ChangePlanDto,
@@ -61,6 +62,8 @@ export class SubscriptionsService {
     private readonly productModel: Model<ProductDocument>,
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
+    @InjectModel(Branch.name)
+    private readonly branchModel: Model<BranchDocument>,
     @InjectModel(SystemConfig.name)
     private readonly systemConfigModel: Model<SystemConfigDocument>,
     private readonly configService: ConfigService,
@@ -2489,7 +2492,7 @@ export class SubscriptionsService {
 
     try {
       // Count actual resources for this shop
-      const [productCount, employeeCount, shopCount] = await Promise.all([
+      const [productCount, employeeCount, branchCount] = await Promise.all([
         // Count products for this shop
         this.productModel.countDocuments({ shopId: new Types.ObjectId(shopId) }),
         // Count employees (users with role 'employee' or 'cashier' for this shop)
@@ -2497,9 +2500,15 @@ export class SubscriptionsService {
           shopId: new Types.ObjectId(shopId),
           role: { $in: ['employee', 'cashier', 'manager'] },
         }),
-        // Count shops/branches (for now, just 1 per subscription - could expand to branches)
-        1, // Each subscription is for one shop, branches would be counted separately
+        // ERROR-UX-RELIABILITY1 (PR C): the shops/branches quota counts the
+        // MAIN SHOP plus every branch — the previous hardcode of 1 silently
+        // reset branch-incremented counts on every sync, corrupting the
+        // quota (over-provisioning on multi-branch plans) and the display.
+        1 + (await this.branchModel.countDocuments({
+          shopId: new Types.ObjectId(shopId),
+        })),
       ]);
+      const shopCount = branchCount;
 
       // Only update and log if counts actually changed (prevents duplicate logs)
       const hasChanges = 
@@ -2524,18 +2533,20 @@ export class SubscriptionsService {
    * Get current usage counts for a shop (real-time from database)
    */
   async getUsageCounts(shopId: string): Promise<{ products: number; employees: number; shops: number }> {
-    const [productCount, employeeCount] = await Promise.all([
+    const [productCount, employeeCount, branchCount] = await Promise.all([
       this.productModel.countDocuments({ shopId: new Types.ObjectId(shopId) }),
       this.userModel.countDocuments({ 
         shopId: new Types.ObjectId(shopId),
         role: { $in: ['employee', 'cashier', 'manager'] },
       }),
+      // ERROR-UX-RELIABILITY1 (PR C): main shop + branches — was hardcoded 1.
+      this.branchModel.countDocuments({ shopId: new Types.ObjectId(shopId) }),
     ]);
 
     return {
       products: productCount,
       employees: employeeCount,
-      shops: 1, // Each subscription is for one shop
+      shops: 1 + branchCount,
     };
   }
 

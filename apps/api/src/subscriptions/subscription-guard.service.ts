@@ -109,10 +109,29 @@ export class SubscriptionGuardService {
       current,
       limit,
       remaining,
-      message: allowed 
-        ? undefined 
-        : `You have reached your ${resourceName} limit (${current}/${limit}). Upgrade your plan to add more.`,
+      message: allowed
+        ? undefined
+        : this.limitMessage(resource, resourceName, current, limit),
     };
+  }
+
+  /**
+   * ERROR-UX-RELIABILITY1 (PR C): the limit message must explain what the
+   * quota counts — for shops/branches the MAIN SHOP consumes one slot, so
+   * "(1/1)" on a one-location plan is the main shop, not a malfunction.
+   */
+  private limitMessage(
+    resource: ResourceType,
+    resourceName: string,
+    current: number,
+    limit: number,
+  ): string {
+    if (resource === 'shops') {
+      return current >= 1
+        ? `Your plan includes ${limit} location${limit === 1 ? '' : 's'} — your main shop and any branches together count toward this limit (${current}/${limit} used). Upgrade your plan to add more.`
+        : `You have reached your ${resourceName} limit (${current}/${limit}). Upgrade your plan to add more.`;
+    }
+    return `You have reached your ${resourceName} limit (${current}/${limit}). Upgrade your plan to add more.`;
   }
 
   /**
@@ -129,6 +148,95 @@ export class SubscriptionGuardService {
       this.logger.warn(`Limit exceeded for shop ${shopId}: ${resource} (${result.current}/${result.limit})`);
       throw new ForbiddenException(result.message);
     }
+  }
+
+  /**
+   * ERROR-UX-RELIABILITY1 (PR C): ATOMIC usage claim for resource creation.
+   *
+   * The previous create path was check-then-act (`enforceLimit` → create →
+   * `incrementUsage`): two concurrent creations both passed the check and
+   * both incremented — the limit could be exceeded. The claim is a single
+   * conditional update: the increment lands ONLY while the stored count
+   * still has room, so exactly one of N concurrent creators wins.
+   *
+   * Callers MUST release the claim if the resource creation itself fails.
+   */
+  async claimUsage(
+    shopId: string,
+    resource: ResourceType,
+    increment = 1,
+  ): Promise<LimitCheckResult & { claimed: boolean }> {
+    const base = await this.checkLimit(shopId, resource, increment);
+    if (!base.allowed) {
+      return { ...base, claimed: false };
+    }
+
+    const field =
+      resource === 'shops'
+        ? 'currentShopCount'
+        : resource === 'employees'
+          ? 'currentEmployeeCount'
+          : 'currentProductCount';
+
+    const updated = await this.subscriptionModel
+      .findOneAndUpdate(
+        {
+          shopId: new Types.ObjectId(shopId),
+          [field]: { $lte: base.limit - increment },
+        },
+        { $inc: { [field]: increment } },
+        { new: true },
+      )
+      .exec();
+
+    if (!updated) {
+      // Lost a concurrent race — re-read for an honest message.
+      const recheck = await this.checkLimit(shopId, resource, increment);
+      return { ...recheck, claimed: false };
+    }
+
+    return {
+      claimed: true,
+      allowed: true,
+      current: (updated as any)[field] || 0,
+      limit: base.limit,
+      remaining: Math.max(0, base.limit - ((updated as any)[field] || 0)),
+    };
+  }
+
+  /**
+   * Release a previously claimed usage slot (creation failed or the resource
+   * was deleted). Floors at 0 — a deletion storm must never drive the count
+   * negative (a negative count silently GRANTS extra quota).
+   */
+  async releaseUsage(
+    shopId: string,
+    resource: ResourceType,
+    count = 1,
+  ): Promise<void> {
+    const field =
+      resource === 'shops'
+        ? 'currentShopCount'
+        : resource === 'employees'
+          ? 'currentEmployeeCount'
+          : 'currentProductCount';
+
+    await this.subscriptionModel
+      .updateOne(
+        { shopId: new Types.ObjectId(shopId) },
+        [
+          {
+            $set: {
+              [field]: {
+                $max: [0, { $subtract: [`$${field}`, count] }],
+              },
+            },
+          },
+        ],
+      )
+      .exec();
+
+    this.logger.log(`Released ${resource} count for shop ${shopId}: -${count} (floored at 0)`);
   }
 
   /**
@@ -159,28 +267,12 @@ export class SubscriptionGuardService {
 
   /**
    * Decrement usage count after deletion
+   *
+   * ERROR-UX-RELIABILITY1 (PR C): floored at 0 — the previous raw `$inc`
+   * could drive counts negative, silently granting extra quota.
    */
   async decrementUsage(shopId: string, resource: ResourceType, count = 1): Promise<void> {
-    const update: Record<string, number> = {};
-    
-    switch (resource) {
-      case 'shops':
-        update.currentShopCount = -count;
-        break;
-      case 'employees':
-        update.currentEmployeeCount = -count;
-        break;
-      case 'products':
-        update.currentProductCount = -count;
-        break;
-    }
-
-    await this.subscriptionModel.updateOne(
-      { shopId: new Types.ObjectId(shopId) },
-      { $inc: update },
-    );
-
-    this.logger.log(`Updated ${resource} count for shop ${shopId}: -${count}`);
+    return this.releaseUsage(shopId, resource, count);
   }
 
   /**

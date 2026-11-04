@@ -181,9 +181,34 @@ export class BranchesService {
     userId: string,
     dto: CreateBranchDto,
   ): Promise<BranchDocument> {
-    // Enforce shop/branch limit
-    await this.subscriptionGuard.enforceLimit(shopId, 'shops');
+    // ERROR-UX-RELIABILITY1 (PR C): ATOMIC limit claim — the previous
+    // check-then-act (enforceLimit → create → incrementUsage) let two
+    // concurrent creations both pass the check and exceed the plan's
+    // location quota. The claim lands the increment conditionally; the
+    // creation releases it if it fails.
+    const claim = await this.subscriptionGuard.claimUsage(shopId, 'shops');
+    if (!claim.claimed) {
+      throw new ForbiddenException(
+        claim.message ||
+          'You have reached your shops/branches limit. Upgrade your plan to add more.',
+      );
+    }
 
+    try {
+      return await this.createBranchInternal(shopId, userId, dto);
+    } catch (error) {
+      await this.subscriptionGuard
+        .releaseUsage(shopId, 'shops')
+        .catch(() => undefined);
+      throw error;
+    }
+  }
+
+  private async createBranchInternal(
+    shopId: string,
+    userId: string,
+    dto: CreateBranchDto,
+  ): Promise<BranchDocument> {
     // Check if code already exists for this shop
     const existing = await this.branchModel.findOne({
       shopId: new Types.ObjectId(shopId),
@@ -247,9 +272,6 @@ export class BranchesService {
 
     const branch = new this.branchModel(branchData);
     const created = await branch.save();
-
-    // Update usage count
-    await this.subscriptionGuard.incrementUsage(shopId, 'shops');
 
     // Log audit trail (mask sensitive data)
     const auditData = { ...created.toObject() };

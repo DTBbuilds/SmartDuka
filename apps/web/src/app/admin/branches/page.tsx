@@ -32,7 +32,15 @@ export default function BranchesPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [dialogError, setDialogError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  // ERROR-UX-RELIABILITY1 (PR C): real location quota from the backend —
+  // the main shop + branches count toward the plan's location limit.
+  const [locationUsage, setLocationUsage] = useState<{
+    current: number;
+    limit: number;
+  } | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     code: '',
@@ -43,7 +51,24 @@ export default function BranchesPage() {
 
   useEffect(() => {
     fetchBranches();
+    fetchLocationUsage();
   }, []);
+
+  const fetchLocationUsage = async () => {
+    try {
+      const res = await fetch(`${config.apiUrl}/subscriptions/limits/shops`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
+      if (res.ok) {
+        setLocationUsage({ current: data.current, limit: data.limit });
+      }
+    } catch {
+      // Non-critical indicator — silently absent when the endpoint is
+      // unavailable; the backend still enforces the real limit.
+    }
+  };
 
   const fetchBranches = async () => {
     try {
@@ -73,6 +98,7 @@ export default function BranchesPage() {
   const handleAdd = () => {
     setEditingBranch(null);
     setFormData({ name: '', code: '', address: '', phone: '', email: '' });
+    setDialogError(null);
     setIsDialogOpen(true);
   };
 
@@ -85,15 +111,20 @@ export default function BranchesPage() {
       phone: branch.phone || '',
       email: branch.email || '',
     });
+    setDialogError(null);
     setIsDialogOpen(true);
   };
 
   const handleSubmit = async () => {
+    if (isSubmitting) return;
+
     if (!formData.name || !formData.code) {
-      setError('Please fill in required fields (Name, Code)');
+      setDialogError('Please fill in required fields (Name, Code)');
       return;
     }
 
+    setIsSubmitting(true);
+    setDialogError(null);
     try {
       const url = editingBranch
         ? `${config.apiUrl}/branches/${editingBranch._id}`
@@ -112,17 +143,30 @@ export default function BranchesPage() {
       if (res.ok) {
         setSuccess(editingBranch ? 'Branch updated successfully' : 'Branch created successfully');
         await fetchBranches();
+        await fetchLocationUsage();
         setIsDialogOpen(false);
         setError(null);
         setTimeout(() => setSuccess(null), 3000);
       } else {
         const errText = await res.text();
-        const errorData = errText ? JSON.parse(errText) : {};
-        setError(errorData.message || 'Failed to save branch');
+        let errorData: any = {};
+        try {
+          errorData = errText ? JSON.parse(errText) : {};
+        } catch {
+          errorData = {};
+        }
+        // ERROR-UX-RELIABILITY1 (PR C): the limit error (and every other
+        // submit failure) renders INSIDE the dialog — it previously landed
+        // on the page BEHIND the open dialog overlay and was invisible.
+        setDialogError(
+          errorData.message || 'Failed to save branch. Please try again.',
+        );
       }
     } catch (error) {
       console.error('Failed to save branch:', error);
-      setError('Failed to save branch');
+      setDialogError('Could not reach the server. Check your connection and try again.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -155,6 +199,12 @@ export default function BranchesPage() {
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Branch Management</h1>
           <p className="text-muted-foreground mt-1 text-sm">Manage your shop branches and locations</p>
+          {locationUsage && (
+            <p className="text-xs text-muted-foreground mt-1">
+              Locations used: {locationUsage.current}/{locationUsage.limit}
+              {' '}— your main shop and branches together count toward your plan's location limit.
+            </p>
+          )}
         </div>
         <Button onClick={handleAdd} className="gap-2 w-full sm:w-auto">
           <Plus className="h-4 w-4" />
@@ -279,6 +329,12 @@ export default function BranchesPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            {dialogError && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{dialogError}</AlertDescription>
+              </Alert>
+            )}
             <div className="space-y-2">
               <Label htmlFor="name">Branch Name *</Label>
               <Input
@@ -331,8 +387,17 @@ export default function BranchesPage() {
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSubmit}>
-              {editingBranch ? 'Update' : 'Create'} Branch
+            <Button onClick={handleSubmit} disabled={isSubmitting}>
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : editingBranch ? (
+                'Update Branch'
+              ) : (
+                'Create Branch'
+              )}
             </Button>
           </div>
         </DialogContent>

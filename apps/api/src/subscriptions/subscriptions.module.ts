@@ -25,6 +25,7 @@ import { BillingEffectsReconciliationService } from './services/billing-effects-
 import { Shop, ShopSchema } from '../shops/schemas/shop.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { Product, ProductSchema } from '../inventory/schemas/product.schema';
+import { Branch, BranchSchema } from '../branches/branch.schema';
 import { SystemConfig, SystemConfigSchema } from '../super-admin/schemas/system-config.schema';
 import { PaymentsModule } from '../payments/payments.module';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -39,6 +40,9 @@ import { NotificationsModule } from '../notifications/notifications.module';
       { name: Shop.name, schema: ShopSchema },
       { name: User.name, schema: UserSchema },
       { name: Product.name, schema: ProductSchema },
+      // ERROR-UX-RELIABILITY1 (PR C): branch counts are part of the
+      // shops/branches quota — the usage sync must count them.
+      { name: Branch.name, schema: BranchSchema },
       { name: SystemConfig.name, schema: SystemConfigSchema },
       { name: PaymentAttempt.name, schema: PaymentAttemptSchema },
       { name: ActivityLog.name, schema: ActivityLogSchema },
