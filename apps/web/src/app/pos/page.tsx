@@ -1175,7 +1175,7 @@ function POSContent() {
     };
 
     const res = await fetch(`${config.apiUrl}/sales/checkout`, {
-      method: "POST",
+      method: "POST", signal: AbortSignal.timeout(30000),
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${token}`,
@@ -1275,7 +1275,7 @@ function POSContent() {
         };
 
         const res = await fetch(`${config.apiUrl}/sales/checkout`, {
-          method: "POST",
+          method: "POST", signal: AbortSignal.timeout(30000),
           headers: {
             "Content-Type": "application/json",
             "Authorization": `Bearer ${token}`,
@@ -1312,9 +1312,17 @@ function POSContent() {
         setFeedbackType(null);
       } catch (err: any) {
         setIsCheckingOut(false);
+        // ERROR-UX-RELEASE-GATE1 Phase 3: a checkout timeout is AMBIGUOUS —
+        // the request may have reached the server and created the order.
+        // Never present it as a plain failure safe to resubmit.
+        const ambiguous =
+          err?.name === 'TimeoutError' || err?.name === 'AbortError';
+        const checkoutErrorText = ambiguous
+          ? 'The checkout request timed out. The order may or may not have been created — check Orders before attempting checkout again.'
+          : err?.message || 'Failed to create order';
         setFeedbackType('error');
-        setFeedbackMessage(err?.message || 'Failed to create order');
-        toast({ type: 'error', title: 'Order failed', message: err?.message });
+        setFeedbackMessage(checkoutErrorText);
+        toast({ type: 'error', title: 'Order failed', message: checkoutErrorText });
       }
     } else if (paymentMethod === 'card' || paymentMethod === 'stripe') {
       // P0-10D: the canonical pending order AND the Stripe PaymentIntent
@@ -1574,7 +1582,7 @@ function POSContent() {
         ...(tableNumber && { tableNumber }),
       };
       const res = await fetch(`${config.apiUrl}/sales/checkout`, {
-        method: "POST",
+        method: "POST", signal: AbortSignal.timeout(30000),
         headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${token}`,
@@ -1787,7 +1795,13 @@ function POSContent() {
         }, 2000);
         refreshPendingCount();
       } else {
-        const errorMsg = err?.message ?? "Checkout failed";
+        // ERROR-UX-RELEASE-GATE1 Phase 3: ambiguous-outcome honesty for
+        // timeouts (the request may have reached the server).
+        const ambiguous =
+          err?.name === 'TimeoutError' || err?.name === 'AbortError';
+        const errorMsg = ambiguous
+          ? 'The checkout request timed out. The order may or may not have been created — check Orders before attempting checkout again.'
+          : err?.message ?? 'Checkout failed';
         setCheckoutError(errorMsg);
         setFeedbackType('error');
         setFeedbackMessage(errorMsg);
@@ -1949,7 +1963,7 @@ function POSContent() {
         try {
           const payload = { ...order.payload, status: "completed", isOffline: false };
           const res = await fetch(`${config.apiUrl}/sales/checkout`, {
-            method: "POST",
+            method: "POST", signal: AbortSignal.timeout(30000),
             headers: {
               "Content-Type": "application/json",
               "Authorization": `Bearer ${token}`,
