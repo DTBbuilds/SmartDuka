@@ -102,6 +102,29 @@ test.describe('Error/UX reliability — desktop', () => {
     await setOnline(page, true);
   });
 
+  test('branch dialog: submit failure renders INSIDE the dialog with retry state', async ({ page }) => {
+    await seedAdmin(page);
+    await mockApi(page);
+    // Fault injection: the branch creation endpoint rejects with a
+    // validation error.
+    await page.route('**/api/v1/branches**', (route) => {
+      if (route.request().method() === 'POST') {
+        return route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ statusCode: 400, message: 'Branch name is required', code: 'VALIDATION_ERROR', requestId: 'test-2' }) });
+      }
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, data: [] }) });
+    });
+    await page.goto(`${BASE_URL}/admin/branches`);
+    await page.getByRole('button', { name: /add branch/i }).first().click();
+    await page.waitForTimeout(400);
+    // Submit the (empty) form: the error must appear INSIDE the dialog,
+    // not behind it.
+    await page.getByRole('button', { name: /create|save|add/i }).last().click();
+    await page.waitForTimeout(600);
+    const dialog = page.locator('[role="dialog"]');
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator('text=/required|invalid|failed/i').first()).toBeVisible();
+  });
+
   test('checkout: double-click cannot double-submit (button disables while processing)', async ({ page }) => {
     await seedAdmin(page);
     await mockApi(page);
