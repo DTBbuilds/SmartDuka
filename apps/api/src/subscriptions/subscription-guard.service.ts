@@ -16,8 +16,10 @@ export type ResourceType = 'shops' | 'employees' | 'products';
 export interface LimitCheckResult {
   allowed: boolean;
   current: number;
-  limit: number;
-  remaining: number;
+  // ERROR-UX-RELEASE-GATE1 Phase 2: null = the plan does not cap this
+  // resource (unlimited — the Free Plan — Full Access lever).
+  limit: number | null;
+  remaining: number | null;
   message?: string;
 }
 
@@ -365,9 +367,9 @@ export class SubscriptionGuardService {
    * Get current usage for a shop
    */
   async getUsage(shopId: string): Promise<{
-    shops: { current: number; limit: number };
-    employees: { current: number; limit: number };
-    products: { current: number; limit: number };
+    shops: { current: number; limit: number | null };
+    employees: { current: number; limit: number | null };
+    products: { current: number; limit: number | null };
   } | null> {
     const subscription = await this.subscriptionModel.findOne({
       shopId: new Types.ObjectId(shopId),

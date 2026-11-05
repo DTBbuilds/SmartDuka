@@ -30,7 +30,7 @@ interface JwtPayload {
 
 /**
  * WebSocket Gateway for real-time subscription and payment updates
- * 
+ *
  * Channels:
  * - shop:{shopId} - For shop-specific events (user subscription page)
  * - admin - For super admin dashboard events
@@ -56,7 +56,10 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   server: Server;
 
   private readonly logger = new Logger(EventsGateway.name);
-  private connectedClients: Map<string, { socket: Socket; userId: string; shopId?: string; role: string }> = new Map();
+  private connectedClients: Map<
+    string,
+    { socket: Socket; userId: string; shopId?: string; role: string }
+  > = new Map();
 
   constructor(private readonly jwtService: JwtService) {}
 
@@ -75,21 +78,37 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('subscribe')
   async handleSubscribe(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { shopId?: string; channel: 'shop' | 'admin'; token?: string }
+    @MessageBody()
+    data: { shopId?: string; channel: 'shop' | 'admin'; token?: string },
   ) {
     // Simple JWT verification for WebSocket
     let user: JwtPayload | null = null;
-    const token = data.token || client.handshake.auth?.token || client.handshake.query?.token;
-    
+    const token =
+      data.token ||
+      client.handshake.auth?.token ||
+      client.handshake.query?.token;
+
     if (token) {
       try {
-        user = this.jwtService.verify(token) as JwtPayload;
+        // The verified payload is validated for the required claims before
+        // use — a malformed token payload must not reach handlers typed as
+        // JwtPayload.
+        const verified = this.jwtService.verify(token) as {
+          sub?: string;
+          email?: string;
+          role?: string;
+          shopId?: string;
+        };
+        if (!verified?.sub || !verified?.email || !verified?.role) {
+          throw new Error('Token payload missing required claims');
+        }
+        user = verified as JwtPayload;
       } catch (error) {
         client.emit('error', { message: 'Invalid token' });
         return;
       }
     }
-    
+
     if (!user) {
       client.emit('error', { message: 'Authentication required' });
       return;
@@ -123,8 +142,10 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
    * Broadcast payment verification event
    */
   emitPaymentVerified(event: SubscriptionEvent) {
-    this.logger.log(`📡 Broadcasting payment verified for shop ${event.shopId}`);
-    
+    this.logger.log(
+      `📡 Broadcasting payment verified for shop ${event.shopId}`,
+    );
+
     // Emit to shop-specific room (for user who paid)
     this.server.to(`shop:${event.shopId}`).emit('payment:verified', {
       type: 'payment_verified',
@@ -150,8 +171,10 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
    * Broadcast subscription status change
    */
   emitSubscriptionUpdated(event: SubscriptionEvent) {
-    this.logger.log(`📡 Broadcasting subscription updated for shop ${event.shopId}`);
-    
+    this.logger.log(
+      `📡 Broadcasting subscription updated for shop ${event.shopId}`,
+    );
+
     // Emit to shop-specific room
     this.server.to(`shop:${event.shopId}`).emit('subscription:updated', {
       type: 'subscription_updated',
