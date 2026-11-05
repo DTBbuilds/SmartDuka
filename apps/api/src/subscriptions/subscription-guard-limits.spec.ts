@@ -233,4 +233,27 @@ describe('ERROR-UX-RELIABILITY1 PR C — subscription limit accounting', () => {
       /main shop/,
     );
   });
+
+  // ─── ERROR-UX-RELEASE-GATE1 Phase 2: the unlimited-plan convention ───
+  it('a plan with maxShops null is UNLIMITED: claims succeed and the count still increments (Free Plan — Full Access lever)', async () => {
+    const plan = await seedPlan(null as any);
+    await seedSubscription(plan._id, 1);
+    const first = await guard.claimUsage(SHOP.toString(), 'shops');
+    expect(first.claimed).toBe(true);
+    expect(first.allowed).toBe(true);
+    expect(first.limit).toBeNull();
+    const second = await guard.claimUsage(SHOP.toString(), 'shops');
+    expect(second.claimed).toBe(true);
+    const usage = await guard.getUsage(SHOP.toString());
+    expect(usage?.shops.limit).toBeNull();
+    expect(usage?.shops.current).toBe(3);
+  });
+
+  it('enforceLimit does not throw on an unlimited plan', async () => {
+    const plan = await seedPlan(null as any);
+    await seedSubscription(plan._id, 1);
+    await expect(
+      guard.enforceLimit(SHOP.toString(), 'shops'),
+    ).resolves.toBeUndefined();
+  });
 });

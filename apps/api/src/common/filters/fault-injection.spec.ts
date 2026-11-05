@@ -1,12 +1,26 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { Controller, Get, Post, Body, HttpCode, HttpStatus, Param } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  HttpCode,
+  HttpStatus,
+  Param,
+} from '@nestjs/common';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AllExceptionsFilter } from './all-exceptions.filter';
 import { RequestIdMiddleware } from '../middleware/request-id.middleware';
 import { HttpException, HttpStatus as Status } from '@nestjs/common';
-import { BadRequestException, ConflictException, ForbiddenException, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 
 /**
  * ERROR-UX-RELIABILITY1 (PR E) — fault-injected canonical error contract.
@@ -43,6 +57,7 @@ const faults: Record<string, () => never> = {
     );
   },
   'non-error-throw': () => {
+    // eslint-disable-next-line @typescript-eslint/only-throw-error
     throw { suspicious: 'payload' };
   },
 };
@@ -137,7 +152,9 @@ describe('ERROR-UX-RELIABILITY1 — fault-injected canonical error contract (rea
       .expect(500);
 
     expect(res.body.message).toBe('Internal server error. Please try again.');
-    expect(JSON.stringify(res.body)).not.toMatch(/E11000|duplicate key|smartduka\.users/i);
+    expect(JSON.stringify(res.body)).not.toMatch(
+      /E11000|duplicate key|smartduka\.users/i,
+    );
   });
 
   it('non-Error throws are sanitized the same way', async () => {
@@ -150,12 +167,16 @@ describe('ERROR-UX-RELIABILITY1 — fault-injected canonical error contract (rea
   });
 
   it('429 responses carry retryable metadata; 4xx business errors do not', async () => {
-    const limited = await request(app.getHttpServer()).get('/fault/rate-limited');
+    const limited = await request(app.getHttpServer()).get(
+      '/fault/rate-limited',
+    );
     expect(limited.body.retryable).toBe(true);
 
     const conflict = await request(app.getHttpServer()).get('/fault/conflict');
     expect(conflict.body.retryable).toBeUndefined();
-    expect(conflict.body.message).toBe('Branch code already exists in this shop');
+    expect(conflict.body.message).toBe(
+      'Branch code already exists in this shop',
+    );
   });
 
   it('duplicate submission with the same idempotency key never creates a second record', async () => {

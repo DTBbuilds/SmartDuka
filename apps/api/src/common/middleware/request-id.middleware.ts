@@ -29,7 +29,7 @@ export class RequestIdMiddleware implements NestMiddleware {
     const inbound = req.headers[REQUEST_ID_HEADER];
     const requestId =
       (typeof inbound === 'string' &&
-        /^[\w\-]{8,64}$/.test(inbound) &&
+        /^[\w-]{8,64}$/.test(inbound) &&
         inbound) ||
       crypto.randomUUID();
 

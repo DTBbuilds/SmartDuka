@@ -5,10 +5,10 @@ export type SubscriptionPlanDocument = HydratedDocument<SubscriptionPlan>;
 
 /**
  * Subscription Plan Schema
- * 
+ *
  * Defines the available subscription tiers for SmartDuka POS
  * Pricing is in KES (Kenyan Shillings) - friendly for Kenyan market
- * 
+ *
  * Plans:
  * - Starter: KES 1,000/month - 1 shop, 2 employees, 500 products
  * - Basic: KES 1,500/month - 2 shops, 5 employees, 1000 products
@@ -40,8 +40,11 @@ export class SubscriptionPlan {
   setupPrice: number; // One-time setup/start price
 
   // Limits
-  @Prop({ required: true, default: 1 })
-  maxShops: number; // Maximum number of shops/branches
+  // ERROR-UX-RELEASE-GATE1 Phase 2: maxShops may be null/absent = UNLIMITED
+  // locations (the owner's Free Plan — Full Access lever). Numeric values
+  // behave exactly as before; the default keeps existing plans unchanged.
+  @Prop({ required: false, default: 1 })
+  maxShops: number; // Maximum number of shops/branches (null = unlimited)
 
   @Prop({ required: true, default: 2 })
   maxEmployees: number; // Maximum number of employees
@@ -86,7 +89,8 @@ export class SubscriptionPlan {
   updatedAt?: Date;
 }
 
-export const SubscriptionPlanSchema = SchemaFactory.createForClass(SubscriptionPlan);
+export const SubscriptionPlanSchema =
+  SchemaFactory.createForClass(SubscriptionPlan);
 
 // Indexes
 // Note: code already has unique index from @Prop({ unique: true })

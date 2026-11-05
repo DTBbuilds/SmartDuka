@@ -201,8 +201,11 @@ export default function BranchesPage() {
           <p className="text-muted-foreground mt-1 text-sm">Manage your shop branches and locations</p>
           {locationUsage && (
             <p className="text-xs text-muted-foreground mt-1">
-              Locations used: {locationUsage.current}/{locationUsage.limit}
-              {' '}— your main shop and branches together count toward your plan's location limit.
+              {/* ERROR-UX-RELEASE-GATE1 Phase 2: a null limit means the plan
+                  does not cap locations (e.g. Free Plan — Full Access). */}
+              {locationUsage.limit == null
+                ? `Locations used: ${locationUsage.current} (unlimited on your plan)`
+                : `Locations used: ${locationUsage.current}/${locationUsage.limit} — your main shop and branches together count toward your plan's location limit.`}
             </p>
           )}
         </div>
