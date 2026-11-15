@@ -17,6 +17,7 @@ export function POSHomeHero({
   description,
   actionLabel,
   actionHref,
+  onAction,
   icon: Icon = ShoppingCart,
   status,
 }: {
@@ -24,7 +25,8 @@ export function POSHomeHero({
   title: string;
   description: string;
   actionLabel: string;
-  actionHref: string;
+  actionHref?: string;
+  onAction?: () => void;
   icon?: LucideIcon;
   status?: string;
 }) {
@@ -41,14 +43,19 @@ export function POSHomeHero({
           <Icon className="h-10 w-10" />
         </div>
       </div>
-      <Link
-        href={actionHref}
-        className="mt-4 flex min-h-[54px] w-full items-center justify-center gap-3 rounded-xl bg-primary px-5 py-3 text-base font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:w-fit"
-      >
-        <Icon aria-hidden="true" className="h-5 w-5" />
-        <span>{actionLabel}</span>
-        <ArrowRight aria-hidden="true" className="h-4 w-4" />
-      </Link>
+      {onAction ? (
+        <button type="button" onClick={onAction} className="mt-4 flex min-h-[54px] w-full items-center justify-center gap-3 rounded-xl bg-primary px-5 py-3 text-base font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:w-fit">
+          <Icon aria-hidden="true" className="h-5 w-5" />
+          <span>{actionLabel}</span>
+          <ArrowRight aria-hidden="true" className="h-4 w-4" />
+        </button>
+      ) : (
+        <Link href={actionHref ?? '#'} className="mt-4 flex min-h-[54px] w-full items-center justify-center gap-3 rounded-xl bg-primary px-5 py-3 text-base font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:w-fit">
+          <Icon aria-hidden="true" className="h-5 w-5" />
+          <span>{actionLabel}</span>
+          <ArrowRight aria-hidden="true" className="h-4 w-4" />
+        </Link>
+      )}
     </section>
   );
 }
@@ -126,10 +133,12 @@ export function POSHomeBottomNav({
   role,
   posHref,
   posLabel = 'POS',
+  disablePOS = false,
 }: {
   role: 'admin' | 'cashier';
   posHref: string;
   posLabel?: string;
+  disablePOS?: boolean;
 }) {
   const tabs = [
     { label: 'Home', href: role === 'admin' ? '/admin' : '/cashier/dashboard', icon: Home },
@@ -140,16 +149,20 @@ export function POSHomeBottomNav({
   return (
     <nav aria-label="Dashboard quick navigation" className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
       <div className="mx-auto grid max-w-lg grid-cols-4 gap-1 px-2 pt-1">
-        {tabs.map(({label, href, icon: Icon, isPrimary}, index) => (
-          <Link key={index} href={href}
-            aria-current={index === 0 ? 'page' : undefined}
-            className={'flex min-h-[58px] flex-col items-center justify-center gap-1 rounded-lg px-1 text-[11px] font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring ' + (isPrimary ? 'text-primary' : index === 0 ? 'text-foreground' : 'text-muted-foreground')}>
+        {tabs.map(({ label, href, icon: Icon, isPrimary }, index) => {
+          const className = 'flex min-h-[58px] flex-col items-center justify-center gap-1 rounded-lg px-1 text-[11px] font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring ' +
+            (isPrimary ? 'text-primary' : index === 0 ? 'text-foreground' : 'text-muted-foreground');
+          const body = <>
             <span className={isPrimary ? 'rounded-lg bg-primary px-3 py-1.5 text-primary-foreground' : ''}>
               <Icon aria-hidden="true" className="h-5 w-5" />
             </span>
             <span>{label}</span>
-          </Link>
-        ))}
+          </>;
+          if (isPrimary && disablePOS) {
+            return <span key={index} aria-label="POS unavailable during break or while shift status is unknown" className={className + ' cursor-not-allowed opacity-50'}>{body}</span>;
+          }
+          return <Link key={index} href={href} aria-current={index === 0 ? 'page' : undefined} className={className}>{body}</Link>;
+        })}
       </div>
     </nav>
   );
