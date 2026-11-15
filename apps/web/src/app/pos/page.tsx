@@ -2474,6 +2474,7 @@ function POSContent() {
         isOpen={isReceiptsHistoryOpen}
         onClose={() => setIsReceiptsHistoryOpen(false)}
         receipts={receiptsHistory}
+        formatMoney={formatCurrency}
       />
 
       {/* Payment Method Selection Modal - Shows after clicking Checkout */}
