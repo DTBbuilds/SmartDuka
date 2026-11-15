@@ -282,13 +282,9 @@ export function BarcodeScannerHtml5({
     setMessage('Code detected · Checking inventory…');
 
     try {
-      // Play success sound
-      await playSuccessBeep();
-      
-      // Vibrate on mobile
-      if (navigator.vibrate) {
-        navigator.vibrate(100);
-      }
+      // Camera scanning must still complete if the browser blocks audio/haptics.
+      void playSuccessBeep().catch(() => {});
+      try { if (navigator.vibrate) navigator.vibrate(80); } catch {}
 
       // Stop scanner before callback
       await cleanupScanner();
