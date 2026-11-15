@@ -250,7 +250,7 @@ function CashierDashboardContent() {
         <POSHomeHero eyebrow={hero.eyebrow} title={hero.title} description={hero.description}
           actionLabel={nextAction.label} actionHref={onAction ? undefined : href}
           onAction={onAction} icon={hero.icon}
-          status={isActive ? `Shift started ${new Date(shift!.startTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : undefined}
+          status={isActive && shift?.startTime ? `Shift started ${new Date(shift.startTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : undefined}
         />
 
         <section aria-labelledby="cashier-activity-title">
@@ -306,10 +306,15 @@ function CashierDashboardContent() {
                   className="min-h-11 flex-1">
                   <Coffee aria-hidden="true" className="mr-2 h-4 w-4" /> {breakBusy ? 'Updating…' : isOnBreak ? 'End break' : 'Take break'}
                 </Button>
-                <Link href="/cashier/shift-end" className={'inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-md border border-border px-3 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring ' + (isOnBreak ? 'pointer-events-none opacity-50' : '')}
-                  aria-disabled={isOnBreak}>
-                  <Square aria-hidden="true" className="h-4 w-4" /> End shift
-                </Link>
+                {isOnBreak ? (
+                  <span aria-disabled="true" className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-md border border-border px-3 text-sm font-semibold opacity-50">
+                    <Square aria-hidden="true" className="h-4 w-4" /> End shift
+                  </span>
+                ) : (
+                  <Link href="/cashier/shift-end" className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-md border border-border px-3 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">
+                    <Square aria-hidden="true" className="h-4 w-4" /> End shift
+                  </Link>
+                )}
               </div>
             )}
           </section>
