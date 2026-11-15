@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/auth-context';
 import { config } from '@/lib/config';
 import { formatMoney } from '@/lib/currency';
 import { AuthGuard } from '@/components/auth-guard';
+import { resolveCashierHomeAction, type CashierHomeShiftState } from '@/lib/pos-home-logic';
 import { shiftActivityTracker, type ShiftActivityState } from '@/lib/shift-activity-tracker';
 import {
   POSHomeHero, POSHomeMetric, POSHomeQuickActions,
@@ -38,13 +39,12 @@ type CashierStats = {
   averageTransaction: number;
   recentOrders: Receipt[];
 };
-type ShiftState = 'loading' | 'none' | 'active' | 'pending' | 'error';
 
 function CashierDashboardContent() {
   const router = useRouter();
   const { user, shop, token, logout } = useAuth();
   const [shift, setShift] = useState<Shift | null>(null);
-  const [shiftState, setShiftState] = useState<ShiftState>('loading');
+  const [shiftState, setShiftState] = useState<CashierHomeShiftState>('loading');
   const [shiftRetry, setShiftRetry] = useState(0);
   const [stats, setStats] = useState<CashierStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
@@ -189,7 +189,7 @@ function CashierDashboardContent() {
       : `${shiftDuration}m`;
 
   const isActive = shiftState === 'active';
-  const canSell = isActive && !isOnBreak;
+  const nextAction = resolveCashierHomeAction(shiftState, isOnBreak);
   const hero = shiftState === 'loading' ? {
     eyebrow: 'Checking shift', title: 'Verifying your shift',
     description: 'Your selling access will appear after we confirm the shift state.',
@@ -216,11 +216,10 @@ function CashierDashboardContent() {
     actionLabel: 'Open POS', icon: ShoppingCart,
   };
 
-  const href = shiftState === 'none' ? '/cashier/shift-start'
-    : shiftState === 'pending' ? '/cashier/shift-end' : '/pos';
-  const onAction = shiftState === 'loading' || shiftState === 'error'
-    ? refreshShift
-    : isActive && isOnBreak ? () => { void toggleBreak(); } : undefined;
+  const href = nextAction.href;
+  const onAction = nextAction.command === 'refresh' ? refreshShift
+    : nextAction.command === 'endBreak' ? () => { void toggleBreak(); }
+      : undefined;
 
   const receipts = Array.isArray(stats?.recentOrders) ? stats.recentOrders : [];
 
@@ -249,7 +248,7 @@ function CashierDashboardContent() {
         )}
 
         <POSHomeHero eyebrow={hero.eyebrow} title={hero.title} description={hero.description}
-          actionLabel={hero.actionLabel} actionHref={onAction ? undefined : href}
+          actionLabel={nextAction.label} actionHref={onAction ? undefined : href}
           onAction={onAction} icon={hero.icon}
           status={isActive ? `Shift started ${new Date(shift!.startTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : undefined}
         />
@@ -331,8 +330,8 @@ function CashierDashboardContent() {
           </section>
         </div>
       </div>
-      <POSHomeBottomNav role="cashier" posHref={shiftState === 'none' ? '/cashier/shift-start' : '/pos'}
-        posLabel={shiftState === 'none' ? 'Start shift' : 'POS'} disablePOS={!canSell && shiftState !== 'none'} />
+      <POSHomeBottomNav role="cashier" posHref={nextAction.href ?? '/pos'}
+        posLabel={shiftState === 'none' ? 'Start shift' : 'POS'} disablePOS={!nextAction.canNavigateToPOS && shiftState !== 'none'} />
     </main>
   );
 }
