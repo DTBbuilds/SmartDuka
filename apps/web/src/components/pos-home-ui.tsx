@@ -92,7 +92,7 @@ export function POSHomeMetric({
 
 export function POSHomeQuickActions({ actions }: { actions: HomeAction[] }) {
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+    <div className={'grid grid-cols-2 gap-2 sm:gap-3 ' + (actions.length <= 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-4')}>
       {actions.map(({ label, description, href, icon: Icon }) => (
         <Link key={href + label} href={href}
           className="flex min-h-[80px] items-start gap-3 rounded-xl border border-border bg-card p-3 text-left transition-colors hover:border-primary/40 hover:bg-accent/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring sm:items-center sm:p-4">
@@ -143,8 +143,8 @@ export function POSHomeBottomNav({
   const tabs = [
     { label: 'Home', href: role === 'admin' ? '/admin' : '/cashier/dashboard', icon: Home },
     { label: posLabel, href: posHref, icon: ShoppingCart, isPrimary: true },
-    { label: role === 'admin' ? 'Orders' : 'My sales', href: role === 'admin' ? '/orders' : '/cashier/dashboard', icon: ReceiptText },
-    { label: 'More', href: role === 'admin' ? '/settings' : '/cashier/dashboard', icon: Menu },
+    { label: role === 'admin' ? 'Orders' : 'My sales', href: role === 'admin' ? '/orders' : '/cashier/dashboard#recent-sales', icon: ReceiptText },
+    { label: role === 'admin' ? 'More' : 'Shift', href: role === 'admin' ? '/settings' : '/cashier/dashboard#shift-details', icon: Menu },
   ];
   return (
     <nav aria-label="Dashboard quick navigation" className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
