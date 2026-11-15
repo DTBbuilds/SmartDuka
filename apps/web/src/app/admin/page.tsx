@@ -7,6 +7,7 @@ import { useBranch } from '@/lib/branch-context';
 import { config } from '@/lib/config';
 import { formatMoney } from '@/lib/currency';
 import { AuthGuard } from '@/components/auth-guard';
+import { safeMetric, shouldShowFirstProductOnboarding } from '@/lib/pos-home-logic';
 import { BranchSelectionModal, useBranchSelectionRequired } from '@/components/branch-selection-modal';
 import {
   POSHomeHero, POSHomeMetric, POSHomeQuickActions,
@@ -129,11 +130,11 @@ function AdminDashboardContent() {
   }, [token, branchId, refreshKey]);
 
   const productCount = inventory?.totalProducts;
-  const isNewShop = inventory !== null && productCount === 0;
+  const isNewShop = shouldShowFirstProductOnboarding(productCount ?? null);
   const firstName = user?.name?.trim() || user?.email?.split('@')[0] || 'Admin';
   const currency = shop?.currency;
   const money = (n: number | undefined): string | null =>
-    typeof n === 'number' && Number.isFinite(n) ? formatMoney(n, currency) : null;
+    safeMetric(n) !== null ? formatMoney(n!, currency) : null;
 
   const actions = [
     { label: 'Products', description: 'Manage inventory', href: '/admin/products', icon: Package },
