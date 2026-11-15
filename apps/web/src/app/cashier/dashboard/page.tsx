@@ -101,6 +101,34 @@ function CashierDashboardContent() {
         }
         setShift(payload);
         setShiftState(payload.status === 'open' ? 'active' : 'pending');
+
+        // Preserve the existing shift-specific cash and sales summary.
+        if (payload.status === 'open') {
+          try {
+            const summaryResponse = await fetch(
+              `${config.apiUrl}/shifts/${encodeURIComponent(payload._id)}/sales`,
+              { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal },
+            );
+            if (summaryResponse.ok) {
+              const summary = await summaryResponse.json() as {
+                totalSales?: number;
+                transactionCount?: number;
+                expectedCash?: number;
+              };
+              if (!controller.signal.aborted) {
+                setShift((existing) => existing?._id === payload._id ? {
+                  ...existing,
+                  totalSales: Number.isFinite(summary.totalSales) ? summary.totalSales : undefined,
+                  transactionCount: Number.isFinite(summary.transactionCount) ? summary.transactionCount : undefined,
+                  expectedCash: Number.isFinite(summary.expectedCash) ? summary.expectedCash : undefined,
+                } : existing);
+              }
+            }
+          } catch {
+            // Never replace an authoritative active shift with a false "no shift".
+            // Financial fields remain unavailable until their own read succeeds.
+          }
+        }
       } catch {
         if (!controller.signal.aborted) setShiftState('error');
       }
@@ -294,6 +322,8 @@ function CashierDashboardContent() {
               <div><dt className="text-xs text-muted-foreground">Duration</dt><dd className="mt-1 font-semibold">{elapsed}</dd></div>
               <div><dt className="text-xs text-muted-foreground">Opening float</dt><dd className="mt-1 font-semibold">{money(shift?.openingBalance) ?? '—'}</dd></div>
               <div><dt className="text-xs text-muted-foreground">Expected cash</dt><dd className="mt-1 font-semibold">{money(shift?.expectedCash) ?? '—'}</dd></div>
+              <div><dt className="text-xs text-muted-foreground">Shift sales</dt><dd className="mt-1 font-semibold">{money(shift?.totalSales) ?? '—'}</dd></div>
+              <div><dt className="text-xs text-muted-foreground">Shift transactions</dt><dd className="mt-1 font-semibold">{shift?.transactionCount ?? '—'}</dd></div>
             </dl>
             {activityState && isActive && (
               <p className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
