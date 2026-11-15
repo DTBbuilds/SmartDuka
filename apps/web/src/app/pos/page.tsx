@@ -31,6 +31,8 @@ import {
   CreditCard,
   HandCoins,
   LogOut,
+  History,
+  ScanLine,
   Pause,
   QrCode,
   RefreshCw,
@@ -82,7 +84,6 @@ import { PaymentMethodModal } from "@/components/payment-method-modal";
 import { MpesaPaymentFlowEnhanced } from "@/components/mpesa-payment-flow-enhanced";
 import { KeyboardShortcutsHelp } from "@/components/keyboard-shortcuts-help";
 import { useBarcodeScanner } from "@/hooks/use-barcode-scanner";
-import { ScannerStatusIndicator } from "@/components/scanner-status-indicator";
 import { smartCache } from "@/lib/smart-cache-manager";
 import { usePOSProducts } from "@/hooks/use-smart-cache";
 import { validateCheckoutSession, probeSupportsQuoteIntegrity, type CheckoutQuote } from "@/lib/checkout-session";
@@ -2142,15 +2143,33 @@ function POSContent() {
 
             {/* Right: Minimal on mobile */}
             <div className="flex items-center gap-1.5 flex-shrink-0">
-              {/* Scanner Status Indicator - shows hardware scanner status */}
-              <ScannerStatusIndicator
-                isHardwareScannerConnected={hardwareScanner.isConnected}
-                isScanning={hardwareScanner.isScanning || isProcessingBarcode}
-                lastScanTime={hardwareScanner.lastBarcode?.timestamp}
-                onOpenScanner={() => setIsScannerOpen(true)}
-                compact
-              />
-                
+              {/* POS-first tools: always visible; never obscure product cards. */}
+              <button
+                type="button"
+                onClick={() => setIsScannerOpen(true)}
+                disabled={isCheckoutMode || isCheckingOut}
+                className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-bold text-primary-foreground disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                aria-label="Scan product barcode or QR code"
+              >
+                <ScanLine aria-hidden="true" className="h-4 w-4" />
+                <span>Scan</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsReceiptsHistoryOpen(true)}
+                disabled={isCheckoutMode || isCheckingOut}
+                className="relative inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-lg border border-border px-2 text-xs font-semibold disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                aria-label={`Session receipts history, ${receiptsHistory.length} receipts`}
+              >
+                <History aria-hidden="true" className="h-4 w-4" />
+                <span className="hidden sm:inline">Receipts</span>
+                {receiptsHistory.length > 0 && (
+                  <span aria-hidden="true" className="absolute -right-1 -top-1 rounded-full bg-primary px-1 text-[10px] text-primary-foreground">
+                    {receiptsHistory.length > 99 ? '99+' : receiptsHistory.length}
+                  </span>
+                )}
+              </button>
+
               {/* Pending count badge */}
               {pendingCount > 0 && (
                 <div className="flex items-center gap-0.5 rounded-full border border-dashed border-orange-400 bg-orange-50 dark:bg-orange-950/30 px-1.5 py-0.5 text-xs text-orange-600 dark:text-orange-400">
