@@ -51,6 +51,7 @@ import { config } from "@/lib/config";
 import { useToast } from "@/lib/use-toast";
 import { ToastContainer } from "@/components/toast-container";
 import { BarcodeScannerUnified } from "@/components/barcode-scanner-unified";
+import { parsePOSScanPayload } from "@/lib/pos-scan-payload";
 import { ReceiptModal } from "@/components/receipt-modal";
 import { ReceiptPreviewModal } from "@/components/receipt-preview-modal";
 import { ReceiptData } from "@/lib/receipt-generator";
@@ -996,8 +997,12 @@ function POSContent() {
   }, [toast]);
 
   const handleBarcodeScanned = useCallback(async (barcode: string) => {
-    const trimmedBarcode = barcode.trim();
-    if (!trimmedBarcode) return;
+    const parsedCode = parsePOSScanPayload(barcode);
+    if (parsedCode.kind === 'unsupported') {
+      toast({ type: 'error', title: 'Unsupported code', message: parsedCode.reason });
+      return;
+    }
+    const trimmedBarcode = parsedCode.value;
     
     const now = Date.now();
     
@@ -1024,6 +1029,31 @@ function POSContent() {
     setIsProcessingBarcode(true);
 
     try {
+      // SmartDuka's generated product QRs contain {type:'product', id, name},
+      // not a barcode. Look up this ID through the shop-scoped inventory API.
+      // Other QR types (payment, order, loyalty, URLs) are never sellable items.
+      if (parsedCode.kind === 'product-id') {
+        let product = products.find((candidate) => candidate._id === parsedCode.value);
+        if (!product) {
+          const response = await fetch(
+            `${config.apiUrl}/inventory/products/${encodeURIComponent(parsedCode.value)}`,
+            { headers: { Authorization: `Bearer ${token}` } },
+          );
+          if (response.status === 404) {
+            toast({ type: 'error', title: 'Product QR not found', message: 'This product is not in your shop catalogue.' });
+            return;
+          }
+          if (!response.ok) throw new Error('Unable to verify this product QR code');
+          const result = await response.json() as Product;
+          if (result?._id !== parsedCode.value || !Number.isFinite(result?.price)) {
+            throw new Error('Invalid product response');
+          }
+          product = result;
+        }
+        handleAddToCart(product, { fromBarcode: true });
+        return;
+      }
+
       // First, try smart cache (fastest - works offline)
       const cachedProduct = getCachedProductByBarcode(trimmedBarcode);
       if (cachedProduct) {
