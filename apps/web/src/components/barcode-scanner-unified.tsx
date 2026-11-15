@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { detectBrowser, type BrowserInfo } from '@/lib/browser-detection';
+import { alternateCameraEngine, preferredCameraEngine } from '@/lib/scanner-engine';
 import { BarcodeScannerZXing } from './barcode-scanner-zxing';
 import { BarcodeScannerHtml5 } from './barcode-scanner-html5';
 
@@ -53,27 +54,15 @@ export function BarcodeScannerUnified({
       return;
     }
 
-    // Auto-select based on browser detection
-    if (info.recommendedScanner === 'html5-qrcode') {
-      setSelectedScanner('html5-qrcode');
-    } else if (info.recommendedScanner === 'zxing') {
-      setSelectedScanner('zxing');
-    } else if (manualOnly) {
-      // No camera API at all — manual entry is the primary mode.
-      setSelectedScanner('html5-qrcode');
-    } else {
-      // Default to html5-qrcode for better mobile support
-      setSelectedScanner('html5-qrcode');
-    }
+    // Chrome/Brave on Android need the single-stream camera path. Keep the
+    // HTML5 decoder for the browsers where it already works, and expose a
+    // deliberate alternate-engine control if camera startup fails.
+    setSelectedScanner(preferredCameraEngine(info));
+    }, [forceScanner]);
 
-    console.log(`[UnifiedScanner] Selected: ${selectedScanner}`, {
-      browser: info.browser,
-      platform: info.platform,
-      isWebView: info.isWebView,
-      isInAppBrowser: info.isInAppBrowser,
-      recommended: info.recommendedScanner,
-    });
-  }, [forceScanner]);
+  const tryAlternate = () => {
+    setSelectedScanner((current) => alternateCameraEngine(current));
+  };
 
   // Don't render until browser detection is complete
   if (!browserInfo) {
@@ -88,6 +77,7 @@ export function BarcodeScannerUnified({
         onClose={onClose}
         onScan={onScan}
         startInManualMode={startInManualMode}
+        onTryAlternateEngine={tryAlternate}
       />
     );
   }
@@ -97,6 +87,7 @@ export function BarcodeScannerUnified({
       isOpen={isOpen}
       onClose={onClose}
       onScan={onScan}
+      onTryAlternateEngine={tryAlternate}
     />
   );
 }
