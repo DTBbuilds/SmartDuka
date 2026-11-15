@@ -1,677 +1,272 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { formatMoney } from '@/lib/currency';
-import {
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@smartduka/ui';
-import { 
-  Users, 
-  Activity, 
-  Package, 
-  BarChart3, 
-  TrendingUp, 
-  ShoppingCart, 
-  CreditCard, 
-  AlertTriangle, 
-  ArrowUpRight, 
-  Boxes, 
-  Smartphone, 
-  Settings, 
-  MapPin, 
-  Grid3x3,
-  Home,
-  ArrowRight,
-  ChevronDown,
-  ChevronUp,
-  X,
-  Eye,
-  EyeOff
-} from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
-import { useToast } from '@/lib/use-toast';
 import { config } from '@/lib/config';
-import { ToastContainer } from '@/components/toast-container';
+import { formatMoney } from '@/lib/currency';
 import { AuthGuard } from '@/components/auth-guard';
+import { safeMetric, shouldShowFirstProductOnboarding } from '@/lib/pos-home-logic';
 import { BranchSelectionModal, useBranchSelectionRequired } from '@/components/branch-selection-modal';
+import {
+  POSHomeHero, POSHomeMetric, POSHomeQuickActions,
+  POSHomeNotice, POSHomeBottomNav,
+} from '@/components/pos-home-ui';
+import {
+  AlertTriangle, BarChart3, Building2, Clock3, MapPin,
+  Package, ReceiptText, ShoppingCart, Users, WifiOff,
+} from 'lucide-react';
 
-type Product = {
-  _id: string;
-  name: string;
-  stock?: number;
+type SalesStats = {
+  todayRevenue: number;
+  todayOrders: number;
+  totalRevenue: number;
+  totalOrders: number;
+};
+type InventoryStats = {
+  totalProducts: number;
+  lowStockProducts: number;
+  activeProducts: number;
+};
+type PaymentPause = {
+  paused: boolean;
+  mode?: string;
 };
 
 function AdminDashboardContent() {
-  const router = useRouter();
   const { user, shop, token } = useAuth();
   const { currentBranch, branches } = useBranch();
-  const { toasts, toast, dismiss } = useToast();
   const branchSelectionRequired = useBranchSelectionRequired();
+  const [branchModalOpen, setBranchModalOpen] = useState(false);
 
-  const [loading, setLoading] = useState(false);
-  const [showBranchModal, setShowBranchModal] = useState(false);
-  const [warningsCollapsed, setWarningsCollapsed] = useState(false);
-
-  // Load collapsed state from localStorage
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('smartduka:warnings_collapsed');
-      if (stored === 'true') {
-        setWarningsCollapsed(true);
-      }
-    }
-  }, []);
-
-  // Toggle warnings visibility
-  const toggleWarnings = useCallback(() => {
-    setWarningsCollapsed(prev => {
-      const newState = !prev;
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('smartduka:warnings_collapsed', String(newState));
-      }
-      return newState;
-    });
-  }, []);
-
-  const [branchBannerDismissed, setBranchBannerDismissed] = useState(false);
-  // Show inline branch banner (non-blocking) instead of auto-popup modal
-  const showBranchBanner = !branchBannerDismissed && branches.length > 1 && branchSelectionRequired;
-  const [productsCount, setProductsCount] = useState(0);
-  const [categoriesCount, setCategoriesCount] = useState(0);
-  const [lowStockProducts, setLowStockProducts] = useState<Product[]>([]);
-  const [salesStats, setSalesStats] = useState<{
-    todayRevenue: number;
-    todayOrders: number;
-    totalRevenue: number;
-    totalOrders: number;
-  } | null>(null);
-  const [mpesaStatus, setMpesaStatus] = useState<{
-    isConfigured: boolean;
-    isVerified: boolean;
-    isEnabled: boolean;
-    message: string;
-  } | null>(null);
-  const [stripeStatus, setStripeStatus] = useState<{
-    isConfigured: boolean;
-    isEnabled: boolean;
-    message: string;
-  } | null>(null);
+  // Null means unknown/unavailable, never a fabricated business zero.
+  const [sales, setSales] = useState<SalesStats | null>(null);
+  const [inventory, setInventory] = useState<InventoryStats | null>(null);
+  const [paymentPause, setPaymentPause] = useState<PaymentPause | null>(null);
+  const [salesLoading, setSalesLoading] = useState(true);
+  const [inventoryLoading, setInventoryLoading] = useState(true);
+  const [salesError, setSalesError] = useState(false);
+  const [inventoryError, setInventoryError] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [isOnline, setIsOnline] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   useEffect(() => {
-    loadData();
-  }, [token, currentBranch]);
+    setIsOnline(navigator.onLine);
+    const online = () => setIsOnline(true);
+    const offline = () => setIsOnline(false);
+    window.addEventListener('online', online);
+    window.addEventListener('offline', offline);
+    return () => {
+      window.removeEventListener('online', online);
+      window.removeEventListener('offline', offline);
+    };
+  }, []);
 
-  const loadData = async () => {
-    if (!token) return;
-    try {
-      setLoading(true);
-      const base = config.apiUrl;
-      const headers = { Authorization: `Bearer ${token}` };
-      
-      // Build branch filter for API calls - always include branchId when branch is selected
-      const branchQuery = currentBranch ? `branchId=${currentBranch._id}` : '';
-      const withBranch = (url: string) => {
-        if (!branchQuery) return url;
-        return url.includes('?') ? `${url}&${branchQuery}` : `${url}?${branchQuery}`;
-      };
+  const branchId = currentBranch?._id;
+  const retry = useCallback(() => setRefreshKey((key) => key + 1), []);
 
-      console.log('[Dashboard] Loading data for branch:', currentBranch?.name || 'All', currentBranch?._id);
-
-      const [productsRes, categoriesRes, lowStockRes, salesStatsRes, mpesaStatusRes, stripeStatusRes] = await Promise.all([
-        fetch(withBranch(`${base}/inventory/products?limit=200`), { headers }),
-        fetch(`${base}/inventory/categories`, { headers }),
-        fetch(withBranch(`${base}/inventory/stock/low-stock`), { headers }),
-        fetch(withBranch(`${base}/sales/stats`), { headers }),
-        fetch(`${base}/payments/mpesa/config/status`, { headers }),
-        fetch(`${base}/payments/stripe/config/status`, { headers }),
-      ]);
-
-      if (productsRes.ok) {
-        const text = await productsRes.text();
-        const data = text ? JSON.parse(text) : [];
-        setProductsCount(Array.isArray(data) ? data.length : 0);
-      }
-
-      if (categoriesRes.ok) {
-        const text = await categoriesRes.text();
-        const data = text ? JSON.parse(text) : [];
-        // Handle both array format and object format { categories: [...], meta: {...} }
-        const categoriesArray = Array.isArray(data) ? data : (data.categories || []);
-        setCategoriesCount(categoriesArray.length);
-      }
-
-      if (lowStockRes.ok) {
-        const text = await lowStockRes.text();
-        const data = text ? JSON.parse(text) : [];
-        setLowStockProducts(Array.isArray(data) ? data : []);
-      }
-
-      if (salesStatsRes.ok) {
-        const text = await salesStatsRes.text();
-        const data = text ? JSON.parse(text) : null;
-        setSalesStats(data);
-      }
-
-      if (mpesaStatusRes.ok) {
-        const text = await mpesaStatusRes.text();
-        const data = text ? JSON.parse(text) : null;
-        setMpesaStatus(data);
-      }
-
-      if (stripeStatusRes.ok) {
-        const text = await stripeStatusRes.text();
-        const data = text ? JSON.parse(text) : null;
-        setStripeStatus(data);
-      }
-    } catch (err: any) {
-      console.error('Error loading data:', err);
-      toast({ type: 'error', title: 'Load failed', message: err?.message });
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    if (!token) {
+      setSales(null);
+      setInventory(null);
+      setSalesLoading(false);
+      setInventoryLoading(false);
+      return;
     }
-  };
+    // One controller per dashboard load prevents stale branch responses.
+    const controller = new AbortController();
+    const signal = controller.signal;
+    const headers = { Authorization: `Bearer ${token}` };
+    const api = config.apiUrl;
+    setSales(null);
+    setInventory(null);
+    setSalesError(false);
+    setInventoryError(false);
+    setSalesLoading(true);
+    setInventoryLoading(true);
 
-  // Quick links for navigation
-  const quickLinks = [
-    { name: 'Products', href: '/admin/products', icon: Package, description: 'Manage inventory' },
-    { name: 'Categories', href: '/admin/categories', icon: Boxes, description: 'Organize products' },
-    { name: 'Cashiers', href: '/admin/cashiers', icon: Users, description: 'Manage staff' },
-    { name: 'Monitoring', href: '/admin/monitoring', icon: Activity, description: 'Track activity' },
-    { name: 'Branches', href: '/admin/branches', icon: MapPin, description: 'Multi-location' },
-    { name: 'Analytics', href: '/admin/analytics/sales', icon: BarChart3, description: 'View reports' },
+    const read = async <T,>(url: string, authenticated = true): Promise<T> => {
+      const response = await fetch(url, {
+        headers: authenticated ? headers : undefined,
+        signal,
+      });
+      if (!response.ok) throw new Error(`Dashboard request failed: ${response.status}`);
+      return (await response.json()) as T;
+    };
+
+    void read<SalesStats>(
+      `${api}/sales/stats${branchId ? `?branchId=${encodeURIComponent(branchId)}` : ''}`,
+    ).then((data) => {
+      if (!signal.aborted) {
+        if (!Number.isFinite(data?.todayRevenue) || !Number.isFinite(data?.todayOrders)) {
+          throw new Error('Invalid sales response');
+        }
+        setSales(data);
+        setLastUpdated(new Date());
+      }
+    }).catch(() => { if (!signal.aborted) setSalesError(true); })
+      .finally(() => { if (!signal.aborted) setSalesLoading(false); });
+
+    // Inventory stats are shop-wide. Do not label them as branch-specific.
+    void read<InventoryStats>(`${api}/inventory/stats`).then((data) => {
+      if (!signal.aborted) {
+        if (!Number.isFinite(data?.totalProducts) || !Number.isFinite(data?.lowStockProducts)) {
+          throw new Error('Invalid inventory response');
+        }
+        setInventory(data);
+      }
+    }).catch(() => { if (!signal.aborted) setInventoryError(true); })
+      .finally(() => { if (!signal.aborted) setInventoryLoading(false); });
+
+    void read<PaymentPause>(`${api}/payments/mpesa/pause-status`, false)
+      .then((data) => {
+        if (!signal.aborted) setPaymentPause(typeof data?.paused === 'boolean' ? data : null);
+      })
+      .catch(() => { if (!signal.aborted) setPaymentPause(null); });
+
+    return () => controller.abort();
+  }, [token, branchId, refreshKey]);
+
+  const productCount = inventory?.totalProducts;
+  const isNewShop = shouldShowFirstProductOnboarding(productCount ?? null);
+  const firstName = user?.name?.trim() || user?.email?.split('@')[0] || 'Admin';
+  const currency = shop?.currency;
+  const money = (n: number | undefined): string | null =>
+    safeMetric(n) !== null ? formatMoney(n!, currency) : null;
+
+  const actions = [
+    { label: 'Products', description: 'Manage inventory', href: '/admin/products', icon: Package },
+    { label: 'Orders', description: 'Receipts and sales', href: '/orders', icon: ReceiptText },
+    { label: 'Cashiers', description: 'Your team', href: '/admin/cashiers', icon: Users },
+    { label: 'Reports', description: 'Sales insights', href: '/admin/analytics/sales', icon: BarChart3 },
   ];
 
   return (
-    <main className="bg-background py-6">
-      <ToastContainer toasts={toasts} onDismiss={dismiss} />
-      <div className="container">
-        {/* Page Header */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary/10">
-              <Home className="h-6 w-6 text-primary" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-2xl font-bold">Admin Dashboard</h1>
-                {currentBranch && (
-                  <span className="text-sm px-2 py-1 rounded-full bg-primary/10 text-primary font-medium">
-                    {currentBranch.name}
-                  </span>
-                )}
-              </div>
-              <p className="text-sm text-muted-foreground">
-                {shop?.name ? `${shop.name} • ` : ''}Welcome back, {user?.email?.split('@')[0] || 'Admin'}
-              </p>
-            </div>
+    <main className="min-w-0 bg-background pb-[calc(6rem+env(safe-area-inset-bottom))] pt-4 sm:pt-6 lg:pb-10">
+      <div className="container max-w-7xl space-y-5 px-3 sm:px-6">
+        <header className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {shop?.name || 'Your shop'} · {currentBranch?.name || 'All branches'}
+            </p>
+            <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Welcome, {firstName}</h1>
+            <p className="mt-1 text-sm text-muted-foreground">Your retail operations at a glance</p>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => router.push('/pos')} className="gap-2">
-              <ShoppingCart className="h-4 w-4" />
-              Open POS
-            </Button>
-            <Button onClick={() => router.push('/admin/products')} className="gap-2">
-              <Package className="h-4 w-4" />
-              Manage Products
-            </Button>
-          </div>
-        </div>
-
-        {/* Branch Selection Banner - non-blocking prompt */}
-        {showBranchBanner && (
-          <div className="mb-4 flex items-center gap-3 p-3 pl-4 rounded-xl border border-primary/20 bg-primary/5">
-            <MapPin className="h-5 w-5 text-primary flex-shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium">
-                Operating as <span className="text-primary">{currentBranch?.name || 'All Branches'}</span>
-              </p>
-              <p className="text-xs text-muted-foreground">You can switch branches anytime from the sidebar or here.</p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 flex-shrink-0"
-              onClick={() => setShowBranchModal(true)}
-            >
-              <MapPin className="h-3.5 w-3.5" />
-              Switch
-            </Button>
-            <button
-              onClick={() => setBranchBannerDismissed(true)}
-              className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
-              title="Dismiss"
-            >
-              <X className="h-4 w-4" />
+          {branches.length > 1 && (
+            <button type="button" onClick={() => setBranchModalOpen(true)}
+              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border px-3 text-sm font-medium hover:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+              aria-label="Switch operating branch">
+              <MapPin className="h-4 w-4" aria-hidden="true" /> {currentBranch?.name || 'Choose branch'}
             </button>
-          </div>
+          )}
+        </header>
+
+        {!isOnline && (
+          <POSHomeNotice title="You're offline" tone="warning">
+            Dashboard numbers may be unavailable. Only previously supported offline POS operations can continue.
+          </POSHomeNotice>
+        )}
+        {branchSelectionRequired && branches.length > 1 && !currentBranch && (
+          <POSHomeNotice title="Choose a branch">
+            Select a branch for branch-specific sales figures. <button type="button" onClick={() => setBranchModalOpen(true)} className="font-semibold underline underline-offset-2">Select branch</button>
+          </POSHomeNotice>
         )}
 
-        {/* Warnings Section - Collapsible */}
-        {(((mpesaStatus && !mpesaStatus.isConfigured && shop?.currency === 'KES') || 
-           (stripeStatus && !stripeStatus.isConfigured && shop?.currency !== 'KES') || 
-           lowStockProducts.length > 0) && (
-          <div className="mb-6">
-            {/* Collapsed View - Show only icons */}
-            {warningsCollapsed ? (
-              <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-xl border border-border">
-                <div className="flex items-center gap-2 flex-1">
-                  <span className="text-xs text-muted-foreground font-medium">Alerts:</span>
-                  {mpesaStatus && !mpesaStatus.isConfigured && shop?.currency === 'KES' && (
-                    <button
-                      onClick={() => router.push('/settings?tab=mpesa')}
-                      className="p-2 rounded-lg bg-orange-500/20 hover:bg-orange-500/30 transition-colors group relative"
-                      title="M-Pesa Setup Required"
-                    >
-                      <Smartphone className="h-4 w-4 text-orange-600" />
-                      <span className="absolute -top-1 -right-1 w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
-                    </button>
-                  )}
-                  {stripeStatus && !stripeStatus.isConfigured && shop?.currency !== 'KES' && (
-                    <button
-                      onClick={() => router.push('/settings?tab=stripe')}
-                      className="p-2 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 transition-colors group relative"
-                      title="Card Payments Setup Required"
-                    >
-                      <CreditCard className="h-4 w-4 text-purple-600" />
-                      <span className="absolute -top-1 -right-1 w-2 h-2 bg-purple-500 rounded-full animate-pulse" />
-                    </button>
-                  )}
-                  {lowStockProducts.length > 0 && (
-                    <button
-                      onClick={() => router.push('/admin/products')}
-                      className="p-2 rounded-lg bg-yellow-500/20 hover:bg-yellow-500/30 transition-colors group relative"
-                      title={`${lowStockProducts.length} products low on stock`}
-                    >
-                      <AlertTriangle className="h-4 w-4 text-yellow-600" />
-                      <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-yellow-500 rounded-full text-[10px] font-bold text-white flex items-center justify-center">
-                        {lowStockProducts.length}
-                      </span>
-                    </button>
-                  )}
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={toggleWarnings}
-                  className="gap-1 text-xs text-muted-foreground hover:text-foreground"
-                >
-                  <Eye className="h-3.5 w-3.5" />
-                  Show
-                </Button>
-              </div>
-            ) : (
-              /* Expanded View - Full warnings */
-              <div className="space-y-4">
-                {/* Hide Button */}
-                <div className="flex justify-end">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={toggleWarnings}
-                    className="gap-1 text-xs text-muted-foreground hover:text-foreground"
-                  >
-                    <EyeOff className="h-3.5 w-3.5" />
-                    Hide Alerts
-                  </Button>
-                </div>
+        <POSHomeHero
+          eyebrow={isNewShop ? 'Getting started' : 'One-tap selling'}
+          title={isNewShop ? 'Add your first product' : 'Start a new sale'}
+          description={isNewShop
+            ? 'Build your catalogue to get ready for checkout. Add a product with a price and stock information.'
+            : 'Open your sales workspace to scan products, build a cart and check out.'}
+          actionLabel={isNewShop ? 'Add first product' : 'Open POS'}
+          actionHref={isNewShop ? '/admin/products' : '/pos'}
+          icon={isNewShop ? Package : ShoppingCart}
+          status={!isNewShop && lastUpdated ? 'Business information last updated ' + lastUpdated.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : undefined}
+        />
 
-                {/* M-Pesa Configuration Alert - Only for KES */}
-                {mpesaStatus && !mpesaStatus.isConfigured && shop?.currency === 'KES' && (
-                  <Card className="border-orange-500/40 bg-orange-500/10">
-                    <CardHeader className="pb-3">
-                      <div className="flex items-center justify-between flex-wrap gap-3">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 rounded-lg bg-orange-500/20">
-                            <Smartphone className="h-5 w-5 text-orange-600" />
-                          </div>
-                          <div>
-                            <CardTitle className="text-orange-700 dark:text-orange-400 text-lg">
-                              M-Pesa Setup Required
-                            </CardTitle>
-                            <CardDescription className="text-orange-600/80">
-                              Configure your Paybill/Till number to accept mobile payments
-                            </CardDescription>
-                          </div>
-                        </div>
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          className="border-orange-500/40 text-orange-700 hover:bg-orange-500/10"
-                          onClick={() => router.push('/settings?tab=mpesa')}
-                        >
-                          <Settings className="h-4 w-4 mr-2" />
-                          Configure Now
-                        </Button>
-                      </div>
-                    </CardHeader>
-                  </Card>
-                )}
-
-                {/* Card Payments Alert - For non-KES currencies */}
-                {stripeStatus && !stripeStatus.isConfigured && shop?.currency !== 'KES' && (
-                  <Card className="border-purple-500/40 bg-purple-500/10">
-                    <CardHeader className="pb-3">
-                      <div className="flex items-center justify-between flex-wrap gap-3">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 rounded-lg bg-purple-500/20">
-                            <CreditCard className="h-5 w-5 text-purple-600" />
-                          </div>
-                          <div>
-                            <CardTitle className="text-purple-700 dark:text-purple-400 text-lg">
-                              Card Payments Setup Required
-                            </CardTitle>
-                            <CardDescription className="text-purple-600/80">
-                              Configure Stripe to accept credit/debit card payments in {shop?.currency}
-                            </CardDescription>
-                          </div>
-                        </div>
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          className="border-purple-500/40 text-purple-700 hover:bg-purple-500/10"
-                          onClick={() => router.push('/settings?tab=stripe')}
-                        >
-                          <Settings className="h-4 w-4 mr-2" />
-                          Configure Now
-                        </Button>
-                      </div>
-                    </CardHeader>
-                  </Card>
-                )}
-
-                {/* Low Stock Alert */}
-                {lowStockProducts.length > 0 && (
-                  <Card className="border-yellow-500/40 bg-yellow-500/10">
-                    <CardHeader className="pb-3">
-                      <div className="flex items-center justify-between flex-wrap gap-3">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 rounded-lg bg-yellow-500/20">
-                            <AlertTriangle className="h-5 w-5 text-yellow-600" />
-                          </div>
-                          <div>
-                            <CardTitle className="text-yellow-700 dark:text-yellow-400 text-lg">
-                              Low Stock Alert
-                            </CardTitle>
-                            <CardDescription className="text-yellow-600/80">
-                              {lowStockProducts.length} product(s) below threshold
-                            </CardDescription>
-                          </div>
-                        </div>
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          className="border-yellow-500/40 text-yellow-700 hover:bg-yellow-500/10"
-                          onClick={() => router.push('/admin/products')}
-                        >
-                          View Products
-                          <ArrowRight className="h-4 w-4 ml-2" />
-                        </Button>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="pt-0">
-                      <div className="flex flex-wrap gap-2">
-                        {lowStockProducts.slice(0, 5).map((product) => (
-                          <Badge key={product._id} variant="secondary" className="text-yellow-700 bg-yellow-500/20">
-                            {product.name}: {product.stock ?? 0} left
-                          </Badge>
-                        ))}
-                        {lowStockProducts.length > 5 && (
-                          <Badge variant="secondary" className="text-yellow-700 bg-yellow-500/20">
-                            +{lowStockProducts.length - 5} more
-                          </Badge>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
+        <section aria-labelledby="admin-metrics-title">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h2 id="admin-metrics-title" className="text-base font-bold">Business today</h2>
+            {(salesError || inventoryError) && (
+              <button type="button" onClick={retry} className="min-h-11 rounded-lg px-2 text-sm font-semibold text-primary underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">Retry data</button>
             )}
           </div>
-        ))}
-
-        {/* Stats Cards */}
-        <div className="mb-6 grid grid-cols-2 md:grid-cols-4 gap-4">
-          {/* Today's Sales */}
-          <Card 
-            className="bg-gradient-to-br from-green-500/10 to-green-600/5 border-green-500/20 cursor-pointer hover:shadow-lg hover:border-green-500/40 transition-all group"
-            onClick={() => router.push('/admin/analytics/sales')}
-          >
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-green-500/20">
-                    <TrendingUp className="h-5 w-5 text-green-600" />
-                  </div>
-                  <div>
-                    <p className="font-bold text-lg text-green-700 dark:text-green-400">
-                      {formatMoney(salesStats?.todayRevenue || 0, shop?.currency)}
-                    </p>
-                    <p className="text-xs text-muted-foreground">Today's Sales</p>
-                  </div>
-                </div>
-                <ArrowUpRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Today's Orders */}
-          <Card 
-            className="cursor-pointer hover:shadow-lg hover:border-blue-500/40 transition-all group"
-            onClick={() => router.push('/admin/analytics/orders')}
-          >
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-blue-500/10">
-                    <ShoppingCart className="h-5 w-5 text-blue-600" />
-                  </div>
-                  <div>
-                    <p className="font-bold text-lg">{salesStats?.todayOrders || 0}</p>
-                    <p className="text-xs text-muted-foreground">Today's Orders</p>
-                  </div>
-                </div>
-                <ArrowUpRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Products Count */}
-          <Card 
-            className="cursor-pointer hover:shadow-lg hover:border-purple-500/40 transition-all group"
-            onClick={() => router.push('/admin/products')}
-          >
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-purple-500/10">
-                    <Package className="h-5 w-5 text-purple-600" />
-                  </div>
-                  <div>
-                    <p className="font-bold text-lg">{productsCount}</p>
-                    <p className="text-xs text-muted-foreground">Products</p>
-                    {lowStockProducts.length > 0 && (
-                      <p className="text-xs text-yellow-600 flex items-center gap-1">
-                        <AlertTriangle className="h-3 w-3" />
-                        {lowStockProducts.length} low stock
-                      </p>
-                    )}
-                  </div>
-                </div>
-                <ArrowUpRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Total Revenue */}
-          <Card 
-            className="cursor-pointer hover:shadow-lg hover:border-orange-500/40 transition-all group"
-            onClick={() => router.push('/admin/analytics/payments')}
-          >
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-orange-500/10">
-                    <CreditCard className="h-5 w-5 text-orange-600" />
-                  </div>
-                  <div>
-                    <p className="font-bold text-lg">
-                      {formatMoney(salesStats?.totalRevenue || 0, shop?.currency)}
-                    </p>
-                    <p className="text-xs text-muted-foreground">Total Revenue</p>
-                  </div>
-                </div>
-                <ArrowUpRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Quick Links Section */}
-        <div className="mb-6">
-          <h2 className="text-lg font-semibold mb-4">Quick Access</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            {quickLinks.map((link) => {
-              const Icon = link.icon;
-              return (
-                <Card 
-                  key={link.href}
-                  className="cursor-pointer hover:shadow-md hover:border-primary/40 transition-all group"
-                  onClick={() => router.push(link.href)}
-                >
-                  <CardContent className="pt-6 pb-4 text-center">
-                    <div className="p-3 rounded-lg bg-primary/10 w-fit mx-auto mb-3 group-hover:bg-primary/20 transition-colors">
-                      <Icon className="h-6 w-6 text-primary" />
-                    </div>
-                    <p className="font-medium text-sm">{link.name}</p>
-                    <p className="text-xs text-muted-foreground">{link.description}</p>
-                  </CardContent>
-                </Card>
-              );
-            })}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+            <POSHomeMetric label="Today's sales" value={money(sales?.todayRevenue)} loading={salesLoading} href="/admin/analytics/sales" />
+            <POSHomeMetric label="Today's orders" value={sales?.todayOrders ?? null} loading={salesLoading} href="/admin/analytics/orders" />
+            <div className="hidden sm:block"><POSHomeMetric label="Shop products" description="All branches" value={productCount ?? null} loading={inventoryLoading} href="/admin/products" /></div>
+            <div className="hidden sm:block"><POSHomeMetric label="Total revenue" value={money(sales?.totalRevenue)} loading={salesLoading} href="/admin/analytics/payments" /></div>
           </div>
-        </div>
+        </section>
 
-        {/* Quick Report Links */}
-        <div className="mb-6">
-          <h2 className="text-lg font-semibold mb-4">Reports & Analytics</h2>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" onClick={() => router.push('/admin/analytics/sales')} className="gap-2">
-              <BarChart3 className="h-4 w-4" />
-              Sales Report
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => router.push('/admin/analytics/orders')} className="gap-2">
-              <ShoppingCart className="h-4 w-4" />
-              Order History
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => router.push('/admin/analytics/inventory')} className="gap-2">
-              <Package className="h-4 w-4" />
-              Stock Report
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => router.push('/admin/analytics/payments')} className="gap-2">
-              <CreditCard className="h-4 w-4" />
-              Payment Report
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => router.push('/reports')} className="gap-2">
-              <TrendingUp className="h-4 w-4" />
-              All Reports
-            </Button>
+        <section aria-labelledby="admin-actions-title">
+          <h2 id="admin-actions-title" className="mb-2 text-base font-bold">Quick actions</h2>
+          <POSHomeQuickActions actions={actions} />
+        </section>
+
+        {(salesError || inventoryError) && (
+          <POSHomeNotice title="Some business figures couldn't load" tone="error">
+            Values marked — are unavailable, not zero. Your POS remains accessible if your account is authorized.{' '}
+            <button type="button" onClick={retry} className="font-semibold underline underline-offset-2">Try again</button>
+          </POSHomeNotice>
+        )}
+
+        <section aria-labelledby="admin-operations-title" className="grid gap-3 lg:grid-cols-2">
+          <div className="rounded-xl border border-border bg-card p-4">
+            <h2 id="admin-operations-title" className="text-base font-bold">Operations to watch</h2>
+            <div className="mt-3 space-y-3 text-sm">
+              <Link href="/admin/products" className="flex min-h-11 items-center justify-between gap-3 rounded-lg hover:bg-accent/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">
+                <span className="flex items-center gap-2"><AlertTriangle aria-hidden="true" className="h-4 w-4 text-amber-500" /> Low stock · shop-wide</span>
+                <span className="font-semibold">{inventoryLoading ? 'Loading' : inventoryError ? '—' : inventory?.lowStockProducts ?? '—'}</span>
+              </Link>
+              <Link href="/admin/branches" className="flex min-h-11 items-center justify-between gap-2 rounded-lg hover:bg-accent/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">
+                <span className="flex items-center gap-2"><Building2 aria-hidden="true" className="h-4 w-4" /> Branch management</span>
+                <span className="text-muted-foreground">Open</span>
+              </Link>
+              <div className="flex min-h-11 items-center justify-between gap-2">
+                <span className="flex items-center gap-2"><Clock3 aria-hidden="true" className="h-4 w-4" /> Data status</span>
+                <span className="text-muted-foreground">{salesError || inventoryError ? 'Needs attention' : lastUpdated ? 'Recently updated' : 'Loading'}</span>
+              </div>
+            </div>
           </div>
-        </div>
 
-        {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Inventory Summary */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Package className="h-5 w-5 text-primary" />
-                Inventory Summary
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Total Products</span>
-                  <span className="font-semibold">{productsCount}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Categories</span>
-                  <span className="font-semibold">{categoriesCount}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Low Stock Items</span>
-                  <Badge variant={lowStockProducts.length > 0 ? 'destructive' : 'secondary'}>
-                    {lowStockProducts.length}
-                  </Badge>
-                </div>
-                <Button 
-                  variant="outline" 
-                  className="w-full mt-4"
-                  onClick={() => router.push('/admin/products')}
-                >
-                  Manage Products
-                  <ArrowRight className="h-4 w-4 ml-2" />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="space-y-3">
+            {isNewShop && (
+              <POSHomeNotice title="First-sale setup">
+                Once you've added products, return here to open your POS. Categories and reporting can be configured as you grow.
+              </POSHomeNotice>
+            )}
+            {paymentPause?.paused === true ? (
+              <POSHomeNotice title="M-Pesa payments paused" tone="warning">
+                STK payment initiation is currently unavailable. Other payment methods may be available according to your shop configuration.
+              </POSHomeNotice>
+            ) : paymentPause === null ? (
+              <POSHomeNotice title="M-Pesa status unavailable" tone="warning">
+                We couldn't confirm M-Pesa availability. Do not assume it is enabled until its status has been verified.
+              </POSHomeNotice>
+            ) : (
+              <POSHomeNotice title="Payment method availability">
+                Review enabled payment methods in Settings before accepting a payment.
+              </POSHomeNotice>
+            )}
+            <Link href="/orders" className="flex min-h-11 items-center gap-2 rounded-xl border border-border bg-card px-4 text-sm font-semibold hover:bg-accent/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">
+              <ReceiptText aria-hidden="true" className="h-4 w-4" /> View order history
+            </Link>
+          </div>
+        </section>
 
-          {/* Sales Summary */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="h-5 w-5 text-primary" />
-                Sales Summary
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Today's Revenue</span>
-                  <span className="font-semibold text-green-600">
-                    {formatMoney(salesStats?.todayRevenue || 0, shop?.currency)}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Today's Orders</span>
-                  <span className="font-semibold">{salesStats?.todayOrders || 0}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Total Revenue</span>
-                  <span className="font-semibold">
-                    {formatMoney(salesStats?.totalRevenue || 0, shop?.currency)}
-                  </span>
-                </div>
-                <Button 
-                  variant="outline" 
-                  className="w-full mt-4"
-                  onClick={() => router.push('/admin/analytics/sales')}
-                >
-                  View Analytics
-                  <ArrowRight className="h-4 w-4 ml-2" />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          {!isOnline && <WifiOff aria-hidden="true" className="h-4 w-4" />}
+          <span>Operations and totals reflect your authorized shop. Inventory totals are shop-wide.</span>
         </div>
       </div>
 
-      {/* Branch Selection Modal */}
-      <BranchSelectionModal
-        isOpen={showBranchModal}
-        onClose={() => setShowBranchModal(false)}
-        showAllBranchesOption={true}
-        title="Select Operating Branch"
-        description="Choose which branch to operate. Dashboard data will be filtered for the selected branch."
-      />
+      <POSHomeBottomNav role="admin" posHref="/pos" />
+      <BranchSelectionModal isOpen={branchModalOpen} onClose={() => setBranchModalOpen(false)}
+        showAllBranchesOption={true} title="Select Operating Branch"
+        description="Choose a branch to filter sales activity. Inventory totals remain shop-wide." />
     </main>
   );
 }

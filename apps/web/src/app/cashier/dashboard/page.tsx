@@ -1,216 +1,202 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button } from '@smartduka/ui';
 import { useAuth } from '@/lib/auth-context';
 import { config } from '@/lib/config';
 import { formatMoney } from '@/lib/currency';
-import { useToast } from '@/lib/use-toast';
-import { ToastContainer } from '@/components/toast-container';
 import { AuthGuard } from '@/components/auth-guard';
+import { resolveCashierHomeAction, type CashierHomeShiftState } from '@/lib/pos-home-logic';
 import { shiftActivityTracker, type ShiftActivityState } from '@/lib/shift-activity-tracker';
-import { DollarSign, ShoppingCart, TrendingUp, Clock, LogOut, Play, Square, Coffee, Activity, Pause } from 'lucide-react';
+import {
+  POSHomeHero, POSHomeMetric, POSHomeQuickActions,
+  POSHomeNotice, POSHomeBottomNav,
+} from '@/components/pos-home-ui';
+import { Button } from '@smartduka/ui';
+import {
+  Activity, Coffee, Clock, LogOut, Play, ReceiptText, ShoppingCart, Square,
+} from 'lucide-react';
 
-interface Transaction {
-  _id: string;
-  action: string;
-  details: {
-    amount?: number;
-    items?: number;
-    paymentMethod?: string;
-  };
-  timestamp: string;
-}
-
-interface Shift {
+type Shift = {
   _id: string;
   startTime: string;
-  endTime?: string;
   openingBalance: number;
   status: 'open' | 'closed' | 'reconciled';
   totalSales?: number;
   transactionCount?: number;
   expectedCash?: number;
-  activeTimeMs?: number;
-  inactiveTimeMs?: number;
-  breakTimeMs?: number;
-}
-
-interface CashierStats {
-  totalSales: number;
-  transactionCount: number;
+};
+type Receipt = {
+  id: string;
+  total: number;
+  createdAt: string;
+  paymentStatus?: string;
+};
+type CashierStats = {
+  todaySales: number;
+  todayTransactions: number;
   averageTransaction: number;
-  recentTransactions: Transaction[];
-}
+  recentOrders: Receipt[];
+};
 
 function CashierDashboardContent() {
   const router = useRouter();
   const { user, shop, token, logout } = useAuth();
-  const { toasts, toast, dismiss } = useToast();
-
-  const [stats, setStats] = useState<CashierStats>({
-    totalSales: 0,
-    transactionCount: 0,
-    averageTransaction: 0,
-    recentTransactions: [],
-  });
   const [shift, setShift] = useState<Shift | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [shiftDuration, setShiftDuration] = useState('0m');
-  const [activityState, setActivityState] = useState<ShiftActivityState | null>(null);
+  const [shiftState, setShiftState] = useState<CashierHomeShiftState>('loading');
+  const [shiftRetry, setShiftRetry] = useState(0);
+  const [stats, setStats] = useState<CashierStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [statsError, setStatsError] = useState(false);
   const [isOnBreak, setIsOnBreak] = useState(false);
+  const [activityState, setActivityState] = useState<ShiftActivityState | null>(null);
+  const [breakBusy, setBreakBusy] = useState(false);
+  const [breakError, setBreakError] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+  const [isOnline, setIsOnline] = useState(true);
+
+  const refreshShift = useCallback(() => setShiftRetry((k) => k + 1), []);
 
   useEffect(() => {
-    loadCashierStats();
-    loadCurrentShift();
-    
-    // Update shift duration and sales every minute
-    const interval = setInterval(() => {
-      updateShiftDuration();
-      if (shift && shift.status === 'open') {
-        loadCurrentShift(); // Refresh sales data
-      }
-    }, 60000);
+    setIsOnline(navigator.onLine);
+    const connected = () => setIsOnline(true);
+    const disconnected = () => setIsOnline(false);
+    window.addEventListener('online', connected);
+    window.addEventListener('offline', disconnected);
+    const clock = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => {
+      window.removeEventListener('online', connected);
+      window.removeEventListener('offline', disconnected);
+      window.clearInterval(clock);
+    };
+  }, []);
 
-    return () => clearInterval(interval);
-  }, [token, shift?.status]);
-
-  // Initialize activity tracker when shift is loaded
+  // Shift state comes from the server; a failed request must not look like "no shift".
   useEffect(() => {
-    if (shift && shift.status === 'open' && token) {
-      shiftActivityTracker.initialize(shift._id, token);
-      
-      // Subscribe to activity state updates
-      const unsubscribe = shiftActivityTracker.subscribe((state) => {
-        setActivityState(state);
-        setIsOnBreak(state.isOnBreak);
-      });
-
-      return () => {
-        unsubscribe();
-        shiftActivityTracker.cleanup();
-      };
-    }
-  }, [shift?._id, shift?.status, token]);
-
-  const updateShiftDuration = () => {
-    const shiftData = localStorage.getItem('smartduka:shift');
-    if (shiftData) {
-      const s = JSON.parse(shiftData);
-      const start = new Date(s.startTime).getTime();
-      const now = Date.now();
-      const diff = now - start;
-      const hours = Math.floor(diff / (1000 * 60 * 60));
-      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-      setShiftDuration(hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`);
-    }
-  };
-
-  const loadCurrentShift = async () => {
-    if (!token || !user) return;
-
-    try {
-      const res = await fetch(`${config.apiUrl}/shifts/current`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (res.ok) {
-        // Safely parse JSON in case of empty body/204
-        let data: any = null;
-        try {
-          const text = await res.text();
-          data = text ? JSON.parse(text) : null;
-        } catch (_) {
-          data = null;
-        }
-        setShift(data);
-        if (data) {
-          localStorage.setItem('smartduka:shift', JSON.stringify(data));
-          updateShiftDuration();
-          
-          // Load sales data for this shift
-          try {
-            const salesRes = await fetch(`${config.apiUrl}/shifts/${data._id}/sales`, {
-              headers: { Authorization: `Bearer ${token}` },
-            });
-            
-            const salesText = await salesRes.text();
-            const salesData = salesText ? JSON.parse(salesText) : {};
-            
-            if (salesRes.ok) {
-              setShift(prev => prev ? {
-                ...prev,
-                totalSales: salesData.totalSales,
-                transactionCount: salesData.transactionCount,
-                expectedCash: salesData.expectedCash,
-              } : null);
-            }
-          } catch (salesError) {
-            console.error('Failed to load sales data:', salesError);
-          }
-        }
-      } else if (res.status === 404) {
-        // No active shift - this is normal
-        setShift(null);
-      }
-    } catch (err: any) {
-      console.error('Failed to load shift:', err);
+    if (!token || !user) {
       setShift(null);
+      setShiftState('error');
+      return;
     }
-  };
-
-  const loadCashierStats = async () => {
-    if (!token || !user) return;
-
-    try {
-      setLoading(true);
-      // Use the dedicated cashier stats endpoint
-      const res = await fetch(`${config.apiUrl}/sales/cashier-stats`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (!res.ok) {
-        if (res.status === 401) {
-          toast({ type: 'error', title: 'Session expired', message: 'Please login again' });
+    const controller = new AbortController();
+    const load = async () => {
+      setShiftState('loading');
+      setShift(null);
+      try {
+        const response = await fetch(`${config.apiUrl}/shifts/current`, {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: controller.signal,
+        });
+        if (response.status === 404) {
+          if (!controller.signal.aborted) setShiftState('none');
           return;
         }
-        // Set empty stats on error
-        setStats({
-          totalSales: 0,
-          transactionCount: 0,
-          averageTransaction: 0,
-          recentTransactions: [],
-        });
-        return;
+        if (!response.ok) throw new Error('Shift status request failed');
+        const payload = await response.json() as Shift | null;
+        if (controller.signal.aborted) return;
+        if (!payload) {
+          setShiftState('none');
+          return;
+        }
+        setShift(payload);
+        setShiftState(payload.status === 'open' ? 'active' : 'pending');
+
+        // Preserve the existing shift-specific cash and sales summary.
+        if (payload.status === 'open') {
+          try {
+            const summaryResponse = await fetch(
+              `${config.apiUrl}/shifts/${encodeURIComponent(payload._id)}/sales`,
+              { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal },
+            );
+            if (summaryResponse.ok) {
+              const summary = await summaryResponse.json() as {
+                totalSales?: number;
+                transactionCount?: number;
+                expectedCash?: number;
+              };
+              if (!controller.signal.aborted) {
+                setShift((existing) => existing?._id === payload._id ? {
+                  ...existing,
+                  totalSales: Number.isFinite(summary.totalSales) ? summary.totalSales : undefined,
+                  transactionCount: Number.isFinite(summary.transactionCount) ? summary.transactionCount : undefined,
+                  expectedCash: Number.isFinite(summary.expectedCash) ? summary.expectedCash : undefined,
+                } : existing);
+              }
+            }
+          } catch {
+            // Never replace an authoritative active shift with a false "no shift".
+            // Financial fields remain unavailable until their own read succeeds.
+          }
+        }
+      } catch {
+        if (!controller.signal.aborted) setShiftState('error');
       }
+    };
+    void load();
+    return () => controller.abort();
+  }, [token, user?.shopId, shiftRetry]);
 
-      const statsText = await res.text();
-      const data = statsText ? JSON.parse(statsText) : {};
+  useEffect(() => {
+    if (!token || !user) {
+      setStatsLoading(false);
+      return;
+    }
+    const controller = new AbortController();
+    setStatsLoading(true);
+    setStatsError(false);
+    setStats(null);
+    void fetch(`${config.apiUrl}/sales/cashier-stats`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: controller.signal,
+    }).then(async (res) => {
+      if (!res.ok) throw new Error('Cashier stats request failed');
+      return (await res.json()) as CashierStats;
+    }).then((data) => {
+      if (controller.signal.aborted) return;
+      if (!Number.isFinite(data?.todaySales) || !Number.isFinite(data?.todayTransactions)) {
+        throw new Error('Invalid cashier metrics');
+      }
+      setStats(data);
+    }).catch(() => {
+      if (!controller.signal.aborted) setStatsError(true);
+    }).finally(() => {
+      if (!controller.signal.aborted) setStatsLoading(false);
+    });
+    return () => controller.abort();
+  }, [token, user?.shopId, shiftRetry]);
 
-      // Format recent orders for display
-      const formattedTransactions: Transaction[] = (data.recentOrders || []).map((order: any) => ({
-        _id: order.id,
-        action: 'sale',
-        details: {
-          amount: order.total,
-          items: order.items || 0,
-          paymentMethod: order.paymentStatus || 'paid',
-        },
-        timestamp: order.createdAt,
-      }));
+  useEffect(() => {
+    if (!token || !shift?._id || shiftState !== 'active') {
+      setActivityState(null);
+      setIsOnBreak(false);
+      return;
+    }
+    shiftActivityTracker.initialize(shift._id, token);
+    const unsubscribe = shiftActivityTracker.subscribe((state) => {
+      setActivityState(state);
+      setIsOnBreak(state.isOnBreak);
+    });
+    return () => {
+      unsubscribe();
+      shiftActivityTracker.cleanup();
+    };
+  }, [token, shift?._id, shiftState]);
 
-      setStats({
-        totalSales: data.todaySales || 0,
-        transactionCount: data.todayTransactions || 0,
-        averageTransaction: data.averageTransaction || 0,
-        recentTransactions: formattedTransactions,
-      });
-    } catch (err: any) {
-      console.error('Error loading stats:', err);
-      toast({ type: 'error', title: 'Load failed', message: err?.message });
+  const toggleBreak = async () => {
+    if (breakBusy || shiftState !== 'active') return;
+    setBreakBusy(true);
+    setBreakError(false);
+    try {
+      const success = isOnBreak
+        ? await shiftActivityTracker.endBreak()
+        : await shiftActivityTracker.startBreak('Break');
+      if (!success) throw new Error('Unable to update break');
+      setIsOnBreak(!isOnBreak);
+    } catch {
+      setBreakError(true);
     } finally {
-      setLoading(false);
+      setBreakBusy(false);
     }
   };
 
@@ -220,355 +206,171 @@ function CashierDashboardContent() {
     router.push('/login');
   };
 
-  const handleStartBreak = async () => {
-    const success = await shiftActivityTracker.startBreak('Break');
-    if (success) {
-      toast({ type: 'info', title: 'Break Started', message: 'Your break has started. Activity tracking is paused.' });
-    }
+  const currency = shop?.currency;
+  const money = (value: number | undefined) =>
+    typeof value === 'number' && Number.isFinite(value) ? formatMoney(value, currency) : null;
+  const shiftDuration = shift?.startTime && shiftState === 'active'
+    ? Math.max(0, Math.floor((now - new Date(shift.startTime).getTime()) / 60_000))
+    : null;
+  const elapsed = shiftDuration === null || !Number.isFinite(shiftDuration) ? '—'
+    : shiftDuration >= 60 ? `${Math.floor(shiftDuration / 60)}h ${shiftDuration % 60}m`
+      : `${shiftDuration}m`;
+
+  const isActive = shiftState === 'active';
+  const nextAction = resolveCashierHomeAction(shiftState, isOnBreak);
+  const hero = shiftState === 'loading' ? {
+    eyebrow: 'Checking shift', title: 'Verifying your shift',
+    description: 'Your selling access will appear after we confirm the shift state.',
+    actionLabel: 'Check again', icon: Clock,
+  } : shiftState === 'error' ? {
+    eyebrow: 'Action required', title: 'Shift status unavailable',
+    description: 'We could not confirm your current shift. Do not start another one until the status is verified.',
+    actionLabel: 'Retry shift check', icon: Clock,
+  } : shiftState === 'none' ? {
+    eyebrow: 'Before selling', title: 'Start your shift',
+    description: 'Confirm your till opening balance to begin tracking sales and cash.',
+    actionLabel: 'Start shift', icon: Play,
+  } : shiftState === 'pending' ? {
+    eyebrow: 'Shift reconciliation', title: 'Resolve your previous shift',
+    description: 'Review the shift status before starting another sales session.',
+    actionLabel: 'View shift close', icon: Square,
+  } : isOnBreak ? {
+    eyebrow: 'Shift on break', title: 'Resume your shift',
+    description: 'End your break before using the point of sale.',
+    actionLabel: 'End break', icon: Coffee,
+  } : {
+    eyebrow: 'Ready for checkout', title: 'Start a new sale',
+    description: 'Scan or search for products and complete your next sale.',
+    actionLabel: 'Open POS', icon: ShoppingCart,
   };
 
-  const handleEndBreak = async () => {
-    const success = await shiftActivityTracker.endBreak();
-    if (success) {
-      toast({ type: 'success', title: 'Break Ended', message: 'Welcome back! Activity tracking resumed.' });
-    }
-  };
+  const href = nextAction.href;
+  const onAction = nextAction.command === 'refresh' ? refreshShift
+    : nextAction.command === 'endBreak' ? () => { void toggleBreak(); }
+      : undefined;
 
-  const formatCurrency = (value: number) =>
-    formatMoney(value, shop?.currency);
-
-  const formatTime = (timestamp: string) => {
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' });
-  };
-
-  const formatDuration = (ms: number) => {
-    const minutes = Math.floor(ms / (1000 * 60));
-    const hours = Math.floor(minutes / 60);
-    const remainingMinutes = minutes % 60;
-    return hours > 0 ? `${hours}h ${remainingMinutes}m` : `${minutes}m`;
-  };
-
-  const getActivePercentage = () => {
-    if (!activityState) return 100;
-    const total = activityState.activeTimeMs + activityState.inactiveTimeMs;
-    if (total === 0) return 100;
-    return Math.round((activityState.activeTimeMs / total) * 100);
-  };
+  const receipts = Array.isArray(stats?.recentOrders) ? stats.recentOrders : [];
 
   return (
-    <main className="bg-background py-4 sm:py-6 min-h-screen">
-      <ToastContainer toasts={toasts} onDismiss={dismiss} />
-      <div className="container px-3 sm:px-6">
-        {/* Header */}
-        <div className="mb-5 sm:mb-8 flex items-center justify-between gap-3">
+    <main className="bg-background pb-[calc(6rem+env(safe-area-inset-bottom))] pt-4 sm:pt-6 lg:pb-10">
+      <div className="container max-w-7xl space-y-5 px-3 sm:px-6">
+        <header className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            {shop && (
-              <p className="text-[10px] sm:text-xs font-medium text-primary mb-1 sm:mb-2 truncate">
-                {shop.name} • Cashier View
-              </p>
-            )}
-            <h1 className="text-xl sm:text-3xl font-bold truncate">Welcome, {user?.name || 'Cashier'}</h1>
-            <p className="text-xs sm:text-sm text-muted-foreground">Your sales dashboard for today</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {shop?.name || 'Your shop'} · Cashier workspace
+            </p>
+            <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Welcome, {user?.name || 'Cashier'}</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {shiftState === 'active' ? (isOnBreak ? 'On break' : 'Shift running') : 'Your sales workspace'}
+            </p>
           </div>
-          <Button
-            variant="outline"
-            onClick={handleLogout}
-            size="sm"
-            className="gap-1.5 sm:gap-2 flex-shrink-0"
-          >
-            <LogOut className="h-4 w-4" />
-            <span className="hidden sm:inline">Logout</span>
-          </Button>
-        </div>
+          <button type="button" onClick={handleLogout}
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-border px-3 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+            aria-label="Log out"><LogOut aria-hidden="true" className="h-5 w-5" /></button>
+        </header>
 
-        {/* Shift Status Card */}
-        {shift ? (
-          <Card className={`mb-5 sm:mb-8 border-l-4 ${isOnBreak ? 'border-l-amber-500' : 'border-l-blue-500'}`}>
-            <CardHeader className="pb-2 sm:pb-3 px-3 sm:px-6">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  {isOnBreak ? (
-                    <Coffee className="h-4 w-4 text-amber-600" />
-                  ) : (
-                    <Clock className="h-4 w-4 text-blue-600" />
-                  )}
-                  {isOnBreak ? 'On Break' : 'Active Shift'}
-                </CardTitle>
-                <div className="flex items-center gap-2">
-                  {activityState && (
-                    <span className={`px-2 py-1 text-xs font-medium rounded-full flex items-center gap-1 ${
-                      activityState.isActive 
-                        ? 'bg-green-100 text-green-700' 
-                        : 'bg-yellow-100 text-yellow-700'
-                    }`}>
-                      <Activity className="h-3 w-3" />
-                      {activityState.isActive ? 'Active' : 'Idle'}
-                    </span>
-                  )}
-                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                    isOnBreak 
-                      ? 'bg-amber-100 text-amber-700' 
-                      : 'bg-green-100 text-green-700'
-                  }`}>
-                    {isOnBreak ? 'Break' : shift.status === 'open' ? 'Running' : 'Closed'}
-                  </span>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="px-3 sm:px-6">
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 mb-3 sm:mb-4">
-                <div>
-                  <p className="text-xs text-muted-foreground">Start Time</p>
-                  <p className="font-semibold">{formatTime(shift.startTime)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Total Duration</p>
-                  <p className="font-semibold">{shiftDuration}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Active Time</p>
-                  <p className="font-semibold text-green-600">
-                    {activityState ? formatDuration(activityState.activeTimeMs) : shiftDuration}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Opening Balance</p>
-                  <p className="font-semibold">{formatCurrency(shift.openingBalance)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Total Sales</p>
-                  <p className="font-semibold text-green-600">{formatCurrency(shift.totalSales || 0)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Transactions</p>
-                  <p className="font-semibold">{shift.transactionCount || 0}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Expected Cash</p>
-                  <p className="font-semibold">{formatCurrency(shift.expectedCash || shift.openingBalance)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Activity Rate</p>
-                  <p className={`font-semibold ${getActivePercentage() >= 70 ? 'text-green-600' : getActivePercentage() >= 50 ? 'text-yellow-600' : 'text-red-600'}`}>
-                    {getActivePercentage()}%
-                  </p>
-                </div>
-                {activityState && activityState.inactiveTimeMs > 0 && (
-                  <div>
-                    <p className="text-xs text-muted-foreground">Idle Time</p>
-                    <p className="font-semibold text-yellow-600">{formatDuration(activityState.inactiveTimeMs)}</p>
-                  </div>
-                )}
-              </div>
-              
-              {/* Activity Progress Bar */}
-              {activityState && (activityState.activeTimeMs > 0 || activityState.inactiveTimeMs > 0) && (
-                <div className="mb-4">
-                  <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                    <span>Activity Breakdown</span>
-                    <span>{getActivePercentage()}% active</span>
-                  </div>
-                  <div className="h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden flex">
-                    <div 
-                      className="bg-green-500 h-full transition-all duration-300" 
-                      style={{ width: `${getActivePercentage()}%` }}
-                    />
-                    <div 
-                      className="bg-yellow-500 h-full transition-all duration-300" 
-                      style={{ width: `${100 - getActivePercentage()}%` }}
-                    />
-                  </div>
-                  <div className="flex justify-between text-xs mt-1">
-                    <span className="text-green-600">Active: {formatDuration(activityState.activeTimeMs)}</span>
-                    <span className="text-yellow-600">Idle: {formatDuration(activityState.inactiveTimeMs)}</span>
-                  </div>
-                </div>
-              )}
-
-              <div className="grid grid-cols-3 gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => router.push('/pos')}
-                  className="h-10 sm:h-9 text-xs sm:text-sm"
-                  disabled={isOnBreak}
-                >
-                  <ShoppingCart className="h-4 w-4 mr-1" />
-                  POS
-                </Button>
-                
-                {/* Break Toggle Button */}
-                {isOnBreak ? (
-                  <Button
-                    size="sm"
-                    onClick={handleEndBreak}
-                    className="h-10 sm:h-9 text-xs sm:text-sm bg-green-600 hover:bg-green-700"
-                  >
-                    <Play className="h-4 w-4 mr-1" />
-                    End Break
-                  </Button>
-                ) : (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={handleStartBreak}
-                    className="h-10 sm:h-9 text-xs sm:text-sm"
-                  >
-                    <Coffee className="h-4 w-4 mr-1" />
-                    Break
-                  </Button>
-                )}
-                
-                <Button
-                  size="sm"
-                  onClick={() => router.push('/cashier/shift-end')}
-                  className="h-10 sm:h-9 text-xs sm:text-sm bg-orange-600 hover:bg-orange-700"
-                  disabled={isOnBreak}
-                >
-                  <Square className="h-4 w-4 mr-1" />
-                  End Shift
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card className="mb-5 sm:mb-8 border-l-4 border-l-yellow-500">
-            <CardHeader className="pb-2 sm:pb-3 px-3 sm:px-6">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Clock className="h-4 w-4 text-yellow-600" />
-                No Active Shift
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-3 sm:px-6">
-              <p className="text-sm text-muted-foreground mb-3 sm:mb-4">
-                Start a shift to begin tracking your sales.
-              </p>
-              <Button
-                onClick={() => router.push('/cashier/shift-start')}
-                className="w-full h-11 bg-green-600 hover:bg-green-700"
-              >
-                <Play className="h-4 w-4 mr-2" />
-                Start Shift
-              </Button>
-            </CardContent>
-          </Card>
+        {!isOnline && (
+          <POSHomeNotice title="No internet connection" tone="warning">
+            Verify which offline operations are supported before continuing. Payment confirmation requires provider verification.
+          </POSHomeNotice>
         )}
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-5 sm:mb-8">
-          {/* Total Sales */}
-          <Card>
-            <CardContent className="p-3 sm:pt-6 sm:p-6">
-              <DollarSign className="h-4 w-4 text-green-600 mb-1" />
-              <p className="text-[10px] sm:text-xs text-muted-foreground">Sales Today</p>
-              <div className="text-base sm:text-2xl font-bold mt-0.5 truncate">{formatCurrency(stats.totalSales)}</div>
-              <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">
-                {stats.transactionCount} txns
-              </p>
-            </CardContent>
-          </Card>
+        <POSHomeHero eyebrow={hero.eyebrow} title={hero.title} description={hero.description}
+          actionLabel={nextAction.label} actionHref={onAction ? undefined : href}
+          onAction={onAction} icon={hero.icon}
+          status={isActive && shift?.startTime ? `Shift started ${new Date(shift.startTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : undefined}
+        />
 
-          {/* Transaction Count */}
-          <Card>
-            <CardContent className="p-3 sm:pt-6 sm:p-6">
-              <ShoppingCart className="h-4 w-4 text-blue-600 mb-1" />
-              <p className="text-[10px] sm:text-xs text-muted-foreground">Transactions</p>
-              <div className="text-base sm:text-2xl font-bold mt-0.5">{stats.transactionCount}</div>
-              <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">
-                completed
-              </p>
-            </CardContent>
-          </Card>
+        <section aria-labelledby="cashier-activity-title">
+          <h2 id="cashier-activity-title" className="mb-2 text-base font-bold">My activity today</h2>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+            <POSHomeMetric label="My sales" value={statsError ? null : money(stats?.todaySales)} loading={statsLoading} />
+            <POSHomeMetric label="Transactions" value={statsError ? null : stats?.todayTransactions ?? null} loading={statsLoading} />
+            <div className="hidden sm:block"><POSHomeMetric label="Shift duration" value={elapsed} loading={shiftState === 'loading'} /></div>
+            <div className="hidden sm:block"><POSHomeMetric label="Average sale" value={statsError ? null : money(stats?.averageTransaction)} loading={statsLoading} /></div>
+          </div>
+        </section>
 
-          {/* Average Transaction */}
-          <Card>
-            <CardContent className="p-3 sm:pt-6 sm:p-6">
-              <TrendingUp className="h-4 w-4 text-purple-600 mb-1" />
-              <p className="text-[10px] sm:text-xs text-muted-foreground">Avg Sale</p>
-              <div className="text-base sm:text-2xl font-bold mt-0.5 truncate">{formatCurrency(stats.averageTransaction)}</div>
-              <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">
-                per txn
-              </p>
-            </CardContent>
-          </Card>
-        </div>
+        <section aria-labelledby="cashier-fast-title">
+          <h2 id="cashier-fast-title" className="mb-2 text-base font-bold">Fast actions</h2>
+          <POSHomeQuickActions actions={[
+            { label: 'My sales', description: 'Recent receipts', href: '/cashier/dashboard#recent-sales', icon: ReceiptText },
+            { label: 'My shift', description: 'Time and cash', href: '/cashier/dashboard#shift-details', icon: Clock },
+          ]} />
+        </section>
 
-        {/* Recent Transactions */}
-        <Card>
-          <CardHeader className="px-3 sm:px-6 pb-2 sm:pb-3">
-            <CardTitle className="text-sm sm:text-base flex items-center gap-2">
-              <Clock className="h-4 w-4 sm:h-5 sm:w-5" />
-              Recent Transactions
-            </CardTitle>
-            <CardDescription className="text-xs">Your last 10 sales today</CardDescription>
-          </CardHeader>
-          <CardContent className="px-3 sm:px-6">
-            {loading ? (
-              <div className="text-center py-8 text-muted-foreground">Loading transactions...</div>
-            ) : stats.recentTransactions.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                No transactions yet. Start selling!
-              </div>
-            ) : (
-              <div className="space-y-2 sm:space-y-3">
-                {stats.recentTransactions.map((transaction) => (
-                  <div
-                    key={transaction._id}
-                    className="flex items-center justify-between p-2.5 sm:p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors active:bg-muted"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 sm:gap-2">
-                        <ShoppingCart className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground flex-shrink-0" />
-                        <span className="font-medium text-sm sm:text-base">
-                          {transaction.details?.items || 0} items
-                        </span>
-                      </div>
-                      <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 sm:mt-1 pl-5 sm:pl-6">
-                        {transaction.details?.paymentMethod || 'Unknown'} • {formatTime(transaction.timestamp)}
-                      </p>
-                    </div>
-                    <div className="text-right flex-shrink-0 ml-2">
-                      <div className="font-bold text-sm sm:text-lg">
-                        {formatCurrency(transaction.details?.amount || 0)}
-                      </div>
-                    </div>
-                  </div>
-                ))}
+        {breakError && <POSHomeNotice title="Break status could not be updated" tone="error">Please retry the action or ask your manager for assistance.</POSHomeNotice>}
+        {statsError && (
+          <POSHomeNotice title="Sales figures unavailable" tone="error">
+            These figures have not been replaced by zeros.{' '}
+            <button type="button" className="font-semibold underline underline-offset-2" onClick={refreshShift}>Retry</button>
+          </POSHomeNotice>
+        )}
+
+        <div className="grid gap-3 lg:grid-cols-2">
+          <section id="shift-details" aria-labelledby="my-shift-title" className="scroll-mt-20 rounded-xl border border-border bg-card p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 id="my-shift-title" className="text-base font-bold">My shift</h2>
+              <span className="rounded-full border border-border px-3 py-1 text-xs font-semibold">
+                {shiftState === 'active' ? (isOnBreak ? 'On break' : 'Running') :
+                  shiftState === 'none' ? 'Not started' : shiftState === 'pending' ? 'Needs reconciliation' :
+                    shiftState === 'error' ? 'Unavailable' : 'Checking'}
+              </span>
+            </div>
+            <dl className="mt-4 grid grid-cols-2 gap-4 text-sm">
+              <div><dt className="text-xs text-muted-foreground">Started</dt><dd className="mt-1 font-semibold">{shift?.startTime ? new Date(shift.startTime).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}) : '—'}</dd></div>
+              <div><dt className="text-xs text-muted-foreground">Duration</dt><dd className="mt-1 font-semibold">{elapsed}</dd></div>
+              <div><dt className="text-xs text-muted-foreground">Opening float</dt><dd className="mt-1 font-semibold">{money(shift?.openingBalance) ?? '—'}</dd></div>
+              <div><dt className="text-xs text-muted-foreground">Expected cash</dt><dd className="mt-1 font-semibold">{money(shift?.expectedCash) ?? '—'}</dd></div>
+              <div><dt className="text-xs text-muted-foreground">Shift sales</dt><dd className="mt-1 font-semibold">{money(shift?.totalSales) ?? '—'}</dd></div>
+              <div><dt className="text-xs text-muted-foreground">Shift transactions</dt><dd className="mt-1 font-semibold">{shift?.transactionCount ?? '—'}</dd></div>
+            </dl>
+            {activityState && isActive && (
+              <p className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                <Activity aria-hidden="true" className="h-4 w-4" /> {activityState.isActive ? 'Shift activity detected' : 'Shift currently idle'}
+              </p>
+            )}
+            {isActive && (
+              <div className="mt-4 flex flex-wrap gap-2" id="shift-actions">
+                <Button type="button" variant="outline" onClick={() => { void toggleBreak(); }} disabled={breakBusy}
+                  className="min-h-11 flex-1">
+                  <Coffee aria-hidden="true" className="mr-2 h-4 w-4" /> {breakBusy ? 'Updating…' : isOnBreak ? 'End break' : 'Take break'}
+                </Button>
+                {isOnBreak ? (
+                  <span aria-disabled="true" className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-md border border-border px-3 text-sm font-semibold opacity-50">
+                    <Square aria-hidden="true" className="h-4 w-4" /> End shift
+                  </span>
+                ) : (
+                  <Link href="/cashier/shift-end" className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-md border border-border px-3 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">
+                    <Square aria-hidden="true" className="h-4 w-4" /> End shift
+                  </Link>
+                )}
               </div>
             )}
-          </CardContent>
-        </Card>
+          </section>
 
-        {/* Action Buttons */}
-        <div className="mt-5 sm:mt-8 grid grid-cols-2 gap-3 sm:gap-4">
-          <Button
-            size="lg"
-            onClick={() => router.push('/pos')}
-            className="gap-2 h-12 sm:h-11"
-          >
-            <ShoppingCart className="h-5 w-5" />
-            Go to POS
-          </Button>
-          <Button
-            size="lg"
-            variant="outline"
-            onClick={loadCashierStats}
-            className="gap-2 h-12 sm:h-11"
-          >
-            <Clock className="h-5 w-5" />
-            Refresh
-          </Button>
+          <section id="recent-sales" aria-labelledby="cashier-receipts-title" className="scroll-mt-20 rounded-xl border border-border bg-card p-4">
+            <h2 id="cashier-receipts-title" className="text-base font-bold">My recent sales</h2>
+            {statsLoading ? <p className="mt-3 text-sm text-muted-foreground">Loading receipts…</p> :
+              statsError ? <p className="mt-3 text-sm text-muted-foreground">Receipts temporarily unavailable.</p> :
+                receipts.length === 0 ? <p className="mt-3 text-sm text-muted-foreground">No sales recorded yet for this cashier.</p> :
+                  <ul className="mt-3 divide-y divide-border">
+                    {receipts.slice(0, 5).map((receipt) => (
+                      <li key={receipt.id} className="flex min-h-12 items-center justify-between gap-3 py-2 text-sm">
+                        <span className="min-w-0 truncate">Receipt · {new Date(receipt.createdAt).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}</span>
+                        <span className="font-semibold tabular-nums">{money(receipt.total) ?? '—'}</span>
+                      </li>
+                    ))}
+                  </ul>}
+          </section>
         </div>
       </div>
+      <POSHomeBottomNav role="cashier" posHref={nextAction.href ?? '/pos'}
+        posLabel={shiftState === 'none' ? 'Start shift' : 'POS'} disablePOS={!nextAction.canNavigateToPOS && shiftState !== 'none'} />
     </main>
   );
 }
 
 export default function CashierDashboardPage() {
-  return (
-    <AuthGuard>
-      <CashierDashboardContent />
-    </AuthGuard>
-  );
+  return <AuthGuard><CashierDashboardContent /></AuthGuard>;
 }
