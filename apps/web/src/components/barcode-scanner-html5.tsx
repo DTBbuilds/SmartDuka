@@ -181,7 +181,7 @@ export function BarcodeScannerHtml5({
       );
       if (generation !== initGenerationRef.current) {
         await scanner.stop().catch(() => {});
-        await scanner.clear().catch(() => {});
+        try { scanner.clear(); } catch { /* Already cleared during close. */ }
         return;
       }
       try {
