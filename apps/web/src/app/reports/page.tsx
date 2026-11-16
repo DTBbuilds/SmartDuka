@@ -12,6 +12,7 @@ import {
   Input,
 } from '@smartduka/ui';
 import { useAuth } from '@/lib/auth-context';
+import { formatMoney } from '@/lib/currency';
 import { useToast } from '@/lib/use-toast';
 import { ToastContainer } from '@/components/toast-container';
 import { AuthGuard } from '@/components/auth-guard';
@@ -30,11 +31,9 @@ type DailySales = {
   }>;
 };
 
-const formatCurrency = (value: number) =>
-  `Ksh ${value.toLocaleString('en-KE', { minimumFractionDigits: 0 })}`;
-
 function ReportsContent() {
   const { user, shop, token } = useAuth();
+  const formatCurrency = (value: number) => formatMoney(value, shop?.currency);
   const { toasts, toast, dismiss } = useToast();
 
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
