@@ -3,22 +3,23 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ShoppingCart, AlertCircle, Lock, Clock, ArrowLeft, Mail, Loader2, ShieldCheck } from 'lucide-react';
+import { ShoppingCart, AlertCircle, Lock, Clock, ArrowLeft, Mail, Loader2, ShieldCheck, Store, UserRound, ScanLine, ArrowRight } from 'lucide-react';
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@smartduka/ui';
 import { useAuth } from '@/lib/auth-context';
 import { config } from '@/lib/config';
 import { AdminLoginForm } from '@/components/login-forms/admin-login';
 import { CashierLoginForm } from '@/components/login-forms/cashier-login';
+import { LoginWorkspaceIntro } from '@/components/login-forms/login-workspace-intro';
 import { ThemeToggleOutline } from '@/components/theme-toggle';
 import { getPreferredShop, getRecentShops, getPreferredRole } from '@/lib/device-memory';
 
 export default function LoginPage() {
-  const [role, setRole] = useState<'admin' | 'cashier'>(() => {
-    if (typeof window !== 'undefined') {
-      return getPreferredRole() || 'admin';
-    }
-    return 'admin';
-  });
+  // The initial render is stable across SSR/hydration; device role is restored after mount.
+  const [role, setRole] = useState<'admin' | 'cashier'>('admin');
+  useEffect(() => {
+    const savedRole = getPreferredRole();
+    if (savedRole === 'admin' || savedRole === 'cashier') setRole(savedRole);
+  }, []);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [shops, setShops] = useState<Array<{ id: string; shopId?: string; name: string; status?: 'pending' | 'verified' | 'active' | 'suspended'; demoMode?: boolean; demoExpiresAt?: string }>>([]);
@@ -103,7 +104,8 @@ export default function LoginPage() {
       .then(data => setGoogleConfigured(!!data?.configured))
       .catch(() => setGoogleConfigured(false));
     if (googleError) {
-      setError(decodeURIComponent(googleError));
+      // Never render OAuth error text from an untrusted redirect URL.
+      setError('Google sign-in was not completed. Please try again.');
     }
     if (expired === 'true') {
       setSessionExpired(true);
@@ -202,7 +204,7 @@ export default function LoginPage() {
     // Default error
     return {
       title: 'Login failed',
-      message: error || 'An unexpected error occurred during login.',
+      message: 'Please check your sign-in details and try again. If the problem continues, contact support.',
       actions: [
         'Please check your credentials and try again',
         'If the problem persists, contact support',
@@ -428,9 +430,9 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="flex min-h-[100dvh] flex-col bg-background">
       {/* Header */}
-      <header className="flex items-center justify-between p-4 md:p-6 border-b border-border">
+      <header className="flex min-h-16 items-center justify-between border-b border-border px-4 py-3 md:px-8">
         <Link href="/" className="flex items-center gap-2 md:gap-3">
           <div className="p-2 bg-gradient-to-br from-primary to-orange-500 rounded-xl">
             <ShoppingCart className="h-5 w-5 md:h-6 md:w-6 text-white" />
@@ -449,12 +451,14 @@ export default function LoginPage() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 flex items-center justify-center p-4 md:p-8">
-        <div className="w-full max-w-md">
+      <main className="flex-1 px-3 py-5 sm:px-6 sm:py-8 lg:flex lg:items-center lg:py-10">
+        <div className="mx-auto grid w-full max-w-6xl grid-cols-1 items-start gap-6 lg:grid-cols-2 lg:items-stretch lg:gap-10">
+          <LoginWorkspaceIntro role={role} />
+          <div className="mx-auto w-full max-w-[540px]">
           {/* Back to Home */}
           <Link 
             href="/" 
-            className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors"
+            className="mb-4 inline-flex min-h-11 items-center gap-2 rounded-lg text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
           >
             <ArrowLeft className="h-4 w-4" />
             Back to home
@@ -462,7 +466,7 @@ export default function LoginPage() {
 
           {/* OTP Verification Card */}
           {showOtpVerification ? (
-            <Card className="border-0 shadow-lg">
+            <Card className="rounded-[1.5rem] border border-border/70 bg-card shadow-sm sm:shadow-lg">
               <CardHeader className="space-y-1 pb-4 text-center">
                 <div className="mx-auto mb-2 p-3 bg-blue-100 dark:bg-blue-900/30 rounded-full w-fit">
                   <ShieldCheck className="h-8 w-8 text-blue-600 dark:text-blue-400" />
@@ -482,7 +486,7 @@ export default function LoginPage() {
                 </p>
 
                 {/* OTP Input */}
-                <div className="flex justify-center gap-2" onPaste={handleOtpPaste}>
+                <div className="flex justify-center gap-1 sm:gap-2" onPaste={handleOtpPaste}>
                   {otpCode.map((digit, index) => (
                     <div key={index} className="relative">
                       <input
@@ -493,7 +497,9 @@ export default function LoginPage() {
                         value={digit}
                         onChange={e => handleOtpChange(index, e.target.value)}
                         onKeyDown={e => handleOtpKeyDown(index, e)}
-                        className={`w-14 h-16 text-center text-2xl font-bold rounded-xl border-2 bg-background transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary focus:scale-105 ${
+                        aria-label={`Verification digit ${index + 1}`}
+                        autoComplete={index === 0 ? "one-time-code" : "off"}
+                        className={`h-12 w-9 rounded-xl border-2 bg-background text-center text-xl font-bold sm:h-14 sm:w-12 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary focus:scale-105 ${
                           digit ? 'border-primary bg-primary/5 shadow-sm' : 'border-border hover:border-primary/50'
                         } ${otpError ? 'border-destructive animate-pulse' : ''} ${
                           otpLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-text'
@@ -596,7 +602,7 @@ export default function LoginPage() {
             </Card>
           ) : (
           /* Login Card */
-          <Card className="border-0 shadow-lg">
+          <Card className="rounded-[1.5rem] border border-border/70 bg-card shadow-sm sm:shadow-lg">
             <CardHeader className="space-y-1 pb-4">
               <CardTitle className="text-2xl font-bold">Welcome back</CardTitle>
               <CardDescription>Sign in to your SmartDuka account</CardDescription>
@@ -721,10 +727,11 @@ export default function LoginPage() {
           <p className="text-center text-xs text-muted-foreground mt-6">
             © {new Date().getFullYear()} SmartDuka. All rights reserved.
           </p>
+          </div>
         </div>
       </main>
 
-      {/* Super Admin Login - Hidden */}
+      {/* Service provider access is separate from merchant sign-in. */}
       <div className="fixed bottom-4 right-4 z-50">
         {!showSuperAdminLogin ? (
           <button
