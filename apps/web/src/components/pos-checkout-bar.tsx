@@ -162,74 +162,25 @@ export function POSCheckoutBar({
         </div>
       </div>
 
-      {/* Mobile: Floating action buttons - cleaner, minimal */}
-      <div className="lg:hidden fixed bottom-4 right-4 left-4 z-40 flex items-center gap-2">
-        {/* Scanner Button - Enhanced with ripple effect */}
-        <button
-          onClick={() => handleButtonPress('mobile-scanner', onOpenScanner)}
-          className={cn(
-            "w-14 h-14 rounded-full bg-gradient-to-br from-slate-700 to-slate-800 text-white shadow-lg flex items-center justify-center transition-all duration-200",
-            "hover:scale-110 hover:shadow-xl active:scale-95",
-            pressedButton === 'mobile-scanner' && "scale-90"
-          )}
-          title="Open scanner"
-        >
-          <ScanLine className="h-6 w-6" />
-        </button>
-
-        {/* Receipts Button */}
-        <button
-          onClick={() => handleButtonPress('mobile-receipts', onOpenReceiptsHistory)}
-          className={cn(
-            "w-14 h-14 rounded-full bg-gradient-to-br from-slate-500 to-slate-600 text-white shadow-lg flex items-center justify-center transition-all duration-200 relative",
-            "hover:scale-110 hover:shadow-xl active:scale-95",
-            pressedButton === 'mobile-receipts' && "scale-90"
-          )}
-          title="View receipts"
-        >
-          <History className="h-6 w-6" />
-          {receiptsCount > 0 && (
-            <span className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center text-[10px] font-bold bg-primary text-primary-foreground rounded-full animate-bounce">
-              {receiptsCount > 9 ? '9+' : receiptsCount}
-            </span>
-          )}
-        </button>
-
-        {/* Spacer */}
-        <div className="flex-1" />
-
-        {/* Main Checkout Button - Large, prominent with animation */}
-        {cartItemsCount > 0 && (
+      {/* Mobile: fixed checkout summary only. Scanner and receipts live in the
+          sticky POS header, so they no longer cover the product grid. */}
+      {cartItemsCount > 0 && (
+        <div className="lg:hidden fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 px-3 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] shadow-lg backdrop-blur">
           <button
+            type="button"
             onClick={() => handleButtonPress('mobile-checkout', onCheckout)}
             disabled={isCheckingOut}
-            className={cn(
-              "h-16 px-8 rounded-full shadow-2xl flex items-center gap-3 transition-all duration-300",
-              "hover:scale-105 hover:shadow-primary/25",
-              isCheckingOut 
-                ? 'bg-slate-400 cursor-not-allowed scale-95' 
-                : 'bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary',
-              pressedButton === 'mobile-checkout' && "scale-90",
-              "text-primary-foreground"
-            )}
+            aria-label={`Review cart: ${cartItemsCount} items totaling ${formatCurrency(cartTotal)}`}
+            className="flex min-h-[56px] w-full items-center justify-between gap-3 rounded-xl bg-primary px-4 text-primary-foreground shadow-sm disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
-            <div className="relative">
-              <ShoppingCart className="h-6 w-6" />
-              <span className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center text-[10px] font-bold bg-white text-primary rounded-full shadow-sm">
-                {cartItemsCount}
-              </span>
-            </div>
-            <div className="flex flex-col items-start">
-              <span className="text-xs opacity-90 font-medium">
-                {isCheckingOut ? 'Processing...' : 'Tap to Pay'}
-              </span>
-              <span className="font-bold text-lg">
-                {formatCurrency(cartTotal)}
-              </span>
-            </div>
+            <span className="flex min-w-0 items-center gap-2 text-sm font-bold">
+              <ShoppingCart aria-hidden="true" className="h-5 w-5 shrink-0" />
+              {isCheckingOut ? 'Processing…' : `Review cart · ${cartItemsCount} item${cartItemsCount === 1 ? '' : 's'}`}
+            </span>
+            <span className="shrink-0 text-base font-bold tabular-nums">{formatCurrency(cartTotal)}</span>
           </button>
-        )}
-      </div>
+        </div>
+      )}
     </>
   );
 }

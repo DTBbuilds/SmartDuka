@@ -31,6 +31,8 @@ import {
   CreditCard,
   HandCoins,
   LogOut,
+  History,
+  ScanLine,
   Pause,
   QrCode,
   RefreshCw,
@@ -51,6 +53,7 @@ import { config } from "@/lib/config";
 import { useToast } from "@/lib/use-toast";
 import { ToastContainer } from "@/components/toast-container";
 import { BarcodeScannerUnified } from "@/components/barcode-scanner-unified";
+import { parsePOSScanPayload } from "@/lib/pos-scan-payload";
 import { ReceiptModal } from "@/components/receipt-modal";
 import { ReceiptPreviewModal } from "@/components/receipt-preview-modal";
 import { ReceiptData } from "@/lib/receipt-generator";
@@ -81,7 +84,6 @@ import { PaymentMethodModal } from "@/components/payment-method-modal";
 import { MpesaPaymentFlowEnhanced } from "@/components/mpesa-payment-flow-enhanced";
 import { KeyboardShortcutsHelp } from "@/components/keyboard-shortcuts-help";
 import { useBarcodeScanner } from "@/hooks/use-barcode-scanner";
-import { ScannerStatusIndicator } from "@/components/scanner-status-indicator";
 import { smartCache } from "@/lib/smart-cache-manager";
 import { usePOSProducts } from "@/hooks/use-smart-cache";
 import { validateCheckoutSession, probeSupportsQuoteIntegrity, type CheckoutQuote } from "@/lib/checkout-session";
@@ -996,8 +998,12 @@ function POSContent() {
   }, [toast]);
 
   const handleBarcodeScanned = useCallback(async (barcode: string) => {
-    const trimmedBarcode = barcode.trim();
-    if (!trimmedBarcode) return;
+    const parsedCode = parsePOSScanPayload(barcode);
+    if (parsedCode.kind === 'unsupported') {
+      toast({ type: 'error', title: 'Unsupported code', message: parsedCode.reason });
+      return;
+    }
+    const trimmedBarcode = parsedCode.value;
     
     const now = Date.now();
     
@@ -1024,6 +1030,31 @@ function POSContent() {
     setIsProcessingBarcode(true);
 
     try {
+      // SmartDuka's generated product QRs contain {type:'product', id, name},
+      // not a barcode. Look up this ID through the shop-scoped inventory API.
+      // Other QR types (payment, order, loyalty, URLs) are never sellable items.
+      if (parsedCode.kind === 'product-id') {
+        let product = products.find((candidate) => candidate._id === parsedCode.value);
+        if (!product) {
+          const response = await fetch(
+            `${config.apiUrl}/inventory/products/${encodeURIComponent(parsedCode.value)}`,
+            { headers: { Authorization: `Bearer ${token}` } },
+          );
+          if (response.status === 404) {
+            toast({ type: 'error', title: 'Product QR not found', message: 'This product is not in your shop catalogue.' });
+            return;
+          }
+          if (!response.ok) throw new Error('Unable to verify this product QR code');
+          const result = await response.json() as Product;
+          if (result?._id !== parsedCode.value || !Number.isFinite(result?.price)) {
+            throw new Error('Invalid product response');
+          }
+          product = result;
+        }
+        handleAddToCart(product, { fromBarcode: true });
+        return;
+      }
+
       // First, try smart cache (fastest - works offline)
       const cachedProduct = getCachedProductByBarcode(trimmedBarcode);
       if (cachedProduct) {
@@ -2112,15 +2143,33 @@ function POSContent() {
 
             {/* Right: Minimal on mobile */}
             <div className="flex items-center gap-1.5 flex-shrink-0">
-              {/* Scanner Status Indicator - shows hardware scanner status */}
-              <ScannerStatusIndicator
-                isHardwareScannerConnected={hardwareScanner.isConnected}
-                isScanning={hardwareScanner.isScanning || isProcessingBarcode}
-                lastScanTime={hardwareScanner.lastBarcode?.timestamp}
-                onOpenScanner={() => setIsScannerOpen(true)}
-                compact
-              />
-                
+              {/* POS-first tools: always visible; never obscure product cards. */}
+              <button
+                type="button"
+                onClick={() => setIsScannerOpen(true)}
+                disabled={isCheckoutMode || isCheckingOut}
+                className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-bold text-primary-foreground disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                aria-label="Scan product barcode or QR code"
+              >
+                <ScanLine aria-hidden="true" className="h-4 w-4" />
+                <span>Scan</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsReceiptsHistoryOpen(true)}
+                disabled={isCheckoutMode || isCheckingOut}
+                className="relative inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-lg border border-border px-2 text-xs font-semibold disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                aria-label={`Session receipts history, ${receiptsHistory.length} receipts`}
+              >
+                <History aria-hidden="true" className="h-4 w-4" />
+                <span className="hidden sm:inline">Receipts</span>
+                {receiptsHistory.length > 0 && (
+                  <span aria-hidden="true" className="absolute -right-1 -top-1 rounded-full bg-primary px-1 text-[10px] text-primary-foreground">
+                    {receiptsHistory.length > 99 ? '99+' : receiptsHistory.length}
+                  </span>
+                )}
+              </button>
+
               {/* Pending count badge */}
               {pendingCount > 0 && (
                 <div className="flex items-center gap-0.5 rounded-full border border-dashed border-orange-400 bg-orange-50 dark:bg-orange-950/30 px-1.5 py-0.5 text-xs text-orange-600 dark:text-orange-400">
@@ -2425,6 +2474,7 @@ function POSContent() {
         isOpen={isReceiptsHistoryOpen}
         onClose={() => setIsReceiptsHistoryOpen(false)}
         receipts={receiptsHistory}
+        formatMoney={formatCurrency}
       />
 
       {/* Payment Method Selection Modal - Shows after clicking Checkout */}

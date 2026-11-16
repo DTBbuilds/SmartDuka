@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   Button,
   Dialog,
@@ -39,18 +39,21 @@ interface ReceiptsHistoryModalProps {
   isOpen: boolean;
   onClose: () => void;
   receipts: StoredReceipt[];
+  formatMoney?: (value: number) => string;
 }
 
 export function ReceiptsHistoryModal({
   isOpen,
   onClose,
   receipts,
+  formatMoney,
 }: ReceiptsHistoryModalProps) {
+  const headingRef = useRef<HTMLHeadingElement>(null);
   const [selectedReceipt, setSelectedReceipt] = useState<StoredReceipt | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
   const formatCurrency = (value: number) =>
-    `Ksh ${value.toLocaleString('en-KE', { minimumFractionDigits: 0 })}`;
+    formatMoney ? formatMoney(value) : `Ksh ${value.toLocaleString('en-KE', { minimumFractionDigits: 0 })}`;
 
   const formatDate = (date: Date) => {
     const d = new Date(date);
@@ -136,12 +139,12 @@ export function ReceiptsHistoryModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-lg max-h-[85vh] p-0 overflow-hidden">
+      <DialogContent onOpenAutoFocus={(event) => { event.preventDefault(); headingRef.current?.focus(); }} className="max-w-lg max-h-[85dvh] p-0 overflow-hidden">
         {!selectedReceipt ? (
           // Receipt List View
           <>
             <DialogHeader className="px-4 pt-4 pb-2">
-              <DialogTitle className="flex items-center gap-2 text-lg">
+              <DialogTitle ref={headingRef} tabIndex={-1} className="flex items-center gap-2 text-lg focus:outline-none">
                 <Receipt className="h-5 w-5" />
                 Receipts History
               </DialogTitle>
@@ -155,11 +158,12 @@ export function ReceiptsHistoryModal({
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <input
-                  type="text"
-                  placeholder="Search by order #, customer, or item..."
+                  type="search"
+                  aria-label="Search session receipts"
+                  placeholder="Search session receipts..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  className="w-full min-h-11 pl-9 pr-4 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
                 />
               </div>
             </div>

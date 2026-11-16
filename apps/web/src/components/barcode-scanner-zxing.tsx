@@ -19,6 +19,7 @@ interface BarcodeScannerZXingProps {
   isOpen: boolean;
   onClose: () => void;
   onScan: (barcode: string) => void;
+  onTryAlternateEngine?: () => void;
 }
 
 type ScanMode = "camera" | "hardware" | "manual";
@@ -144,6 +145,7 @@ export function BarcodeScannerZXing({
   isOpen,
   onClose,
   onScan,
+  onTryAlternateEngine,
 }: BarcodeScannerZXingProps) {
   // ── Refs (no re-renders, no stale closures) ─────────────────────────
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -260,16 +262,15 @@ export function BarcodeScannerZXing({
       scanCompletedRef.current = true;
       setIsProcessing(true);
       setScanStatus("detecting");
-      setMessage(`✅ Barcode detected: ${barcode}`);
+      setMessage("Code detected · Checking inventory…");
 
       try {
-        await playSuccessBeep();
-        if (navigator.vibrate) navigator.vibrate(100);
-
+        // Feedback must not block product lookup on browsers that restrict audio.
+        void playSuccessBeep().catch(() => {});
+        try { if (navigator.vibrate) navigator.vibrate(80); } catch {}
         cleanupCamera();
-
         setScanStatus("success");
-        setMessage("✓ Barcode scanned successfully!");
+        setMessage("Code captured · Looking up product…");
 
         setTimeout(() => {
           onScan(barcode);
@@ -338,8 +339,7 @@ export function BarcodeScannerZXing({
           width: { ideal: 1280 },
           height: { ideal: 720 },
         } as MediaTrackConstraints;
-        (videoConstraints as any).focusMode = "continuous";
-        console.log("[Scanner] Mobile constraints with continuous focus");
+        // Let the browser negotiate focus; unsupported focusMode can reject setup.
       } else {
         videoConstraints = {
           deviceId: deviceId ? { ideal: deviceId } : undefined,
@@ -531,7 +531,7 @@ export function BarcodeScannerZXing({
       } catch {}
 
       setScanStatus("ready");
-      setMessage("✓ Scanner ready - Point at barcode");
+      setMessage("Camera live · Scanning for barcodes and QR codes…");
       retryCountRef.current = 0;
       isInitializingRef.current = false;
       console.log("[Scanner] ✅ Camera initialized successfully");
@@ -755,14 +755,14 @@ export function BarcodeScannerZXing({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-md sm:max-w-lg p-4">
+      <DialogContent className="max-w-md sm:max-w-lg max-h-[90dvh] overflow-y-auto p-4">
         <DialogHeader className="space-y-1">
           <DialogTitle className="flex items-center gap-2 text-lg">
             <Camera className="h-4 w-4" />
-            <span>Scan Barcode</span>
+            <span>Scan Barcode or QR Code</span>
           </DialogTitle>
           <DialogDescription className="text-xs">
-            {scanMode === "camera" && "Point camera at barcode to scan automatically"}
+            {scanMode === "camera" && "Scan product barcodes or SmartDuka product QR codes"}
             {scanMode === "hardware" && "Use your barcode scanner or switch to camera/manual"}
             {scanMode === "manual" && "Type or paste barcode below"}
           </DialogDescription>
@@ -1141,6 +1141,10 @@ export function BarcodeScannerZXing({
               </span>
             )}
           </div>
+
+          {onTryAlternateEngine && scanMode === "camera" && (scanStatus === "error" || cameraUnavailable || permissionDenied) && (
+            <button type="button" onClick={onTryAlternateEngine} className="min-h-11 w-full rounded-md border border-border px-3 py-2 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">Try alternate camera scanner</button>
+          )}
 
           {/* Action Buttons */}
           <div className="flex gap-2">

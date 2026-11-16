@@ -13,7 +13,6 @@ import {
 import { X, Camera, AlertCircle, CheckCircle, Zap, RefreshCw, Flashlight, RotateCcw, ExternalLink } from 'lucide-react';
 import { playSuccessBeep, playErrorBeep } from '@/lib/audio-utils';
 import { detectBrowser, getCameraIssueMessage, shouldShowOpenInBrowser, type BrowserInfo } from '@/lib/browser-detection';
-import { useCameraPermission } from '@/hooks/use-camera-permission';
 
 interface BarcodeScannerHtml5Props {
   isOpen: boolean;
@@ -25,6 +24,7 @@ interface BarcodeScannerHtml5Props {
    * entry instead of showing a camera error first.
    */
   startInManualMode?: boolean;
+  onTryAlternateEngine?: () => void;
 }
 
 type ScanMode = 'camera' | 'hardware' | 'manual';
@@ -50,9 +50,8 @@ export function BarcodeScannerHtml5({
   onClose,
   onScan,
   startInManualMode = false,
+  onTryAlternateEngine,
 }: BarcodeScannerHtml5Props) {
-  // Camera permission hook - consistent with ZXing scanner
-  const cameraPermission = useCameraPermission();
 
   // Refs
   const scannerRef = useRef<any>(null);
@@ -61,6 +60,8 @@ export function BarcodeScannerHtml5({
   const hardwareTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const manualInputRef = useRef<HTMLInputElement>(null);
   const isInitializingRef = useRef(false);
+  const initGenerationRef = useRef(0);
+  const detectedHandlerRef = useRef<(code: string) => void>(() => {});
 
   // State
   const [scanMode, setScanMode] = useState<ScanMode>(
@@ -98,7 +99,7 @@ export function BarcodeScannerHtml5({
   /**
    * Initialize html5-qrcode scanner
    */
-  const initScanner = useCallback(async () => {
+  const initScanner = useCallback(async (deviceIdOverride?: string) => {
     if (!browserInfo) return;
     
     // Prevent duplicate initialization
@@ -107,6 +108,7 @@ export function BarcodeScannerHtml5({
       return;
     }
     isInitializingRef.current = true;
+    const generation = ++initGenerationRef.current;
     
     try {
       setScanStatus('initializing');
@@ -142,32 +144,8 @@ export function BarcodeScannerHtml5({
       // Dynamically import html5-qrcode
       const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import('html5-qrcode');
 
-      // Get available cameras
-      console.log('[Scanner] Requesting camera list...');
-      const devices = await Html5Qrcode.getCameras();
-      console.log('[Scanner] Cameras found:', devices.length, devices.map(d => ({ id: d.id, label: d.label })));
-      
-      if (devices.length === 0) {
-        throw new Error('No cameras found on this device');
-      }
-
-      setCameras(devices.map(d => ({ id: d.id, label: d.label || `Camera ${d.id}` })));
-
-      // Select back camera if available
-      let cameraId = devices[0].id;
-      const backCamera = devices.find(d => 
-        d.label?.toLowerCase().includes('back') ||
-        d.label?.toLowerCase().includes('rear') ||
-        d.label?.toLowerCase().includes('environment')
-      );
-      if (backCamera) {
-        cameraId = backCamera.id;
-      } else if (devices.length > 1) {
-        // On mobile, last camera is usually back camera
-        cameraId = devices[devices.length - 1].id;
-      }
-      setSelectedCamera(cameraId);
-
+      // Avoid Html5Qrcode.getCameras() before start: it can open a temporary
+      // camera stream and cause a second permission request on mobile.
       // Create scanner instance
       const scanner = new Html5Qrcode(scannerContainerId, {
         verbose: false,
@@ -185,45 +163,43 @@ export function BarcodeScannerHtml5({
       });
       scannerRef.current = scanner;
 
-      // Configure scanner settings based on device
-      // PERFORMANCE FIX: Higher FPS and larger scan box for better detection
-      const config = {
-        fps: browserInfo.isMobile ? 15 : 20, // Higher FPS for responsive scanning
-        qrbox: browserInfo.isMobile ? { width: 280, height: 180 } : { width: 350, height: 220 },
-        aspectRatio: browserInfo.isMobile ? 1.777 : 1.777, // 16:9 is better for horizontal barcodes
-        disableFlip: false,
-        // FOCUS FIX: Request continuous autofocus for mobile
-        videoConstraints: browserInfo.isMobile ? {
-          facingMode: 'environment',
-          focusMode: 'continuous', // Critical for mobile barcode scanning
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        } : undefined,
-      };
-
-      // Start scanning
-      console.log('[Scanner] Starting camera with config:', { cameraId, config });
+      // Scan the entire frame: a fixed, narrow qrbox can crop square QR codes.
+      // Avoid unsupported focusMode / strict dimensions on Chromium Android.
       await scanner.start(
-        cameraId,
-        config,
+        deviceIdOverride || { facingMode: 'environment' },
+        { fps: browserInfo.isMobile ? 10 : 15, disableFlip: false },
         (decodedText) => {
-          // Debounce duplicate scans
+          if (generation !== initGenerationRef.current) return;
           const now = Date.now();
-          if (decodedText === lastScannedRef.current && now - lastScanTimeRef.current < SCAN_DEBOUNCE_MS) {
-            return;
-          }
+          if (decodedText === lastScannedRef.current &&
+              now - lastScanTimeRef.current < SCAN_DEBOUNCE_MS) return;
           lastScannedRef.current = decodedText;
           lastScanTimeRef.current = now;
-          
-          handleBarcodeDetected(decodedText);
+          detectedHandlerRef.current(decodedText);
         },
-        (errorMessage) => {
-          // Ignore scanning errors (no barcode found) - this is normal during continuous scanning
-        }
+        () => { /* A frame without a barcode/QR is normal. */ },
       );
+      if (generation !== initGenerationRef.current) {
+        await scanner.stop().catch(() => {});
+        try { scanner.clear(); } catch { /* Already cleared during close. */ }
+        return;
+      }
+      try {
+        // Enumerating after start avoids a second permission prompt.
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        if (generation === initGenerationRef.current) {
+          setCameras(devices.filter(d => d.kind === 'videoinput').map(d => ({
+            id: d.deviceId, label: d.label,
+          })));
+          const video = document.querySelector(`#${scannerContainerId} video`) as HTMLVideoElement | null;
+          const cameraId = video?.srcObject instanceof MediaStream
+            ? video.srcObject.getVideoTracks()[0]?.getSettings().deviceId : undefined;
+          if (cameraId) setSelectedCamera(cameraId);
+        }
+      } catch { /* Camera switching is optional. */ }
 
       setScanStatus('ready');
-      setMessage('✓ Scanner ready - Point at barcode');
+      setMessage('Camera live · Scanning for barcodes and QR codes…');
       console.log('[Scanner] ✅ Camera started successfully');
       
       // Check torch support
@@ -241,6 +217,7 @@ export function BarcodeScannerHtml5({
 
     } catch (err: any) {
       isInitializingRef.current = false; // Reset initialization flag on error
+      if (generation !== initGenerationRef.current) return;
       console.error('Scanner initialization error:', err);
       setScanStatus('error');
       
@@ -264,8 +241,7 @@ export function BarcodeScannerHtml5({
         setError(`Camera error: ${err.message || 'Unknown error'}`);
       }
       
-      // Fallback to hardware scanner
-      setScanMode('hardware');
+      // Keep camera recovery, hardware and manual choices visible.
     }
   }, [browserInfo]);
 
@@ -273,6 +249,7 @@ export function BarcodeScannerHtml5({
    * Cleanup scanner
    */
   const cleanupScanner = useCallback(async () => {
+    initGenerationRef.current += 1;
     isInitializingRef.current = false; // Reset initialization flag
     const scanner = scannerRef.current;
     if (scanner) {
@@ -302,16 +279,12 @@ export function BarcodeScannerHtml5({
     
     setIsProcessing(true);
     setScanStatus('detecting');
-    setMessage(`✅ Barcode detected: ${barcode}`);
+    setMessage('Code detected · Checking inventory…');
 
     try {
-      // Play success sound
-      await playSuccessBeep();
-      
-      // Vibrate on mobile
-      if (navigator.vibrate) {
-        navigator.vibrate(100);
-      }
+      // Camera scanning must still complete if the browser blocks audio/haptics.
+      void playSuccessBeep().catch(() => {});
+      try { if (navigator.vibrate) navigator.vibrate(80); } catch {}
 
       // Stop scanner before callback
       await cleanupScanner();
@@ -344,6 +317,10 @@ export function BarcodeScannerHtml5({
       setIsProcessing(false);
     }
   }, [isProcessing, cleanupScanner, onScan, onClose]);
+
+  useEffect(() => {
+    detectedHandlerRef.current = (code) => { void handleBarcodeDetected(code); };
+  }, [handleBarcodeDetected]);
 
   /**
    * Handle hardware scanner input
@@ -386,73 +363,22 @@ export function BarcodeScannerHtml5({
   }, [isOpen, scanMode, handleBarcodeDetected]);
 
   /**
-   * Initialize camera when dialog opens
-   * MOBILE FIX: Require user gesture on mobile browsers
+   * Permission-state updates must not tear down an active camera.
+   * Start only on explicit user tap, with actual permission checked by start().
    */
   useEffect(() => {
-    if (isOpen && scanMode === 'camera' && browserInfo) {
-      // Detect mobile platforms
-      const isMobile = browserInfo.isMobile;
-      
-      // Wait for permission check to complete
-      if (cameraPermission.isChecking) {
-        setMessage('📷 Checking camera availability...');
-        setScanStatus('initializing');
-        return;
-      }
-      
-      // MOBILE FIX: On mobile, require user gesture before camera access
-      if (isMobile) {
-        if (cameraPermission.isDenied) {
-          setScanStatus('error');
-          setError(browserInfo ? getCameraIssueMessage(browserInfo) : 'Camera permission denied');
-          return;
-        }
-        if (cameraPermission.isUnavailable) {
-          setScanStatus('error');
-          setError(cameraPermission.error || 'Camera not available on this device.');
-          return;
-        }
-        // Show "Start Camera" button for user gesture
-        setShowPermissionRequest(true);
-        setScanStatus('idle');
-        return;
-      }
-      
-      // DESKTOP: Can auto-start if permission granted
-      if (cameraPermission.isGranted) {
-        const timer = setTimeout(() => {
-          initScanner();
-        }, 100);
-        return () => {
-          clearTimeout(timer);
-          cleanupScanner();
-        };
-      }
-      
-      // Permission denied on desktop
-      if (cameraPermission.isDenied) {
-        setScanStatus('error');
-        setError('Camera permission denied. Please enable camera access in your browser settings.');
-        return;
-      }
-      
-      // Permission unavailable
-      if (cameraPermission.isUnavailable) {
-        setScanStatus('error');
-        setError(cameraPermission.error || 'Camera not available on this device.');
-        return;
-      }
-      
-      // Permission is 'prompt' - show permission request UI
-      setShowPermissionRequest(true);
-      setScanStatus('idle');
+    if (!isOpen || scanMode !== 'camera' || !browserInfo) return;
+    if (!browserInfo.cameraSupport.hasGetUserMedia ||
+        !browserInfo.cameraSupport.isSecureContext) {
+      setScanStatus('error');
+      setError('Camera access requires HTTPS and a compatible browser. Use manual entry or a hardware scanner.');
+      return;
     }
-    
-    return () => {
-      cleanupScanner();
-    };
-  }, [isOpen, scanMode, browserInfo, cameraPermission.isChecking, cameraPermission.isGranted, cameraPermission.isDenied, cameraPermission.isUnavailable, cameraPermission.error, initScanner, cleanupScanner]);
+    setShowPermissionRequest(true);
+    setScanStatus('idle');
+    setError(null);
+    return () => { void cleanupScanner(); };
+  }, [isOpen, scanMode, browserInfo, cleanupScanner]);
 
   /**
    * Handle manual entry
@@ -525,78 +451,27 @@ export function BarcodeScannerHtml5({
     }
   };
 
-  /**
-   * Switch camera
-   * FIX: Directly reinitialize with new camera instead of relying on useEffect
-   */
+  /** Release the previous stream before switching physical cameras. */
   const switchCamera = async () => {
-    if (!scannerRef.current || cameras.length <= 1) return;
-    
-    const currentIndex = cameras.findIndex(c => c.id === selectedCamera);
-    const nextIndex = (currentIndex + 1) % cameras.length;
-    const nextCamera = cameras[nextIndex];
-    
-    try {
-      // Cleanup current scanner
-      await cleanupScanner();
-      setSelectedCamera(nextCamera.id);
-      setTorchEnabled(false); // Reset torch when switching
-      
-      // FIX: Directly reinitialize scanner with new camera
-      // Don't rely on useEffect - it may not trigger due to state batching
-      setTimeout(async () => {
-        if (!browserInfo) return;
-        
-        const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import('html5-qrcode');
-        const scanner = new Html5Qrcode(scannerContainerId, {
-          verbose: false,
-          formatsToSupport: [
-            Html5QrcodeSupportedFormats.EAN_13,
-            Html5QrcodeSupportedFormats.EAN_8,
-            Html5QrcodeSupportedFormats.CODE_128,
-            Html5QrcodeSupportedFormats.CODE_39,
-            Html5QrcodeSupportedFormats.UPC_A,
-            Html5QrcodeSupportedFormats.UPC_E,
-            Html5QrcodeSupportedFormats.QR_CODE,
-          ],
-        });
-        scannerRef.current = scanner;
-        
-        const config = {
-          fps: browserInfo.isMobile ? 15 : 20,
-          qrbox: browserInfo.isMobile ? { width: 280, height: 180 } : { width: 350, height: 220 },
-          aspectRatio: 1.777,
-          videoConstraints: browserInfo.isMobile ? {
-            facingMode: 'environment',
-            focusMode: 'continuous',
-          } : undefined,
-        };
-        
-        await scanner.start(nextCamera.id, config, (decodedText) => {
-          const now = Date.now();
-          if (decodedText === lastScannedRef.current && now - lastScanTimeRef.current < SCAN_DEBOUNCE_MS) return;
-          lastScannedRef.current = decodedText;
-          lastScanTimeRef.current = now;
-          handleBarcodeDetected(decodedText);
-        }, () => {});
-        
-        setScanStatus('ready');
-      }, 200);
-    } catch (err) {
-      console.error('Failed to switch camera:', err);
-    }
+    if (cameras.length <= 1) return;
+    const index = cameras.findIndex(c => c.id === selectedCamera);
+    const next = cameras[(index + 1) % cameras.length];
+    await cleanupScanner();
+    setSelectedCamera(next.id);
+    setTorchEnabled(false);
+    void initScanner(next.id);
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-md sm:max-w-lg p-4">
+      <DialogContent className="max-w-md sm:max-w-lg p-4 max-h-[90dvh] overflow-y-auto">
         <DialogHeader className="space-y-1">
           <DialogTitle className="flex items-center gap-2 text-lg">
             <Camera className="h-4 w-4" />
-            <span>Scan Barcode</span>
+            <span>Scan Barcode or QR Code</span>
           </DialogTitle>
           <DialogDescription className="text-xs">
-            {scanMode === 'camera' && 'Point camera at barcode to scan automatically'}
+            {scanMode === 'camera' && 'Point camera at a product barcode or QR code'}
             {scanMode === 'hardware' && 'Use your barcode scanner or switch to camera/manual'}
             {scanMode === 'manual' && 'Type or paste barcode below'}
           </DialogDescription>
@@ -665,7 +540,7 @@ export function BarcodeScannerHtml5({
           )}
 
           {message && scanStatus !== 'error' && (
-            <div className="rounded-md border border-green-500/40 bg-green-500/10 p-3 text-sm text-green-600 dark:text-green-400 flex items-start gap-2">
+            <div role="status" aria-live="polite" className="rounded-md border border-blue-500/40 bg-blue-500/10 p-3 text-sm text-blue-700 dark:text-blue-300 flex items-start gap-2">
               <CheckCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
               <span>{message}</span>
             </div>
@@ -801,11 +676,15 @@ export function BarcodeScannerHtml5({
                 </span>
                 {browserInfo.scannerNotes.length > 0 && (
                   <span className="text-blue-500">
-                    {browserInfo.recommendedScanner === 'html5-qrcode' ? '✓ Optimized' : ''}
+                    {scanStatus === 'ready' ? '● Camera scanning' : scanStatus === 'error' ? 'Camera unavailable' : 'Camera not started'}
                   </span>
                 )}
               </div>
             </div>
+          )}
+
+          {onTryAlternateEngine && scanMode === "camera" && scanStatus === "error" && (
+            <button type="button" onClick={onTryAlternateEngine} className="min-h-11 w-full rounded-md border px-3 py-2 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">Try alternate camera scanner</button>
           )}
 
           {/* Action Buttons */}
