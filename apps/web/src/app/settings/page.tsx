@@ -450,12 +450,12 @@ export default function SettingsPage() {
               {settingsNavItems.map((item) => {
                 const Icon = item.icon;
                 return (
-                  <SelectItem key={item.id} value={item.id} className="py-3">
+                  <SelectItem key={item.id} value={item.id} className="py-3 data-[state=checked]:text-primary-foreground">
                     <span className="flex items-center gap-3">
-                      <Icon aria-hidden="true" className="h-4 w-4 shrink-0 text-primary" />
+                      <Icon aria-hidden="true" className="h-4 w-4 shrink-0" />
                       <span className="min-w-0">
                         <span className="block text-sm font-semibold">{item.label}</span>
-                        <span className="block text-xs text-muted-foreground">{item.description}</span>
+                        <span className="block text-xs text-current opacity-75">{item.description}</span>
                       </span>
                     </span>
                   </SelectItem>
