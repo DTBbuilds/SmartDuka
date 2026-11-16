@@ -397,75 +397,88 @@ export default function OrdersPage() {
         </div>
       )}
 
-      {/* Stats Cards - Compact on mobile */}
-      {stats && (
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-5 md:gap-4">
+      {/* Show the two core KPIs first on mobile; optional page-level details. */}
+      {stats && !ordersError && (
+        <section aria-labelledby="orders-summary" className="space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <h2 id="orders-summary" className="text-sm font-semibold">Sales overview</h2>
+            <button type="button" onClick={() => setShowMoreMetrics((open) => !open)}
+              aria-expanded={showMoreMetrics} aria-controls="extra-order-metrics"
+              className="min-h-11 rounded-lg px-2 text-sm font-semibold text-primary md:hidden">
+              {showMoreMetrics ? 'Fewer details' : 'More details'}
+            </button>
+          </div>
+          <div id="extra-order-metrics" className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-5 md:gap-4">
           <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
+            <CardContent className="p-3 sm:p-4">
+              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                <div className="hidden sm:flex p-2 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
                   <Receipt className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Total Orders</p>
-                  <p className="text-2xl font-bold">{stats.totalOrders}</p>
+                  <p className="break-words text-lg font-bold tabular-nums sm:text-2xl">{stats.totalOrders}</p>
                 </div>
               </div>
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-green-100 dark:bg-green-900/20 rounded-lg">
+            <CardContent className="p-3 sm:p-4">
+              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                <div className="hidden sm:flex p-2 bg-green-100 dark:bg-green-900/20 rounded-lg">
                   <DollarSign className="h-5 w-5 text-green-600 dark:text-green-400" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Total Revenue</p>
-                  <p className="text-2xl font-bold">{formatCurrency(stats.totalRevenue)}</p>
+                  <p className="text-sm text-muted-foreground">Page revenue</p>
+                  <p className="break-words text-lg font-bold tabular-nums sm:text-2xl">{formatCurrency(stats.totalRevenue)}</p>
                 </div>
               </div>
             </CardContent>
           </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-emerald-100 dark:bg-emerald-900/20 rounded-lg">
+          <Card className={showMoreMetrics ? "" : "hidden md:block"}>
+            <CardContent className="p-3 sm:p-4">
+              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                <div className="hidden sm:flex p-2 bg-emerald-100 dark:bg-emerald-900/20 rounded-lg">
                   <CheckCircle className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Completed</p>
-                  <p className="text-2xl font-bold">{stats.completedOrders}</p>
+                  <p className="text-sm text-muted-foreground">Page completed</p>
+                  <p className="break-words text-lg font-bold tabular-nums sm:text-2xl">{stats.completedOrders}</p>
                 </div>
               </div>
             </CardContent>
           </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-yellow-100 dark:bg-yellow-900/20 rounded-lg">
+          <Card className={showMoreMetrics ? "" : "hidden md:block"}>
+            <CardContent className="p-3 sm:p-4">
+              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                <div className="hidden sm:flex p-2 bg-yellow-100 dark:bg-yellow-900/20 rounded-lg">
                   <Clock className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Pending</p>
-                  <p className="text-2xl font-bold">{stats.pendingOrders}</p>
+                  <p className="text-sm text-muted-foreground">Page pending</p>
+                  <p className="break-words text-lg font-bold tabular-nums sm:text-2xl">{stats.pendingOrders}</p>
                 </div>
               </div>
             </CardContent>
           </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-purple-100 dark:bg-purple-900/20 rounded-lg">
+          <Card className={showMoreMetrics ? "" : "hidden md:block"}>
+            <CardContent className="p-3 sm:p-4">
+              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                <div className="hidden sm:flex p-2 bg-purple-100 dark:bg-purple-900/20 rounded-lg">
                   <TrendingUp className="h-5 w-5 text-purple-600 dark:text-purple-400" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Avg. Order</p>
-                  <p className="text-2xl font-bold">{formatCurrency(stats.averageOrderValue)}</p>
+                  <p className="text-sm text-muted-foreground">Page average</p>
+                  <p className="break-words text-lg font-bold tabular-nums sm:text-2xl">{formatCurrency(stats.averageOrderValue)}</p>
                 </div>
               </div>
             </CardContent>
           </Card>
-        </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Total orders match your filters. Revenue, completed, pending and average reflect the current page only.
+          </p>
+        </section>
       )}
 
       {/* Filters - Stacked on mobile */}
