@@ -397,9 +397,9 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="container py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold">Settings</h1>
+    <div className="container max-w-6xl px-3 py-5 sm:px-6 sm:py-8">
+      <div className="mb-5 sm:mb-8">
+        <h1 className="text-2xl font-bold sm:text-3xl">Settings</h1>
         <p className="text-muted-foreground">Manage your shop and account settings</p>
       </div>
 
@@ -417,73 +417,55 @@ export default function SettingsPage() {
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        {/* Mobile Navigation - Dropdown + Cards */}
-        <div className="md:hidden space-y-4">
-          {/* Mobile Dropdown Selector */}
+        {/* Mobile: one section picker, not a second competing icon grid. */}
+        <div className="md:hidden space-y-2">
+          <label id="mobile-settings-section-label" className="block text-sm font-semibold text-foreground">
+            Settings section
+          </label>
           <Select value={activeTab} onValueChange={setActiveTab}>
-            <SelectTrigger className="w-full h-14 text-base">
+            <SelectTrigger
+              aria-labelledby="mobile-settings-section-label"
+              className="w-full min-h-14 h-auto px-3 py-2 text-left"
+            >
               <SelectValue>
                 {(() => {
-                  const item = settingsNavItems.find(i => i.id === activeTab);
-                  if (!item) return 'Select setting';
+                  const item = settingsNavItems.find((entry) => entry.id === activeTab);
+                  if (!item) return 'Choose a section';
                   const Icon = item.icon;
                   return (
-                    <div className="flex items-center gap-3">
-                      <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                        <Icon className="h-4 w-4 text-primary" />
-                      </div>
-                      <div className="text-left">
-                        <p className="font-medium">{item.label}</p>
-                        <p className="text-xs text-muted-foreground">{item.description}</p>
-                      </div>
-                    </div>
+                    <span className="flex min-w-0 items-center gap-3">
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <Icon aria-hidden="true" className="h-5 w-5" />
+                      </span>
+                      <span className="min-w-0 text-left">
+                        <span className="block truncate text-sm font-semibold">{item.label}</span>
+                        <span className="block truncate text-xs text-muted-foreground">{item.description}</span>
+                      </span>
+                    </span>
                   );
                 })()}
               </SelectValue>
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="max-h-[65dvh]">
               {settingsNavItems.map((item) => {
                 const Icon = item.icon;
                 return (
                   <SelectItem key={item.id} value={item.id} className="py-3">
-                    <div className="flex items-center gap-3">
-                      <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                        <Icon className="h-4 w-4 text-primary" />
-                      </div>
-                      <div>
-                        <p className="font-medium">{item.label}</p>
-                        <p className="text-xs text-muted-foreground">{item.description}</p>
-                      </div>
-                    </div>
+                    <span className="flex items-center gap-3">
+                      <Icon aria-hidden="true" className="h-4 w-4 shrink-0 text-primary" />
+                      <span className="min-w-0">
+                        <span className="block text-sm font-semibold">{item.label}</span>
+                        <span className="block text-xs text-muted-foreground">{item.description}</span>
+                      </span>
+                    </span>
                   </SelectItem>
                 );
               })}
             </SelectContent>
           </Select>
-
-          {/* Mobile Quick Navigation Cards */}
-          <div className="grid grid-cols-5 gap-2">
-            {settingsNavItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = activeTab === item.id;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => setActiveTab(item.id)}
-                  className={`flex flex-col items-center justify-center p-2 rounded-lg border transition-all ${
-                    isActive
-                      ? 'bg-primary text-primary-foreground border-primary shadow-sm'
-                      : 'bg-card border-border hover:bg-muted/50'
-                  }`}
-                >
-                  <Icon className={`h-5 w-5 ${isActive ? '' : 'text-muted-foreground'}`} />
-                  <span className={`text-[10px] mt-1 font-medium truncate w-full text-center ${isActive ? '' : 'text-muted-foreground'}`}>
-                    {item.label.split(' ')[0]}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+          <p className="text-xs text-muted-foreground">
+            Choose a section to manage your shop, account or payment preferences.
+          </p>
         </div>
 
         {/* Desktop Navigation - Horizontal Tabs */}
