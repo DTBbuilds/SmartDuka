@@ -618,11 +618,11 @@ function ProductsContent() {
                           <Badge variant={product.status === 'active' ? 'default' : 'secondary'}>{product.status}</Badge>
                         </div>
                       </div>
-                      <div className="mt-3 flex items-center gap-2">
+                      <div className="mt-3 grid grid-cols-2 gap-2">
                         <Button type="button" size="sm" variant="outline"
                           onClick={() => { setActionLoading(product._id + '-edit'); router.push(`/inventory/${product._id}/edit`); }}
                           disabled={actionLoading?.startsWith(product._id)}
-                          className="min-h-11 flex-1 gap-2">
+                          className="min-h-11 w-full min-w-0 gap-2">
                           <Edit2 aria-hidden="true" className="h-4 w-4" /> Edit
                         </Button>
                         <Button type="button" size="sm" variant="outline"
@@ -631,18 +631,18 @@ function ProductsContent() {
                           className="min-h-11 flex-1 gap-2">
                           <Eye aria-hidden="true" className="h-4 w-4" /> Details
                         </Button>
-                        <details className="relative">
-                          <summary className="flex min-h-11 cursor-pointer list-none items-center justify-center rounded-md border border-border px-3 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">
+                        <details className="col-span-2">
+                          <summary className="flex min-h-11 w-full cursor-pointer list-none items-center justify-center rounded-md border border-border px-3 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">
                             More <ChevronDown aria-hidden="true" className="ml-1 h-4 w-4" />
                           </summary>
-                          <div className="absolute right-0 top-full z-20 mt-1 flex w-44 flex-col gap-1 rounded-lg border border-border bg-background p-2 shadow-xl">
+                          <div className="mt-2 grid grid-cols-2 gap-2 rounded-lg border border-border bg-background p-2">
                             <button type="button" onClick={() => setStockHistoryProduct(product)}
-                              className="min-h-11 rounded-md px-3 text-left text-sm hover:bg-accent">
+                              className="min-h-11 rounded-md border px-2 text-center text-xs hover:bg-accent">
                               Stock history
                             </button>
                             <button type="button" onClick={() => handleDeleteProduct(product._id)}
                               disabled={actionLoading?.startsWith(product._id)}
-                              className="min-h-11 rounded-md px-3 text-left text-sm text-destructive hover:bg-destructive/10">
+                              className="min-h-11 rounded-md border px-2 text-center text-xs text-destructive hover:bg-destructive/10">
                               Delete product
                             </button>
                           </div>
