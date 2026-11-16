@@ -545,13 +545,19 @@ export default function OrdersPage() {
       {ordersError ? null : orders.length === 0 ? (
         <EmptyState
           icon={Receipt}
-          title="No orders found"
-          description={searchQuery || statusFilter !== "all" || paymentFilter !== "all"
-            ? "Try adjusting your filters"
-            : "Orders will appear here once customers make purchases"
-          }
-          actionLabel={undefined}
-          onAction={undefined}
+          title={dateFilter === 'today' && !searchQuery && statusFilter === 'all' && paymentFilter === 'all'
+            ? 'No orders today' : 'No matching orders'}
+          description={dateFilter === 'today' && !searchQuery && statusFilter === 'all' && paymentFilter === 'all'
+            ? 'No sales are recorded for today. You can view earlier orders or start a new sale.'
+            : 'No orders match the selected search, date and status filters.'}
+          actionLabel={dateFilter === 'all' && !searchQuery && statusFilter === 'all' && paymentFilter === 'all'
+            ? undefined : 'Clear filters · View all orders'}
+          onAction={() => {
+            setDateFilter('all');
+            setStatusFilter('all');
+            setPaymentFilter('all');
+            setSearchQuery('');
+          }}
         />
       ) : (
         <Card>
