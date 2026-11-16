@@ -164,8 +164,7 @@ export function AdminLoginForm({
       </div>
 
       <p className="text-center text-xs leading-relaxed text-muted-foreground">
-        Working at an existing shop? Ask its owner to invite you.{' '}
-        <a href="/register-shop" className="font-semibold text-primary underline-offset-2 hover:underline">Create a new shop</a>
+        Signing in as staff? Use the account your shop administrator created for you.
       </p>
     </form>
   );
