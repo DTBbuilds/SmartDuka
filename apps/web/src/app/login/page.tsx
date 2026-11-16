@@ -23,7 +23,8 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [shops, setShops] = useState<Array<{ id: string; shopId?: string; name: string; status?: 'pending' | 'verified' | 'active' | 'suspended'; demoMode?: boolean; demoExpiresAt?: string }>>([]);
-  const [loadingShops, setLoadingShops] = useState(false);
+  const [loadingShops, setLoadingShops] = useState(true);
+  const [shopLoadError, setShopLoadError] = useState(false);
   const [showSuperAdminLogin, setShowSuperAdminLogin] = useState(false);
   const [superAdminEmail, setSuperAdminEmail] = useState('');
   const [superAdminPassword, setSuperAdminPassword] = useState('');
@@ -118,16 +119,20 @@ export default function LoginPage() {
   const fetchShops = async () => {
     try {
       setLoadingShops(true);
+      setShopLoadError(false);
       const base = config.apiUrl;
       const res = await fetch(`${base}/shops`);
       const text = await res.text();
       const data = text ? JSON.parse(text) : [];
       
-      if (res.ok) {
-        setShops(Array.isArray(data) ? data : []);
+      if (!res.ok || !Array.isArray(data)) {
+        throw new Error('Shop directory is currently unavailable');
       }
+      setShops(data);
     } catch (err) {
       console.error('Failed to fetch shops:', err);
+      setShopLoadError(true);
+      setShops([]);
     } finally {
       setLoadingShops(false);
     }
@@ -636,6 +641,14 @@ export default function LoginPage() {
                       </p>
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* No blank selector or false "no shops" on a network failure. */}
+              {shopLoadError && (
+                <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+                  <span>We couldn't load the shop directory. Check your connection and try again.</span>
+                  <Button type="button" variant="outline" size="sm" className="min-h-11" onClick={() => { void fetchShops(); }}>Retry shops</Button>
                 </div>
               )}
 
