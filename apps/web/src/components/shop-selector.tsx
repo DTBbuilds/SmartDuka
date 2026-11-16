@@ -142,8 +142,7 @@ export function ShopSelector({
       <button
         ref={triggerRef}
         type="button"
-        aria-labelledby={selectorId + '-label'}
-        aria-haspopup="listbox"
+        aria-labelledby={selectorId + '-label ' + selectorId + '-value'}
         aria-expanded={isOpen}
         aria-controls={selectorId + '-options'}
         onClick={() => !disabled && setIsOpen(!isOpen)}
@@ -171,7 +170,7 @@ export function ShopSelector({
         </div>
 
         {/* Shop Info */}
-        <div className="flex-1 text-left min-w-0">
+        <div id={selectorId + '-value'} className="flex-1 text-left min-w-0">
           {selectedShop ? (
             <>
               <div className="font-semibold text-sm sm:text-base text-slate-900 dark:text-white truncate">
@@ -205,7 +204,7 @@ export function ShopSelector({
 
       {/* Dropdown List */}
       {isOpen && (
-        <div id={selectorId + '-options'} role="listbox" aria-labelledby={selectorId + '-label'}
+        <div id={selectorId + '-options'} role="group" aria-labelledby={selectorId + '-label'}
           className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl shadow-xl shadow-slate-200/50 dark:shadow-slate-900/50 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
           {/* Search Input */}
           {shops.length > 3 && (
@@ -237,8 +236,7 @@ export function ShopSelector({
                     <button
                       key={shop.id}
                       type="button"
-                      role="option"
-                      aria-selected={isSelected}
+                      aria-current={isSelected ? 'true' : undefined}
                       onClick={() => {
                         handleShopChange(shop.id);
                         triggerRef.current?.focus();
