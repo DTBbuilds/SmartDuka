@@ -14,6 +14,7 @@ import {
 import { Plus, Trash2, Edit2, Download, Upload, Eye, Search, ChevronDown, ChevronUp, Package, Loader2, ChevronLeft, ChevronRight, History, RefreshCw } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
+import { formatMoney } from '@/lib/currency';
 import { useBranch } from '@/lib/branch-context';
 import { useToast } from '@/lib/use-toast';
 import { config } from '@/lib/config';
@@ -405,37 +406,39 @@ function ProductsContent() {
       <ToastContainer toasts={toasts} onDismiss={dismiss} />
       <div className="container">
         {/* Page Header */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4 md:mb-6">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-primary/10">
               <Package className="h-6 w-6 text-primary" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold">Products</h1>
+              <h1 className="text-2xl font-bold tracking-tight">Products</h1>
               <p className="text-sm text-muted-foreground">
                 Manage your product inventory
               </p>
             </div>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setIsCSVImportOpen(true)} className="gap-2">
-              <Upload className="h-4 w-4" aria-hidden="true" />
+          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap">
+            <Button type="button" onClick={() => setIsQuickAddExpanded(!isQuickAddExpanded)}
+              aria-expanded={isQuickAddExpanded} aria-controls="quick-add-product"
+              className="col-span-2 min-h-11 gap-2 sm:order-3 sm:col-span-1">
+              <Plus aria-hidden="true" className="h-4 w-4" />
+              {isQuickAddExpanded ? 'Close product form' : 'Add Product'}
+            </Button>
+            <Button type="button" variant="outline" onClick={() => setIsCSVImportOpen(true)} className="min-h-11 gap-2">
+              <Upload aria-hidden="true" className="h-4 w-4" />
               Import
             </Button>
-            <Button variant="outline" onClick={handleCSVExport} className="gap-2">
-              <Download className="h-4 w-4" aria-hidden="true" />
+            <Button type="button" variant="outline" onClick={handleCSVExport} className="min-h-11 gap-2">
+              <Download aria-hidden="true" className="h-4 w-4" />
               Export
-            </Button>
-            <Button onClick={() => setIsQuickAddExpanded(!isQuickAddExpanded)} className="gap-2">
-              <Plus className="h-4 w-4" />
-              Add Product
             </Button>
           </div>
         </div>
 
         {/* Quick Add Product Form */}
         {isQuickAddExpanded && (
-          <Card className="mb-6 border-primary/40 bg-primary/5">
+          <Card id="quick-add-product" className="mb-6 border-primary/40 bg-primary/5">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
@@ -517,13 +520,15 @@ function ProductsContent() {
                     placeholder="Search by name or SKU..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10"
+                    aria-label="Search products by name or SKU"
+                    className="min-h-11 pl-10"
                   />
                 </div>
                 <select
+                  aria-label="Filter products by status"
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value as 'all' | 'active' | 'inactive')}
-                  className="px-3 py-2 border rounded-md text-sm bg-background"
+                  className="min-h-11 w-full rounded-md border bg-background px-3 text-sm sm:w-auto"
                 >
                   <option value="all">All Status</option>
                   <option value="active">Active</option>
@@ -580,10 +585,72 @@ function ProductsContent() {
 
                 {/* Product Rows - Using paginated products for performance */}
                 {paginatedProducts.map((product) => (
-                  <div
-                    key={product._id}
-                    className="grid grid-cols-1 md:grid-cols-12 gap-3 md:gap-3 p-3 border rounded-lg hover:bg-accent transition-colors items-center"
-                  >
+                  <div key={product._id}>
+                    {/* Mobile: compact retail inventory item with clear core actions. */}
+                    <article className="rounded-xl border border-border bg-card p-3 md:hidden">
+                      <div className="flex items-start gap-3">
+                        <input type="checkbox" checked={selectedProducts.has(product._id)}
+                          onChange={() => handleSelectProduct(product._id)}
+                          aria-label={`Select ${product.name}`}
+                          className="mt-3 h-5 w-5 shrink-0 rounded" />
+                        {product.image ? (
+                          <img src={product.image} alt="" loading="lazy"
+                            className="h-12 w-12 shrink-0 rounded-lg bg-muted object-cover" />
+                        ) : (
+                          <span aria-hidden="true" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-muted">
+                            <Package className="h-5 w-5 text-muted-foreground" />
+                          </span>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="line-clamp-2 text-sm font-semibold leading-snug">{product.name}</p>
+                          <p className="mt-1 truncate text-xs text-muted-foreground">SKU: {product.sku || 'Not set'}</p>
+                        </div>
+                      </div>
+                      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
+                        <div>
+                          <p className="text-lg font-bold tabular-nums">{formatMoney(product.price, shop?.currency)}</p>
+                          <p className="text-xs text-muted-foreground">Sale price</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant={product.stock && product.stock > 10 ? 'default' : product.stock && product.stock > 0 ? 'secondary' : 'destructive'}>
+                            {product.stock ?? 0} in stock
+                          </Badge>
+                          <Badge variant={product.status === 'active' ? 'default' : 'secondary'}>{product.status}</Badge>
+                        </div>
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <Button type="button" size="sm" variant="outline"
+                          onClick={() => { setActionLoading(product._id + '-edit'); router.push(`/inventory/${product._id}/edit`); }}
+                          disabled={actionLoading?.startsWith(product._id)}
+                          className="min-h-11 w-full min-w-0 gap-2">
+                          <Edit2 aria-hidden="true" className="h-4 w-4" /> Edit
+                        </Button>
+                        <Button type="button" size="sm" variant="outline"
+                          onClick={() => { setActionLoading(product._id + '-view'); router.push(`/inventory/${product._id}`); }}
+                          disabled={actionLoading?.startsWith(product._id)}
+                          className="min-h-11 flex-1 gap-2">
+                          <Eye aria-hidden="true" className="h-4 w-4" /> Details
+                        </Button>
+                        <details className="col-span-2">
+                          <summary className="flex min-h-11 w-full cursor-pointer list-none items-center justify-center rounded-md border border-border px-3 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">
+                            More <ChevronDown aria-hidden="true" className="ml-1 h-4 w-4" />
+                          </summary>
+                          <div className="mt-2 grid grid-cols-2 gap-2 rounded-lg border border-border bg-background p-2">
+                            <button type="button" onClick={() => setStockHistoryProduct(product)}
+                              className="min-h-11 rounded-md border px-2 text-center text-xs hover:bg-accent">
+                              Stock history
+                            </button>
+                            <button type="button" onClick={() => handleDeleteProduct(product._id)}
+                              disabled={actionLoading?.startsWith(product._id)}
+                              className="min-h-11 rounded-md border px-2 text-center text-xs text-destructive hover:bg-destructive/10">
+                              Delete product
+                            </button>
+                          </div>
+                        </details>
+                      </div>
+                    </article>
+                    {/* Desktop: preserve the original comprehensive table-style row. */}
+                    <div className="hidden grid-cols-12 items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-accent md:grid">
                     <div className="col-span-1 flex items-center">
                       <input
                         type="checkbox"
@@ -606,7 +673,7 @@ function ProductsContent() {
                       </div>
                     </div>
                     <div className="col-span-1 md:col-span-2">
-                      <p className="font-semibold">Ksh {product.price.toLocaleString()}</p>
+                      <p className="font-semibold">{formatMoney(product.price, shop?.currency)}</p>
                     </div>
                     <div className="col-span-1 md:col-span-2">
                       <Badge variant={product.stock && product.stock > 10 ? 'default' : product.stock && product.stock > 0 ? 'secondary' : 'destructive'}>
@@ -676,6 +743,7 @@ function ProductsContent() {
                           <Trash2 className="h-4 w-4 text-red-600" />
                         )}
                       </Button>
+                    </div>
                     </div>
                   </div>
                 ))}

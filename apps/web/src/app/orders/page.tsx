@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { formatMoney } from "@/lib/currency";
 import { useBranch } from "@/lib/branch-context";
@@ -25,6 +26,7 @@ import {
   XCircle,
   ChevronLeft,
   ChevronRight,
+  ShoppingCart,
 } from "lucide-react";
 import { DataTable, Column } from "@/components/shared/data-table";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -95,6 +97,8 @@ export default function OrdersPage() {
   const [paymentFilter, setPaymentFilter] = useState<string>("all");
   const [dateFilter, setDateFilter] = useState<string>("today");
   const [stats, setStats] = useState<OrderStats | null>(null);
+  const [ordersError, setOrdersError] = useState(false);
+  const [showMoreMetrics, setShowMoreMetrics] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalOrders, setTotalOrders] = useState(0);
@@ -142,6 +146,7 @@ export default function OrdersPage() {
   const fetchOrders = useCallback(async () => {
     try {
       setIsLoading(true);
+      setOrdersError(false);
       const base = config.apiUrl;
       
       // Build query params for server-side filtering
@@ -162,6 +167,7 @@ export default function OrdersPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
+      if (!res.ok) throw new Error(`Could not load orders (${res.status})`);
       if (res.ok) {
         const text = await res.text();
         const response = text ? JSON.parse(text) : { data: [], total: 0 };
@@ -212,6 +218,8 @@ export default function OrdersPage() {
       }
     } catch (error) {
       console.error("Failed to fetch orders:", error);
+      setOrdersError(true);
+      setStats(null);
       setOrders([]);
     } finally {
       setIsLoading(false);
@@ -365,95 +373,112 @@ export default function OrdersPage() {
 
   return (
     <div className="p-4 md:p-6 space-y-4 md:space-y-6">
-      {/* Header - Mobile optimized */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      {/* Retail operations: one-tap access to a new sale. */}
+      <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl md:text-2xl font-bold">Orders</h1>
-          <p className="text-sm text-muted-foreground hidden md:block">
-            View and manage all sales orders
-          </p>
+          <h1 className="text-2xl font-bold tracking-tight">Orders</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Receipts, payments and sales history</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={fetchOrders} className="flex-shrink-0">
-            <RefreshCw className="h-4 w-4 md:mr-2" />
-            <span className="hidden md:inline">Refresh</span>
+        <div className="flex items-center gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={fetchOrders}
+            disabled={isLoading} aria-label="Refresh order list" className="min-h-11 min-w-11 px-3">
+            <RefreshCw aria-hidden="true" className={isLoading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
           </Button>
-          <Button variant="outline" size="sm" className="flex-shrink-0">
-            <Download className="h-4 w-4 md:mr-2" />
-            <span className="hidden md:inline">Export</span>
-          </Button>
+          <Link href="/pos" className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground hover:bg-primary/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">
+            <ShoppingCart aria-hidden="true" className="h-4 w-4" /> New sale
+          </Link>
         </div>
-      </div>
+      </header>
 
-      {/* Stats Cards - Compact on mobile */}
-      {stats && (
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-5 md:gap-4">
+      {ordersError && (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm">
+          <span>Orders could not be loaded. Your sales data has not been changed.</span>
+          <Button type="button" size="sm" variant="outline" onClick={fetchOrders}>Try again</Button>
+        </div>
+      )}
+
+      {/* Show the two core KPIs first on mobile; optional page-level details. */}
+      {stats && !ordersError && (
+        <section aria-labelledby="orders-summary" className="space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <h2 id="orders-summary" className="text-sm font-semibold">Sales overview</h2>
+            <button type="button" onClick={() => setShowMoreMetrics((open) => !open)}
+              aria-expanded={showMoreMetrics} aria-controls="extra-order-metrics"
+              className="min-h-11 rounded-lg px-2 text-sm font-semibold text-primary md:hidden">
+              {showMoreMetrics ? 'Fewer details' : 'More details'}
+            </button>
+          </div>
+          <div id="extra-order-metrics" className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-5 md:gap-4">
           <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
+            <CardContent className="p-3 sm:p-4">
+              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                <div className="hidden sm:flex p-2 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
                   <Receipt className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Total Orders</p>
-                  <p className="text-2xl font-bold">{stats.totalOrders}</p>
+                  <p className="break-words text-lg font-bold tabular-nums sm:text-2xl">{stats.totalOrders}</p>
                 </div>
               </div>
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-green-100 dark:bg-green-900/20 rounded-lg">
+            <CardContent className="p-3 sm:p-4">
+              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                <div className="hidden sm:flex p-2 bg-green-100 dark:bg-green-900/20 rounded-lg">
                   <DollarSign className="h-5 w-5 text-green-600 dark:text-green-400" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Total Revenue</p>
-                  <p className="text-2xl font-bold">{formatCurrency(stats.totalRevenue)}</p>
+                  <p className="text-sm text-muted-foreground">Page revenue</p>
+                  <p className="break-words text-lg font-bold tabular-nums sm:text-2xl">{formatCurrency(stats.totalRevenue)}</p>
                 </div>
               </div>
             </CardContent>
           </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-emerald-100 dark:bg-emerald-900/20 rounded-lg">
+          <Card className={showMoreMetrics ? "" : "hidden md:block"}>
+            <CardContent className="p-3 sm:p-4">
+              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                <div className="hidden sm:flex p-2 bg-emerald-100 dark:bg-emerald-900/20 rounded-lg">
                   <CheckCircle className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Completed</p>
-                  <p className="text-2xl font-bold">{stats.completedOrders}</p>
+                  <p className="text-sm text-muted-foreground">Page completed</p>
+                  <p className="break-words text-lg font-bold tabular-nums sm:text-2xl">{stats.completedOrders}</p>
                 </div>
               </div>
             </CardContent>
           </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-yellow-100 dark:bg-yellow-900/20 rounded-lg">
+          <Card className={showMoreMetrics ? "" : "hidden md:block"}>
+            <CardContent className="p-3 sm:p-4">
+              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                <div className="hidden sm:flex p-2 bg-yellow-100 dark:bg-yellow-900/20 rounded-lg">
                   <Clock className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Pending</p>
-                  <p className="text-2xl font-bold">{stats.pendingOrders}</p>
+                  <p className="text-sm text-muted-foreground">Page pending</p>
+                  <p className="break-words text-lg font-bold tabular-nums sm:text-2xl">{stats.pendingOrders}</p>
                 </div>
               </div>
             </CardContent>
           </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-purple-100 dark:bg-purple-900/20 rounded-lg">
+          <Card className={showMoreMetrics ? "" : "hidden md:block"}>
+            <CardContent className="p-3 sm:p-4">
+              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                <div className="hidden sm:flex p-2 bg-purple-100 dark:bg-purple-900/20 rounded-lg">
                   <TrendingUp className="h-5 w-5 text-purple-600 dark:text-purple-400" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Avg. Order</p>
-                  <p className="text-2xl font-bold">{formatCurrency(stats.averageOrderValue)}</p>
+                  <p className="text-sm text-muted-foreground">Page average</p>
+                  <p className="break-words text-lg font-bold tabular-nums sm:text-2xl">{formatCurrency(stats.averageOrderValue)}</p>
                 </div>
               </div>
             </CardContent>
           </Card>
-        </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Total orders match your filters. Revenue, completed, pending and average reflect the current page only.
+          </p>
+        </section>
       )}
 
       {/* Filters - Stacked on mobile */}
@@ -468,17 +493,19 @@ export default function OrdersPage() {
                   placeholder="Search orders..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 h-10"
+                  aria-label="Search orders by number, product or customer"
+                  className="min-h-11 pl-9"
                 />
               </div>
             </div>
 
             {/* Filters row */}
-            <div className="flex gap-2 overflow-x-auto">
+            <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-3 md:w-auto">
               <select
+                aria-label="Order date range"
                 value={dateFilter}
                 onChange={(e) => setDateFilter(e.target.value)}
-                className="h-10 rounded-md border border-input bg-background px-3 text-sm flex-shrink-0"
+                className="min-h-11 w-full min-w-0 rounded-md border border-input bg-background px-2 text-sm"
               >
                 <option value="all">All Time</option>
                 <option value="today">Today</option>
@@ -487,9 +514,10 @@ export default function OrdersPage() {
               </select>
 
               <select
+                aria-label="Order status"
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="h-10 rounded-md border border-input bg-background px-3 text-sm flex-shrink-0"
+                className="min-h-11 w-full min-w-0 rounded-md border border-input bg-background px-2 text-sm"
               >
                 <option value="all">All Status</option>
                 <option value="completed">Completed</option>
@@ -498,9 +526,10 @@ export default function OrdersPage() {
               </select>
 
               <select
+                aria-label="Payment status"
                 value={paymentFilter}
                 onChange={(e) => setPaymentFilter(e.target.value)}
-                className="h-10 rounded-md border border-input bg-background px-3 text-sm flex-shrink-0"
+                className="col-span-2 sm:col-span-1 min-h-11 w-full min-w-0 rounded-md border border-input bg-background px-2 text-sm"
               >
                 <option value="all">Payment</option>
                 <option value="paid">Paid</option>
@@ -513,21 +542,49 @@ export default function OrdersPage() {
       </Card>
 
       {/* Orders Table */}
-      {orders.length === 0 ? (
+      {ordersError ? null : orders.length === 0 ? (
         <EmptyState
           icon={Receipt}
-          title="No orders found"
-          description={searchQuery || statusFilter !== "all" || paymentFilter !== "all"
-            ? "Try adjusting your filters"
-            : "Orders will appear here once customers make purchases"
-          }
-          actionLabel={undefined}
-          onAction={undefined}
+          title={dateFilter === 'today' && !searchQuery && statusFilter === 'all' && paymentFilter === 'all'
+            ? 'No orders today' : 'No matching orders'}
+          description={dateFilter === 'today' && !searchQuery && statusFilter === 'all' && paymentFilter === 'all'
+            ? 'No sales are recorded for today. You can view earlier orders or start a new sale.'
+            : 'No orders match the selected search, date and status filters.'}
+          actionLabel={dateFilter === 'all' && !searchQuery && statusFilter === 'all' && paymentFilter === 'all'
+            ? undefined : 'Clear filters · View all orders'}
+          onAction={() => {
+            setDateFilter('all');
+            setStatusFilter('all');
+            setPaymentFilter('all');
+            setSearchQuery('');
+          }}
         />
       ) : (
         <Card>
           <CardContent className="p-0">
-            <DataTable
+            <div className="divide-y divide-border md:hidden">
+              {orders.map((order) => (
+                <button key={order._id} type="button"
+                  onClick={() => { setSelectedOrder(order); setIsDetailsModalOpen(true); }}
+                  className="flex min-h-[100px] w-full flex-col gap-2 p-4 text-left hover:bg-accent/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+                  aria-label={`View order ${order.orderNumber}`}>
+                  <span className="flex items-center justify-between gap-3">
+                    <span className="min-w-0 truncate font-semibold text-primary">{order.orderNumber}</span>
+                    <span className="shrink-0 font-bold tabular-nums">{formatCurrency(order.total)}</span>
+                  </span>
+                  <span className="flex flex-wrap items-center gap-2">
+                    {getStatusBadge(order.status)}
+                    {getPaymentStatusBadge(order.paymentStatus)}
+                  </span>
+                  <span className="flex justify-between gap-3 text-xs text-muted-foreground">
+                    <span className="truncate">{order.customerName || 'Walk-in'} · {order.items.length} items</span>
+                    <span className="shrink-0">{new Date(order.createdAt).toLocaleDateString()}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+            <div className="hidden md:block">
+              <DataTable
               data={orders}
               columns={columns}
               searchable={false}
@@ -536,8 +593,9 @@ export default function OrdersPage() {
                 setSelectedOrder(order);
                 setIsDetailsModalOpen(true);
               }}
-            />
-            
+              />
+            </div>
+
             {/* Pagination Controls */}
             {totalPages > 1 && (
               <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 border-t">

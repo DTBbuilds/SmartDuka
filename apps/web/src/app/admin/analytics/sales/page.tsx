@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@smartduka/ui';
 import { useAuth } from '@/lib/auth-context';
+import { formatMoney } from '@/lib/currency';
 import { useBranch } from '@/lib/branch-context';
 import { config } from '@/lib/config';
 import { BackButton } from '@/components/back-button';
@@ -62,10 +63,6 @@ const PERIOD_LABELS: Record<string, { title: string; subtitle: string; trendLabe
   year: { title: 'This Year', subtitle: 'Last 12 months performance', trendLabel: 'Monthly for 12 months', comparedTo: 'vs prev year' },
 };
 
-const formatCurrency = (value: number) => {
-  return `Ksh ${value.toLocaleString('en-KE')}`;
-};
-
 const formatAxis = (value: number) => {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
   if (value >= 1_000) return `${(value / 1_000).toFixed(0)}K`;
@@ -76,7 +73,8 @@ const PAYMENT_COLORS = ['#22c55e', '#3b82f6', '#a855f7', '#f59e0b', '#ef4444'];
 
 export default function SalesAnalyticsPage() {
   const router = useRouter();
-  const { token } = useAuth();
+  const { token, shop } = useAuth();
+  const formatCurrency = (value: number) => formatMoney(value, shop?.currency);
   const { currentBranch } = useBranch();
   const [loading, setLoading] = useState(true);
   const [salesData, setSalesData] = useState<SalesData | null>(null);

@@ -4,6 +4,7 @@ import { config } from '@/lib/config';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
+import { formatMoney } from '@/lib/currency';
 import { useBranch } from '@/lib/branch-context';
 import { AdminNavigation } from '@/components/admin-navigation';
 import { AdminHeader } from '@/components/admin-header';
@@ -83,7 +84,7 @@ interface Branch {
 
 export default function CashiersPage() {
   const router = useRouter();
-  const { token } = useAuth();
+  const { token, shop } = useAuth();
   const { branches: contextBranches, currentBranch } = useBranch();
   
   const [cashiers, setCashiers] = useState<Cashier[]>([]);
@@ -397,12 +398,7 @@ export default function CashiersPage() {
     }
   };
 
-  const formatCurrency = (value: number) =>
-    new Intl.NumberFormat('en-KE', {
-      style: 'currency',
-      currency: 'KES',
-      maximumFractionDigits: 0,
-    }).format(value);
+  const formatCurrency = (value: number) => formatMoney(value, shop?.currency);
 
   const formatDate = (date: string) =>
     new Date(date).toLocaleDateString('en-KE', {
