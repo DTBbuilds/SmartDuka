@@ -414,7 +414,7 @@ export default function LoginPage() {
             <div className="h-12 w-12 rounded-full border-4 border-primary/20" />
             <div className="absolute inset-0 h-12 w-12 rounded-full border-4 border-transparent border-t-primary animate-spin" />
           </div>
-          <p className="text-muted-foreground">{loginSuccess ? 'Redirecting...' : 'Connecting to SmartDuka...'}</p>
+          <p className="text-muted-foreground">{loginSuccess ? 'Opening your retail workspace…' : 'Preparing shop sign-in…'}</p>
         </div>
       </div>
     );
@@ -638,7 +638,8 @@ export default function LoginPage() {
                     <div className="flex-1">
                       <p className="text-destructive text-sm font-medium">{error}</p>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        Need help? <Link href="/register-shop" className="text-primary hover:underline">Register your shop</Link> or contact support.
+                        {role === 'cashier' ? 'Ask your shop administrator for access or a PIN reset. ' : 'Check your account or shop details. '}
+                        <Link href="/support" className="font-semibold text-primary underline-offset-2 hover:underline">Contact support</Link>
                       </p>
                     </div>
                   </div>
