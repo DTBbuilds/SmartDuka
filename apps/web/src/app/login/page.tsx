@@ -711,12 +711,18 @@ export default function LoginPage() {
               )}
 
               {/* Register Link */}
-              <p className="text-center text-sm text-muted-foreground">
-                Don&apos;t have an account?{' '}
-                <Link href="/register-shop" className="text-primary hover:underline font-medium">
-                  Register for free
-                </Link>
-              </p>
+              {role === 'admin' ? (
+                <p className="text-center text-sm text-muted-foreground">
+                  New to SmartDuka?{' '}
+                  <Link href="/register-shop" className="font-semibold text-primary underline-offset-2 hover:underline">
+                    Register your shop
+                  </Link>
+                </p>
+              ) : (
+                <p className="text-center text-xs text-muted-foreground">
+                  New cashier? Ask your shop administrator to create your staff access.
+                </p>
+              )}
             </CardContent>
           </Card>
           )}
