@@ -3,13 +3,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ShoppingCart, AlertCircle, Lock, Clock, ArrowLeft, Mail, Loader2, ShieldCheck, Store, UserRound, ScanLine, ArrowRight } from 'lucide-react';
+import { ShoppingCart, AlertCircle, Clock, ArrowLeft, Loader2, ShieldCheck, Store, UserRound, ScanLine, ArrowRight } from 'lucide-react';
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@smartduka/ui';
 import { useAuth } from '@/lib/auth-context';
 import { config } from '@/lib/config';
 import { AdminLoginForm } from '@/components/login-forms/admin-login';
 import { CashierLoginForm } from '@/components/login-forms/cashier-login';
 import { LoginWorkspaceIntro } from '@/components/login-forms/login-workspace-intro';
+import { safeLoginRedirect } from '@/lib/safe-login-redirect';
 import { ThemeToggleOutline } from '@/components/theme-toggle';
 import { getPreferredShop, getRecentShops, getPreferredRole } from '@/lib/device-memory';
 
@@ -57,7 +58,7 @@ export default function LoginPage() {
     if (authLoading) return;
     
     if (isAuthenticated && user) {
-      const redirectTo = searchParams.get('redirect') || (user.role === 'cashier' ? '/pos' : user.role === 'super_admin' ? '/super-admin' : '/admin');
+      const redirectTo = safeLoginRedirect(searchParams.get('redirect'), user.role === 'cashier' ? '/pos' : user.role === 'super_admin' ? '/super-admin' : '/admin');
       router.replace(redirectTo);
     }
   }, [isAuthenticated, user, authLoading, router, searchParams]);
@@ -285,7 +286,7 @@ export default function LoginPage() {
       resetRefreshAttempts();
       if (tokens?.csrfToken) storeCsrfToken(tokens.csrfToken);
       setLoginSuccess(true);
-      const redirectTo = searchParams.get('redirect') || (decoded.role === 'cashier' ? '/pos' : '/admin');
+      const redirectTo = safeLoginRedirect(searchParams.get('redirect'), decoded.role === 'cashier' ? '/pos' : '/admin');
       window.location.href = redirectTo;
     } catch (err: any) {
       setOtpError(err.message || 'Verification failed');
@@ -335,7 +336,7 @@ export default function LoginPage() {
         enterDemoMode(selectedShop as any);
       }
       setLoginSuccess(true);
-      const redirectTo = searchParams.get('redirect') || '/admin';
+      const redirectTo = safeLoginRedirect(searchParams.get('redirect'), '/admin');
       window.location.href = redirectTo;
     } catch (err: any) {
       // Handle email verification requirement
@@ -369,7 +370,7 @@ export default function LoginPage() {
       }
       // Mark login as successful and redirect immediately
       setLoginSuccess(true);
-      const redirectTo = searchParams.get('redirect') || '/pos';
+      const redirectTo = safeLoginRedirect(searchParams.get('redirect'), '/pos');
       // Use window.location for more reliable redirect after state changes
       window.location.href = redirectTo;
     } catch (err: any) {
