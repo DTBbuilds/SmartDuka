@@ -3,9 +3,10 @@
 import { useState, useEffect } from 'react';
 import { Button, Input } from '@smartduka/ui';
 import { ShopSelector } from '../shop-selector';
-import { Lock, Loader2, ArrowRight, Star, Clock, Sparkles, AlertTriangle, Info } from 'lucide-react';
+import { Lock, Loader2, ArrowRight, Star, Clock, Sparkles, AlertTriangle } from 'lucide-react';
 import { getPreferredShop, type RecentShop } from '@/lib/device-memory';
 import { config } from '@/lib/config';
+import { resolveCashierShopChoice } from '@/lib/login-workspace-state';
 
 interface Shop {
   id: string;
@@ -28,22 +29,12 @@ export function CashierLoginForm({
   shops,
   onSubmit,
   isLoading = false,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   preferredShopId,
-  recentShops = [],
 }: CashierLoginFormProps) {
-  // Use preferred shop if available
-  const [shopId, setShopId] = useState(() => {
-    if (preferredShopId && shops.some(s => s.id === preferredShopId)) {
-      return preferredShopId;
-    }
-    const preferred = getPreferredShop();
-    if (preferred && shops.some(s => s.id === preferred.id)) {
-      return preferred.id;
-    }
-    return shops[0]?.id || '';
-  });
-  
+  const [initialChoice] = useState(() =>
+    resolveCashierShopChoice(shops, preferredShopId, getPreferredShop()?.id),
+  );
+  const [shopId, setShopId] = useState(initialChoice.shopId);
   const [pin, setPin] = useState('');
   const [validationError, setValidationError] = useState('');
   const [googleConfigured, setGoogleConfigured] = useState(false);
@@ -56,13 +47,8 @@ export function CashierLoginForm({
       .catch(() => setGoogleConfigured(false));
   }, []);
   
-  // Never auto-skip based on a stale ID from a previously used device.
-  // A remembered shop must actually exist in the current public shop list.
-  const [step, setStep] = useState<'shop' | 'pin'>(() => {
-    const storedId = preferredShopId || getPreferredShop()?.id;
-    return storedId && shops.some((shop) => shop.id === storedId) ? 'pin' : 'shop';
-  });
-  const hasPreferredShop = !!shopId && shops.some((shop) => shop.id === shopId) && step === 'pin';
+  const [step, setStep] = useState<'shop' | 'pin'>(initialChoice.step);
+  const hasPreferredShop = !!shopId && shops.some(shop => shop.id === shopId) && step === 'pin';
 
   const handlePinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value.replace(/\D/g, '');
