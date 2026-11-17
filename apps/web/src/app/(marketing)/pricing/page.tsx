@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import {
-  ArrowRight, CheckCircle2, CircleHelp, Layers3, Package, ShieldCheck, ShoppingCart, Store, Users,
+  ArrowRight, CheckCircle2, CircleHelp, Layers3, ShieldCheck, ShoppingCart, Store,
 } from 'lucide-react';
 import { SmartDukaLogo } from '@/components/brand/smartduka-logo';
 import { FAQJsonLd, ProductJsonLd } from '@/components/seo';
@@ -36,7 +36,7 @@ const faqs = [
   },
   {
     question: 'Does the platform support M-Pesa payments?',
-    answer: 'SmartDuka has an M-Pesa integration, but STK initiation is currently paused. Availability depends on the configured payment method and safety controls; it is not guaranteed for every shop.',
+    answer: 'SmartDuka includes an M-Pesa integration, but availability depends on your shop configuration and safety controls. STK initiation may be paused; check your payment settings before offering it to customers.',
   },
 ];
 
