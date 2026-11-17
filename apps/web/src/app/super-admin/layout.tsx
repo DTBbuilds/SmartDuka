@@ -1,4 +1,6 @@
 'use client';
+import { SmartDukaLogo } from '@/components/brand/smartduka-logo';
+
 
 import { SuperAdminGuard } from '@/components/super-admin-guard';
 import { SuperAdminMobileNav } from '@/components/super-admin-mobile-nav';
@@ -32,7 +34,7 @@ export default function SuperAdminLayout({
         >
           {/* Logo */}
           <div className="p-4 border-b border-slate-700 flex items-center justify-between">
-            {sidebarOpen && <h1 className="text-xl font-bold">SmartDuka</h1>}
+            <SmartDukaLogo size="sm" markOnly={!sidebarOpen} inverse />
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
               className="p-1 hover:bg-slate-800 rounded"
