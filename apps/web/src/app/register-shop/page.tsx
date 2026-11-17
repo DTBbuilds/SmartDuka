@@ -1,3 +1,4 @@
+import { SmartDukaLogo } from '@/components/brand/smartduka-logo';
 "use client";
 
 import { useState, useEffect, useRef, Suspense } from "react";
@@ -714,10 +715,7 @@ function RegisterShopContent() {
         
         <div className="relative z-10">
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-primary/20 rounded-xl">
-              <ShoppingCart className="h-8 w-8 text-primary" />
-            </div>
-            <span className="text-3xl font-bold text-white">SmartDuka</span>
+            <SmartDukaLogo size="lg" inverse />
           </div>
         </div>
         
