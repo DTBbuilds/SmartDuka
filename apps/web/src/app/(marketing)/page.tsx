@@ -520,10 +520,7 @@ export default function HomePage() {
           <div className="grid md:grid-cols-4 gap-12 mb-12">
             <div>
               <Link href="/" className="flex items-center gap-2 mb-4">
-                <div className="w-10 h-10 bg-orange-600 rounded-lg flex items-center justify-center">
-                  <Store className="h-6 w-6 text-white" />
-                </div>
-                <span className="text-xl font-bold text-white">SmartDuka</span>
+                <SmartDukaLogo size="md" inverse />
               </Link>
               <p className="text-gray-400 mb-2">
                 Point of sale and inventory management software by{' '}
