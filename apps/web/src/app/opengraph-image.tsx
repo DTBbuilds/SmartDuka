@@ -1,3 +1,4 @@
+import { PremiumCartTile } from '@/components/brand/premium-cart-tile';
 import { ImageResponse } from 'next/og';
 
 export const runtime = 'edge';
@@ -21,8 +22,8 @@ export default async function Image() {
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: '#1e3a5f',
-          backgroundImage: 'linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%)',
+          backgroundColor: '#101820',
+          backgroundImage: 'linear-gradient(135deg, #101820 0%, #0b0f16 100%)',
         }}
       >
         <div
@@ -33,49 +34,20 @@ export default async function Image() {
             justifyContent: 'center',
           }}
         >
-          {/* Logo circle */}
-          <div
-            style={{
-              width: 120,
-              height: 120,
-              borderRadius: 24,
-              backgroundColor: '#2563eb',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              marginBottom: 32,
-              boxShadow: '0 8px 32px rgba(37, 99, 235, 0.4)',
-            }}
-          >
-            <span
-              style={{
-                fontSize: 64,
-                fontWeight: 800,
-                color: 'white',
-              }}
-            >
-              S
-            </span>
+          {/* The same premium cart mark and two-tone wordmark used in-app. */}
+          <div style={{ display: 'flex', marginBottom: 30 }}>
+            <PremiumCartTile side={128} />
           </div>
-
-          {/* Brand name */}
-          <span
-            style={{
-              fontSize: 72,
-              fontWeight: 800,
-              color: 'white',
-              letterSpacing: '-0.02em',
-              marginBottom: 16,
-            }}
-          >
-            SmartDuka
-          </span>
+          <div style={{ display: 'flex', fontSize: 72, fontWeight: 800, letterSpacing: '-0.02em', marginBottom: 16 }}>
+            <span style={{ color: '#ffffff' }}>Smart</span>
+            <span style={{ color: '#ff8418' }}>Duka</span>
+          </div>
 
           {/* Tagline */}
           <span
             style={{
               fontSize: 32,
-              color: '#93c5fd',
+              color: '#ffc29d',
               fontWeight: 500,
               marginBottom: 40,
             }}
