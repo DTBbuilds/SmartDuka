@@ -24,6 +24,7 @@ export function SmartDukaLogo({
   return (
     <span
       className={cn('inline-flex min-w-0 items-center gap-2 font-extrabold tracking-tight', className)}
+      role="img"
       aria-label="SmartDuka"
     >
       <Image
