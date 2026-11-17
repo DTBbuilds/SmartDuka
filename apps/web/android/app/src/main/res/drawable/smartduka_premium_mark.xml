@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+  xmlns:aapt="http://schemas.android.com/aapt"
+  android:width="256dp" android:height="256dp"
+  android:viewportWidth="512" android:viewportHeight="512">
+  <!-- Native equivalent of /brand/smartduka-mark.svg: no legacy Android robot. -->
+  <path android:pathData="M134,8 H378 C447.6,8 504,64.4 504,134 V378 C504,447.6 447.6,504 378,504 H134 C64.4,504 8,447.6 8,378 V134 C8,64.4 64.4,8 134,8 Z">
+    <aapt:attr name="android:fillColor">
+      <gradient android:startX="20" android:startY="0" android:endX="474" android:endY="510"
+        android:type="linear" android:startColor="#FFAD08" android:endColor="#F34404" />
+    </aapt:attr>
+  </path>
+  <path android:fillColor="#3CF13405"
+    android:pathData="M8,382 C105,207 274,202 504,77 V378 C504,447.6 447.6,504 378,504 H134 C64.4,504 8,447.6 8,378Z" />
+  <path android:fillColor="#00000000" android:strokeColor="#FFFFFFFF" android:strokeWidth="32"
+    android:strokeLineCap="round" android:strokeLineJoin="round"
+    android:pathData="M81,120 H143 C152,120 159,125 162,135 L201,294 C205,312 219,323 236,323 H375 C392,323 402,313 407,298 L438,190 H194" />
+  <path android:fillColor="#FFFFFFFF" android:pathData="M244,392a24,24 0,1 1,-48,0a24,24 0,1 1,48,0" />
+  <path android:fillColor="#FFFFFFFF" android:pathData="M389,392a24,24 0,1 1,-48,0a24,24 0,1 1,48,0" />
+</vector>
