@@ -1,5 +1,7 @@
 'use client';
 
+import { SmartDukaLogo } from '@/components/brand/smartduka-logo';
+
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Input } from '@smartduka/ui';
@@ -225,10 +227,7 @@ export default function CashierGoogleSignupPage() {
             {/* Header */}
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-2">
-                <div className="p-2 bg-primary/10 rounded-xl">
-                  <ShoppingCart className="h-6 w-6 text-primary" />
-                </div>
-                <span className="text-xl font-bold text-foreground">SmartDuka</span>
+                <SmartDukaLogo size="md" />
               </div>
               <ThemeToggleOutline />
             </div>
