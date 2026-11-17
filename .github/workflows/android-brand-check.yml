@@ -1,0 +1,54 @@
+# Validate native icons and splash resources on brand changes without releasing an APK.
+name: Android Brand Resources
+
+on:
+  pull_request:
+    paths:
+      - 'apps/web/android/**'
+      - 'apps/web/capacitor.config.ts'
+      - '.github/workflows/android-brand-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  resource-check:
+    name: Android resources compile
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Sync native plugins and assets
+        run: pnpm --dir apps/web exec cap sync android
+      - name: Align known legacy Gradle SDK references
+        run: |
+          cd apps/web/android/app
+          sed -i 's/rootProject.ext.compileSdkVersion/35/g' build.gradle
+          sed -i 's/rootProject.ext.minSdkVersion/24/g' build.gradle
+          sed -i 's/rootProject.ext.targetSdkVersion/35/g' build.gradle
+          sed -i 's/\$androidxAppCompatVersion/1.6.1/g' build.gradle
+          sed -i 's/\$androidxCoordinatorLayoutVersion/1.2.0/g' build.gradle
+          sed -i 's/\$coreSplashScreenVersion/1.0.1/g' build.gradle
+          sed -i 's/\$junitVersion/4.13.2/g' build.gradle
+          sed -i 's/\$androidxJunitVersion/1.1.5/g' build.gradle
+          sed -i 's/\$androidxEspressoCoreVersion/3.5.1/g' build.gradle
+      - name: Compile Android resources (no APK release)
+        run: |
+          cd apps/web/android
+          chmod +x ./gradlew
+          ./gradlew :app:processDebugResources --stacktrace
