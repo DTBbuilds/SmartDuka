@@ -1,754 +1,311 @@
 'use client';
 
-import { SmartDukaLogo } from '@/components/brand/smartduka-logo';
-
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useAuth } from '@/lib/auth-context';
-import { AppStartupScreen } from '@/components/app-startup-screen';
-import { 
-  ShoppingCart, Smartphone, Package, BarChart3, Users, CheckCircle, ArrowRight, 
-  Shield, Zap, Camera, Receipt, Brain, Wallet, Phone, Mail, Clock, 
-  Sparkles, TrendingUp, ChevronRight, Star, CreditCard, Building2,
-  Heart, Globe, Lock, Code, Loader2, MapPin, MessageCircle
+import { useRouter } from 'next/navigation';
+import {
+  ArrowRight, BarChart3, CheckCircle2, ChevronRight, Clock3, Headphones,
+  Layers3, Package, ReceiptText, ScanLine, ShieldCheck, ShoppingCart,
+  Store, TrendingUp, Users,
 } from 'lucide-react';
+import { AppStartupScreen } from '@/components/app-startup-screen';
+import { SmartDukaLogo } from '@/components/brand/smartduka-logo';
+import { CartLoader } from '@/components/ui/cart-loader';
 import { ThemeToggleOutline } from '@/components/theme-toggle';
-import { StripePaymentForm } from '@/components/stripe-payment-form';
-import { PaymentTrustBadges } from '@/components/payment-trust-badges';
-import { Button, Input } from '@smartduka/ui';
-import { config } from '@/lib/config';
+import { useAuth } from '@/lib/auth-context';
+
+const highlights = [
+  { icon: ShoppingCart, title: 'Sell with fewer steps', detail: 'Search, scan, build a cart and finish the sale in your POS workspace.' },
+  { icon: Package, title: 'Know what is in stock', detail: 'Organise your products, adjust inventory and catch low-stock items.' },
+  { icon: BarChart3, title: 'Understand each day', detail: 'See orders, sales performance and the activity behind your numbers.' },
+  { icon: Users, title: 'Give your team a clear role', detail: 'Set up cashier access and keep the selling experience focused.' },
+  { icon: ReceiptText, title: 'Keep a usable sales history', detail: 'Find order details and receipts when a customer needs help.' },
+  { icon: Store, title: 'Grow beyond one counter', detail: 'Manage your shop today and explore more advanced operations as you grow.' },
+];
+
+const dailyFlow = [
+  { icon: Clock3, title: 'Open your day', detail: 'Check what needs attention before the first customer.' },
+  { icon: ScanLine, title: 'Serve each customer', detail: 'Go straight to POS, scan or search products and complete the sale.' },
+  { icon: TrendingUp, title: 'Close with clarity', detail: 'Review the day’s orders, sales and low-stock items.' },
+];
+
+function InterfacePreview() {
+  return (
+    <div aria-label="Illustrative SmartDuka point of sale interface"
+      className="relative mx-auto w-full max-w-[520px] rounded-[2rem] border border-white/15 bg-slate-950 p-3 shadow-[0_30px_75px_-18px_rgba(15,23,42,0.35)] sm:p-5">
+      <div className="absolute -right-2 -top-3 hidden rounded-full border border-orange-200 bg-orange-50 px-3 py-2 text-xs font-semibold text-orange-800 shadow-lg sm:block">
+        Built for busy counters
+      </div>
+      <div className="overflow-hidden rounded-2xl bg-white text-slate-900">
+        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-50 text-orange-600">
+              <Store aria-hidden="true" className="h-4 w-4" />
+            </span>
+            <div>
+              <p className="text-sm font-extrabold leading-none">Your shop</p>
+              <p className="mt-1 text-[11px] text-slate-500">Point of sale workspace</p>
+            </div>
+          </div>
+          <span className="rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700">Ready to sell</span>
+        </div>
+        <div className="space-y-4 p-4 sm:p-5">
+          <div className="flex items-center justify-between">
+            <p className="text-base font-extrabold">New sale</p>
+            <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-3 py-2 text-xs font-bold text-orange-700">
+              <ScanLine aria-hidden="true" className="h-3.5 w-3.5" /> Scan items
+            </span>
+          </div>
+          <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+            <Package aria-hidden="true" className="h-4 w-4" /> Search products or scan a barcode
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { name: 'Products', icon: Package },
+              { name: 'Receipts', icon: ReceiptText },
+              { name: 'Reports', icon: BarChart3 },
+            ].map((item) => (
+              <div key={item.name} className="flex min-w-0 flex-col items-center gap-2 rounded-xl border border-slate-200 bg-white px-2 py-4">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-50 text-orange-600">
+                  <item.icon aria-hidden="true" className="h-5 w-5" />
+                </span>
+                <span className="text-xs font-bold">{item.name}</span>
+              </div>
+            ))}
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <p className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-500">Your retail routine</p>
+            <div className="space-y-3">
+              {['Track what you sell', 'Keep stock organised', 'See how today is going'].map((task) => (
+                <div key={task} className="flex items-center gap-3 text-sm font-medium">
+                  <CheckCircle2 aria-hidden="true" className="h-4 w-4 shrink-0 text-orange-600" /> {task}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+      <p className="px-2 pt-3 text-center text-[11px] text-slate-300">
+        Illustrative interface · No customer or business data shown
+      </p>
+    </div>
+  );
+}
 
 export default function Home() {
   const router = useRouter();
   const { user, loading, isAuthenticated } = useAuth();
   const [appReady, setAppReady] = useState(false);
 
-  // Redirect authenticated users to their dashboard
   useEffect(() => {
-    if (!appReady || loading) return;
-
-    if (isAuthenticated && user) {
-      if (user.role === 'admin') {
-        router.push('/admin');
-      } else if (user.role === 'cashier') {
-        router.push('/cashier/dashboard');
-      } else if (user.role === 'super_admin') {
-        router.push('/super-admin');
-      }
-    }
+    if (!appReady || loading || !isAuthenticated || !user) return;
+    if (user.role === 'admin') router.replace('/admin');
+    if (user.role === 'cashier') router.replace('/cashier/dashboard');
+    if (user.role === 'super_admin') router.replace('/super-admin');
   }, [user, loading, isAuthenticated, router, appReady]);
 
-  // Show startup screen until app is ready
-  if (!appReady) {
-    return <AppStartupScreen onReady={() => setAppReady(true)} />;
-  }
+  if (!appReady) return <AppStartupScreen onReady={() => setAppReady(true)} />;
+  if (loading || (isAuthenticated && user)) return <CartLoader fullScreen title="Opening SmartDuka" />;
 
-  // Show loading while checking auth for authenticated users
-  if (loading || (isAuthenticated && user)) {
-    return (
-      <div className="h-screen bg-background flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="relative">
-            <div className="h-12 w-12 rounded-full border-4 border-primary/20" />
-            <div className="absolute inset-0 h-12 w-12 rounded-full border-4 border-transparent border-t-primary animate-spin" />
-          </div>
-          <p className="text-muted-foreground">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
-  const features = [
-    { 
-      icon: Brain, 
-      title: 'AI-Powered Insights', 
-      description: 'Smart predictions & analytics powered by our AI Hyper Engine',
-      color: 'from-primary to-orange-600'
-    },
-    { 
-      icon: Camera, 
-      title: 'Smart Scanning', 
-      description: 'Camera barcode scanning & hardware scanner support',
-      color: 'from-primary to-orange-600'
-    },
-    { 
-      icon: Wallet, 
-      title: 'M-Pesa & Pochi', 
-      description: 'Accept Send Money & Pochi la Biashara payments',
-      color: 'from-primary to-orange-600'
-    },
-    { 
-      icon: Receipt, 
-      title: 'Smart Invoicing', 
-      description: 'Professional invoices with payment tracking',
-      color: 'from-primary to-orange-600'
-    },
-    { 
-      icon: Package, 
-      title: 'Inventory Control', 
-      description: 'Real-time stock tracking with low-stock alerts',
-      color: 'from-primary to-orange-600'
-    },
-    { 
-      icon: BarChart3, 
-      title: 'Sales Analytics', 
-      description: 'Comprehensive reports & performance metrics',
-      color: 'from-primary to-orange-600'
-    },
-  ];
-
-
-  // Hero/Landing page for non-authenticated users
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-muted/20">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <Link href="/" className="flex items-center gap-2.5">
-              <SmartDukaLogo size="md" />
-            </Link>
-            
-            <nav className="hidden md:flex items-center gap-8">
-              <a href="#features" className="text-muted-foreground hover:text-foreground text-sm font-medium transition-colors">
-                Features
-              </a>
-              <a href="#pricing" className="text-muted-foreground hover:text-foreground text-sm font-medium transition-colors">
-                Why Free
-              </a>
-              <a href="#contact" className="text-muted-foreground hover:text-foreground text-sm font-medium transition-colors">
-                Contact
-              </a>
-            </nav>
-            
-            <div className="flex items-center gap-3">
-              <Link 
-                href="/login" 
-                className="text-muted-foreground hover:text-foreground font-medium text-sm transition-colors"
-              >
-                Sign In
-              </Link>
-              <Link 
-                href="/register-shop" 
-                className="hidden sm:flex px-4 py-2 bg-primary text-primary-foreground rounded-lg font-medium text-sm hover:bg-primary/90 transition-all shadow-md shadow-primary/20"
-              >
-                Start Free
-              </Link>
-              <ThemeToggleOutline />
-            </div>
+    <div className="min-h-screen bg-background text-foreground">
+      <a href="#main" className="sr-only rounded-md bg-background p-3 focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-[70]">
+        Skip to main content
+      </a>
+      <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur-xl">
+        <div className="mx-auto flex h-[72px] max-w-7xl items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
+          <Link href="/" aria-label="SmartDuka homepage" className="flex shrink-0 items-center">
+            <SmartDukaLogo size="md" />
+          </Link>
+          <nav aria-label="Main navigation" className="hidden items-center gap-7 md:flex">
+            <a href="#features" className="text-sm font-medium text-muted-foreground hover:text-foreground">Features</a>
+            <a href="#daily-routine" className="text-sm font-medium text-muted-foreground hover:text-foreground">How it works</a>
+            <Link href="/pricing" className="text-sm font-medium text-muted-foreground hover:text-foreground">Plans</Link>
+            <a href="#support" className="text-sm font-medium text-muted-foreground hover:text-foreground">Support</a>
+          </nav>
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+            <Link href="/login" className="inline-flex min-h-11 items-center rounded-xl px-3 text-sm font-semibold text-foreground hover:bg-muted sm:px-4">Sign in</Link>
+            <Link href="/register-shop" className="hidden min-h-11 items-center rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary/90 sm:inline-flex">Start your shop</Link>
+            <ThemeToggleOutline />
           </div>
         </div>
       </header>
 
-      {/* Hero Section */}
-      <section className="relative overflow-hidden pt-16 pb-20 md:pt-24 md:pb-32">
-        {/* Subtle background pattern */}
-        <div className="absolute inset-0 -z-10">
-          <div className="absolute top-0 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-3xl opacity-60" />
-          <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-orange-500/10 rounded-full blur-3xl opacity-60" />
-        </div>
+      <main id="main">
+        <section className="relative overflow-hidden border-b border-border/70 bg-gradient-to-br from-orange-50/80 via-background to-background py-12 dark:from-orange-950/20 sm:py-16 lg:py-20">
+          <div className="pointer-events-none absolute -right-28 -top-24 h-80 w-80 rounded-full bg-orange-400/10 blur-3xl" />
+          <div className="mx-auto grid max-w-7xl items-center gap-10 px-4 sm:px-6 lg:grid-cols-[1.1fr_0.9fr] lg:gap-12 lg:px-8">
+            <div className="relative">
+              <p className="mb-5 inline-flex items-center gap-2 rounded-full border border-orange-200/80 bg-orange-50 px-3 py-2 text-xs font-bold tracking-wide text-orange-800 dark:border-orange-700/40 dark:bg-orange-900/20 dark:text-orange-200">
+                <Store aria-hidden="true" className="h-4 w-4" /> A smarter way to run your shop
+              </p>
+              <h1 className="max-w-2xl text-[clamp(2.6rem,7vw,4.9rem)] font-extrabold leading-[1.04] tracking-[-0.045em]">
+                Run your shop smarter.
+                <span className="mt-2 block text-orange-600 dark:text-orange-400">Sell faster. Grow with confidence.</span>
+              </h1>
+              <p className="mt-6 max-w-xl text-base leading-relaxed text-muted-foreground sm:text-lg">
+                Bring your sales, stock, staff and daily numbers together in one easy-to-use point of sale workspace. Spend less time juggling records and more time serving customers.
+              </p>
+              <div className="mt-8 grid gap-3 sm:flex sm:flex-wrap">
+                <Link href="/register-shop" className="inline-flex min-h-14 w-full items-center justify-center gap-3 rounded-2xl bg-orange-600 px-7 text-base font-bold text-white shadow-lg shadow-orange-600/20 transition-colors hover:bg-orange-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600 sm:w-auto">
+                  Create your shop <ArrowRight aria-hidden="true" className="h-5 w-5" />
+                </Link>
+                <Link href="/login" className="inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl border border-border bg-card px-7 text-base font-bold shadow-sm transition-colors hover:bg-muted sm:w-auto">
+                  Already use SmartDuka? Sign in
+                </Link>
+              </div>
+              <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-sm text-muted-foreground">
+                <span className="inline-flex items-center gap-2"><CheckCircle2 aria-hidden="true" className="h-4 w-4 text-orange-600" /> Start at no cost today</span>
+                <span className="inline-flex items-center gap-2"><CheckCircle2 aria-hidden="true" className="h-4 w-4 text-orange-600" /> No card required to start</span>
+                <span className="inline-flex items-center gap-2"><CheckCircle2 aria-hidden="true" className="h-4 w-4 text-orange-600" /> Built for retail teams</span>
+              </div>
+              <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+                Introductory free access is currently available. Future usage limits and paid plans will be announced before they take effect. <Link href="/pricing" className="font-semibold text-orange-700 underline-offset-2 hover:underline dark:text-orange-300">View current terms</Link>.
+              </p>
+            </div>
+            <InterfacePreview />
+          </div>
+        </section>
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center max-w-4xl mx-auto">
-            {/* Badge */}
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-primary/10 border border-primary/20 rounded-full text-primary text-sm font-medium mb-8">
-              <Sparkles className="h-4 w-4" />
-              Free &amp; Open Source
+        <section id="features" className="py-16 sm:py-20 lg:py-24">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="max-w-2xl">
+              <p className="mb-3 text-sm font-bold uppercase tracking-[0.16em] text-orange-600">Your daily operations, connected</p>
+              <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Everything starts with a better selling day.</h2>
+              <p className="mt-4 text-base leading-relaxed text-muted-foreground">One organised place for the tasks retailers return to every day.</p>
             </div>
-            
-            {/* Main Heading */}
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight mb-6">
-              <span className="text-foreground">Free Point of Sale</span>
-              <br />
-              <span className="bg-gradient-to-r from-primary to-orange-600 bg-clip-text text-transparent">
-                For Every Business
-              </span>
-            </h1>
-            
-            {/* Subheading */}
-            <p className="text-lg md:text-xl text-muted-foreground mb-10 leading-relaxed max-w-2xl mx-auto">
-              Complete Point of Sale system with M-Pesa integration, AI-powered analytics, 
-              and real-time inventory tracking. Free, open source, and free during our introductory period.
-            </p>
-            
-            {/* CTA Buttons */}
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-10">
-              <Link 
-                href="/register-shop" 
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-4 bg-primary text-primary-foreground rounded-xl font-semibold text-lg hover:bg-primary/90 transition-all shadow-xl shadow-primary/25 hover:shadow-primary/40"
-              >
-                Get Started Free
-                <ArrowRight className="h-5 w-5" />
-              </Link>
-              <Link 
-                href="/login" 
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-4 bg-card border border-border text-foreground rounded-xl font-semibold text-lg hover:bg-muted transition-colors shadow-sm"
-              >
-                Sign In
-              </Link>
-            </div>
-            
-            {/* Trust badges */}
-            <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-muted-foreground">
-              <div className="flex items-center gap-2">
-                <CheckCircle className="h-5 w-5 text-primary" />
-                Free during our introductory period
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckCircle className="h-5 w-5 text-primary" />
-                Your business data stays yours
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckCircle className="h-5 w-5 text-primary" />
-                Open source
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Features Section */}
-      <section id="features" className="py-20 md:py-28 bg-muted/30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
-              Powerful Features for Modern Retail
-            </h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Everything you need to run your business efficiently, all in one platform
-            </p>
-          </div>
-          
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {features.map((feature, index) => (
-              <div 
-                key={index} 
-                className="group p-6 bg-card rounded-2xl border border-border hover:border-primary/30 hover:shadow-xl transition-all duration-300"
-              >
-                <div className={`w-12 h-12 bg-gradient-to-br ${feature.color} rounded-xl flex items-center justify-center mb-5 shadow-lg group-hover:scale-110 transition-transform`}>
-                  <feature.icon className="h-6 w-6 text-white" />
-                </div>
-                <h3 className="text-lg font-semibold text-foreground mb-2">{feature.title}</h3>
-                <p className="text-muted-foreground">{feature.description}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Stats Section */}
-      <section className="py-16 md:py-20 border-y border-border">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-            {[
-              { value: '500+', label: 'Active Shops' },
-              { value: '10K+', label: 'Daily Transactions' },
-              { value: '99.9%', label: 'Uptime' },
-              { value: 'EN & SW', label: 'Interface languages' },
-            ].map((stat, index) => (
-              <div key={index} className="text-center">
-                <div className="text-3xl md:text-4xl font-bold text-primary mb-1">
-                  {stat.value}
-                </div>
-                <div className="text-muted-foreground text-sm font-medium">{stat.label}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Why Free Section */}
-      <section id="pricing" className="py-20 md:py-28">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-primary/10 border border-primary/20 rounded-full text-primary text-sm font-medium mb-6">
-              <Heart className="h-4 w-4" />
-              Completely Free
-            </div>
-            <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
-              Free. No Catch.
-            </h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              SmartDuka is open source and free for everyone. No subscriptions, no hidden fees, 
-              no premium tiers. Every feature is available to every user.
-            </p>
-          </div>
-          
-          <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto mb-16">
-            <div className="text-center p-6 bg-card rounded-2xl border border-border">
-              <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center mx-auto mb-4">
-                <Code className="h-6 w-6 text-primary" />
-              </div>
-              <h3 className="text-lg font-semibold text-foreground mb-2">Open Source</h3>
-              <p className="text-sm text-muted-foreground">Fully transparent codebase. Inspect, modify, and contribute to the project.</p>
-            </div>
-            <div className="text-center p-6 bg-card rounded-2xl border border-border">
-              <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center mx-auto mb-4">
-                <Lock className="h-6 w-6 text-primary" />
-              </div>
-              <h3 className="text-lg font-semibold text-foreground mb-2">Shop Data Isolation</h3>
-              <p className="text-sm text-muted-foreground">Your business data stays in your shop. See our Privacy Policy for how accounts and shop records are handled.</p>
-            </div>
-            <div className="text-center p-6 bg-card rounded-2xl border border-border">
-              <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center mx-auto mb-4">
-                <Globe className="h-6 w-6 text-primary" />
-              </div>
-              <h3 className="text-lg font-semibold text-foreground mb-2">Free Now</h3>
-              <p className="text-sm text-muted-foreground">No trials, no limits, no upgrades. Full access to all features, always.</p>
-            </div>
-          </div>
-
-          {/* What You Get - All Features Free */}
-          <div className="bg-gradient-to-br from-primary/5 to-orange-500/5 border border-primary/10 rounded-2xl p-8 md:p-10 max-w-3xl mx-auto">
-            <h3 className="text-xl font-bold text-foreground mb-6 text-center">Everything Included — Free</h3>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              {[
-                'Unlimited Shops', 'Unlimited Staff', 'Unlimited Products',
-                'Full POS System', 'M-Pesa Integration', 'Barcode Scanning',
-                'Sales Analytics', 'Inventory Tracking', 'Smart Invoicing',
-                'AI-Powered Insights', 'Multi-Branch Support', 'Real-time Reports'
-              ].map((feature, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-primary flex-shrink-0" />
-                  <span className="text-sm text-foreground">{feature}</span>
-                </div>
+            <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {highlights.map((feature) => (
+                <article key={feature.title} className="group rounded-2xl border border-border bg-card p-6 shadow-sm transition-all hover:-translate-y-0.5 hover:border-orange-400/40 hover:shadow-lg">
+                  <span className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-orange-500/10 text-orange-600">
+                    <feature.icon aria-hidden="true" className="h-6 w-6" />
+                  </span>
+                  <h3 className="text-lg font-bold">{feature.title}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{feature.detail}</p>
+                </article>
               ))}
             </div>
-            <div className="mt-8 text-center">
-              <Link 
-                href="/register-shop"
-                className="inline-flex items-center gap-2 px-8 py-4 bg-primary text-primary-foreground rounded-xl font-semibold text-lg hover:bg-primary/90 transition-all shadow-xl shadow-primary/25"
-              >
-                Get Started — It&apos;s Free
-                <ArrowRight className="h-5 w-5" />
-              </Link>
+          </div>
+        </section>
+
+        <section id="daily-routine" className="border-y border-border bg-muted/40 py-16 sm:py-20">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="max-w-2xl">
+              <p className="mb-3 text-sm font-bold uppercase tracking-[0.16em] text-orange-600">A POS you return to</p>
+              <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">From opening time to your last receipt.</h2>
+              <p className="mt-4 text-muted-foreground">Designed around a real shopkeeper’s routine—not another complicated dashboard.</p>
+            </div>
+            <div className="mt-10 grid gap-4 md:grid-cols-3">
+              {dailyFlow.map((step, index) => (
+                <article key={step.title} className="rounded-2xl border border-border bg-card p-6">
+                  <div className="mb-5 flex items-center justify-between">
+                    <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-orange-500/10 text-orange-600">
+                      <step.icon aria-hidden="true" className="h-6 w-6" />
+                    </span>
+                    <span className="text-xs font-bold tracking-widest text-muted-foreground">0{index + 1}</span>
+                  </div>
+                  <h3 className="text-lg font-bold">{step.title}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{step.detail}</p>
+                </article>
+              ))}
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Donate Section */}
-      <section className="py-16 md:py-20 bg-muted/30">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <Heart className="h-10 w-10 text-primary mx-auto mb-4" />
-          <h2 className="text-2xl md:text-3xl font-bold text-foreground mb-4">
-            Love SmartDuka? Support Us
-          </h2>
-          <p className="text-muted-foreground mb-8 max-w-xl mx-auto">
-            SmartDuka is built and maintained by a small team. If you find it valuable, 
-            consider making a voluntary donation to help us keep it free and keep improving.
-          </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-6">
-            <a 
-              href="https://wa.me/61450275013?text=Hello%20SmartDuka%2C%20I%20would%20like%20to%20make%20a%20donation%20to%20support%20the%20project" 
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition-colors shadow-lg"
-            >
-              <Heart className="h-5 w-5" />
-              Donate via M-Pesa
-            </a>
-            <p className="text-sm text-muted-foreground">
-              Send to <strong>0727 068 107</strong> (SmartDuka Kenya)
-            </p>
-          </div>
-          {/* Card Donation Option */}
-          <HomepageCardDonation />
-          <p className="text-xs text-muted-foreground mt-4">
-            Donations are completely voluntary and do not unlock any additional features.
-          </p>
-        </div>
-      </section>
-
-      {/* CTA Section */}
-      <section className="py-20 md:py-28 bg-primary relative overflow-hidden">
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSA2MCAwIEwgMCAwIDAgNjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0icmdiYSgyNTUsMjU1LDI1NSwwLjEpIiBzdHJva2Utd2lkdGg9IjEiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz48L3N2Zz4=')] opacity-30" />
-        
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative">
-          <h2 className="text-3xl md:text-4xl font-bold text-primary-foreground mb-6">
-            Ready to Transform Your Business?
-          </h2>
-          <p className="text-lg text-primary-foreground/80 mb-10 max-w-2xl mx-auto">
-            Start using SmartDuka for free to streamline operations and boost sales.
-          </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link 
-              href="/register-shop" 
-              className="w-full sm:w-auto px-8 py-4 bg-white text-primary rounded-xl font-bold text-lg hover:bg-gray-100 transition-colors shadow-xl"
-            >
-              Get Started Free
-            </Link>
-            <Link 
-              href="/login" 
-              className="w-full sm:w-auto px-8 py-4 border-2 border-white text-white rounded-xl font-bold text-lg hover:bg-white/10 transition-colors"
-            >
-              Sign In
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* Contact Section */}
-      <section id="contact" className="py-20 md:py-24 bg-muted/30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
-              Get in Touch
-            </h2>
-            <p className="text-lg text-muted-foreground">
-              Our team is here to help you get started
-            </p>
-          </div>
-          
-          {/* Location Badge */}
-          <div className="flex flex-wrap items-center justify-center gap-4 mb-8 text-sm text-muted-foreground">
-            <div className="flex items-center gap-2">
-              <MapPin className="h-4 w-4 text-primary" />
-              <span>Based in <strong className="text-foreground">Sydney, Australia</strong></span>
-            </div>
-            <span className="hidden sm:inline">|</span>
-            <div className="flex items-center gap-2">
-              <Globe className="h-4 w-4 text-primary" />
-              <span>Supporting businesses in <strong className="text-foreground">Kenya</strong> &amp; <strong className="text-foreground">Australia</strong></span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 max-w-5xl mx-auto">
-            {/* Email */}
-            <a 
-              href="mailto:smartdukainfo@gmail.com" 
-              className="flex flex-col items-center p-5 md:p-6 bg-card rounded-2xl border-2 border-border hover:border-primary hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group cursor-pointer"
-            >
-              <div className="w-14 h-14 bg-primary/10 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 group-hover:bg-primary/20 transition-all">
-                <Mail className="h-7 w-7 text-primary" />
-              </div>
-              <h3 className="font-semibold text-foreground mb-1">Email Us</h3>
-              <p className="text-primary font-medium text-xs md:text-sm text-center">smartdukainfo@gmail.com</p>
-              <span className="mt-3 text-xs text-muted-foreground group-hover:text-primary transition-colors flex items-center gap-1">
-                Click to send email
-                <ArrowRight className="h-3 w-3 group-hover:translate-x-1 transition-transform" />
-              </span>
-            </a>
-            
-            {/* Australia (Sydney) */}
-            <a 
-              href="tel:+61450275013" 
-              className="flex flex-col items-center p-5 md:p-6 bg-card rounded-2xl border-2 border-border hover:border-blue-500 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group cursor-pointer"
-            >
-              <div className="w-14 h-14 bg-blue-500/10 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 group-hover:bg-blue-500/20 transition-all">
-                <Phone className="h-7 w-7 text-blue-500" />
-              </div>
-              <h3 className="font-semibold text-foreground mb-1">Australia</h3>
-              <p className="text-blue-500 font-medium text-sm">0450 275 013</p>
-              <span className="text-[10px] text-muted-foreground">Sydney, NSW</span>
-              <span className="mt-2 text-xs text-muted-foreground group-hover:text-blue-500 transition-colors flex items-center gap-1">
-                Call or text
-                <ArrowRight className="h-3 w-3 group-hover:translate-x-1 transition-transform" />
-              </span>
-            </a>
-            
-            {/* Kenya */}
-            <a 
-              href="tel:+254727068107" 
-              className="flex flex-col items-center p-5 md:p-6 bg-card rounded-2xl border-2 border-border hover:border-green-600 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group cursor-pointer"
-            >
-              <div className="w-14 h-14 bg-green-600/10 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 group-hover:bg-green-600/20 transition-all">
-                <Phone className="h-7 w-7 text-green-600" />
-              </div>
-              <h3 className="font-semibold text-foreground mb-1">Kenya</h3>
-              <p className="text-green-600 font-medium text-sm">0727 068 107</p>
-              <span className="text-[10px] text-muted-foreground">Nairobi, KE</span>
-              <span className="mt-2 text-xs text-muted-foreground group-hover:text-green-600 transition-colors flex items-center gap-1">
-                Click to call
-                <ArrowRight className="h-3 w-3 group-hover:translate-x-1 transition-transform" />
-              </span>
-            </a>
-            
-            {/* WhatsApp */}
-            <a 
-              href="https://wa.me/61450275013?text=Hello%20SmartDuka%2C%20I%20need%20help%20with" 
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex flex-col items-center p-5 md:p-6 bg-card rounded-2xl border-2 border-border hover:border-green-500 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group cursor-pointer"
-            >
-              <div className="w-14 h-14 bg-green-500/10 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 group-hover:bg-green-500/20 transition-all">
-                <MessageCircle className="h-7 w-7 text-green-500" />
-              </div>
-              <h3 className="font-semibold text-foreground mb-1">WhatsApp</h3>
-              <p className="text-green-500 font-medium text-sm">0450 275 013</p>
-              <span className="text-[10px] text-muted-foreground">Chat with us anytime</span>
-              <span className="mt-2 text-xs text-muted-foreground group-hover:text-green-500 transition-colors flex items-center gap-1">
-                Click to chat
-                <ArrowRight className="h-3 w-3 group-hover:translate-x-1 transition-transform" />
-              </span>
-            </a>
-          </div>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="py-12 border-t border-border bg-card">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid md:grid-cols-4 gap-8 mb-8">
-            {/* Brand */}
-            <div className="md:col-span-2">
-              <Link href="/" className="flex items-center gap-2.5 mb-4">
-                <SmartDukaLogo size="md" />
-              </Link>
-              <p className="text-muted-foreground text-sm max-w-xs mb-4">
-                The world&apos;s smartest free Point of Sale system. Free, open source, and privacy-first. Built for modern businesses everywhere.
+        <section id="plans" className="py-16 sm:py-20">
+          <div className="mx-auto grid max-w-7xl items-center gap-8 px-4 sm:px-6 lg:grid-cols-[1fr_1.05fr] lg:gap-12 lg:px-8">
+            <div>
+              <p className="mb-3 text-sm font-bold uppercase tracking-[0.16em] text-orange-600">Start small. Grow when you're ready.</p>
+              <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Professional shop tools, without a big commitment.</h2>
+              <p className="mt-4 leading-relaxed text-muted-foreground">
+                SmartDuka currently offers introductory free access. We are designing a lasting free plan for smaller shops, with optional upgrades for higher product capacity, more staff, branches and advanced reporting.
               </p>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Clock className="h-4 w-4" />
-                <span>In-app support available</span>
+              <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+                Changes will be clearly published before any limit is enforced. Existing sales records remain yours to access.
+              </p>
+              <Link href="/pricing" className="mt-6 inline-flex min-h-12 items-center gap-2 rounded-xl font-bold text-orange-700 underline-offset-4 hover:underline dark:text-orange-300">
+                See current access and planned tiers <ChevronRight aria-hidden="true" className="h-5 w-5" />
+              </Link>
+            </div>
+            <div className="rounded-[1.7rem] border border-border bg-card p-6 shadow-xl shadow-slate-950/5 sm:p-8">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-orange-600">Available today</p>
+                  <h3 className="mt-1 text-2xl font-extrabold">Start with SmartDuka</h3>
+                </div>
+                <span className="shrink-0 rounded-full bg-emerald-500/10 px-3 py-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-300">No card required</span>
+              </div>
+              <ul className="mt-6 space-y-3 text-sm">
+                {[
+                  'Set up your shop and inventory',
+                  'Manage sales with your POS workspace',
+                  'Review receipts and basic sales activity',
+                  'Use the app from your existing device',
+                ].map((item) => (
+                  <li key={item} className="flex gap-3"><CheckCircle2 aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-orange-600" />{item}</li>
+                ))}
+              </ul>
+              <Link href="/register-shop" className="mt-7 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-bold text-primary-foreground hover:bg-primary/90">
+                Start setting up your shop <ArrowRight aria-hidden="true" className="h-4 w-4" />
+              </Link>
+              <p className="mt-3 text-center text-xs text-muted-foreground">See the full current terms on the plans page.</p>
+            </div>
+          </div>
+        </section>
+
+        <section className="bg-slate-950 py-16 text-white sm:py-20">
+          <div className="mx-auto max-w-4xl px-4 text-center sm:px-6">
+            <span className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-orange-500/15 text-orange-400">
+              <ShieldCheck aria-hidden="true" className="h-6 w-6" />
+            </span>
+            <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Your shop deserves a dependable system.</h2>
+            <p className="mx-auto mt-4 max-w-2xl leading-relaxed text-slate-300">
+              Build a clear record of products, orders and daily operations. Grow your business without losing sight of what is happening at the counter.
+            </p>
+            <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+              <Link href="/register-shop" className="inline-flex min-h-14 items-center justify-center gap-2 rounded-xl bg-orange-600 px-7 font-bold text-white hover:bg-orange-700">
+                Create your shop <ArrowRight aria-hidden="true" className="h-5 w-5" />
+              </Link>
+              <Link href="/login" className="inline-flex min-h-14 items-center justify-center rounded-xl border border-white/30 px-7 font-bold text-white hover:bg-white/10">
+                Sign in to SmartDuka
+              </Link>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer id="support" className="border-t border-border bg-background py-12">
+        <div className="mx-auto flex max-w-7xl flex-col gap-8 px-4 sm:px-6 lg:px-8">
+          <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
+            <div>
+              <SmartDukaLogo size="md" />
+              <p className="mt-4 max-w-xs text-sm leading-relaxed text-muted-foreground">Point of sale and shop management built for your everyday retail routine.</p>
+            </div>
+            <div>
+              <h3 className="font-bold">Explore</h3>
+              <div className="mt-3 flex flex-col gap-3 text-sm text-muted-foreground">
+                <a href="#features" className="hover:text-foreground">Features</a>
+                <Link href="/pricing" className="hover:text-foreground">Plans and current terms</Link>
+                <Link href="/login" className="hover:text-foreground">Shop sign in</Link>
+                <Link href="/register-shop" className="hover:text-foreground">Create a shop</Link>
               </div>
             </div>
-            
-            {/* Quick Links */}
             <div>
-              <h4 className="font-semibold text-foreground mb-4">Quick Links</h4>
-              <ul className="space-y-2 text-sm">
-                <li><a href="#features" className="text-muted-foreground hover:text-primary transition-colors">Features</a></li>
-                <li><a href="#pricing" className="text-muted-foreground hover:text-primary transition-colors">Why Free</a></li>
-                <li><a href="#contact" className="text-muted-foreground hover:text-primary transition-colors">Contact</a></li>
-                <li><Link href="/login" className="text-muted-foreground hover:text-primary transition-colors">Sign In</Link></li>
-              </ul>
-            </div>
-            
-            {/* Contact */}
-            <div>
-              <h4 className="font-semibold text-foreground mb-4">Contact</h4>
-              <ul className="space-y-3 text-sm">
-                <li className="flex items-center gap-2 text-muted-foreground">
-                  <Mail className="h-4 w-4 flex-shrink-0" />
-                  smartdukainfo@gmail.com
-                </li>
-                <li>
-                  <a href="tel:+61450275013" className="flex items-center gap-2 text-muted-foreground hover:text-blue-500 transition-colors">
-                    <Phone className="h-4 w-4 flex-shrink-0" />
-                    <span>0450 275 013 <span className="text-xs opacity-70">(AU)</span></span>
-                  </a>
-                </li>
-                <li>
-                  <a href="tel:+254727068107" className="flex items-center gap-2 text-muted-foreground hover:text-green-600 transition-colors">
-                    <Phone className="h-4 w-4 flex-shrink-0" />
-                    <span>0727 068 107 <span className="text-xs opacity-70">(KE)</span></span>
-                  </a>
-                </li>
-                <li>
-                  <a href="https://wa.me/61450275013" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-muted-foreground hover:text-green-500 transition-colors">
-                    <MessageCircle className="h-4 w-4 flex-shrink-0" />
-                    <span>WhatsApp <span className="text-xs opacity-70">(AU)</span></span>
-                  </a>
-                </li>
-                <li className="flex items-center gap-2 text-muted-foreground">
-                  <MapPin className="h-4 w-4 flex-shrink-0" />
-                  Sydney, Australia
-                </li>
-              </ul>
+              <h3 className="font-bold">Support</h3>
+              <div className="mt-3 flex flex-col gap-3 text-sm text-muted-foreground">
+                <a href="mailto:smartdukainfo@gmail.com" className="inline-flex items-center gap-2 hover:text-foreground"><Headphones aria-hidden="true" className="h-4 w-4" /> smartdukainfo@gmail.com</a>
+                <Link href="/support" className="hover:text-foreground">Help and support</Link>
+                <Link href="/privacy" className="hover:text-foreground">Privacy policy</Link>
+                <Link href="/terms" className="hover:text-foreground">Terms of service</Link>
+              </div>
             </div>
           </div>
-          
-          {/* Payment Trust Badges */}
-          <div className="pt-6 pb-2">
-            <PaymentTrustBadges variant="footer" />
-          </div>
-
-          <div className="pt-6 border-t border-border flex flex-col md:flex-row items-center justify-between gap-4">
-            <p className="text-sm text-muted-foreground">
-              © {new Date().getFullYear()} SmartDuka. All rights reserved.
-            </p>
-            <a 
-              href="https://www.dtbtech.org" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="group flex items-center gap-2 text-sm text-muted-foreground/70 hover:text-primary transition-all duration-300"
-            >
-              <span className="text-xs tracking-wide uppercase">Powered by</span>
-              <span className="font-semibold text-foreground/80 group-hover:text-primary transition-colors">
-                DTB Technologies
-              </span>
-              <svg 
-                className="w-4 h-4 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300" 
-                fill="none" 
-                viewBox="0 0 24 24" 
-                stroke="currentColor"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-              </svg>
-            </a>
+          <div className="flex flex-col justify-between gap-3 border-t border-border pt-6 text-xs text-muted-foreground sm:flex-row">
+            <span>© {new Date().getFullYear()} SmartDuka. All rights reserved.</span>
+            <span>Created by <a href="https://www.dtbtech.org" target="_blank" rel="noopener noreferrer" className="font-semibold hover:text-foreground">DTB Technologies</a></span>
           </div>
         </div>
       </footer>
-    </div>
-  );
-}
-
-// Card Donation Section for Homepage - no auth required
-function HomepageCardDonation() {
-  const [donationAmount, setDonationAmount] = useState(500); // cents ($5 default)
-  const [donorEmail, setDonorEmail] = useState('');
-  const [clientSecret, setClientSecret] = useState<string | null>(null);
-  const [publishableKey, setPublishableKey] = useState('');
-  const [creating, setCreating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
-  const [stripeConfigured, setStripeConfigured] = useState<boolean | null>(null);
-  const [showCardForm, setShowCardForm] = useState(false);
-
-  const presetAmounts = [
-    { label: '$5', value: 500 },
-    { label: '$10', value: 1000 },
-    { label: '$25', value: 2500 },
-    { label: '$50', value: 5000 },
-  ];
-
-  // Check if Stripe is configured
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch(`${config.apiUrl}/stripe/config`);
-        if (res.ok) {
-          const data = await res.json();
-          setStripeConfigured(data.isConfigured && !!data.publishableKey);
-          if (data.publishableKey) setPublishableKey(data.publishableKey);
-        } else {
-          setStripeConfigured(false);
-        }
-      } catch {
-        setStripeConfigured(false);
-      }
-    })();
-  }, []);
-
-  if (stripeConfigured === null || !stripeConfigured) return null;
-
-  const startCardDonation = async () => {
-    setCreating(true);
-    setError(null);
-    try {
-      const res = await fetch(`${config.apiUrl}/stripe/donation/create-payment`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          amount: donationAmount,
-          currency: 'usd',
-          donorEmail: donorEmail || undefined,
-        }),
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.message || 'Failed to create donation payment');
-      }
-      const data = await res.json();
-      setClientSecret(data.clientSecret);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  if (success) {
-    return (
-      <div className="max-w-md mx-auto bg-green-50 dark:bg-green-950/20 rounded-xl p-6 border border-green-200 dark:border-green-800 text-center">
-        <CheckCircle className="h-10 w-10 text-green-500 mx-auto mb-3" />
-        <p className="text-base font-semibold text-green-800 dark:text-green-300">Thank you for your donation!</p>
-        <p className="text-sm text-muted-foreground mt-1">Your support helps keep SmartDuka free for everyone.</p>
-      </div>
-    );
-  }
-
-  if (clientSecret) {
-    return (
-      <div className="max-w-md mx-auto bg-background rounded-xl border shadow-lg p-6 text-left">
-        <div className="flex items-center justify-between mb-4">
-          <p className="text-sm font-semibold">Card Donation: ${(donationAmount / 100).toFixed(2)}</p>
-          <button
-            onClick={() => { setClientSecret(null); setError(null); }}
-            className="text-xs text-muted-foreground hover:underline"
-          >
-            Cancel
-          </button>
-        </div>
-        <StripePaymentForm
-          clientSecret={clientSecret}
-          amount={donationAmount}
-          currency="usd"
-          publishableKey={publishableKey}
-          onSuccess={() => {
-            setSuccess(true);
-            setClientSecret(null);
-          }}
-          onCancel={() => {
-            setClientSecret(null);
-          }}
-        />
-      </div>
-    );
-  }
-
-  if (!showCardForm) {
-    return (
-      <button
-        onClick={() => setShowCardForm(true)}
-        className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors shadow-lg"
-      >
-        <CreditCard className="h-5 w-5" />
-        Donate via Card
-      </button>
-    );
-  }
-
-  return (
-    <div className="max-w-md mx-auto bg-background rounded-xl border shadow-lg p-6 space-y-4 text-left">
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-foreground flex items-center gap-2">
-          <CreditCard className="h-4 w-4" />
-          Donate with Card
-        </p>
-        <button
-          onClick={() => setShowCardForm(false)}
-          className="text-xs text-muted-foreground hover:underline"
-        >
-          Close
-        </button>
-      </div>
-      <div className="flex flex-wrap gap-2 justify-center">
-        {presetAmounts.map((p) => (
-          <button
-            key={p.value}
-            onClick={() => setDonationAmount(p.value)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
-              donationAmount === p.value
-                ? 'bg-primary text-primary-foreground border-primary'
-                : 'bg-background text-foreground border-border hover:bg-muted'
-            }`}
-          >
-            {p.label}
-          </button>
-        ))}
-      </div>
-      <Input
-        type="email"
-        placeholder="Email for receipt (optional)"
-        value={donorEmail}
-        onChange={(e) => setDonorEmail(e.target.value)}
-        className="text-sm"
-      />
-      {error && <p className="text-xs text-red-600">{error}</p>}
-      <Button
-        onClick={startCardDonation}
-        disabled={creating}
-        className="w-full gap-2"
-      >
-        {creating ? (
-          <><Loader2 className="h-4 w-4 animate-spin" /> Processing...</>
-        ) : (
-          <><CreditCard className="h-4 w-4" /> Donate ${(donationAmount / 100).toFixed(2)}</>
-        )}
-      </Button>
     </div>
   );
 }
