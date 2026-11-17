@@ -34,12 +34,23 @@ export function SmartDukaLogo({
         unoptimized
         className="shrink-0"
       />
-      {!markOnly && (
-        <span aria-hidden="true" className={cn('whitespace-nowrap leading-none', text)}>
-          <span className={inverse ? 'text-white' : 'text-foreground'}>Smart</span>
-          <span className="text-[#f75b0b]">Duka</span>
-        </span>
-      )}
+      {!markOnly && <SmartDukaWordmark inverse={inverse} className={text} />}
+    </span>
+  );
+}
+
+/** Wordmark-only variant for splash screens already displaying the cart badge. */
+export function SmartDukaWordmark({
+  inverse = false,
+  className,
+}: {
+  inverse?: boolean;
+  className?: string;
+}) {
+  return (
+    <span className={cn('whitespace-nowrap font-extrabold tracking-tight leading-none', className)}>
+      <span className={inverse ? 'text-white' : 'text-foreground'}>Smart</span>
+      <span className="text-[#f75b0b]">Duka</span>
     </span>
   );
 }
