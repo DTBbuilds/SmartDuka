@@ -1,5 +1,7 @@
 'use client';
 
+import { SmartDukaLogo } from '@/components/brand/smartduka-logo';
+
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -158,10 +160,7 @@ export default function ResetPasswordPage() {
       <div className="flex-1 flex items-center justify-center px-4 pb-16">
         <div className="w-full max-w-md">
           <div className="flex items-center justify-center gap-3 mb-6">
-            <div className="p-2 bg-gradient-to-br from-primary to-orange-500 rounded-xl">
-              <Lock className="h-6 w-6 text-white" />
-            </div>
-            <h1 className="text-2xl font-bold">SmartDuka</h1>
+            <SmartDukaLogo size="lg" />
           </div>
           <Card className="border-0 shadow-lg">
             <CardHeader className="space-y-1 pb-4">
