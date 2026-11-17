@@ -1,5 +1,7 @@
 'use client';
 
+import { SmartDukaLogo } from '@/components/brand/smartduka-logo';
+
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label } from '@smartduka/ui';
@@ -75,10 +77,7 @@ function ShiftStartContent() {
       <Card className="w-full max-w-md shadow-lg">
         <CardHeader className="space-y-2">
           <div className="flex items-center gap-2">
-            <div className="p-2 bg-green-100 rounded-lg">
-              <Clock className="h-6 w-6 text-green-600" />
-            </div>
-            <span className="text-xl font-bold">SmartDuka</span>
+            <SmartDukaLogo size="md" />
           </div>
           <CardTitle>Start Your Shift</CardTitle>
           <CardDescription>Enter your opening cash balance</CardDescription>
