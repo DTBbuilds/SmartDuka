@@ -493,10 +493,7 @@ export default function Home() {
             {/* Brand */}
             <div className="md:col-span-2">
               <Link href="/" className="flex items-center gap-2.5 mb-4">
-                <div className="p-2 bg-gradient-to-br from-primary to-orange-600 rounded-xl">
-                  <ShoppingCart className="h-5 w-5 text-white" />
-                </div>
-                <span className="text-xl font-bold text-foreground">SmartDuka</span>
+                <SmartDukaLogo size="md" />
               </Link>
               <p className="text-muted-foreground text-sm max-w-xs mb-4">
                 The world&apos;s smartest free Point of Sale system. Free, open source, and privacy-first. Built for modern businesses everywhere.
