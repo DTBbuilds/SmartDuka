@@ -30,6 +30,10 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: android-actions/setup-android@v3
+        with:
+          # The removed SDK "tools" package in the action's default is not
+          # available on Android 35 runners; use currently supported packages.
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
       - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile
       - name: Sync native plugins and assets
