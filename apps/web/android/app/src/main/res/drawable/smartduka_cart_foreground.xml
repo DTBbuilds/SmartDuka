@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+  android:width="108dp" android:height="108dp"
+  android:viewportWidth="512" android:viewportHeight="512">
+  <!-- White cart centred in adaptive-icon safe zone, on the orange background. -->
+  <group android:pivotX="256" android:pivotY="256" android:scaleX=".75" android:scaleY=".75">
+    <path android:fillColor="#00000000" android:strokeColor="#FFFFFFFF" android:strokeWidth="32"
+      android:strokeLineCap="round" android:strokeLineJoin="round"
+      android:pathData="M81,120 H143 C152,120 159,125 162,135 L201,294 C205,312 219,323 236,323 H375 C392,323 402,313 407,298 L438,190 H194" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M244,392a24,24 0,1 1,-48,0a24,24 0,1 1,48,0" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M389,392a24,24 0,1 1,-48,0a24,24 0,1 1,48,0" />
+  </group>
+</vector>
