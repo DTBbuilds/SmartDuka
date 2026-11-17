@@ -759,10 +759,7 @@ function RegisterShopContent() {
           {/* Mobile Logo + Theme Toggle */}
           <div className="flex items-center justify-between mb-4 lg:mb-0">
             <div className="flex items-center gap-2">
-              <div className="p-2 bg-primary/10 rounded-lg">
-                <ShoppingCart className="h-6 w-6 text-primary" />
-              </div>
-              <span className="text-xl font-bold text-foreground lg:hidden">SmartDuka</span>
+              <SmartDukaLogo size="md" />
             </div>
             <ThemeToggleOutline />
           </div>
