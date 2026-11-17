@@ -1,5 +1,6 @@
 'use client';
 
+import { SmartDukaLogo } from '@/components/brand/smartduka-logo';
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -165,11 +166,8 @@ export function SuperAdminMobileNav() {
           {/* Logo */}
           <div className="flex items-center gap-2">
             <Link href="/super-admin" className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                <Shield className="h-4 w-4" />
-              </div>
+              <SmartDukaLogo size="sm" inverse />
               <div className="flex flex-col">
-                <span className="font-semibold text-sm leading-tight">SmartDuka</span>
                 <span className="text-[10px] text-slate-400 leading-tight">Super Admin</span>
               </div>
             </Link>
