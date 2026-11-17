@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { ChevronDown, Search, CheckCircle, Clock, Sparkles, Building2, ShoppingBag } from 'lucide-react';
 
 interface Shop {
@@ -29,6 +29,8 @@ export function ShopSelector({
   label = 'Select Your Shop',
   placeholder = 'Choose a shop...',
 }: ShopSelectorProps) {
+  const selectorId = useId();
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [lastUsedShopId, setLastUsedShopId] = useState<string | null>(null);
@@ -63,11 +65,18 @@ export function ShopSelector({
     }
   }, [isOpen]);
 
-  // Focus search input when dropdown opens
+  // Keyboard access without opening a virtual keyboard on every short shop list.
   useEffect(() => {
-    if (isOpen && searchInputRef.current) {
-      searchInputRef.current.focus();
-    }
+    if (!isOpen) return;
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setIsOpen(false);
+        triggerRef.current?.focus();
+      }
+    };
+    document.addEventListener('keydown', escape);
+    return () => document.removeEventListener('keydown', escape);
   }, [isOpen]);
 
   // Save shop selection to localStorage
@@ -125,23 +134,28 @@ export function ShopSelector({
 
   return (
     <div className="relative" ref={dropdownRef}>
-      <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
+      <span id={selectorId + '-label'} className="mb-2 block text-sm font-medium text-foreground">
         {label}
-      </label>
+      </span>
 
       {/* Selected Shop Display */}
       <button
+        ref={triggerRef}
         type="button"
+        aria-labelledby={selectorId + '-label ' + selectorId + '-value'}
+        aria-expanded={isOpen}
+        aria-controls={selectorId + '-options'}
         onClick={() => !disabled && setIsOpen(!isOpen)}
         disabled={disabled}
         className={`
-          w-full px-3 sm:px-4 py-3 sm:py-2.5 border-2 rounded-xl bg-white dark:bg-slate-800 
+          w-full min-h-14 px-3 sm:px-4 py-3 sm:py-2.5 border-2 rounded-xl bg-white dark:bg-slate-800 
           flex items-center gap-2 sm:gap-3 transition-all duration-200
           ${isOpen 
             ? 'border-primary ring-4 ring-primary/10' 
             : 'border-slate-200 dark:border-slate-700 hover:border-primary/60 dark:hover:border-primary/60'
           }
           ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+          focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary
         `}
       >
         {/* Shop Icon - Professional SmartDuka style */}
@@ -156,7 +170,7 @@ export function ShopSelector({
         </div>
 
         {/* Shop Info */}
-        <div className="flex-1 text-left min-w-0">
+        <div id={selectorId + '-value'} className="flex-1 text-left min-w-0">
           {selectedShop ? (
             <>
               <div className="font-semibold text-sm sm:text-base text-slate-900 dark:text-white truncate">
@@ -190,7 +204,8 @@ export function ShopSelector({
 
       {/* Dropdown List */}
       {isOpen && (
-        <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl shadow-xl shadow-slate-200/50 dark:shadow-slate-900/50 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+        <div id={selectorId + '-options'} role="group" aria-labelledby={selectorId + '-label'}
+          className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl shadow-xl shadow-slate-200/50 dark:shadow-slate-900/50 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
           {/* Search Input */}
           {shops.length > 3 && (
             <div className="p-2 sm:p-3 border-b border-slate-100 dark:border-slate-700">
@@ -199,17 +214,18 @@ export function ShopSelector({
                 <input
                   ref={searchInputRef}
                   type="text"
+                  aria-label="Search shops"
                   placeholder="Search shops..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 sm:py-3 border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white text-sm sm:text-base placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                  className="w-full min-h-11 pl-10 pr-4 py-2.5 sm:py-3 border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white text-sm sm:text-base placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                 />
               </div>
             </div>
           )}
 
           {/* Shop List - Mobile optimized */}
-          <div className="max-h-72 sm:max-h-64 overflow-y-auto p-1.5 sm:p-2 -webkit-overflow-scrolling-touch">
+          <div className="max-h-[min(18rem,45dvh)] overflow-y-auto p-1.5 sm:p-2">
             {sortedShops.length > 0 ? (
               <div className="space-y-1">
                 {sortedShops.map((shop) => {
@@ -220,7 +236,11 @@ export function ShopSelector({
                     <button
                       key={shop.id}
                       type="button"
-                      onClick={() => handleShopChange(shop.id)}
+                      aria-current={isSelected ? 'true' : undefined}
+                      onClick={() => {
+                        handleShopChange(shop.id);
+                        triggerRef.current?.focus();
+                      }}
                       className={`
                         w-full text-left px-2.5 sm:px-3 py-3 sm:py-3 rounded-lg transition-all duration-150
                         flex items-center gap-2.5 sm:gap-3 active:scale-[0.98]

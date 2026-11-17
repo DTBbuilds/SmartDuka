@@ -3,9 +3,10 @@
 import { useState, useEffect } from 'react';
 import { Button, Input } from '@smartduka/ui';
 import { ShopSelector } from '../shop-selector';
-import { Lock, Loader2, ArrowRight, Star, Clock, Sparkles, AlertTriangle, Info } from 'lucide-react';
+import { Lock, Loader2, ArrowRight, Star, Clock, Sparkles, AlertTriangle } from 'lucide-react';
 import { getPreferredShop, type RecentShop } from '@/lib/device-memory';
 import { config } from '@/lib/config';
+import { resolveCashierShopChoice } from '@/lib/login-workspace-state';
 
 interface Shop {
   id: string;
@@ -28,22 +29,12 @@ export function CashierLoginForm({
   shops,
   onSubmit,
   isLoading = false,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   preferredShopId,
-  recentShops = [],
 }: CashierLoginFormProps) {
-  // Use preferred shop if available
-  const [shopId, setShopId] = useState(() => {
-    if (preferredShopId && shops.some(s => s.id === preferredShopId)) {
-      return preferredShopId;
-    }
-    const preferred = getPreferredShop();
-    if (preferred && shops.some(s => s.id === preferred.id)) {
-      return preferred.id;
-    }
-    return shops[0]?.id || '';
-  });
-  
+  const [initialChoice] = useState(() =>
+    resolveCashierShopChoice(shops, preferredShopId, getPreferredShop()?.id),
+  );
+  const [shopId, setShopId] = useState(initialChoice.shopId);
   const [pin, setPin] = useState('');
   const [validationError, setValidationError] = useState('');
   const [googleConfigured, setGoogleConfigured] = useState(false);
@@ -56,9 +47,8 @@ export function CashierLoginForm({
       .catch(() => setGoogleConfigured(false));
   }, []);
   
-  // Auto-skip to PIN entry if we have a preferred shop
-  const hasPreferredShop = !!preferredShopId || !!getPreferredShop();
-  const [step, setStep] = useState<'shop' | 'pin'>(hasPreferredShop ? 'pin' : 'shop');
+  const [step, setStep] = useState<'shop' | 'pin'>(initialChoice.step);
+  const hasPreferredShop = !!shopId && shops.some(shop => shop.id === shopId) && step === 'pin';
 
   const handlePinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value.replace(/\D/g, '');
@@ -101,10 +91,10 @@ export function CashierLoginForm({
   const canSubmit = pin.length >= 4;
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
+    <form onSubmit={handleSubmit} className="space-y-4">
       {/* Validation Error */}
       {validationError && (
-        <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg flex items-start gap-2">
+        <div role="alert" className="rounded-xl border border-amber-400/40 bg-amber-500/10 p-3 flex items-start gap-2">
           <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
           <p className="text-sm text-amber-700 dark:text-amber-300">{validationError}</p>
         </div>
@@ -112,7 +102,7 @@ export function CashierLoginForm({
 
       {/* Quick Shop Indicator (when we have a preferred shop) */}
       {step === 'pin' && hasPreferredShop && (
-        <div className="flex items-center gap-3 p-3 bg-primary/5 border border-primary/20 rounded-xl mb-2">
+        <div className="flex items-center gap-3 rounded-xl border border-primary/20 bg-primary/5 p-3">
           <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
             <Star className="h-5 w-5 text-primary" />
           </div>
@@ -122,13 +112,13 @@ export function CashierLoginForm({
             </div>
             <div className="text-xs text-muted-foreground flex items-center gap-1">
               <Clock className="h-3 w-3" />
-              Remembered from last login
+              Selected shop · cashier access
             </div>
           </div>
           <button
             type="button"
             onClick={() => setStep('shop')}
-            className="text-xs text-primary hover:underline"
+            className="min-h-11 rounded-lg px-2 text-sm font-semibold text-primary hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
           >
             Change
           </button>
@@ -141,13 +131,14 @@ export function CashierLoginForm({
           shops={shops}
           selectedShopId={shopId}
           onShopChange={(id) => {
+            // Keep a prior shop's PIN out of the next shop's sign-in attempt.
+            setPin('');
+            setValidationError('');
             setShopId(id);
-            if (id) {
-              setStep('pin');
-            }
+            if (id) setStep('pin');
           }}
           disabled={isLoading}
-          label="Step 1: Select Your Shop"
+          label="1. Choose your shop"
           placeholder="Tap to choose your shop..."
         />
       </div>
@@ -157,9 +148,9 @@ export function CashierLoginForm({
         <Button
           type="button"
           onClick={() => setStep('pin')}
-          className="w-full h-12 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold rounded-xl shadow-lg shadow-blue-500/25 gap-2"
+          className="min-h-14 w-full gap-2 rounded-xl text-base font-bold"
         >
-          Continue
+          Continue to PIN
           <ArrowRight className="h-4 w-4" />
         </Button>
       )}
@@ -169,8 +160,9 @@ export function CashierLoginForm({
         <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
           {/* PIN Input */}
           <div>
-            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
-              Step 2: Enter Your PIN
+            <label htmlFor="pin"
+              className="mb-2 block text-sm font-semibold text-foreground">
+              2. Enter your cashier PIN
             </label>
             
             {/* PIN Input - uses device keyboard */}
@@ -183,39 +175,35 @@ export function CashierLoginForm({
                 type="password"
                 inputMode="numeric"
                 pattern="[0-9]*"
-                placeholder="Enter 4-6 digit PIN"
+                placeholder="4–6 digit PIN"
                 value={pin}
                 onChange={handlePinChange}
                 maxLength={6}
+                autoComplete="off"
+                aria-describedby="pin-help"
                 disabled={isLoading}
-                autoFocus
-                className="h-14 pl-14 pr-4 text-center text-xl tracking-[0.3em] font-bold border-2 border-slate-200 dark:border-slate-700 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+                className="min-h-14 w-full rounded-xl border-2 border-border bg-background pl-14 pr-4 text-lg font-semibold tracking-normal focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
               />
             </div>
-            <p className="text-xs text-muted-foreground mt-1.5 text-center">4-6 digit PIN from your admin</p>
+            <p id="pin-help" className="mt-2 text-xs text-muted-foreground">Enter the 4–6 digit PIN issued by your shop administrator. Never share your PIN.</p>
           </div>
 
           {/* Submit Button */}
-          <Button 
-            type="submit" 
-            className={`
-              w-full h-14 text-base font-semibold rounded-xl transition-all duration-200
-              ${canSubmit 
-                ? 'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white shadow-lg shadow-green-500/25' 
-                : 'bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
-              }
-            `}
+          <Button
+            type="submit"
+            className="min-h-14 w-full gap-2 rounded-xl text-base font-bold"
             disabled={isLoading || !canSubmit}
           >
             {isLoading ? (
               <>
-                <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                Signing in...
+                <Loader2 aria-hidden="true" className="h-5 w-5 animate-spin" />
+                Checking your PIN…
               </>
             ) : (
               <>
-                <Lock className="h-5 w-5 mr-2" />
-                Sign In to POS
+                <Lock aria-hidden="true" className="h-5 w-5" />
+                Sign in to POS
+                <ArrowRight aria-hidden="true" className="ml-1 h-5 w-5" />
               </>
             )}
           </Button>
@@ -224,7 +212,7 @@ export function CashierLoginForm({
           <button
             type="button"
             onClick={() => setStep('shop')}
-            className="w-full text-center text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 py-2"
+            className="min-h-11 w-full rounded-lg text-center text-sm font-semibold text-muted-foreground hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
           >
             ← Change shop
           </button>
@@ -257,26 +245,18 @@ export function CashierLoginForm({
                   <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
                   <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
                 </svg>
-                <span>Sign up with Google</span>
+                <span>Set up Google sign-in</span>
                 <Sparkles className="h-4 w-4 text-amber-500" />
               </button>
               <p className="text-xs text-center text-muted-foreground mt-2">
-                Link your Google account for faster login (requires PIN once)
+                Optional: link Google to your cashier account. Your shop may require PIN verification first.
               </p>
             </>
           )}
 
-          {/* Help Text for Cashiers */}
-          <div className="p-3 bg-muted/50 rounded-lg mt-4">
-            <div className="flex items-start gap-2">
-              <Info className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-              <div className="text-xs text-muted-foreground space-y-1">
-                <p><strong>Don't have a PIN?</strong> Ask your shop administrator to create a cashier account for you.</p>
-                <p><strong>Wrong shop?</strong> Make sure you select the correct shop where you are employed.</p>
-                <p><strong>Forgot PIN?</strong> Contact your admin to reset your PIN.</p>
-              </div>
-            </div>
-          </div>
+          <p className="rounded-xl bg-muted/50 px-3 py-3 text-xs leading-relaxed text-muted-foreground">
+            Need a PIN or a reset? Ask your shop administrator. Only staff invited to this shop can sign in.
+          </p>
         </div>
       )}
     </form>

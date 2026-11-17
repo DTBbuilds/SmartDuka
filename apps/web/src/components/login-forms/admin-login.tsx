@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Button, Input, Label } from '@smartduka/ui';
-import { Eye, EyeOff, AlertTriangle, Info } from 'lucide-react';
+import { Eye, EyeOff, AlertTriangle, ArrowRight, Store } from 'lucide-react';
 import { ShopSelector } from '../shop-selector';
 
 interface Shop {
@@ -79,27 +79,37 @@ export function AdminLoginForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-3">
+    <form onSubmit={handleSubmit} className="space-y-4">
       {/* Validation Error */}
       {validationError && (
-        <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg flex items-start gap-2">
+        <div role="alert" className="rounded-xl border border-amber-400/40 bg-amber-500/10 p-3 flex items-start gap-2">
           <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
           <p className="text-sm text-amber-700 dark:text-amber-300">{validationError}</p>
         </div>
       )}
 
-      {/* Shop selector - full width */}
-      <ShopSelector
-        shops={shops}
-        selectedShopId={shopId}
-        onShopChange={setShopId}
-        disabled={isLoading}
-      />
+      {/* Make the selected merchant unmistakable before credentials. */}
+      <div className="space-y-2">
+        <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
+          <Store aria-hidden="true" className="h-4 w-4 text-primary" /> 1. Choose your shop
+        </p>
+        <ShopSelector
+          shops={shops}
+          selectedShopId={shopId}
+          onShopChange={(id) => {
+            setShopId(id);
+            setValidationError('');
+          }}
+          disabled={isLoading}
+          label="Shop"
+        />
+      </div>
+      <p className="text-sm font-semibold text-foreground">2. Enter your account details</p>
 
-      {/* Email & Password - side by side on larger screens */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {/* Easy-to-read form on a counter tablet or phone; no narrow side-by-side fields. */}
+      <div className="grid grid-cols-1 gap-3">
         <div>
-          <Label htmlFor="email" className="text-xs">Email</Label>
+          <Label htmlFor="email" className="text-sm font-medium">Email address</Label>
           <Input
             id="email"
             type="email"
@@ -107,13 +117,15 @@ export function AdminLoginForm({
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             disabled={isLoading}
+            autoComplete="username"
+            inputMode="email"
             required
-            className="mt-1 h-9"
+            className="mt-1 min-h-12 rounded-xl"
           />
         </div>
 
         <div>
-          <Label htmlFor="password" className="text-xs">Password</Label>
+          <Label htmlFor="password" className="text-sm font-medium">Password</Label>
           <div className="relative mt-1">
             <Input
               id="password"
@@ -122,13 +134,16 @@ export function AdminLoginForm({
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               disabled={isLoading}
+              autoComplete="current-password"
               required
-              className="h-9 pr-9"
+              className="min-h-12 rounded-xl pr-14"
             />
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              aria-pressed={showPassword}
+              className="absolute right-1 top-1/2 flex min-h-11 min-w-11 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
             >
               {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
@@ -136,8 +151,9 @@ export function AdminLoginForm({
         </div>
       </div>
 
-      <Button type="submit" className="w-full h-9" disabled={isLoading}>
-        {isLoading ? 'Signing in...' : 'Sign In'}
+      <Button type="submit" className="min-h-14 w-full gap-2 rounded-xl text-base font-bold" disabled={isLoading}>
+        {isLoading ? 'Opening your shop…' : 'Sign in to shop'}
+        {!isLoading && <ArrowRight aria-hidden="true" className="h-5 w-5" />}
       </Button>
 
       {/* P1-13: self-service password recovery */}
@@ -147,16 +163,9 @@ export function AdminLoginForm({
         </a>
       </div>
 
-      {/* Help Text */}
-      <div className="p-3 bg-muted/50 rounded-lg">
-        <div className="flex items-start gap-2">
-          <Info className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-          <div className="text-xs text-muted-foreground space-y-1">
-            <p><strong>Not registered?</strong> Ask your shop admin to create an account for you, or <a href="/register-shop" className="text-primary hover:underline">register a new shop</a>.</p>
-            <p><strong>Forgot password?</strong> Use the reset link above — a reset email will be sent to the account address.</p>
-          </div>
-        </div>
-      </div>
+      <p className="text-center text-xs leading-relaxed text-muted-foreground">
+        Signing in as staff? Use the account your shop administrator created for you.
+      </p>
     </form>
   );
 }

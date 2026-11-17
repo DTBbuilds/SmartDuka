@@ -3,26 +3,29 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ShoppingCart, AlertCircle, Lock, Clock, ArrowLeft, Mail, Loader2, ShieldCheck } from 'lucide-react';
+import { ShoppingCart, AlertCircle, Clock, ArrowLeft, Loader2, ShieldCheck, Store, UserRound, ScanLine, ArrowRight } from 'lucide-react';
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@smartduka/ui';
 import { useAuth } from '@/lib/auth-context';
 import { config } from '@/lib/config';
 import { AdminLoginForm } from '@/components/login-forms/admin-login';
 import { CashierLoginForm } from '@/components/login-forms/cashier-login';
+import { LoginWorkspaceIntro } from '@/components/login-forms/login-workspace-intro';
+import { safeLoginRedirect } from '@/lib/safe-login-redirect';
 import { ThemeToggleOutline } from '@/components/theme-toggle';
 import { getPreferredShop, getRecentShops, getPreferredRole } from '@/lib/device-memory';
 
 export default function LoginPage() {
-  const [role, setRole] = useState<'admin' | 'cashier'>(() => {
-    if (typeof window !== 'undefined') {
-      return getPreferredRole() || 'admin';
-    }
-    return 'admin';
-  });
+  // The initial render is stable across SSR/hydration; device role is restored after mount.
+  const [role, setRole] = useState<'admin' | 'cashier'>('admin');
+  useEffect(() => {
+    const savedRole = getPreferredRole();
+    if (savedRole === 'admin' || savedRole === 'cashier') setRole(savedRole);
+  }, []);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [shops, setShops] = useState<Array<{ id: string; shopId?: string; name: string; status?: 'pending' | 'verified' | 'active' | 'suspended'; demoMode?: boolean; demoExpiresAt?: string }>>([]);
-  const [loadingShops, setLoadingShops] = useState(false);
+  const [loadingShops, setLoadingShops] = useState(true);
+  const [shopLoadError, setShopLoadError] = useState(false);
   const [showSuperAdminLogin, setShowSuperAdminLogin] = useState(false);
   const [superAdminEmail, setSuperAdminEmail] = useState('');
   const [superAdminPassword, setSuperAdminPassword] = useState('');
@@ -55,7 +58,7 @@ export default function LoginPage() {
     if (authLoading) return;
     
     if (isAuthenticated && user) {
-      const redirectTo = searchParams.get('redirect') || (user.role === 'cashier' ? '/pos' : user.role === 'super_admin' ? '/super-admin' : '/admin');
+      const redirectTo = safeLoginRedirect(searchParams.get('redirect'), user.role === 'cashier' ? '/pos' : user.role === 'super_admin' ? '/super-admin' : '/admin');
       router.replace(redirectTo);
     }
   }, [isAuthenticated, user, authLoading, router, searchParams]);
@@ -103,7 +106,8 @@ export default function LoginPage() {
       .then(data => setGoogleConfigured(!!data?.configured))
       .catch(() => setGoogleConfigured(false));
     if (googleError) {
-      setError(decodeURIComponent(googleError));
+      // Never render OAuth error text from an untrusted redirect URL.
+      setError('Google sign-in was not completed. Please try again.');
     }
     if (expired === 'true') {
       setSessionExpired(true);
@@ -116,16 +120,20 @@ export default function LoginPage() {
   const fetchShops = async () => {
     try {
       setLoadingShops(true);
+      setShopLoadError(false);
       const base = config.apiUrl;
       const res = await fetch(`${base}/shops`);
       const text = await res.text();
       const data = text ? JSON.parse(text) : [];
       
-      if (res.ok) {
-        setShops(Array.isArray(data) ? data : []);
+      if (!res.ok || !Array.isArray(data)) {
+        throw new Error('Shop directory is currently unavailable');
       }
+      setShops(data);
     } catch (err) {
       console.error('Failed to fetch shops:', err);
+      setShopLoadError(true);
+      setShops([]);
     } finally {
       setLoadingShops(false);
     }
@@ -202,7 +210,7 @@ export default function LoginPage() {
     // Default error
     return {
       title: 'Login failed',
-      message: error || 'An unexpected error occurred during login.',
+      message: 'Please check your sign-in details and try again. If the problem continues, contact support.',
       actions: [
         'Please check your credentials and try again',
         'If the problem persists, contact support',
@@ -278,7 +286,7 @@ export default function LoginPage() {
       resetRefreshAttempts();
       if (tokens?.csrfToken) storeCsrfToken(tokens.csrfToken);
       setLoginSuccess(true);
-      const redirectTo = searchParams.get('redirect') || (decoded.role === 'cashier' ? '/pos' : '/admin');
+      const redirectTo = safeLoginRedirect(searchParams.get('redirect'), decoded.role === 'cashier' ? '/pos' : '/admin');
       window.location.href = redirectTo;
     } catch (err: any) {
       setOtpError(err.message || 'Verification failed');
@@ -328,7 +336,7 @@ export default function LoginPage() {
         enterDemoMode(selectedShop as any);
       }
       setLoginSuccess(true);
-      const redirectTo = searchParams.get('redirect') || '/admin';
+      const redirectTo = safeLoginRedirect(searchParams.get('redirect'), '/admin');
       window.location.href = redirectTo;
     } catch (err: any) {
       // Handle email verification requirement
@@ -362,7 +370,7 @@ export default function LoginPage() {
       }
       // Mark login as successful and redirect immediately
       setLoginSuccess(true);
-      const redirectTo = searchParams.get('redirect') || '/pos';
+      const redirectTo = safeLoginRedirect(searchParams.get('redirect'), '/pos');
       // Use window.location for more reliable redirect after state changes
       window.location.href = redirectTo;
     } catch (err: any) {
@@ -406,7 +414,7 @@ export default function LoginPage() {
             <div className="h-12 w-12 rounded-full border-4 border-primary/20" />
             <div className="absolute inset-0 h-12 w-12 rounded-full border-4 border-transparent border-t-primary animate-spin" />
           </div>
-          <p className="text-muted-foreground">{loginSuccess ? 'Redirecting...' : 'Connecting to SmartDuka...'}</p>
+          <p className="text-muted-foreground">{loginSuccess ? 'Opening your retail workspace…' : 'Preparing shop sign-in…'}</p>
         </div>
       </div>
     );
@@ -428,9 +436,9 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="flex min-h-[100dvh] flex-col bg-background">
       {/* Header */}
-      <header className="flex items-center justify-between p-4 md:p-6 border-b border-border">
+      <header className="flex min-h-16 items-center justify-between border-b border-border px-4 py-3 md:px-8">
         <Link href="/" className="flex items-center gap-2 md:gap-3">
           <div className="p-2 bg-gradient-to-br from-primary to-orange-500 rounded-xl">
             <ShoppingCart className="h-5 w-5 md:h-6 md:w-6 text-white" />
@@ -449,12 +457,14 @@ export default function LoginPage() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 flex items-center justify-center p-4 md:p-8">
-        <div className="w-full max-w-md">
+      <main className="flex-1 px-3 py-5 sm:px-6 sm:py-8 lg:flex lg:items-center lg:py-10">
+        <div className="mx-auto grid w-full max-w-6xl grid-cols-1 items-start gap-6 lg:grid-cols-2 lg:items-stretch lg:gap-10">
+          <LoginWorkspaceIntro role={role} />
+          <div className="mx-auto w-full max-w-[540px]">
           {/* Back to Home */}
           <Link 
             href="/" 
-            className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors"
+            className="mb-4 inline-flex min-h-11 items-center gap-2 rounded-lg text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
           >
             <ArrowLeft className="h-4 w-4" />
             Back to home
@@ -462,7 +472,7 @@ export default function LoginPage() {
 
           {/* OTP Verification Card */}
           {showOtpVerification ? (
-            <Card className="border-0 shadow-lg">
+            <Card className="rounded-[1.5rem] border border-border/70 bg-card shadow-sm sm:shadow-lg">
               <CardHeader className="space-y-1 pb-4 text-center">
                 <div className="mx-auto mb-2 p-3 bg-blue-100 dark:bg-blue-900/30 rounded-full w-fit">
                   <ShieldCheck className="h-8 w-8 text-blue-600 dark:text-blue-400" />
@@ -482,7 +492,7 @@ export default function LoginPage() {
                 </p>
 
                 {/* OTP Input */}
-                <div className="flex justify-center gap-2" onPaste={handleOtpPaste}>
+                <div className="flex justify-center gap-1 sm:gap-2" onPaste={handleOtpPaste}>
                   {otpCode.map((digit, index) => (
                     <div key={index} className="relative">
                       <input
@@ -493,7 +503,9 @@ export default function LoginPage() {
                         value={digit}
                         onChange={e => handleOtpChange(index, e.target.value)}
                         onKeyDown={e => handleOtpKeyDown(index, e)}
-                        className={`w-14 h-16 text-center text-2xl font-bold rounded-xl border-2 bg-background transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary focus:scale-105 ${
+                        aria-label={`Verification digit ${index + 1}`}
+                        autoComplete={index === 0 ? "one-time-code" : "off"}
+                        className={`h-12 w-9 rounded-xl border-2 bg-background text-center text-xl font-bold sm:h-14 sm:w-12 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary focus:scale-105 ${
                           digit ? 'border-primary bg-primary/5 shadow-sm' : 'border-border hover:border-primary/50'
                         } ${otpError ? 'border-destructive animate-pulse' : ''} ${
                           otpLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-text'
@@ -596,12 +608,20 @@ export default function LoginPage() {
             </Card>
           ) : (
           /* Login Card */
-          <Card className="border-0 shadow-lg">
-            <CardHeader className="space-y-1 pb-4">
-              <CardTitle className="text-2xl font-bold">Welcome back</CardTitle>
-              <CardDescription>Sign in to your SmartDuka account</CardDescription>
+          <Card className="rounded-[1.5rem] border border-border/70 bg-card shadow-sm sm:shadow-lg">
+            <CardHeader className="space-y-2 pb-4">
+              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary">
+                {role === 'cashier' ? <ScanLine aria-hidden="true" className="h-4 w-4" /> : <Store aria-hidden="true" className="h-4 w-4" />}
+                {role === 'cashier' ? 'Cashier terminal' : 'Shop management'}
+              </div>
+              <CardTitle className="text-2xl font-extrabold tracking-tight sm:text-3xl">
+                {role === 'cashier' ? 'Ready for your shift?' : 'Welcome back to your shop'}
+              </CardTitle>
+              <CardDescription className="text-sm leading-relaxed">
+                {role === 'cashier' ? 'Choose your shop and enter your staff PIN to access the POS.' : 'Choose your shop and sign in to manage the day’s business.'}
+              </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-5">
               {/* Session Expired Alert */}
               {sessionExpired && (
                 <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg flex items-center gap-3">
@@ -612,80 +632,44 @@ export default function LoginPage() {
 
               {/* Error Alert */}
               {error && (
-                <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/10 p-3">
                   <div className="flex items-start gap-3">
                     <AlertCircle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
                     <div className="flex-1">
                       <p className="text-destructive text-sm font-medium">{error}</p>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        Need help? <Link href="/register-shop" className="text-primary hover:underline">Register your shop</Link> or contact support.
+                        {role === 'cashier' ? 'Ask your shop administrator for access or a PIN reset. ' : 'Check your account or shop details. '}
+                        <Link href="/support" className="font-semibold text-primary underline-offset-2 hover:underline">Contact support</Link>
                       </p>
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Google Sign-in - Primary recommended option */}
-              {googleConfigured && (
-                <div className="space-y-4">
-                  <Button
-                    type="button"
-                    className="w-full flex items-center justify-center gap-3 h-14 text-base bg-white hover:bg-gray-50 text-gray-700 border-2 border-gray-300 shadow-md hover:shadow-lg transition-all dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-200 dark:border-gray-600 rounded-xl"
-                    onClick={() => loginWithGoogle()}
-                    disabled={isLoading}
-                  >
-                    <svg className="h-6 w-6" viewBox="0 0 24 24">
-                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-                    </svg>
-                    <span className="font-semibold">Sign in with Google</span>
-                  </Button>
-                  <p className="text-center text-xs text-muted-foreground flex items-center justify-center gap-1.5">
-                    <svg className="h-3.5 w-3.5 text-green-500" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" /></svg>
-                    Recommended &mdash; faster and more secure
-                  </p>
+              {/* No blank selector or false "no shops" on a network failure. */}
+              {shopLoadError && (
+                <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+                  <span>We couldn't load the shop directory. Check your connection and try again.</span>
+                  <Button type="button" variant="outline" size="sm" className="min-h-11" onClick={() => { void fetchShops(); }}>Retry shops</Button>
                 </div>
               )}
 
-              {/* Divider */}
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t border-border" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-card px-2 text-muted-foreground">Or sign in with email</span>
-                </div>
-              </div>
-
-              {/* Role Selection */}
-              <div className="flex justify-center">
-                <div className="flex gap-1 p-1 bg-muted rounded-lg w-full max-w-xs">
-                  <button
-                    type="button"
-                    className={`flex-1 px-4 py-2.5 text-sm font-medium rounded-md transition-all ${
-                      role === 'admin' 
-                        ? 'bg-background text-foreground shadow-sm' 
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
+              {/* Role-first: match the retail job before choosing a sign-in method. */}
+              <section aria-labelledby="login-role-label" className="space-y-2">
+                <p id="login-role-label" className="text-sm font-semibold text-foreground">Sign in as</p>
+                <div role="group" aria-labelledby="login-role-label" className="flex w-full gap-1 rounded-xl bg-muted p-1">
+                  <button type="button" aria-pressed={role === 'admin'}
                     onClick={() => { setRole('admin'); setError(''); }}
-                  >
-                    Admin
+                    className={`flex min-h-12 flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${role === 'admin' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
+                    <UserRound aria-hidden="true" className="h-4 w-4" /> Admin
                   </button>
-                  <button
-                    type="button"
-                    className={`flex-1 px-4 py-2.5 text-sm font-medium rounded-md transition-all ${
-                      role === 'cashier' 
-                        ? 'bg-background text-foreground shadow-sm' 
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
+                  <button type="button" aria-pressed={role === 'cashier'}
                     onClick={() => { setRole('cashier'); setError(''); }}
-                  >
-                    Cashier
+                    className={`flex min-h-12 flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${role === 'cashier' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
+                    <ScanLine aria-hidden="true" className="h-4 w-4" /> Cashier
                   </button>
                 </div>
-              </div>
+              </section>
 
               {/* Login Forms */}
               {role === 'admin' ? (
@@ -706,36 +690,64 @@ export default function LoginPage() {
                 />
               )}
 
+              {/* Google is an admin alternative, not a competing cashier PIN action. */}
+              {role === 'admin' && googleConfigured && (
+                <div className="space-y-3 pt-1">
+                  <div className="relative flex items-center justify-center text-xs uppercase text-muted-foreground">
+                    <span className="absolute inset-x-0 border-t border-border" aria-hidden="true" />
+                    <span className="relative bg-card px-3">Or sign in with Google</span>
+                  </div>
+                  <Button type="button" variant="outline" onClick={() => loginWithGoogle()}
+                    disabled={isLoading} className="min-h-12 w-full gap-3 rounded-xl border-2 text-sm font-semibold">
+                    <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24">
+                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                    </svg>
+                    Continue with Google
+                    <ArrowRight aria-hidden="true" className="ml-auto h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+
               {/* Register Link */}
-              <p className="text-center text-sm text-muted-foreground">
-                Don&apos;t have an account?{' '}
-                <Link href="/register-shop" className="text-primary hover:underline font-medium">
-                  Register for free
-                </Link>
-              </p>
+              {role === 'admin' ? (
+                <p className="text-center text-sm text-muted-foreground">
+                  New to SmartDuka?{' '}
+                  <Link href="/register-shop" className="font-semibold text-primary underline-offset-2 hover:underline">
+                    Register your shop
+                  </Link>
+                </p>
+              ) : (
+                <p className="text-center text-xs text-muted-foreground">
+                  New cashier? Ask your shop administrator to create your staff access.
+                </p>
+              )}
             </CardContent>
           </Card>
           )}
 
           {/* Footer */}
-          <p className="text-center text-xs text-muted-foreground mt-6">
+          <p className="mt-5 text-center text-xs text-muted-foreground">
             © {new Date().getFullYear()} SmartDuka. All rights reserved.
           </p>
+          </div>
         </div>
       </main>
 
-      {/* Super Admin Login - Hidden */}
-      <div className="fixed bottom-4 right-4 z-50">
+      {/* Service provider access is separate from merchant sign-in. */}
+      <div className="mx-auto w-full max-w-sm px-4 pb-6 text-center">
         {!showSuperAdminLogin ? (
           <button
             onClick={() => setShowSuperAdminLogin(true)}
-            className="p-2 rounded-full bg-slate-900/80 hover:bg-slate-900 text-slate-400 hover:text-slate-300 transition-all opacity-20 hover:opacity-50"
-            title="Admin Access"
+            className="min-h-11 rounded-lg px-3 text-xs font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+            aria-label="Open service provider sign-in"
           >
-            <Lock className="h-4 w-4" />
+            Service provider access
           </button>
         ) : (
-          <Card className="w-80 shadow-xl">
+          <Card className="w-full rounded-xl shadow-sm">
             <CardHeader className="pb-3">
               <div className="flex justify-between items-center">
                 <CardTitle className="text-sm">Service Provider Access</CardTitle>
