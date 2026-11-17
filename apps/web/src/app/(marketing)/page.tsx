@@ -22,32 +22,17 @@ import {
 import { FAQJsonLd, WebPageJsonLd } from '@/components/seo';
 
 export const metadata: Metadata = {
-  title: 'SmartDuka \u2013 Free Open Source Point of Sale & Inventory Management',
-  description: 'SmartDuka is a free, open source point of sale and inventory management system. Free to use during our introductory period. M-Pesa integration, barcode scanning, analytics and more. No payment required now.',
+  title: 'SmartDuka | Shop Management and Point of Sale Software',
+  description: 'Run your shop smarter. Manage sales, products, staff, receipts and daily reports in one SmartDuka point of sale workspace. Introductory free access available.',
   keywords: [
-    'SmartDuka',
-    'Smart Duka',
-    'smart duka',
-    'smartduka',
-    'Smart Duka POS',
-    'free point of sale software',
-    'free POS system',
-    'open source POS',
-    'free inventory management',
-    'free stock management',
-    'free retail POS',
-    'free barcode POS',
-    'free sales software',
-    'free web-based POS',
-    'DTB Technologies',
-    'free cloud POS',
-    'free multi-store POS',
-    'no subscription POS',
-    'M-Pesa POS system',
+    'SmartDuka', 'Smart Duka POS', 'point of sale software',
+    'inventory management', 'sales reporting', 'shop management',
+    'barcode POS', 'retail management', 'cashier software',
+    'POS system Kenya', 'POS system Australia', 'DTB Technologies',
   ],
   openGraph: {
-    title: 'SmartDuka \u2013 Free Open Source Point of Sale & Inventory Management',
-    description: 'Free, open source POS and inventory management \u2014 free during our introductory period. Built for modern businesses everywhere.',
+    title: 'SmartDuka | Run Your Shop Smarter',
+    description: 'Sell faster, stay on top of stock and manage daily shop operations with SmartDuka.',
     type: 'website',
     locale: 'en_KE',
     siteName: 'SmartDuka',
@@ -55,15 +40,13 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'SmartDuka \u2013 Free Open Source POS System',
-    description: 'Free, open source POS and inventory management. No payment required during our introductory period. Built for modern businesses everywhere.',
-    creator: '@smartduka',
-    site: '@smartduka',
+    title: 'SmartDuka | Run Your Shop Smarter',
+    description: 'Point of sale, inventory and daily retail operations in one workspace.',
   },
   alternates: {
     canonical: 'https://www.smartduka.org',
     languages: {
-      'en': 'https://www.smartduka.org',
+      en: 'https://www.smartduka.org',
       'en-KE': 'https://www.smartduka.org',
       'x-default': 'https://www.smartduka.org',
     },
@@ -72,11 +55,8 @@ export const metadata: Metadata = {
     index: true,
     follow: true,
     googleBot: {
-      index: true,
-      follow: true,
-      'max-video-preview': -1,
-      'max-image-preview': 'large',
-      'max-snippet': -1,
+      index: true, follow: true,
+      'max-video-preview': -1, 'max-image-preview': 'large', 'max-snippet': -1,
     },
   },
 };
@@ -146,7 +126,7 @@ const homepageFaqs = [
   },
   {
     question: 'Is SmartDuka cloud-based?',
-    answer: 'Yes. SmartDuka is a cloud-based web POS system. You can access it from any device with a web browser. It also supports offline mode so you can continue selling even without an internet connection.',
+    answer: 'Yes. SmartDuka is a cloud-based web POS system. You can access it from any device with a web browser. Offline behaviour depends on the device, app version and feature; confirm connectivity before relying on offline checkout.',
   },
   {
     question: 'Who owns SmartDuka?',
@@ -159,8 +139,8 @@ export default function HomePage() {
     <div className="min-h-screen bg-white">
       <FAQJsonLd faqs={homepageFaqs} />
       <WebPageJsonLd 
-        name="SmartDuka \u2013 Free Open Source Point of Sale & Inventory Management"
-        description="SmartDuka is a free, open source point of sale and inventory management system by DTB Technologies \u2014 free to use during our introductory period."
+        name="SmartDuka | Run Your Shop Smarter"
+        description="SmartDuka is a point of sale and inventory management workspace for retailers, with introductory free access available now."
         url="https://www.smartduka.org"
       />
       
@@ -201,18 +181,18 @@ export default function HomePage() {
             <div>
               <div className="inline-flex items-center gap-2 px-4 py-2 bg-green-100 rounded-full text-green-700 text-sm font-medium mb-6">
                 <Zap className="h-4 w-4" />
-                Free &amp; Open Source
+                SmartDuka for everyday retail
               </div>
               
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900 leading-tight mb-6">
-                SmartDuka &ndash; <span className="text-orange-600">Point of Sale</span> & Inventory Management Software
+                Run Your Shop Smarter. <span className="text-orange-600">Sell Faster.</span>
               </h1>
               
               <p className="text-xl text-gray-600 mb-8 leading-relaxed">
                 SmartDuka (Smart Duka) is a web-based <Link href="/point-of-sale-software" className="text-orange-600 hover:underline">point of sale</Link> and{' '}
                 <Link href="/inventory-management-software" className="text-orange-600 hover:underline">inventory management software</Link> built
                 by <a href="https://www.dtbtech.org" className="text-orange-600 hover:underline" target="_blank" rel="noopener noreferrer">DTB Technologies</a>.
-                It helps retail businesses manage sales, inventory, reports, analytics, and barcode scanning using existing hardware.
+                Keep sales, stock, staff and daily performance organised using your existing devices.
               </p>
               
               <div className="flex flex-col sm:flex-row gap-4 mb-4">
@@ -220,14 +200,14 @@ export default function HomePage() {
                   href="/register-shop" 
                   className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-orange-600 text-white rounded-xl font-bold text-lg hover:bg-orange-700 transition-all shadow-lg hover:shadow-xl"
                 >
-                  Get Started Free
+                  Create Your Shop
                   <ArrowRight className="h-5 w-5" />
                 </Link>
                 <Link 
                   href="/features/pos" 
                   className="inline-flex items-center justify-center gap-2 px-8 py-4 border-2 border-gray-300 text-gray-700 rounded-xl font-bold text-lg hover:border-gray-400 transition-colors"
                 >
-                  See All Features
+                  Explore Plans
                 </Link>
               </div>
               
@@ -250,7 +230,7 @@ export default function HomePage() {
               <div className="flex items-center gap-6 text-sm text-gray-500">
                 <div className="flex items-center gap-2">
                   <CheckCircle className="h-5 w-5 text-green-500" />
-                  Free during our introductory period
+                  Start at no cost today
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle className="h-5 w-5 text-green-500" />
@@ -258,7 +238,7 @@ export default function HomePage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle className="h-5 w-5 text-green-500" />
-                  Open source
+                  Simple shop tools
                 </div>
               </div>
             </div>
@@ -275,7 +255,7 @@ export default function HomePage() {
               
               {/* Floating badges */}
               <div className="absolute -top-4 -right-4 bg-green-500 text-white px-4 py-2 rounded-full font-bold text-sm shadow-lg">
-                ✓ M-Pesa Ready
+                ✓ Smart Retail
               </div>
               <div className="absolute -bottom-4 -left-4 bg-orange-600 text-white px-4 py-2 rounded-full font-bold text-sm shadow-lg">
                 Works Offline
@@ -484,13 +464,13 @@ export default function HomePage() {
               href="/register-shop" 
               className="px-8 py-4 bg-white text-orange-600 rounded-xl font-bold text-lg hover:bg-orange-50 transition-colors shadow-lg"
             >
-              Get Started Free
+              Create Your Shop
             </Link>
             <Link 
               href="/pricing" 
               className="px-8 py-4 border-2 border-white text-white rounded-xl font-bold text-lg hover:bg-white/10 transition-colors"
             >
-              See All Features
+              Explore Plans
             </Link>
           </div>
         </div>
@@ -576,7 +556,7 @@ export default function HomePage() {
               {' · '}
               <Link href="/pricing" className="hover:text-white">Pricing</Link>
               {' · '}
-              <Link href="/register-shop" className="hover:text-white">Get Started Free</Link>
+              <Link href="/register-shop" className="hover:text-white">Create Your Shop</Link>
             </p>
           </div>
         </div>
