@@ -1,5 +1,7 @@
 'use client';
 
+import { SmartDukaLogo } from '@/components/brand/smartduka-logo';
+
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { CartLoader } from '@/components/ui/cart-loader';
@@ -137,10 +139,7 @@ export default function SelectPlanPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-                <ShoppingCart className="h-6 w-6 text-white" />
-              </div>
-              <span className="text-xl font-bold text-gray-900">SmartDuka</span>
+              <SmartDukaLogo size="md" />
             </div>
             <div className="text-sm text-gray-600">
               Welcome, {shop?.name || user.email}
