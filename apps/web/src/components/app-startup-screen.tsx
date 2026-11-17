@@ -1,4 +1,5 @@
 'use client';
+import { SmartDukaLogo, SmartDukaWordmark } from '@/components/brand/smartduka-logo';
 
 import { useState, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
@@ -101,22 +102,15 @@ export function AppStartupScreen({ onReady }: AppStartupScreenProps) {
               </svg>
             )}
 
-            {/* Inner circle with logo */}
-            <div className={cn(
-              'h-20 w-20 rounded-full flex items-center justify-center transition-all duration-500',
-              'bg-gradient-to-br from-orange-500 to-amber-600 shadow-lg',
-              isReady && 'from-green-500 to-emerald-600',
-              isError && 'from-red-500 to-rose-600',
-            )}>
-              <ShoppingCart className="h-9 w-9 text-white" />
+            {/* Keep the approved mark unchanged; status is conveyed by the ring/text. */}
+            <div className="relative flex h-20 w-20 items-center justify-center">
+              <SmartDukaLogo markOnly size="xl" />
             </div>
           </div>
         </div>
 
         {/* Brand name */}
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-1 tracking-tight">
-          SmartDuka
-        </h1>
+        <h1 className="mb-1"><SmartDukaWordmark className="text-2xl" /></h1>
         <p className="text-[13px] text-slate-400 dark:text-slate-500 mb-8">
           Point of Sale & Inventory
         </p>

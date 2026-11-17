@@ -1,5 +1,6 @@
 'use client';
 
+import { SmartDukaLogo } from '@/components/brand/smartduka-logo';
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -195,10 +196,7 @@ export function AdminMobileNav() {
           {/* Logo */}
           <div className="flex items-center gap-2">
             <Link href="/" className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                <ShoppingCart className="h-4 w-4" />
-              </div>
-              <span className="font-semibold text-lg">SmartDuka</span>
+              <SmartDukaLogo size="md" />
             </Link>
             {isDemoMode && (
               <div className="flex items-center gap-1">

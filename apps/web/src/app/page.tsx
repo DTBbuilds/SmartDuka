@@ -1,5 +1,7 @@
 'use client';
 
+import { SmartDukaLogo } from '@/components/brand/smartduka-logo';
+
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -105,12 +107,7 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <Link href="/" className="flex items-center gap-2.5">
-              <div className="p-2 bg-gradient-to-br from-primary to-orange-600 rounded-xl shadow-lg shadow-primary/20">
-                <ShoppingCart className="h-5 w-5 text-white" />
-              </div>
-              <span className="text-xl font-bold text-foreground">
-                SmartDuka
-              </span>
+              <SmartDukaLogo size="md" />
             </Link>
             
             <nav className="hidden md:flex items-center gap-8">
@@ -497,10 +494,7 @@ export default function Home() {
             {/* Brand */}
             <div className="md:col-span-2">
               <Link href="/" className="flex items-center gap-2.5 mb-4">
-                <div className="p-2 bg-gradient-to-br from-primary to-orange-600 rounded-xl">
-                  <ShoppingCart className="h-5 w-5 text-white" />
-                </div>
-                <span className="text-xl font-bold text-foreground">SmartDuka</span>
+                <SmartDukaLogo size="md" />
               </Link>
               <p className="text-muted-foreground text-sm max-w-xs mb-4">
                 The world&apos;s smartest free Point of Sale system. Free, open source, and privacy-first. Built for modern businesses everywhere.

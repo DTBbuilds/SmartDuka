@@ -1,5 +1,6 @@
 "use client";
 
+import { SmartDukaLogo } from '@/components/brand/smartduka-logo';
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ShoppingCart, Package, BarChart3, Settings, LogOut, User, Menu, X, ChevronDown, Users, TrendingUp, DollarSign, Boxes, ShoppingBag } from "lucide-react";
@@ -86,8 +87,7 @@ export function NavbarEnhanced() {
         {/* Logo */}
         <div className="flex items-center gap-6">
           <Link href="/" className="flex items-center gap-2 font-semibold">
-            <ShoppingCart className="h-6 w-6 text-primary" />
-            <span className="text-xl">SmartDuka</span>
+            <SmartDukaLogo size="md" />
           </Link>
 
           {/* Desktop Navigation */}

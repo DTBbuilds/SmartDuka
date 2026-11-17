@@ -1,5 +1,6 @@
 'use client';
 
+import { SmartDukaLogo } from '@/components/brand/smartduka-logo';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -159,12 +160,7 @@ export function AdminSidebar() {
       {/* Logo & Brand */}
       <div className="flex h-16 items-center justify-between px-4 border-b border-border">
         <Link href="/" className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <ShoppingCart className="h-4 w-4" />
-          </div>
-          {showExpanded && (
-            <span className="font-semibold text-lg whitespace-nowrap">SmartDuka</span>
-          )}
+          <SmartDukaLogo size="sm" markOnly={!showExpanded} />
         </Link>
         {showExpanded && (
           <Button

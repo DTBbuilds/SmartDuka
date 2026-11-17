@@ -1,4 +1,6 @@
 'use client';
+import { SmartDukaLogo, SmartDukaWordmark } from '@/components/brand/smartduka-logo';
+
 
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
@@ -186,12 +188,12 @@ export function StartupScreen({ onReady, minDisplayTime = 1000 }: StartupScreenP
               <div className="h-20 w-20 lg:h-32 lg:w-32 rounded-full border-4 border-primary/20 mx-auto lg:mx-0" />
               <div className="absolute inset-0 h-20 w-20 lg:h-32 lg:w-32 rounded-full border-4 border-transparent border-t-primary animate-spin mx-auto lg:mx-0" />
               <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-3xl lg:text-5xl font-bold text-primary">S</span>
+                <SmartDukaLogo markOnly size="xl" />
               </div>
             </div>
             
             {/* Brand name and tagline */}
-            <h1 className="text-2xl lg:text-4xl font-bold text-foreground mb-2">SmartDuka</h1>
+            <h1 className="mb-2"><SmartDukaWordmark className="text-2xl lg:text-4xl" /></h1>
             <p className="text-sm lg:text-base text-muted-foreground">Point of Sale & Inventory Management</p>
             
             {/* Feature highlights - desktop only */}

@@ -27,18 +27,18 @@ const config: CapacitorConfig = {
       launchShowDuration: 2000,
       launchAutoHide: true,
       launchFadeOutDuration: 500,
-      backgroundColor: '#16a34a', // SmartDuka green
+      backgroundColor: '#ffffff', // Premium SmartDuka splash uses a white canvas
       androidSplashResourceName: 'splash',
-      androidScaleType: 'CENTER_CROP',
-      showSpinner: true,
+      androidScaleType: 'CENTER_INSIDE',
+      showSpinner: false, // Web startup displays the same branded progress indicator
       spinnerStyle: 'small',
-      spinnerColor: '#ffffff',
+      spinnerColor: '#f56a0b',
     },
 
     // Status bar configuration
     StatusBar: {
       style: 'LIGHT',
-      backgroundColor: '#16a34a',
+      backgroundColor: '#f56a0b',
     },
 
     // Keyboard configuration for POS input
@@ -59,7 +59,7 @@ const config: CapacitorConfig = {
     // Local notifications for offline sync
     LocalNotifications: {
       smallIcon: 'ic_stat_icon',
-      iconColor: '#16a34a',
+      iconColor: '#f56a0b',
       sound: 'beep.wav',
     },
 

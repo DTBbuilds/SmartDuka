@@ -1,5 +1,7 @@
 "use client";
 
+import { SmartDukaLogo } from '@/components/brand/smartduka-logo';
+
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -124,9 +126,7 @@ export default function SignupPage() {
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background to-muted p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-4 text-center">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary">
-            <ShoppingCart className="h-6 w-6 text-primary-foreground" />
-          </div>
+          <div className="mx-auto flex items-center justify-center"><SmartDukaLogo size="xl" markOnly /></div>
           <div>
             <CardTitle className="text-2xl">Create your account</CardTitle>
             <CardDescription>Get started with SmartDuka today</CardDescription>

@@ -1,5 +1,7 @@
 'use client';
 
+import { SmartDukaLogo } from '@/components/brand/smartduka-logo';
+
 import { useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Mail, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
@@ -62,10 +64,7 @@ export default function ForgotPasswordPage() {
       <div className="flex-1 flex items-center justify-center px-4 pb-16">
         <div className="w-full max-w-md">
           <div className="flex items-center justify-center gap-3 mb-6">
-            <div className="p-2 bg-gradient-to-br from-primary to-orange-500 rounded-xl">
-              <Mail className="h-6 w-6 text-white" />
-            </div>
-            <h1 className="text-2xl font-bold">SmartDuka</h1>
+            <SmartDukaLogo size="lg" />
           </div>
 
           <Card className="border-0 shadow-lg">

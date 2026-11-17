@@ -1,5 +1,7 @@
 'use client';
 
+import { SmartDukaLogo } from '@/components/brand/smartduka-logo';
+
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -440,10 +442,7 @@ export default function LoginPage() {
       {/* Header */}
       <header className="flex min-h-16 items-center justify-between border-b border-border px-4 py-3 md:px-8">
         <Link href="/" className="flex items-center gap-2 md:gap-3">
-          <div className="p-2 bg-gradient-to-br from-primary to-orange-500 rounded-xl">
-            <ShoppingCart className="h-5 w-5 md:h-6 md:w-6 text-white" />
-          </div>
-          <span className="text-xl md:text-2xl font-bold text-foreground">SmartDuka</span>
+          <SmartDukaLogo size="lg" />
         </Link>
         <div className="flex items-center gap-3">
           <Link 

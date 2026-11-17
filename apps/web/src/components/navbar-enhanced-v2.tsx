@@ -1,5 +1,6 @@
 "use client";
 
+import { SmartDukaLogo } from '@/components/brand/smartduka-logo';
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -92,8 +93,7 @@ export function NavbarEnhancedV2() {
         {/* Logo */}
         <div className="flex items-center gap-2 md:gap-6">
           <Link href="/" className="flex items-center gap-2 font-semibold flex-shrink-0">
-            <ShoppingCart className="h-6 w-6 text-primary" />
-            <span className="hidden sm:inline text-lg md:text-xl">SmartDuka</span>
+            <SmartDukaLogo size="md" />
           </Link>
 
           {/* Desktop Navigation */}

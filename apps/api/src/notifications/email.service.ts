@@ -578,7 +578,10 @@ export class EmailService {
 <tr><td align="center">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background-color:#ffffff;border-radius:8px;border-top:3px solid #f97316;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
 <tr><td style="padding:28px 36px 0;text-align:center;">
-  <p style="margin:0;font-size:22px;font-weight:700;color:#111827;letter-spacing:-0.3px;">SmartDuka</p>
+  <table role="presentation" cellpadding="0" cellspacing="0" align="center"><tr>
+    <td style="padding-right:8px;vertical-align:middle;"><img src="https://www.smartduka.org/brand-icon" width="36" height="36" alt="" style="display:block;border:0;border-radius:9px;" /></td>
+    <td style="vertical-align:middle;font-size:22px;font-weight:800;letter-spacing:-0.3px;white-space:nowrap;"><span style="color:#111827;">Smart</span><span style="color:#f75b0b;">Duka</span></td>
+  </tr></table>
 </td></tr>
 <tr><td style="padding:24px 36px 32px;">
   ${content}
