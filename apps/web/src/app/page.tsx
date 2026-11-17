@@ -1,5 +1,6 @@
-import { SmartDukaLogo } from '@/components/brand/smartduka-logo';
 'use client';
+
+import { SmartDukaLogo } from '@/components/brand/smartduka-logo';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
