@@ -1,5 +1,7 @@
 "use client";
 
+import { SmartDukaLogo } from '@/components/brand/smartduka-logo';
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Clock, Phone, Mail, HelpCircle, LogOut, RefreshCw, AlertCircle, CheckCircle, FlaskConical, Play, Sparkles, ShoppingCart, Zap, Shield } from "lucide-react";
@@ -123,10 +125,7 @@ export default function VerificationPendingPage() {
         
         <div className="relative z-10">
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-primary/20 rounded-xl">
-              <ShoppingCart className="h-8 w-8 text-primary" />
-            </div>
-            <span className="text-3xl font-bold text-white">SmartDuka</span>
+            <SmartDukaLogo size="lg" inverse />
           </div>
         </div>
         
